@@ -1,0 +1,104 @@
+/* ---------------- ENUM CONSTANTS ---------------- */
+
+export const MEDIA_TYPE = {
+  IMAGE: 'IMAGE',
+  VIDEO: 'VIDEO',
+  DOCUMENT: 'DOCUMENT',
+  AUDIO: 'AUDIO',
+  OTHER: 'OTHER',
+} as const;
+
+export const MEDIA_OWNER_TYPE = {
+  PRODUCT: 'PRODUCT',
+  VARIANT: 'VARIANT',
+  CUSTOMER: 'CUSTOMER',
+  EMPLOYEE: 'EMPLOYEE',
+  ORDER: 'ORDER',
+  PAYMENT: 'PAYMENT',
+  VISIT: 'VISIT',
+  INVENTORY: 'INVENTORY',
+  ROUTE: 'ROUTE',
+  WAREHOUSE: 'WAREHOUSE',
+  GENERAL: 'GENERAL',
+  CATEGORY: 'CATEGORY',
+} as const;
+
+export const MEDIA_PURPOSE = {
+  MAIN: 'MAIN',
+  GALLERY: 'GALLERY',
+  THUMBNAIL: 'THUMBNAIL',
+  PROFILE: 'PROFILE',
+  COVER: 'COVER',
+  DOCUMENT: 'DOCUMENT',
+  RECEIPT: 'RECEIPT',
+  SIGNATURE: 'SIGNATURE',
+  PROOF: 'PROOF',
+  OTHER: 'OTHER',
+} as const;
+
+export const MEDIA_LIMITS: Record<string, Partial<Record<string, number>>> = {
+  [MEDIA_OWNER_TYPE.PRODUCT]: {
+    [MEDIA_PURPOSE.MAIN]: 1,
+    [MEDIA_PURPOSE.THUMBNAIL]: 1,
+    [MEDIA_PURPOSE.GALLERY]: 10,
+    [MEDIA_PURPOSE.OTHER]: 5,
+  },
+
+  [MEDIA_OWNER_TYPE.VARIANT]: {
+    [MEDIA_PURPOSE.MAIN]: 1,
+    [MEDIA_PURPOSE.THUMBNAIL]: 1,
+    [MEDIA_PURPOSE.GALLERY]: 6,
+  },
+
+  [MEDIA_OWNER_TYPE.CATEGORY]: {
+    [MEDIA_PURPOSE.COVER]: 1,
+    [MEDIA_PURPOSE.MAIN]: 1,
+    [MEDIA_PURPOSE.GALLERY]: 5,
+  },
+
+  [MEDIA_OWNER_TYPE.CUSTOMER]: {
+    [MEDIA_PURPOSE.PROFILE]: 1,
+    [MEDIA_PURPOSE.COVER]: 1,
+    [MEDIA_PURPOSE.PROOF]: 5,
+  },
+
+  [MEDIA_OWNER_TYPE.EMPLOYEE]: {
+    [MEDIA_PURPOSE.PROFILE]: 1,
+    [MEDIA_PURPOSE.PROOF]: 5,
+  },
+
+  [MEDIA_OWNER_TYPE.ORDER]: {
+    [MEDIA_PURPOSE.RECEIPT]: 5,
+    [MEDIA_PURPOSE.DOCUMENT]: 5,
+    [MEDIA_PURPOSE.PROOF]: 5,
+  },
+
+  [MEDIA_OWNER_TYPE.PAYMENT]: {
+    [MEDIA_PURPOSE.RECEIPT]: 3,
+    [MEDIA_PURPOSE.PROOF]: 3,
+  },
+
+  [MEDIA_OWNER_TYPE.VISIT]: {
+    [MEDIA_PURPOSE.PROOF]: 10,
+    [MEDIA_PURPOSE.SIGNATURE]: 1,
+  },
+
+  [MEDIA_OWNER_TYPE.GENERAL]: {
+    [MEDIA_PURPOSE.OTHER]: 10,
+  },
+};
+
+/**
+ * ✅ Fallback limits (if not defined)
+ * Keeps system safe
+ */
+export const MEDIA_DEFAULT_LIMIT = 10;
+
+/**
+ * ✅ Extra safety: Some types should always be limited
+ */
+export const MEDIA_TYPE_LIMITS: Partial<Record<string, number>> = {
+  [MEDIA_TYPE.VIDEO]: 2,
+  [MEDIA_TYPE.DOCUMENT]: 10,
+  [MEDIA_TYPE.AUDIO]: 5,
+};

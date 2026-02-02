@@ -1,0 +1,52 @@
+export const V1 = '1';
+export const API_PREFIX = 'api';
+export const API_METHOD = {
+  CREATE: 'create',
+  UPDATE: 'update',
+  DELETE: 'delete',
+  GET: 'get',
+  FETCH: 'fetch',
+};
+export const API_MODULE = {
+  USER: 'user',
+  EMPLOYEE: 'employee',
+  CUSTOMER: 'customer',
+  PRODUCT: 'product',
+  ORDER: 'order',
+  HEALTH: 'health',
+  METRIC: 'metric',
+  AUDIT_LOGS: 'audit-logs',
+  ROLE: 'role',
+  COMPANY: 'company',
+  ADDRESS: 'address',
+  CATEGORY: 'category',
+  PRODUCT_VARIANT: 'product variant',
+  CART: 'cart',
+  WISHLIST: 'wishlist',
+  NOTIFICATION: 'notification',
+  SUBSCRIPTION: 'subscription',
+  OFFER: 'offer',
+  PERMISSION: 'permission',
+  MEDIA: 'media',
+};
+
+export const API_MODULE_ENABLE_KEYS = {
+  ADDRESS: 'ENABLE_ADDRESS_MODULE',
+  AUDIT_LOGS: 'ENABLE_AUDIT_LOGS',
+  CART: 'ENABLE_CART_MODULE',
+  CATEGORY: 'ENABLE_CATEGORY_MODULE',
+  COMPANY: 'ENABLE_COMPANY_MODULE',
+  CUSTOMER: 'ENABLE_CUSTOMER_MODULE',
+  EMPLOYEE: 'ENABLE_EMPLOYEE_MODULE',
+  NOTIFICATION: 'ENABLE_NOTIFICATION_MODULE',
+  OFFER: 'ENABLE_OFFER_MODULE',
+  ORDER: 'ENABLE_ORDER_MODULE',
+  PRODUCT: 'ENABLE_PRODUCT_MODULE',
+  PRODUCT_VARIANT: 'ENABLE_PRODUCT_VARIANT_MODULE',
+  ROLE: 'ENABLE_ROLE_MODULE',
+  SUBSCRIPTION: 'ENABLE_SUBSCRIPTION_MODULE',
+  USER: 'ENABLE_USER_MODULE',
+  WISHLIST: 'ENABLE_WISHLIST_MODULE',
+  PERMISSION: 'ENABLE_PERMISSION_MODULE',
+  MEDIA: 'ENABLE_MEDIA_MODULE',
+};

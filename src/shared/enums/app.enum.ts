@@ -1,0 +1,20 @@
+export enum Platform {
+  WEB = 'WEB',
+  MOBILE = 'MOBILE',
+}
+
+export enum Status {
+  ACTIVE = 'ACTIVE',
+  INACTIVE = 'INACTIVE',
+}
+
+export enum UserRole {
+  CUSTOMER = 'CUSTOMER',
+  EMPLOYEE = 'EMPLOYEE',
+  ADMIN = 'ADMIN',
+}
+
+export enum Language {
+  EN = 'EN',
+  HI = 'HI',
+}
