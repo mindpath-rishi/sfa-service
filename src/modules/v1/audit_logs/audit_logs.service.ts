@@ -1,3 +1,20 @@
+/**
+ * Audit Logs Service
+ * ------------------
+ * Purpose : Handles read-only access to audit log data
+ * Used by : AuditLogsController
+ *
+ * Responsibilities:
+ * - Fetch audit logs with filters and pagination
+ * - Support text search and date range queries
+ * - Return single audit log records
+ *
+ * Notes:
+ * - Audit logs are immutable
+ * - No create/update/delete operations are exposed here
+ * - This service focuses only on read operations
+ */
+
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { MongoRepository } from 'src/core/database/mongo/mongo.repository';
 import { MongoService } from 'src/core/database/mongo/mongo.service';
@@ -13,10 +30,24 @@ export class AuditLogsService extends MongoRepository<AuditLog> {
     super(mongo.getModel(AuditLog.name, AuditLogSchema));
   }
 
-  /* ======================================================
-   * GET AUDIT LOGS (FILTER + PAGINATION + SEARCH)
-   * ====================================================== */
-
+  /**
+   * Get Audit Logs (List)
+   * --------------------
+   * Purpose : Fetch audit logs with filtering, search, and pagination
+   * Used by : AUDIT LOG LIST / ADMIN ACTIVITY SCREENS
+   *
+   * Supports:
+   * - Entity-based filtering
+   * - Entity ID filtering
+   * - Action-based filtering
+   * - Performer-based filtering
+   * - Text search across entity & performer fields
+   * - Date range filtering
+   * - Pagination & sorting
+   *
+   * Notes:
+   * - Results are sorted by latest activity first
+   */
   async findAll(params?: {
     entity?: string;
     entityId?: string;
@@ -42,7 +73,7 @@ export class AuditLogsService extends MongoRepository<AuditLog> {
 
     const filter: any = {};
 
-    /* ---------- Exact filters ---------- */
+    /* ---------- Exact Match Filters ---------- */
     if (entity) filter.entity = entity.trim();
     if (entityId) filter.entityId = entityId.trim();
     if (action) filter.action = action.trim();
@@ -50,7 +81,7 @@ export class AuditLogsService extends MongoRepository<AuditLog> {
       filter['performedBy.employeeId'] = performedBy.trim();
     }
 
-    /* ---------- Search (partial, case-insensitive) ---------- */
+    /* ---------- Text Search (Case-Insensitive) ---------- */
     if (searchText) {
       const regex = new RegExp(searchText.trim(), 'i');
       filter.$or = [
@@ -60,7 +91,7 @@ export class AuditLogsService extends MongoRepository<AuditLog> {
       ];
     }
 
-    /* ---------- Date range filter ---------- */
+    /* ---------- Date Range Filtering ---------- */
     if (from || to) {
       filter.createdAt = {};
       if (from) filter.createdAt.$gte = new Date(from);
@@ -82,10 +113,15 @@ export class AuditLogsService extends MongoRepository<AuditLog> {
     };
   }
 
-  /* ======================================================
-   * GET AUDIT LOG BY ID
-   * ====================================================== */
-
+  /**
+   * Get Audit Log by ID
+   * -------------------
+   * Purpose : Fetch a single audit log entry
+   * Used by : AUDIT LOG DETAIL / FORENSIC REVIEW
+   *
+   * Params:
+   * - id : Audit log document ID
+   */
   async findById(id: string) {
     return this.findById(id);
   }

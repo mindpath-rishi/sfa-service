@@ -1,10 +1,29 @@
+/**
+ * Employee Service
+ * ----------------
+ * Purpose : Handles business logic for employee lifecycle management
+ * Used by : EmployeeController
+ *
+ * Responsibilities:
+ * - Create employee profiles and linked auth users
+ * - Restore soft-deleted employees
+ * - Fetch employee lists with filters and pagination
+ * - Retrieve single employee profiles
+ * - Update employee information
+ * - Soft-delete employees and linked users
+ *
+ * Notes:
+ * - All write operations are transaction-safe
+ * - Employee and User records are tightly coupled
+ * - Soft deletes are used to preserve audit history
+ */
+
 import {
   Injectable,
   NotFoundException,
   ConflictException,
   HttpStatus,
 } from '@nestjs/common';
-import { randomUUID } from 'crypto';
 
 import { MongoService } from 'src/core/database/mongo/mongo.service';
 import { MongoRepository } from 'src/core/database/mongo/mongo.repository';
@@ -13,20 +32,14 @@ import {
   Employee,
   EmployeeSchema,
 } from 'src/core/database/mongo/schema/employee.schema';
-import { UserStatus, Agent } from 'src/modules/v1/user/user.enum';
+import { UserStatus } from 'src/modules/v1/user/user.enum';
 
 import { UserService } from 'src/modules/v1/user/user.service';
 import { CreateEmployeeDto } from './dto/create-employee.dto';
 import { UpdateEmployeeDto } from './dto/update-employee.dto';
+import { EmployeeQueryDto } from './dto/employee.query.dto';
 import { EMPLOYEE } from './employee.constants';
 import { IdGenerator } from 'src/shared/utils/id-generator.utils';
-
-type FindAllEmployeesQuery = {
-  status?: string;
-  searchText?: string;
-  page?: number;
-  limit?: number;
-};
 
 @Injectable()
 export class EmployeeService extends MongoRepository<Employee> {
@@ -38,16 +51,24 @@ export class EmployeeService extends MongoRepository<Employee> {
   }
 
   /**
-   * Creates an employee profile and linked user account in a single transaction.
+   * Create Employee
+   * ---------------
+   * Purpose : Create a new employee profile and linked authentication user
    *
-   * Behavior:
-   * - If active employee exists (same mobile/email) -> conflict
-   * - If soft-deleted employee exists -> restore employee + restore user
-   * - Otherwise -> create new employee + create new user
+   * Flow:
+   * - Check for existing employee (including soft-deleted)
+   * - Restore soft-deleted employee if found
+   * - Generate unique employeeId
+   * - Create employee profile
+   * - Create linked auth user
+   *
+   * Notes:
+   * - Operation is fully transactional
+   * - Prevents duplicate active employees
    */
   async create(payload: CreateEmployeeDto) {
     return this.withTransaction(async (session) => {
-      // Lookup existing employee (including deleted)
+      // Check existing employee (including soft-deleted)
       const existingEmployee: Employee | any = await this.findOne(
         {
           $or: [{ mobile: payload.mobile }, { email: payload.email }],
@@ -55,12 +76,12 @@ export class EmployeeService extends MongoRepository<Employee> {
         { session, includeDeleted: true },
       );
 
-      // Active employee already exists
+      // Prevent duplicate active employees
       if (existingEmployee && !existingEmployee.isDeleted) {
         throw new ConflictException(EMPLOYEE.DUPLICATE);
       }
 
-      // Restore soft-deleted employee
+      // Restore soft-deleted employee and linked user
       if (existingEmployee?.isDeleted) {
         await this.updateById(
           existingEmployee._id.toString(),
@@ -87,6 +108,7 @@ export class EmployeeService extends MongoRepository<Employee> {
             password: payload.password,
             isDeleted: false,
             status: UserStatus.ACTIVE,
+            loginId: payload.loginId,
           },
           session,
         );
@@ -98,15 +120,13 @@ export class EmployeeService extends MongoRepository<Employee> {
         };
       }
 
-      // Generate unique employeeId
+      // Generate unique business employeeId
       const MAX_TRIES = 10;
       let employeeId = '';
 
       for (let attempt = 1; attempt <= MAX_TRIES; attempt++) {
         employeeId = IdGenerator.generate('EID', 8);
-
-        const exists = await this.exists({ employeeId }, session);
-        if (!exists) break;
+        if (!(await this.exists({ employeeId }, session))) break;
 
         if (attempt === MAX_TRIES) {
           throw new ConflictException(
@@ -134,14 +154,14 @@ export class EmployeeService extends MongoRepository<Employee> {
         { session },
       );
 
-      // Create linked user account
+      // Create linked authentication user
       await this.userService.createUser(
         {
           profileId: employeeId,
           mobile: payload.mobile,
           email: payload.email,
           password: payload.password,
-          agent: Agent.BACK_OFFICE,
+          loginId: payload.loginId,
         },
         session,
       );
@@ -155,9 +175,16 @@ export class EmployeeService extends MongoRepository<Employee> {
   }
 
   /**
-   * Returns paginated list of employees with optional status filter and search.
+   * Get Employees (List)
+   * -------------------
+   * Purpose : Retrieve employees with filtering and pagination
+   *
+   * Supports:
+   * - Status-based filtering
+   * - Free-text search
+   * - Pagination & sorting
    */
-  async findAll(query: FindAllEmployeesQuery = {}) {
+  async findAll(query: EmployeeQueryDto) {
     const { status, searchText, page = 1, limit = 20 } = query;
 
     const filter: Record<string, any> = {};
@@ -192,7 +219,12 @@ export class EmployeeService extends MongoRepository<Employee> {
   }
 
   /**
-   * Returns employee details by employeeId.
+   * Get Employee by ID
+   * ------------------
+   * Purpose : Retrieve a single employee profile
+   *
+   * Throws:
+   * - NotFoundException if employee does not exist
    */
   async findByEmployeeId(employeeId: string) {
     const employee = await this.findOne({ employeeId }, { lean: true });
@@ -209,7 +241,12 @@ export class EmployeeService extends MongoRepository<Employee> {
   }
 
   /**
-   * Updates employee profile.
+   * Update Employee
+   * ---------------
+   * Purpose : Update editable employee profile fields
+   *
+   * Notes:
+   * - Identity fields remain unchanged
    */
   async update(employeeId: string, dto: UpdateEmployeeDto) {
     const employee = await this.updateOne({ employeeId }, dto);
@@ -226,7 +263,17 @@ export class EmployeeService extends MongoRepository<Employee> {
   }
 
   /**
-   * Soft-deletes employee profile and linked user account inside a transaction.
+   * Delete Employee (Soft Delete)
+   * -----------------------------
+   * Purpose : Deactivate employee and linked authentication user
+   *
+   * Flow:
+   * - Soft-delete employee record
+   * - Soft-delete linked auth user
+   *
+   * Notes:
+   * - Operation is transactional
+   * - Records remain for audit purposes
    */
   async delete(employeeId: string) {
     const deletedEmployee = await this.withTransaction(async (session) => {
@@ -240,8 +287,6 @@ export class EmployeeService extends MongoRepository<Employee> {
       }
 
       await this.softDelete({ employeeId }, { session });
-
-      // Linked user delete (profileId = employeeId)
       await this.userService.delete(employeeId, { session });
 
       return existing;

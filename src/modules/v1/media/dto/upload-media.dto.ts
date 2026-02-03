@@ -1,3 +1,19 @@
+/**
+ * Upload Media DTO
+ * ----------------
+ * Purpose : Upload a new media file with metadata
+ * Used by : MEDIA UPLOAD / CMS / ADMIN FLOWS
+ *
+ * Allows:
+ * - Uploading media for any supported owner
+ * - Optional media classification and UI metadata
+ * - Sorting and primary media designation
+ *
+ * Notes:
+ * - Designed for multipart/form-data
+ * - Boolean values are received as strings
+ */
+
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsIn,
@@ -5,8 +21,6 @@ import {
   IsOptional,
   IsString,
   IsBooleanString,
-  IsArray,
-  ArrayMaxSize,
 } from 'class-validator';
 
 import {
@@ -16,7 +30,9 @@ import {
 } from 'src/shared/constants/media.constants';
 
 export class UploadMediaDto {
-  /* ================= OWNER ================= */
+  /* ======================================================
+   * FILE
+   * ====================================================== */
   @IsOptional()
   @ApiProperty({
     type: 'string',
@@ -24,6 +40,10 @@ export class UploadMediaDto {
     description: 'Upload file (image/pdf/etc)',
   })
   file: any;
+
+  /* ======================================================
+   * OWNER
+   * ====================================================== */
 
   @ApiProperty({
     enum: Object.values(MEDIA_OWNER_TYPE),
@@ -41,7 +61,9 @@ export class UploadMediaDto {
   @IsString()
   subOwnerId?: string;
 
-  /* ================= MEDIA TYPE ================= */
+  /* ======================================================
+   * MEDIA CLASSIFICATION
+   * ====================================================== */
 
   @ApiPropertyOptional({
     enum: Object.values(MEDIA_TYPE),
@@ -59,7 +81,9 @@ export class UploadMediaDto {
   @IsIn(Object.values(MEDIA_PURPOSE))
   purpose?: string;
 
-  /* ================= OPTIONAL UI / SEO ================= */
+  /* ======================================================
+   * UI & SEO
+   * ====================================================== */
 
   @ApiPropertyOptional({ example: 'Product Banner' })
   @IsOptional()
@@ -82,9 +106,9 @@ export class UploadMediaDto {
   navigationUrl?: string;
 
   /**
-   * ✅ Accept in 2 ways:
-   * 1) tags="banner,offer,home"
-   * 2) tags=["banner","offer"]
+   * Accepts:
+   * - Comma-separated string (e.g. "banner,offer")
+   * - Array format (e.g. ["banner","offer"])
    */
   @ApiPropertyOptional({
     example: 'banner,offer,home',
@@ -93,7 +117,9 @@ export class UploadMediaDto {
   @IsOptional()
   tags?: string | string[];
 
-  /* ================= SORT / PRIMARY ================= */
+  /* ======================================================
+   * ORDERING & PRIMARY FLAG
+   * ====================================================== */
 
   @ApiPropertyOptional({ example: '1' })
   @IsOptional()
@@ -101,8 +127,7 @@ export class UploadMediaDto {
   sortOrder?: string;
 
   /**
-   * ✅ In multipart/form-data, boolean comes as string:
-   * isPrimary="true" | "false"
+   * Boolean flag received as string in multipart/form-data.
    */
   @ApiPropertyOptional({ example: 'false' })
   @IsOptional()

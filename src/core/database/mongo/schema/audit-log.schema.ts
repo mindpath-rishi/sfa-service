@@ -1,16 +1,26 @@
+/**
+ * Audit Logs Collection
+ * --------------------
+ * Purpose : System-wide audit trail for critical actions
+ * Used by : ALL MODULES (read-only access)
+ *
+ * Contains:
+ * - Entity reference and action performed
+ * - Before & after state snapshots
+ * - Actor (employee) information
+ * - Request metadata
+ *
+ * Notes:
+ * - Audit logs are immutable once created
+ * - Used for compliance, debugging, and traceability
+ */
+
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Schema as MongooseSchema } from 'mongoose';
-
-export enum AuditAction {
-  CREATE = 'CREATE',
-  UPDATE = 'UPDATE',
-  DELETE = 'DELETE',
-  RESTORE = 'RESTORE',
-}
+import { AuditAction } from 'src/shared/enums/app.enum';
 
 @Schema({
   collection: 'audit_logs',
-  timestamps: { createdAt: true, updatedAt: false },
 })
 export class AuditLog extends Document {
   /* ======================================================
@@ -42,7 +52,7 @@ export class AuditLog extends Document {
   after?: Record<string, any>;
 
   /* ======================================================
-   * WHO PERFORMED ACTION
+   * ACTOR INFORMATION
    * ====================================================== */
 
   @Prop({
@@ -73,12 +83,6 @@ export class AuditLog extends Document {
     ip?: string;
     userAgent?: string;
   };
-
-  /* ======================================================
-   * TIMESTAMP
-   * ====================================================== */
-
-  createdAt: Date; // auto from timestamps
 }
 
 export const AuditLogSchema = SchemaFactory.createForClass(AuditLog);
@@ -88,5 +92,5 @@ export const AuditLogSchema = SchemaFactory.createForClass(AuditLog);
 // Fast entity timeline lookup
 AuditLogSchema.index({ entity: 1, entityId: 1, createdAt: -1 });
 
-// Actor-based lookup
+// Actor-based audit lookup
 AuditLogSchema.index({ 'performedBy.employeeId': 1, createdAt: -1 });

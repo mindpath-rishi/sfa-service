@@ -1,3 +1,21 @@
+/**
+ * Role Controller
+ * ---------------
+ * Purpose : Expose APIs for managing roles and permissions
+ * Used by : ROLE MANAGEMENT / ACCESS CONTROL ADMIN SCREENS
+ *
+ * Responsibilities:
+ * - Create new roles
+ * - Retrieve role lists with filters & pagination
+ * - Fetch role details
+ * - Update role configuration
+ * - Soft delete roles
+ *
+ * Notes:
+ * - Business logic is delegated to RoleService
+ * - Role permissions control access across the system
+ */
+
 import {
   Body,
   Controller,
@@ -9,13 +27,11 @@ import {
   Patch,
   Post,
   Query,
-  UseGuards,
 } from '@nestjs/common';
 import {
   ApiBody,
   ApiOperation,
   ApiParam,
-  ApiQuery,
   ApiTags,
 } from '@nestjs/swagger';
 
@@ -27,7 +43,11 @@ import { RoleService } from './role.service';
 import { ROLE } from './role.constants';
 
 import { FeatureFlag } from 'src/core/decorators/feature-flag.decorator';
-import { API_MODULE, API_MODULE_ENABLE_KEYS, V1 } from 'src/shared/constants/api.constants';
+import {
+  API_MODULE,
+  API_MODULE_ENABLE_KEYS,
+  V1,
+} from 'src/shared/constants/api.constants';
 
 import { ApiSuccessResponse } from 'src/core/swagger/api.response.swagger';
 import {
@@ -35,9 +55,6 @@ import {
   ApiUnauthorizedResponse,
   ApiUnprocessableEntityResponse,
 } from 'src/core/swagger/api-error.response.swagger';
-
-// OPTIONAL (recommended): If Roles API should be protected
-// import { JwtAuthGuard } from 'src/core/guards/jwt.guard';
 
 @ApiTags('Roles')
 @FeatureFlag(API_MODULE_ENABLE_KEYS.ROLE)
@@ -52,7 +69,10 @@ export class RoleController {
   constructor(private readonly roleService: RoleService) {}
 
   /**
-   * Create a new role.
+   * Create Role
+   * -----------
+   * Purpose : Create a new role with permissions
+   * Used by : ADMIN / ACCESS CONTROL SETUP
    */
   @Post()
   @HttpCode(HttpStatus.CREATED)
@@ -73,30 +93,20 @@ export class RoleController {
   }
 
   /**
-   * Fetch roles with optional pagination and filters.
+   * Get Roles
+   * ---------
+   * Purpose : Retrieve roles using filters and pagination
+   * Used by : ROLE LIST / ACCESS CONTROL SCREENS
+   *
+   * Supports:
+   * - Status-based filtering
+   * - Free-text search
+   * - Van limit filters
+   * - Pagination
    */
   @Get()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Get all roles' })
-  @ApiQuery({ name: 'status', required: false, example: 'ACTIVE' })
-  @ApiQuery({
-    name: 'searchText',
-    required: false,
-    example: 'admin',
-    description: 'Search by role name or roleId',
-  })
-  @ApiQuery({
-    name: 'page',
-    required: false,
-    example: 1,
-    description: 'Default: 1',
-  })
-  @ApiQuery({
-    name: 'limit',
-    required: false,
-    example: 20,
-    description: 'Default: 20',
-  })
   @ApiSuccessResponse(
     {
       items: [
@@ -121,7 +131,10 @@ export class RoleController {
   }
 
   /**
-   * Fetch role details by roleId.
+   * Get Role by ID
+   * --------------
+   * Purpose : Retrieve role details
+   * Used by : ROLE DETAIL / PERMISSION REVIEW
    */
   @Get(':roleId')
   @HttpCode(HttpStatus.OK)
@@ -141,7 +154,10 @@ export class RoleController {
   }
 
   /**
-   * Update role properties (permissions/status/name).
+   * Update Role
+   * -----------
+   * Purpose : Update role configuration and permissions
+   * Used by : ADMIN / ACCESS CONTROL MAINTENANCE
    */
   @Patch(':roleId')
   @HttpCode(HttpStatus.OK)
@@ -161,11 +177,17 @@ export class RoleController {
   }
 
   /**
-   * Soft delete a role (disables role without removing from DB).
+   * Delete Role (Soft Delete)
+   * -------------------------
+   * Purpose : Deactivate a role
+   * Used by : ADMIN / ACCESS CONTROL CLEANUP
+   *
+   * Notes:
+   * - Role data is preserved for audit purposes
    */
   @Delete(':roleId')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Delete role (soft delete)' })
+  @ApiOperation({ summary: 'Delete role' })
   @ApiParam({ name: 'roleId', example: 'RID-001' })
   @ApiSuccessResponse(null, ROLE.DELETED)
   async remove(@Param('roleId') roleId: string) {

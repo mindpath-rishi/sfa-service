@@ -43,6 +43,15 @@ export class User {
   @Prop({
     type: String,
     required: true,
+    trim: true,
+    index: true,
+  })
+  loginId: string;
+
+  // Unique PER AGENT (composite index below)
+  @Prop({
+    type: String,
+    required: true,
     index: true,
   })
   mobile: string;
@@ -63,18 +72,6 @@ export class User {
     select: false,
   })
   password: string;
-
-  /* ======================================================
-   * CONTEXT
-   * ====================================================== */
-
-  @Prop({
-    type: String,
-    enum: Agent,
-    required: true,
-    index: true,
-  })
-  agent: Agent;
 
   /* ======================================================
    * STATUS & METADATA
@@ -98,10 +95,16 @@ export const UserSchema = SchemaFactory.createForClass(User);
  * COMPOSITE UNIQUE INDEXES (CRITICAL)
  * ====================================================== */
 
+// 🔐 Same loginId cannot exist twice within same agent
+UserSchema.index(
+  { loginId: 1, agent: 1 },
+  { unique: true },
+);
+
 // 🔐 Same mobile cannot exist twice within same agent
 UserSchema.index(
   { mobile: 1, agent: 1 },
-  { unique: true }
+  { unique: true, sparse: true },
 );
 
 // 🔐 Same email cannot exist twice within same agent
@@ -110,5 +113,6 @@ UserSchema.index(
   {
     unique: true,
     partialFilterExpression: { email: { $exists: true } },
-  }
+    sparse: true,
+  },
 );

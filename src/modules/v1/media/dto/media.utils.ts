@@ -1,13 +1,60 @@
+/**
+ * Media Utility
+ * -------------
+ * Purpose : Common helpers for media handling and validation
+ * Used by : MEDIA SERVICE / UPLOAD FLOWS
+ *
+ * Responsibilities:
+ * - Normalize request inputs
+ * - Decide storage behavior
+ * - Enforce upload limits
+ *
+ * Notes:
+ * - Stateless utility class
+ * - Does not perform DB mutations directly
+ * - Relies on MediaService for data access
+ */
+
 import { ForbiddenException } from '@nestjs/common';
-import { MEDIA_OWNER_TYPE, MEDIA_TYPE } from 'src/shared/constants/media.constants';
+import {
+  MEDIA_OWNER_TYPE,
+  MEDIA_TYPE,
+} from 'src/shared/constants/media.constants';
 import { MediaLimitUtil } from 'src/shared/utils/media-limit.utils';
 
 export class MediaUtil {
+  /* ================= PARSERS ================= */
+
+  /**
+   * Parse Primary Flag
+   * ------------------
+   * Purpose : Normalize boolean-like input for `isPrimary`
+   *
+   * Accepts:
+   * - boolean
+   * - string ('true' / 'false')
+   *
+   * Returns:
+   * - true / false
+   * - undefined if value not provided
+   */
   static parseIsPrimary(value: any): boolean | undefined {
     if (value === undefined || value === null) return undefined;
     return String(value).toLowerCase() === 'true';
   }
 
+  /**
+   * Parse Tags
+   * ----------
+   * Purpose : Normalize tags input into a string array
+   *
+   * Supports:
+   * - Array of strings
+   * - Comma-separated string
+   *
+   * Returns:
+   * - string[] or undefined
+   */
   static parseTags(value: any): string[] | undefined {
     if (value === undefined || value === null) return undefined;
 
@@ -25,19 +72,58 @@ export class MediaUtil {
     return undefined;
   }
 
+  /* ================= STORAGE HELPERS ================= */
+
+  /**
+   * Build Storage Folder Path
+   * -------------------------
+   * Purpose : Generate folder path for media storage
+   *
+   * Example:
+   * - ownerType = PRODUCT → media/product
+   * - ownerType = USER → media/user
+   */
   static buildFolder(ownerType: string) {
     return `media/${String(ownerType || 'general').toLowerCase()}`;
   }
 
-  static isProductImage(ownerType: string, mediaType: string) {
+  /**
+   * Determine Variant Generation
+   * ----------------------------
+   * Purpose : Decide whether image variants should be generated
+   *
+   * Rules:
+   * - Only IMAGE media type
+   * - Only product-related owner types
+   */
+  static shouldGenerateVariants(ownerType: string, mediaType: string) {
     return (
       mediaType === MEDIA_TYPE.IMAGE &&
-      [MEDIA_OWNER_TYPE.PRODUCT, MEDIA_OWNER_TYPE.VARIANT, MEDIA_OWNER_TYPE.CATEGORY].includes(
-        ownerType as any,
-      )
+      [
+        MEDIA_OWNER_TYPE.PRODUCT,
+        MEDIA_OWNER_TYPE.VARIANT,
+        MEDIA_OWNER_TYPE.CATEGORY,
+      ].includes(ownerType as any)
     );
   }
 
+  /* ================= LIMIT VALIDATION ================= */
+
+  /**
+   * Validate Media Upload Limit
+   * ---------------------------
+   * Purpose : Enforce media upload limits per owner, purpose, and type
+   *
+   * Used by:
+   * - Upload flows
+   * - Update flows (group change)
+   *
+   * Supports:
+   * - Ignoring current media (during update)
+   *
+   * Throws:
+   * - ForbiddenException if limit exceeded
+   */
   static async validateLimit(params: {
     mediaService: any;
 
@@ -47,7 +133,7 @@ export class MediaUtil {
     purpose: string;
     mediaType: string;
 
-    ignoreMediaId?: string; // ✅ for update only
+    ignoreMediaId?: string;
   }) {
     const {
       mediaService,
@@ -73,19 +159,15 @@ export class MediaUtil {
         purpose,
         mediaType,
         isDeleted: false,
-      } as any,
-      {
-        sort: { sortOrder: 1, _id: 1 },
-        lean: true,
-        select: { mediaId: 1 },
-      } as any,
+      },
+      { lean: true, select: { mediaId: 1 } },
     );
 
-    const countWithoutIgnored = ignoreMediaId
+    const count = ignoreMediaId
       ? list.filter((x) => x.mediaId !== ignoreMediaId).length
       : list.length;
 
-    if (countWithoutIgnored >= limit) {
+    if (count >= limit) {
       throw new ForbiddenException(
         `Upload limit reached. Max allowed = ${limit} for ${ownerType} + ${purpose}. Please delete an existing media and retry.`,
       );

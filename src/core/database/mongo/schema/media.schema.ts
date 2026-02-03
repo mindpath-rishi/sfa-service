@@ -1,3 +1,21 @@
+/**
+ * Media Collection
+ * ----------------
+ * Purpose : Centralized storage for all media assets
+ * Used by : PRODUCT / CATEGORY / USER / CMS / BANNERS
+ *
+ * Contains:
+ * - Media ownership and classification
+ * - Storage and access URLs
+ * - UI/SEO related metadata
+ * - Ordering and primary media flags
+ *
+ * Notes:
+ * - Supports multiple resolutions per media
+ * - Soft delete is used instead of hard delete
+ * - One owner can have multiple media records
+ */
+
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document } from 'mongoose';
 import {
@@ -8,9 +26,14 @@ import {
 
 export type MediaDocument = Media & Document;
 
-/* ---------------- SUB-SCHEMAS ---------------- */
+/* ======================================================
+ * SUB-SCHEMAS
+ * ====================================================== */
 
-@Schema({ _id: false })
+/**
+ * Holds multiple image resolutions for responsive usage.
+ */
+@Schema({ _id: false, timestamps: false })
 export class MediaUrls {
   @Prop({ type: String, default: undefined })
   small?: string;
@@ -27,7 +50,10 @@ export class MediaUrls {
 
 export const MediaUrlsSchema = SchemaFactory.createForClass(MediaUrls);
 
-@Schema({ _id: false })
+/**
+ * Stores technical metadata of the uploaded file.
+ */
+@Schema({ _id: false, timestamps: false })
 export class MediaMeta {
   @Prop({ type: String, default: undefined })
   fileName?: string;
@@ -50,17 +76,25 @@ export class MediaMeta {
 
 export const MediaMetaSchema = SchemaFactory.createForClass(MediaMeta);
 
-/* ---------------- MAIN SCHEMA ---------------- */
+/* ======================================================
+ * MAIN SCHEMA
+ * ====================================================== */
 
 @Schema({
-  timestamps: false,
   versionKey: false,
 })
 export class Media {
+  /* ======================================================
+   * IDENTITY
+   * ====================================================== */
+
   @Prop({ type: String, required: true, unique: true, trim: true })
   mediaId: string;
 
-  /* ✅ Owner linkage */
+  /* ======================================================
+   * OWNER LINKAGE
+   * ====================================================== */
+
   @Prop({
     type: String,
     required: true,
@@ -75,7 +109,10 @@ export class Media {
   @Prop({ type: String, default: null, index: true })
   subOwnerId?: string | null;
 
-  /* ✅ Media classification */
+  /* ======================================================
+   * MEDIA CLASSIFICATION
+   * ====================================================== */
+
   @Prop({
     type: String,
     enum: Object.values(MEDIA_TYPE),
@@ -92,7 +129,10 @@ export class Media {
   })
   purpose: string;
 
-  /* ✅ Storage */
+  /* ======================================================
+   * STORAGE
+   * ====================================================== */
+
   @Prop({ type: String, required: true, index: true })
   storageKey: string;
 
@@ -102,7 +142,10 @@ export class Media {
   @Prop({ type: MediaUrlsSchema, default: undefined })
   urls?: MediaUrls;
 
-  /* ✅ UI & SEO fields (for Product / Category banners etc.) */
+  /* ======================================================
+   * UI & SEO
+   * ====================================================== */
+
   @Prop({ type: String, default: undefined, trim: true })
   title?: string;
 
@@ -112,50 +155,47 @@ export class Media {
   @Prop({ type: String, default: undefined, trim: true })
   altText?: string;
 
-  /**
-   * ✅ Where to navigate when user clicks the image/banner
-   * Example:
-   * - /products/P001
-   * - /category/CAT001
-   * - https://domain.com/offer
-   */
   @Prop({ type: String, default: undefined, trim: true })
   navigationUrl?: string;
 
   @Prop({ type: [String], default: undefined, index: true })
   tags?: string[];
 
-  /* ✅ Ordering */
+  /* ======================================================
+   * ORDERING
+   * ====================================================== */
+
   @Prop({ type: Number, default: 1, index: true })
   sortOrder: number;
 
   @Prop({ type: Boolean, default: false, index: true })
   isPrimary: boolean;
 
-  /* ✅ Metadata */
+  /* ======================================================
+   * METADATA
+   * ====================================================== */
+
   @Prop({ type: MediaMetaSchema, default: undefined })
   meta?: MediaMeta;
 
-  /* ✅ Soft delete */
+  /* ======================================================
+   * SOFT DELETE
+   * ====================================================== */
+
   @Prop({ type: Boolean, default: false, index: true })
   isDeleted: boolean;
-
-  /* ✅ Audit */
-  @Prop({ type: String, default: null })
-  createdById?: string | null;
-
-  @Prop({ type: String, default: null })
-  updatedById?: string | null;
 }
 
 export const MediaSchema = SchemaFactory.createForClass(Media);
 
-/* ---------------- INDEXES (SCALABLE) ---------------- */
+/* ======================================================
+ * INDEXES (SCALABLE)
+ * ====================================================== */
 
-// ✅ Fast fetch media by owner (gallery listing)
+// Fast gallery listing per owner
 MediaSchema.index({ ownerType: 1, ownerId: 1, isDeleted: 1, sortOrder: 1 });
 
-// ✅ Fast primary media lookup (main/profile/receipt etc.)
+// Fast primary media lookup
 MediaSchema.index({
   ownerType: 1,
   ownerId: 1,
@@ -164,9 +204,9 @@ MediaSchema.index({
   isDeleted: 1,
 });
 
-// ✅ Fast sub-owner fetch (variant images / nested records)
+// Sub-owner media fetch (variants, nested entities)
 MediaSchema.index({ ownerType: 1, ownerId: 1, subOwnerId: 1, isDeleted: 1 });
 
-// ✅ Faster search by title/tags
+// Title and tag-based search
 MediaSchema.index({ ownerType: 1, ownerId: 1, title: 1, isDeleted: 1 });
 MediaSchema.index({ tags: 1, isDeleted: 1 });

@@ -9,16 +9,24 @@ import {
 import {
   ApiTags,
   ApiOperation,
-  ApiQuery,
   ApiParam,
 } from '@nestjs/swagger';
 
 import { ApiSuccessResponse } from 'src/core/swagger/api.response.swagger';
 import { FeatureFlag } from 'src/core/decorators/feature-flag.decorator';
 import { AuditLogsService } from './audit_logs.service';
-import { API_MODULE, API_MODULE_ENABLE_KEYS, V1 } from 'src/shared/constants/api.constants';
+import {
+  API_MODULE,
+  API_MODULE_ENABLE_KEYS,
+  V1,
+} from 'src/shared/constants/api.constants';
 import { AUDIT_LOGS } from './audit_logs.constants';
+import { AuditLogsQueryDto } from './dto/audit-logs-query.dto';
 
+/**
+ * Audit log endpoints.
+ * Provides read-only access to system audit trails.
+ */
 @ApiTags('Audit Logs')
 @FeatureFlag(API_MODULE_ENABLE_KEYS.AUDIT_LOGS)
 @Controller({
@@ -29,41 +37,13 @@ export class AuditLogsController {
   constructor(private readonly auditLogsService: AuditLogsService) {}
 
   /* ======================================================
-   * GET ALL AUDIT LOGS (FILTER + PAGINATION + SEARCH)
+   * GET ALL AUDIT LOGS
+   * Supports filtering, search, date range, and pagination.
    * ====================================================== */
 
   @Get()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Get audit logs' })
-  @ApiQuery({ name: 'entity', required: false, example: 'Customer' })
-  @ApiQuery({ name: 'entityId', required: false, example: 'CID-1A2B3C4D' })
-  @ApiQuery({ name: 'action', required: false, example: 'UPDATE' })
-  @ApiQuery({
-    name: 'performedBy',
-    required: false,
-    description: 'Employee ID who performed the action',
-    example: 'EID-9F8E7D6C',
-  })
-  @ApiQuery({
-    name: 'searchText',
-    required: false,
-    description: 'Search by entityId or performer',
-    example: 'CID',
-  })
-  @ApiQuery({
-    name: 'from',
-    required: false,
-    description: 'Start date (ISO)',
-    example: '2026-01-01',
-  })
-  @ApiQuery({
-    name: 'to',
-    required: false,
-    description: 'End date (ISO)',
-    example: '2026-01-31',
-  })
-  @ApiQuery({ name: 'page', required: false, example: 1 })
-  @ApiQuery({ name: 'limit', required: false, example: 20 })
   @ApiSuccessResponse(
     {
       items: [],
@@ -76,32 +56,13 @@ export class AuditLogsController {
     },
     AUDIT_LOGS.FETCH,
   )
-  async findAll(
-    @Query('entity') entity?: string,
-    @Query('entityId') entityId?: string,
-    @Query('action') action?: string,
-    @Query('performedBy') performedBy?: string,
-    @Query('searchText') searchText?: string,
-    @Query('from') from?: string,
-    @Query('to') to?: string,
-    @Query('page') page?: number,
-    @Query('limit') limit?: number,
-  ) {
-    return this.auditLogsService.findAll({
-      entity,
-      entityId,
-      action,
-      performedBy,
-      searchText,
-      from,
-      to,
-      page: Number(page) || 1,
-      limit: Number(limit) || 20,
-    });
+  async findAll(@Query() query: AuditLogsQueryDto) {
+    return this.auditLogsService.findAll(query);
   }
 
   /* ======================================================
    * GET AUDIT LOG BY ID
+   * Returns a single audit log entry.
    * ====================================================== */
 
   @Get(':id')

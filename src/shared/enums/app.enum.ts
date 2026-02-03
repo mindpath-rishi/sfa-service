@@ -18,3 +18,13 @@ export enum Language {
   EN = 'EN',
   HI = 'HI',
 }
+
+/**
+ * Supported audit actions.
+ */
+export enum AuditAction {
+  CREATE = 'CREATE',
+  UPDATE = 'UPDATE',
+  DELETE = 'DELETE',
+  RESTORE = 'RESTORE',
+}

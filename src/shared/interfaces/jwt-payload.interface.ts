@@ -4,5 +4,6 @@ export interface JwtPayload {
   sid: string; // sessionId
   iat?: number;
   exp?: number;
-  name: string
+  name: string;
+  deviceId: string;
 }

@@ -3,15 +3,17 @@ import {
   ExecutionContext,
   ForbiddenException,
   Injectable,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
+import { PERMISSIONS_KEY } from '../decorators/permissioin.decorator';
 
 import { EmployeeService } from 'src/modules/v1/employee/employee.service';
 import { RoleService } from 'src/modules/v1/role/role.service';
-import { PERMISSIONS_KEY } from '../decorators/permissioin.decorator';
-import { AppLogger } from '../logger/app-logger';
+import { Status } from 'src/shared/enums/app.enum';
+import { UserStatus } from 'src/modules/v1/user/user.enum';
 
 @Injectable()
 export class PermissionsGuard implements CanActivate {
@@ -22,41 +24,56 @@ export class PermissionsGuard implements CanActivate {
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    // ✅ 1) Skip permission check for public routes
+    /* ======================================================
+     * PUBLIC ROUTES
+     * ====================================================== */
     const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
       context.getHandler(),
       context.getClass(),
     ]);
-
-
     if (isPublic) return true;
 
-    // ✅ 2) If route has no permission decorator, allow by default
+    /* ======================================================
+     * REQUIRED PERMISSIONS
+     * ====================================================== */
     const requiredPermissions = this.reflector.getAllAndOverride<string[]>(
       PERMISSIONS_KEY,
       [context.getHandler(), context.getClass()],
     );
 
-    if (!requiredPermissions || requiredPermissions.length === 0) return true;
+    if (!requiredPermissions || requiredPermissions.length === 0) {
+      return true;
+    }
 
     const req = context.switchToHttp().getRequest();
     const user = req.user;
-    // ✅ 3) Ensure user is logged in
-    if (!user?.userId ||  !user.roleId) {
-      throw new ForbiddenException('Unauthorized access');
+
+    /* ======================================================
+     * AUTH CONTEXT
+     * ====================================================== */
+    if (!user?.userId) {
+      throw new UnauthorizedException('Unauthorized access');
     }
 
-    // ✅ 4) Load employee profile (profileId = employeeId)
+    /* ======================================================
+     * EMPLOYEE VALIDATION
+     * ====================================================== */
     const employee = await this.employeeService.findOne(
       { employeeId: user.userId, isDeleted: false },
       { lean: true },
     );
 
     if (!employee) {
-      throw new ForbiddenException('Employee profile not found');
+      throw new UnauthorizedException('Employee profile not found');
     }
 
-    // ✅ 5) Load role permissions
+    if (employee.status !== UserStatus.ACTIVE) {
+      throw new ForbiddenException('Employee account is inactive');
+    }
+
+    /* ======================================================
+     * ROLE VALIDATION
+     * ====================================================== */
     const role = await this.roleService.findOne(
       { roleId: employee.roleId, isDeleted: false },
       { lean: true },
@@ -66,27 +83,45 @@ export class PermissionsGuard implements CanActivate {
       throw new ForbiddenException('Role not found');
     }
 
-    // ✅ 6) Build final permission list (role perms + overrides)
-    const rolePermissions = new Set<string>(role.permissions || []);
-
-    const allowOverrides = new Set<string>(employee.permissionOverrides?.allow || []);
-    const denyOverrides = new Set<string>(employee.permissionOverrides?.deny || []);
-
-    // ✅ add allow overrides
-    for (const p of allowOverrides) {
-      rolePermissions.add(p);
+    if (role.status !== Status.ACTIVE) {
+      throw new ForbiddenException('Role is inactive');
     }
 
-    // ✅ remove deny overrides (deny wins always)
-    for (const p of denyOverrides) {
-      rolePermissions.delete(p);
+    /* ======================================================
+     * SUPER ADMIN BYPASS
+     * ====================================================== */
+    if (role.name === 'SUPER_ADMIN') {
+      return true;
     }
 
-    // ✅ 7) Check required permissions
-    const hasAll = requiredPermissions.every((p) => rolePermissions.has(p));
+    /* ======================================================
+     * PERMISSION RESOLUTION
+     * Priority:
+     * 1. Role permissions
+     * 2. Employee allow overrides
+     * 3. Employee deny overrides (highest)
+     * ====================================================== */
+    const permissions = new Set<string>(role.permissions || []);
 
-    if (!hasAll) {
-      throw new ForbiddenException('You do not have permission to access this resource');
+    for (const p of employee.permissionOverrides?.allow || []) {
+      permissions.add(p);
+    }
+
+    for (const p of employee.permissionOverrides?.deny || []) {
+      permissions.delete(p);
+    }
+
+    /* ======================================================
+     * FINAL PERMISSION CHECK
+     * ====================================================== */
+    const hasAllPermissions = requiredPermissions.every((p) =>
+      permissions.has(p),
+    );
+
+    if (!hasAllPermissions) {
+      throw new ForbiddenException(
+        'You do not have permission to access this resource',
+      );
     }
 
     return true;

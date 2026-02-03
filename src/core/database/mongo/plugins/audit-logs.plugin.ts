@@ -1,7 +1,6 @@
 import { Schema } from 'mongoose';
 import { RequestContextStore } from 'src/core/context/request-context';
-import { AuditAction } from 'src/core/database/mongo/schema/audit-log.schema';
-
+import { AuditAction } from 'src/shared/enums/app.enum';
 const IGNORED_FIELDS = ['updatedAt', 'createdAt', '__v'];
 
 export const auditPlugin = (schema: Schema, entity: string) => {

@@ -1,3 +1,20 @@
+/**
+ * Create Employee DTO
+ * -------------------
+ * Purpose : Define and validate payload for creating a new employee
+ * Used by : EMPLOYEE CREATE APIs / ADMIN USER MANAGEMENT
+ *
+ * Supports:
+ * - Basic employee identity details
+ * - Secure authentication credentials
+ * - Role assignment
+ * - Fine-grained permission overrides
+ *
+ * Notes:
+ * - All validations are enforced at request level
+ * - Permission overrides are applied on top of role permissions
+ */
+
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsEmail,
@@ -10,9 +27,25 @@ import {
   ArrayUnique,
 } from 'class-validator';
 
+/**
+ * Permission Overrides DTO
+ * -----------------------
+ * Purpose : Define permission-level overrides for an employee
+ * Used by : EMPLOYEE ACCESS CONTROL / AUTHORIZATION LAYER
+ *
+ * Notes:
+ * - Overrides are applied after role permissions
+ * - `allow` grants extra permissions
+ * - `deny` explicitly revokes permissions
+ */
 class PermissionOverridesDto {
+  /**
+   * Allowed Permissions
+   * -------------------
+   * Purpose : Explicit permissions granted to the employee
+   */
   @ApiPropertyOptional({
-    description: 'Explicitly allowed permissions',
+    description: 'Permissions explicitly granted to the employee',
     example: ['employee.read', 'employee.update'],
   })
   @IsOptional()
@@ -21,8 +54,13 @@ class PermissionOverridesDto {
   @ArrayUnique({ message: 'allow permissions must be unique' })
   allow?: string[];
 
+  /**
+   * Denied Permissions
+   * -----------------
+   * Purpose : Explicit permissions revoked from the employee
+   */
   @ApiPropertyOptional({
-    description: 'Explicitly denied permissions',
+    description: 'Permissions explicitly revoked from the employee',
     example: ['employee.delete'],
   })
   @IsOptional()
@@ -32,15 +70,20 @@ class PermissionOverridesDto {
   deny?: string[];
 }
 
+/**
+ * Create Employee Payload
+ * ----------------------
+ * Purpose : Validate request body for employee creation
+ */
 export class CreateEmployeeDto {
-  /* ======================================================
-   * MOBILE (REQUIRED)
-   * ====================================================== */
-
+  /**
+   * Mobile Number
+   * -------------
+   * Purpose : Primary contact number for the employee
+   */
   @ApiProperty({
     example: '9876543210',
     description: 'Employee mobile number',
-    required: true,
   })
   @IsString({ message: 'Mobile must be a string' })
   @IsNotEmpty({ message: 'Mobile is required' })
@@ -49,70 +92,89 @@ export class CreateEmployeeDto {
   })
   mobile: string;
 
-  /* ======================================================
-   * NAME (REQUIRED)
-   * ====================================================== */
+  /**
+   * Login ID
+   * --------
+   * Purpose : Unique login identifier for the employee
+   */
+  @ApiProperty({
+    example: 'UserId',
+    description: 'Employee login ID',
+  })
+  @IsString({ message: 'Login ID must be a string' })
+  @IsNotEmpty({ message: 'Login ID is required' })
+  loginId: string;
 
+  /**
+   * Full Name
+   * ---------
+   * Purpose : Employee full name
+   */
   @ApiProperty({
     example: 'John Doe',
     description: 'Employee full name',
-    required: true,
   })
   @IsString({ message: 'Name must be a string' })
   @IsNotEmpty({ message: 'Name is required' })
   name: string;
 
-  /* ======================================================
-   * EMAIL (REQUIRED)
-   * ====================================================== */
-
+  /**
+   * Email Address
+   * -------------
+   * Purpose : Official email for communication and login
+   */
   @ApiProperty({
     example: 'john.doe@company.com',
     description: 'Employee email address',
-    required: true,
   })
   @IsEmail({}, { message: 'Email must be a valid email address' })
   email: string;
 
-  /* ======================================================
-   * PASSWORD (REQUIRED)
-   * ====================================================== */
-
+  /**
+   * Password
+   * --------
+   * Purpose : Initial password for employee account
+   *
+   * Rules:
+   * - Minimum 8 characters
+   * - Must include uppercase, lowercase, number, and special character
+   */
   @ApiProperty({
     description:
-      'Strong password (min 8 chars, 1 uppercase, 1 lowercase, 1 number, 1 special char)',
+      'Strong password (min 8 chars, uppercase, lowercase, number, special character)',
     example: 'Passw0rd@123',
-    required: true,
   })
   @IsString({ message: 'Password must be a string' })
   @IsNotEmpty({ message: 'Password is required' })
   @MinLength(8, { message: 'Password must be at least 8 characters long' })
-  @Matches(
-    /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])/,
-    {
-      message:
-        'Password must include uppercase, lowercase, number, and special character',
-    },
-  )
+  @Matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])/, {
+    message:
+      'Password must include uppercase, lowercase, number, and special character',
+  })
   password: string;
 
-  /* ======================================================
-   * ROLE (REQUIRED)
-   * ====================================================== */
-
+  /**
+   * Role ID
+   * -------
+   * Purpose : Assign role to the employee
+   */
   @ApiProperty({
     example: 'ROLE_ADMIN',
     description: 'Role identifier assigned to the employee',
-    required: true,
   })
   @IsString({ message: 'roleId must be a string' })
   @IsNotEmpty({ message: 'roleId is required' })
   roleId: string;
 
-  /* ======================================================
-   * PERMISSION OVERRIDES (OPTIONAL)
-   * ====================================================== */
-
+  /**
+   * Permission Overrides
+   * --------------------
+   * Purpose : Apply fine-grained permission changes on top of role permissions
+   *
+   * Notes:
+   * - Optional
+   * - Overrides are evaluated after role permissions
+   */
   @ApiPropertyOptional({
     description: 'Fine-grained permission overrides for the employee',
     type: PermissionOverridesDto,

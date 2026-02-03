@@ -7,11 +7,12 @@
  * Contains:
  * - Role identity
  * - Permission list
+ * - Van association limits
  * - Status
  *
  * Notes:
  * - Permissions are string-based for flexibility
- * - Timestamps handled by global mongoose plugin
+ * - Van limits are enforced at service layer
  */
 
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
@@ -35,15 +36,36 @@ export class Role extends Document {
 
   @Prop({
     type: String,
-    enum: UserRole,
+    required: true,
+  })
+  name: string;
+
+  @Prop({
+    type: String,
     required: true,
     unique: true,
     index: true,
   })
-  name: string;
+  displayName: string;
 
   @Prop()
   description?: string;
+
+  /* ======================================================
+   * VAN ASSOCIATION RULES
+   * ====================================================== */
+
+  @Prop({
+    type: Number,
+    default: 0,
+    min: -1,
+  })
+  maxAssociatedVans: number;
+  /**
+   * -1 → unlimited
+   *  0 → no vans
+   *  N → max N vans
+   */
 
   /* ======================================================
    * PERMISSIONS
@@ -66,6 +88,9 @@ export class Role extends Document {
     index: true,
   })
   status: Status;
+
+  @Prop({ default: false, index: true })
+  isSystemAdmin: boolean;
 }
 
 export const RoleSchema = SchemaFactory.createForClass(Role);

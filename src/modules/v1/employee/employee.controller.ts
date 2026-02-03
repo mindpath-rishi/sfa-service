@@ -1,3 +1,21 @@
+/**
+ * Employee Controller
+ * -------------------
+ * Purpose : Exposes APIs for managing employee lifecycle and profiles
+ * Used by : ADMIN PANEL / HR MANAGEMENT / INTERNAL TOOLS
+ *
+ * Responsibilities:
+ * - Create employee profiles
+ * - Fetch employee lists with filters & pagination
+ * - Retrieve individual employee details
+ * - Update employee profiles
+ * - Deactivate employee accounts
+ *
+ * Notes:
+ * - Authentication & authorization are handled via guards and permissions
+ * - Business logic is delegated to EmployeeService
+ */
+
 import {
   Body,
   Controller,
@@ -10,16 +28,11 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
-import {
-  ApiBody,
-  ApiOperation,
-  ApiParam,
-  ApiQuery,
-  ApiTags,
-} from '@nestjs/swagger';
+import { ApiBody, ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger';
 
 import { CreateEmployeeDto } from './dto/create-employee.dto';
 import { UpdateEmployeeDto } from './dto/update-employee.dto';
+
 import { EmployeeService } from './employee.service';
 import { FeatureFlag } from 'src/core/decorators/feature-flag.decorator';
 import { ApiSuccessResponse } from 'src/core/swagger/api.response.swagger';
@@ -37,13 +50,8 @@ import {
 } from 'src/shared/constants/api.constants';
 import { EMPLOYEE } from './employee.constants';
 import { Permissions } from 'src/core/decorators/permissioin.decorator';
+import { EmployeeQueryDto } from './dto/employee.query.dto';
 
-/**
- * Employee API (v1)
- *
- * Handles Employee CRUD operations.
- * Authentication is required for all endpoints.
- */
 @ApiTags('Employee')
 @FeatureFlag(API_MODULE_ENABLE_KEYS.EMPLOYEE)
 @ApiUnauthorizedResponse()
@@ -57,7 +65,14 @@ export class EmployeeController {
   constructor(private readonly employeeService: EmployeeService) {}
 
   /**
-   * Create a new employee.
+   * Create Employee
+   * ---------------
+   * Purpose : Create a new employee profile
+   * Used by : ADMIN / HR ONBOARDING FLOWS
+   *
+   * Notes:
+   * - Authentication credentials are managed separately
+   * - Role & permission assignment is handled during creation
    */
   @Permissions('EMPLOYEE_CREATE')
   @Post()
@@ -78,29 +93,19 @@ export class EmployeeController {
   }
 
   /**
-   * Fetch employees with optional search and pagination.
+   * Get Employees
+   * -------------
+   * Purpose : Retrieve a paginated list of employees
+   * Used by : EMPLOYEE LIST / ADMIN MANAGEMENT SCREENS
+   *
+   * Supports:
+   * - Status-based filtering
+   * - Free-text search
+   * - Pagination
    */
   @Get()
+  @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Get all employees' })
-  @ApiQuery({ name: 'status', required: false, example: 'ACTIVE' })
-  @ApiQuery({
-    name: 'searchText',
-    required: false,
-    description: 'Search by employeeId, name, mobile, or email',
-    example: 'john',
-  })
-  @ApiQuery({
-    name: 'page',
-    required: false,
-    example: 1,
-    description: 'Default: 1',
-  })
-  @ApiQuery({
-    name: 'limit',
-    required: false,
-    example: 20,
-    description: 'Default: 20',
-  })
   @ApiSuccessResponse(
     {
       items: [
@@ -119,24 +124,21 @@ export class EmployeeController {
     },
     EMPLOYEE.FETCHED,
   )
-  async findAll(
-    @Query('status') status?: string,
-    @Query('searchText') searchText?: string,
-    @Query('page') page?: string,
-    @Query('limit') limit?: string,
-  ) {
-    return this.employeeService.findAll({
-      status,
-      searchText,
-      page: Number(page) || 1,
-      limit: Number(limit) || 20,
-    });
+  async findAll(@Query() query: EmployeeQueryDto) {
+    return this.employeeService.findAll(query);
   }
 
   /**
-   * Fetch employee details by employeeId.
+   * Get Employee by ID
+   * ------------------
+   * Purpose : Retrieve a single employee profile
+   * Used by : EMPLOYEE DETAIL / PROFILE VIEW
+   *
+   * Params:
+   * - employeeId : Unique employee identifier
    */
   @Get(':employeeId')
+  @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Get employee by employeeId' })
   @ApiParam({ name: 'employeeId', example: 'EID-1A2B3C4D' })
   @ApiSuccessResponse(
@@ -153,9 +155,17 @@ export class EmployeeController {
   }
 
   /**
-   * Update employee details by employeeId.
+   * Update Employee
+   * ---------------
+   * Purpose : Update employee profile information
+   * Used by : ADMIN EDIT / PROFILE UPDATE FLOWS
+   *
+   * Notes:
+   * - Only editable fields are updated
+   * - Employee identity remains unchanged
    */
   @Patch(':employeeId')
+  @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Update employee' })
   @ApiParam({ name: 'employeeId', example: 'EID-1A2B3C4D' })
   @ApiBody({ type: UpdateEmployeeDto })
@@ -169,9 +179,17 @@ export class EmployeeController {
   }
 
   /**
-   * Deactivate employee (soft delete).
+   * Deactivate Employee
+   * -------------------
+   * Purpose : Deactivate an employee profile (soft delete)
+   * Used by : ADMIN / HR OFFBOARDING FLOWS
+   *
+   * Notes:
+   * - Employee data is retained for audit purposes
+   * - Access is revoked but record remains
    */
   @Delete(':employeeId')
+  @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Deactivate employee' })
   @ApiParam({ name: 'employeeId', example: 'EID-1A2B3C4D' })
   @ApiSuccessResponse(null, EMPLOYEE.DELETED)

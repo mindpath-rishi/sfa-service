@@ -1,5 +1,18 @@
+/**
+ * Media Query DTO
+ * ----------------
+ * Purpose : Filter and paginate media records
+ * Used by : MEDIA LIST / GALLERY / CMS SCREENS
+ *
+ * Supports:
+ * - Owner-based filtering
+ * - Media type and purpose filters
+ * - Text search
+ * - Pagination
+ */
+
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEnum, IsNumberString, IsOptional, IsString } from 'class-validator';
+import { IsEnum, IsOptional, IsString } from 'class-validator';
 import {
   MEDIA_OWNER_TYPE,
   MEDIA_PURPOSE,
@@ -8,6 +21,7 @@ import {
 import { PaginationDto } from 'src/shared/dto/pagination.dto';
 
 export class MediaQueryDto extends PaginationDto {
+  /** Owner entity type (Product, Category, User, etc.) */
   @ApiPropertyOptional({
     enum: Object.values(MEDIA_OWNER_TYPE),
     example: 'PRODUCT',
@@ -17,6 +31,7 @@ export class MediaQueryDto extends PaginationDto {
   @IsEnum(Object.values(MEDIA_OWNER_TYPE))
   ownerType?: string;
 
+  /** Primary owner business identifier */
   @ApiPropertyOptional({
     example: 'P001',
     description:
@@ -26,6 +41,7 @@ export class MediaQueryDto extends PaginationDto {
   @IsString()
   ownerId?: string;
 
+  /** Optional secondary owner identifier (e.g. variantId) */
   @ApiPropertyOptional({
     example: 'V001',
     description: 'Optional sub owner id (variantId etc.)',
@@ -34,6 +50,7 @@ export class MediaQueryDto extends PaginationDto {
   @IsString()
   subOwnerId?: string;
 
+  /** Media format filter */
   @ApiPropertyOptional({
     enum: Object.values(MEDIA_TYPE),
     example: 'IMAGE',
@@ -43,6 +60,7 @@ export class MediaQueryDto extends PaginationDto {
   @IsEnum(Object.values(MEDIA_TYPE))
   mediaType?: string;
 
+  /** Media usage/purpose filter */
   @ApiPropertyOptional({
     enum: Object.values(MEDIA_PURPOSE),
     example: 'GALLERY',
@@ -52,6 +70,7 @@ export class MediaQueryDto extends PaginationDto {
   @IsEnum(Object.values(MEDIA_PURPOSE))
   purpose?: string;
 
+  /** Free-text search across media metadata */
   @ApiPropertyOptional({
     example: 'invoice',
     description: 'Search by url, storageKey, fileName, mimeType',

@@ -14,6 +14,10 @@ import {
   Employee,
   EmployeeSchema,
 } from 'src/core/database/mongo/schema/employee.schema';
+import {
+  UserDevice,
+  UserDeviceSchema,
+} from 'src/core/database/mongo/schema/device.schema';
 // import { Employee, EmployeeSchema } from 'src/core/database/mongo/schema/employee.schema';
 
 @Module({
@@ -32,6 +36,7 @@ import {
     MongooseModule.forFeature([
       { name: User.name, schema: UserSchema },
       { name: Employee.name, schema: EmployeeSchema },
+      { name: UserDevice.name, schema: UserDeviceSchema },
     ]),
   ],
   controllers: [UserController],

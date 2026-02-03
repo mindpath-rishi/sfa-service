@@ -25,6 +25,7 @@ import { AppLogger } from './core/logger/app-logger';
 import { PermissionsSeeder } from './core/seeds/permission.seeds';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { join } from 'path';
+import { SeederRunner } from './core/seeds/seed.runner';
 
 // ⚠️ guaranteed cookie-parser fix
 const cookieParser = require('cookie-parser');
@@ -121,8 +122,8 @@ async function bootstrap() {
   console.log('🚀 Server running on http://localhost:3000');
 
   if (process.env.SEED_PERMISSIONS === 'true') {
-    const permissionSeeder = app.get(PermissionsSeeder);
-    await permissionSeeder.seed();
+    const seederRunner = app.get(SeederRunner);
+    await seederRunner.run();
   }
 }
 bootstrap();

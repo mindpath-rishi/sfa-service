@@ -5,7 +5,7 @@ This is not boilerplate — it reflects everything we fixed and implemented.
 
 You can copy–paste this directly as README.md.
 
-🚀 Anavilam Service – Backend API
+🚀 SFA Service – Backend API
 
 An enterprise-grade backend service built using NestJS, Node.js 22, MongoDB (Replica Set), Docker, and Observability tooling (Prometheus & Grafana).
 
@@ -66,7 +66,7 @@ Example .env.development:
 NODE_ENV=development
 PORT=3000
 
-MONGO_URI=mongodb://mongo1:27017,mongo2:27017,mongo3:27017/anavilam?replicaSet=rs0
+MONGO_URI=mongodb://mongo1:27017,mongo2:27017,mongo3:27017/sfa?replicaSet=rs0
 
 
 ⚠️ Never use localhost, 127.0.0.1, or container IPs for MongoDB inside Docker.
@@ -182,7 +182,7 @@ MIT License
 
 👨‍💻 Maintained By
 
-Anavilam Engineering Team
+SFA Engineering Team
 
 ✅ Summary
 

@@ -27,6 +27,7 @@ import { SeedsModule } from './core/seeds/seeds.module';
 import { PermissionModule } from './modules/v1/permission/permission.module';
 import { MediaModule } from './modules/v1/media/media.module';
 import { RoleModule } from './modules/v1/role/role.module';
+import { EmployeeModule } from './modules/v1/employee/employee.module';
 
 @Global()
 @Module({
@@ -62,6 +63,7 @@ import { RoleModule } from './modules/v1/role/role.module';
     SeedsModule,
     PermissionModule,
     MediaModule,
+    EmployeeModule
   ],
   providers: [
     AppControlService,

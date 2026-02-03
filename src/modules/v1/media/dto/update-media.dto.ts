@@ -1,4 +1,19 @@
-import { Optional } from '@nestjs/common';
+/**
+ * Update Media DTO
+ * ----------------
+ * Purpose : Update media metadata and optionally replace the file
+ * Used by : MEDIA UPDATE / CMS / ADMIN FLOWS
+ *
+ * Allows:
+ * - Replacing the media file
+ * - Updating media type and purpose
+ * - Modifying UI, SEO, and ordering attributes
+ *
+ * Notes:
+ * - All fields are optional
+ * - Upload limits are validated at service layer
+ */
+
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsBooleanString,
@@ -13,15 +28,22 @@ import {
 } from 'src/shared/constants/media.constants';
 
 export class UpdateMediaDto {
-  @IsOptional()
+  /* ======================================================
+   * FILE
+   * ====================================================== */
+
   @ApiPropertyOptional({
     type: 'string',
     format: 'binary',
     description: 'Optional file to replace existing media file',
   })
+  @IsOptional()
   file?: any;
 
-  /* ✅ Allow changing mediaType + purpose */
+  /* ======================================================
+   * MEDIA CLASSIFICATION
+   * ====================================================== */
+
   @ApiPropertyOptional({
     enum: Object.values(MEDIA_TYPE),
     example: MEDIA_TYPE.IMAGE,
@@ -38,7 +60,10 @@ export class UpdateMediaDto {
   @IsIn(Object.values(MEDIA_PURPOSE))
   purpose?: string;
 
-  /* ✅ UI fields */
+  /* ======================================================
+   * UI & SEO
+   * ====================================================== */
+
   @ApiPropertyOptional({ example: 'New banner title' })
   @IsOptional()
   @IsString()
@@ -66,7 +91,10 @@ export class UpdateMediaDto {
   @IsOptional()
   tags?: string | string[];
 
-  /* ✅ sorting / primary */
+  /* ======================================================
+   * ORDERING & PRIMARY FLAG
+   * ====================================================== */
+
   @ApiPropertyOptional({ example: '1' })
   @IsOptional()
   @IsNumberString()

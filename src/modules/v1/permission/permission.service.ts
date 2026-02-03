@@ -1,3 +1,18 @@
+/**
+ * Permission Service
+ * ------------------
+ * Purpose : Handle read-only access to system permissions
+ * Used by : PermissionController
+ *
+ * Responsibilities:
+ * - Fetch active permissions
+ * - Support free-text search across permission attributes
+ *
+ * Notes:
+ * - Permissions are treated as static reference data
+ * - No create/update/delete operations are exposed here
+ */
+
 import { Injectable, HttpStatus } from '@nestjs/common';
 
 import { MongoRepository } from 'src/core/database/mongo/mongo.repository';
@@ -10,6 +25,7 @@ import {
 
 import { Status } from 'src/shared/enums/app.enum';
 import { PERMISSION } from './permission.constants';
+import { PermissionsQueryDto } from './dto/permission-query.dto';
 
 @Injectable()
 export class PermissionService extends MongoRepository<Permission> {
@@ -17,9 +33,21 @@ export class PermissionService extends MongoRepository<Permission> {
     super(mongo.getModel(Permission.name, PermissionSchema));
   }
 
-  /* ================= GET ALL ================= */
-
-  async findAll(searchText?: string) {
+  /**
+   * Get Permissions
+   * ---------------
+   * Purpose : Retrieve all active permissions
+   * Used by : ROLE MANAGEMENT / PERMISSION SELECTION UI
+   *
+   * Supports:
+   * - Free-text search across permission name, code, module, and description
+   *
+   * Notes:
+   * - Only ACTIVE permissions are returned
+   * - Results are sorted alphabetically by name
+   */
+  async findAll(query: PermissionsQueryDto) {
+    const { searchText } = query;
     const filter: any = { status: Status.ACTIVE };
 
     if (searchText?.trim()) {
