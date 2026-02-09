@@ -8,7 +8,7 @@
  * - Entity reference and action performed
  * - Before & after state snapshots
  * - Actor (employee) information
- * - Request metadata
+* - Request metadata
  *
  * Notes:
  * - Audit logs are immutable once created

@@ -69,7 +69,7 @@ export class EmployeeService extends MongoRepository<Employee> {
   async create(payload: CreateEmployeeDto) {
     return this.withTransaction(async (session) => {
       // Check existing employee (including soft-deleted)
-      const existingEmployee: Employee | any = await this.findOne(
+      const existingEmployee = await this.findOne(
         {
           $or: [{ mobile: payload.mobile }, { email: payload.email }],
         },

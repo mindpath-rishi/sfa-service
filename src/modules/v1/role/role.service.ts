@@ -39,7 +39,7 @@ import { normalizeRoleName } from './role.uitls';
 @Injectable()
 export class RoleService extends MongoRepository<Role> {
   constructor(mongo: MongoService) {
-    super(mongo.getModel(Role.name, RoleSchema));
+    super(mongo.getModel<Role>(Role.name, RoleSchema));
   }
 
   /**

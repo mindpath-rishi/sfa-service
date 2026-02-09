@@ -31,7 +31,7 @@ export const SWAGGER_AUTH = {
   TOKEN: 'access-token',
 } as const;
 
-export const SWAGGER_ENDPOINT = '/api-docs/';
+export const SWAGGER_ENDPOINT = '/api-docs';
 
 /* ================= SECURITY / RATE LIMITING ================= */
 

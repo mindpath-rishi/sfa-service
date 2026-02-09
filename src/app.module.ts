@@ -28,6 +28,9 @@ import { PermissionModule } from './modules/v1/permission/permission.module';
 import { MediaModule } from './modules/v1/media/media.module';
 import { RoleModule } from './modules/v1/role/role.module';
 import { EmployeeModule } from './modules/v1/employee/employee.module';
+import { NotificationModule } from './modules/v1/notification/notification.module';
+import { ProductModule } from './modules/v1/product/product.module';
+import { ProductCategoryModule } from './modules/v1/product-category/product-category.module';
 
 @Global()
 @Module({
@@ -63,7 +66,10 @@ import { EmployeeModule } from './modules/v1/employee/employee.module';
     SeedsModule,
     PermissionModule,
     MediaModule,
-    EmployeeModule
+    EmployeeModule,
+    NotificationModule,
+    ProductModule,
+    ProductCategoryModule,
   ],
   providers: [
     AppControlService,

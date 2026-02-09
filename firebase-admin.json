@@ -1,0 +1,13 @@
+{
+  "type": "service_account",
+  "project_id": "sales-force-automation-d398d",
+  "private_key_id": "1fc6b6390ec9cb1e479af5108ac943100cca447f",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDMzN1d1MHtj5Ky\ndh5GQKyyLZC/xHnA4lO65771h12Ga1IQo+Q/4Si0mUCBztjG0dStsT1CeT5aa4ID\nuhbZMkgM60YKIAssldEQYuSOZBaQ0txbuOO/OLY22x2MPfScGMAUxxslr+p6DYcA\nFYCrjV5M0dfqy5JI0RcvJCHIzqTgIbDVU+6k8c1UsKa0s+KkED1a4J2jpy/wK/uM\n1MgmC6XzvCzX6hh/HHlD7LpyuSbgy8Ej8bdxI24wnNKe/VfMTS/qjFy8HafaFcUk\nlPwLdWmKnLqE64JTG610jaKSw+Dl+oQth/0eYj3HyzqS+o5rkjodwLTE/DXvEHCA\nzR9tbmA9AgMBAAECggEATgyFEI1UmsRsk7aQMxXSutTCpVKrU+btIf3PuKKt8dxU\nmiLbiby1Vp5RByddVegBtXAmeH7cVHlEQ0dYDc4rx0CioJk1qPgvhJ8rm1hpgSfa\n8tmzcdybFKzMxfWWkyabjU+T+Pjh00H0gQOw1bA6j+wo7UJHrZiBzWVnuq+GBiQh\nggxAoadFpMSXs7fRKVc/F0XPIn2G7LT8aRauVskE24MUPqdXpkrnYLimeYXwbhtG\nynzxCuRrCHJwUUwkW7m8/WErTnV8wDVTxnHO+zU5hTgXeIv7oyUsSFrAsjcJPFMi\nRQooJgSLvVcHJUWwhlDMY/zC6OCtFvLP98IYQ5HdwQKBgQD7qxLqan1avZYISfru\nrcUDS3AmXt0j+oSr5XXIcIRYY0OH5p+9zfvAKmGZSwSX6Ca6nNuhSYtaGy/E5Xte\nKVBLsnkZacx0f1dEW8I0/qmJ7reUVGvX9Rds3DfivJGQi268YILEAgaWhQ/wTTWJ\ncyeppjQzt13MIIq/aG4pC/22TwKBgQDQU0a6nW2mIEPRf7gVPd/i1C+fCPbisPsF\nN/wyPwwFheTilnspMF0ZFUd9Iqh8EfG54b0U7Set8gdJDay4cvTEKqV1rC39gUMi\n23Y6NO7Bp4W8kYy+Dk44laOOLTMuNTEasyU7Pa7yMCvpD1raiTZiqaNkn7Qp7v6m\np67+McbpswKBgEN2eHueUDwi1jUin8Gbk1RuxIGErIMYhLgPqqMwhkmrUk7745Zd\nwT6iHceZ9IFEGh2sLrPtow1kfEmruoZjTML99Lh7Q/N2r04Dyuup2IjBFTUN7FrX\nuI/V+KUvJ1Y4Clc1B9jDMkDnKn6gM9nEpL01cIjsfphZoNfuhpk6PajBAoGBALXy\ntciRbM32SiU0rntm8h6zgfAdrTtqpaL2Nb9Qz1gXjEPWeDUON5GLw0douMy8A2p8\n3V7kjo5e37wPRHZIeLzIHoD646QQfKl6EfVee9UJUkXSvaDU7759+z5W/edyr7OJ\nGZB3HFAMgJ1qOsi5pJVhYgKldX5WbXTy6WS75uX/AoGAVQCDU0u2NE1ZRr8jd4zR\nWqTa5kpWBlCj06PCe+fJ7X8EQ1PP1aqffazxE4LHVrLDsCOL7yH6H+UwFLvGFddK\n6klOeWabUdkzsdeG5+Vi47zvjpC/dQtxhzAdI6JbTG/f8lXsc6K46ug96LGPRiCI\nKwalVhAaybgtdEPgr71Xqtk=\n-----END PRIVATE KEY-----\n",
+  "client_email": "firebase-adminsdk-fbsvc@sales-force-automation-d398d.iam.gserviceaccount.com",
+  "client_id": "100827290211112151004",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/firebase-adminsdk-fbsvc%40sales-force-automation-d398d.iam.gserviceaccount.com",
+  "universe_domain": "googleapis.com"
+}

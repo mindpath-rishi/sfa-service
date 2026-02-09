@@ -16,10 +16,10 @@
  */
 
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Document } from 'mongoose';
+import { Document, HydratedDocument } from 'mongoose';
 import { UserStatus } from 'src/modules/v1/user/user.enum';
 
-export type EmployeeDocument = Employee & Document;
+export type EmployeeDocument = HydratedDocument<Employee>;
 
 @Schema({ timestamps: true })
 export class Employee {

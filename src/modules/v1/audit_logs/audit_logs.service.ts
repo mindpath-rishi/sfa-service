@@ -27,7 +27,7 @@ import {
 @Injectable()
 export class AuditLogsService extends MongoRepository<AuditLog> {
   constructor(mongo: MongoService) {
-    super(mongo.getModel(AuditLog.name, AuditLogSchema));
+    super(mongo.getModel<AuditLog>(AuditLog.name, AuditLogSchema));
   }
 
   /**

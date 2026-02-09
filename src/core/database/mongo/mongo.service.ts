@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectConnection } from '@nestjs/mongoose';
-import { Connection, Model, Schema } from 'mongoose';
+import { Connection, HydratedDocument, Model, Schema } from 'mongoose';
 
 @Injectable()
 export class MongoService {
@@ -9,10 +9,7 @@ export class MongoService {
     private readonly connection: Connection,
   ) {}
 
-  getModel<T>(name: string, schema: Schema<T>): Model<T> {
-    return (
-      this.connection.models[name] ??
-      this.connection.model<T>(name, schema)
-    );
+  getModel<T>(name: string, schema: any): Model<HydratedDocument<T>> {
+    return this.connection.model<HydratedDocument<T>>(name, schema);
   }
 }
