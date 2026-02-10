@@ -1,3 +1,5 @@
+import { CUSTOMER_CATEGORY } from "src/modules/v1/customer-category/customer-category.constants";
+
 export const V1 = '1';
 export const API_PREFIX = 'api';
 export const API_METHOD = {
@@ -29,6 +31,7 @@ export const API_MODULE = {
   PERMISSION: 'permission',
   MEDIA: 'media',
   VAN: 'van',
+  CUSTOMER_CATEGORY: 'customer-category',
 };
 
 export const API_MODULE_ENABLE_KEYS = {
@@ -51,4 +54,5 @@ export const API_MODULE_ENABLE_KEYS = {
   PERMISSION: 'ENABLE_PERMISSION_MODULE',
   MEDIA: 'ENABLE_MEDIA_MODULE',
   VAN: 'ENABLE_VAN_MODULE',
+  CUSTOMER_CATEGORY: 'ENABLE_CUSTOMER_CATEGORY_MODULE',
 };

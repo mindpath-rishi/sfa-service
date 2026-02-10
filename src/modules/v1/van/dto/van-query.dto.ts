@@ -7,12 +7,16 @@
 
 import { IsOptional, IsString, IsNumberString } from 'class-validator';
 import { PaginationDto } from 'src/shared/dto/pagination.dto';
+import { ApiPropertyOptional } from '@nestjs/swagger';
+import { VanStatus } from 'src/shared/constants/van.constants';
 
 export class VanQueryDto extends PaginationDto {
+  @ApiPropertyOptional({ example: 'delivery' })
   @IsOptional()
   @IsString()
   searchText?: string;
 
+  @ApiPropertyOptional({ example: VanStatus.ACTIVE, enum: VanStatus })
   @IsOptional()
   @IsString()
   status?: string;

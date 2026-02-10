@@ -13,6 +13,7 @@
 
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IsOptional, IsString, IsNumberString } from 'class-validator';
+import { ProductStatus } from 'src/shared/constants/product.constants';
 import { PaginationDto } from 'src/shared/dto/pagination.dto';
 
 export class ProductQueryDto extends PaginationDto {
@@ -41,7 +42,7 @@ export class ProductQueryDto extends PaginationDto {
    * ------
    * Purpose : Filter active or inactive products
    */
-  @ApiPropertyOptional({ example: 'ACTIVE' })
+  @ApiPropertyOptional({ example: ProductStatus.ACTIVE, enum: ProductStatus })
   @IsOptional()
   @IsString()
   status?: string;

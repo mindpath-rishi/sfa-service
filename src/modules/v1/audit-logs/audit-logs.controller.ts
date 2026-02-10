@@ -14,13 +14,13 @@ import {
 
 import { ApiSuccessResponse } from 'src/core/swagger/api.response.swagger';
 import { FeatureFlag } from 'src/core/decorators/feature-flag.decorator';
-import { AuditLogsService } from './audit_logs.service';
+import { AuditLogsService } from './audit-logs.service';
 import {
   API_MODULE,
   API_MODULE_ENABLE_KEYS,
   V1,
 } from 'src/shared/constants/api.constants';
-import { AUDIT_LOGS } from './audit_logs.constants';
+import { AUDIT_LOGS } from './audit-logs.constants';
 import { AuditLogsQueryDto } from './dto/audit-logs-query.dto';
 
 /**

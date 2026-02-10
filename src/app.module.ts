@@ -21,7 +21,7 @@ import { AppControlService } from './core/config/app-control.service';
 import { AppControlGuard } from './core/guards/app-control.guard';
 import { JwtAuthGuard } from './core/guards/jwt.guard';
 import { THROTTLE_LIMIT, THROTTLE_TTL } from './shared/constants/app.constants';
-import { AuditLogsModule } from './modules/v1/audit_logs/audit_logs.module';
+import { AuditLogsModule } from './modules/v1/audit-logs/audit-logs.module';
 import { PermissionsGuard } from './core/guards/permission.guard';
 import { SeedsModule } from './core/seeds/seeds.module';
 import { PermissionModule } from './modules/v1/permission/permission.module';
@@ -32,6 +32,7 @@ import { NotificationModule } from './modules/v1/notification/notification.modul
 import { ProductModule } from './modules/v1/product/product.module';
 import { ProductCategoryModule } from './modules/v1/product-category/product-category.module';
 import { VanModule } from './modules/v1/van/van.module';
+import { CustomerCategoryModule } from './modules/v1/customer-category/customer-category.module';
 
 @Global()
 @Module({
@@ -72,6 +73,7 @@ import { VanModule } from './modules/v1/van/van.module';
     ProductModule,
     ProductCategoryModule,
     VanModule,
+    CustomerCategoryModule,
   ],
   providers: [
     AppControlService,

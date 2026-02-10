@@ -18,7 +18,7 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { MongoRepository } from 'src/core/database/mongo/mongo.repository';
 import { MongoService } from 'src/core/database/mongo/mongo.service';
-import { AUDIT_LOGS } from './audit_logs.constants';
+import { AUDIT_LOGS } from './audit-logs.constants';
 import {
   AuditLog,
   AuditLogSchema,
