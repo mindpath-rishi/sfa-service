@@ -28,6 +28,7 @@ export const API_MODULE = {
   OFFER: 'offer',
   PERMISSION: 'permission',
   MEDIA: 'media',
+  VAN: 'van',
 };
 
 export const API_MODULE_ENABLE_KEYS = {
@@ -49,4 +50,5 @@ export const API_MODULE_ENABLE_KEYS = {
   WISHLIST: 'ENABLE_WISHLIST_MODULE',
   PERMISSION: 'ENABLE_PERMISSION_MODULE',
   MEDIA: 'ENABLE_MEDIA_MODULE',
+  VAN: 'ENABLE_VAN_MODULE',
 };

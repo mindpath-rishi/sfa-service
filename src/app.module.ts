@@ -31,6 +31,7 @@ import { EmployeeModule } from './modules/v1/employee/employee.module';
 import { NotificationModule } from './modules/v1/notification/notification.module';
 import { ProductModule } from './modules/v1/product/product.module';
 import { ProductCategoryModule } from './modules/v1/product-category/product-category.module';
+import { VanModule } from './modules/v1/van/van.module';
 
 @Global()
 @Module({
@@ -70,6 +71,7 @@ import { ProductCategoryModule } from './modules/v1/product-category/product-cat
     NotificationModule,
     ProductModule,
     ProductCategoryModule,
+    VanModule,
   ],
   providers: [
     AppControlService,
