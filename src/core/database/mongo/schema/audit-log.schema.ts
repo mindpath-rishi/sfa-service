@@ -17,7 +17,7 @@
 
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Schema as MongooseSchema } from 'mongoose';
-import { AuditAction } from 'src/shared/enums/app.enum';
+import { AuditAction } from 'src/shared/enums/app.enums';
 
 @Schema({
   collection: 'audit_logs',

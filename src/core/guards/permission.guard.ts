@@ -12,7 +12,7 @@ import { PERMISSIONS_KEY } from '../decorators/permissioin.decorator';
 
 import { EmployeeService } from 'src/modules/v1/employee/employee.service';
 import { RoleService } from 'src/modules/v1/role/role.service';
-import { Status } from 'src/shared/enums/app.enum';
+import { Status } from 'src/shared/enums/app.enums';
 import { UserStatus } from 'src/modules/v1/user/user.enum';
 
 @Injectable()

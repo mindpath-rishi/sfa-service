@@ -34,6 +34,7 @@ export const API_MODULE = {
   VAN: 'van',
   CUSTOMER_CATEGORY: 'customer-category',
   MARKET: 'market',
+  PROVINCE: 'province',
 };
 
 export const API_MODULE_ENABLE_KEYS = {
@@ -58,4 +59,5 @@ export const API_MODULE_ENABLE_KEYS = {
   VAN: 'ENABLE_VAN_MODULE',
   CUSTOMER_CATEGORY: 'ENABLE_CUSTOMER_CATEGORY_MODULE',
   MARKET: 'ENABLE_MARKET_MODULE',
+  PROVINCE: 'ENABLE_PROVINCE_MODULE',
 };

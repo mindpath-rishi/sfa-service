@@ -17,7 +17,7 @@
 
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document } from 'mongoose';
-import { UserRole, Status } from 'src/shared/enums/app.enum';
+import { UserRole, Status } from 'src/shared/enums/app.enums';
 
 @Schema({
   collection: 'roles',

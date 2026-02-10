@@ -34,6 +34,7 @@ import { ProductCategoryModule } from './modules/v1/product-category/product-cat
 import { VanModule } from './modules/v1/van/van.module';
 import { CustomerCategoryModule } from './modules/v1/customer-category/customer-category.module';
 import { MarketModule } from './modules/v1/market/market.module';
+import { ProvinceModule } from './modules/v1/province/province.module';
 
 @Global()
 @Module({
@@ -76,6 +77,7 @@ import { MarketModule } from './modules/v1/market/market.module';
     VanModule,
     CustomerCategoryModule,
     MarketModule,
+    ProvinceModule,
   ],
   providers: [
     AppControlService,

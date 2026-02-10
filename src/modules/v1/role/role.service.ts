@@ -33,7 +33,7 @@ import { Role, RoleSchema } from 'src/core/database/mongo/schema/role.schema';
 import { MongoRepository } from 'src/core/database/mongo/mongo.repository';
 import { MongoService } from 'src/core/database/mongo/mongo.service';
 import { IdGenerator } from 'src/shared/utils/id-generator.utils';
-import { Status } from 'src/shared/enums/app.enum';
+import { Status } from 'src/shared/enums/app.enums';
 import { normalizeRoleName } from './role.uitls';
 
 @Injectable()

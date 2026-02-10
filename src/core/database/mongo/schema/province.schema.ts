@@ -1,0 +1,58 @@
+/**
+ * Provinces Collection
+ * -------------------
+ * Purpose : Province / State master classification
+ * Used by : BACK_OFFICE / ADMIN / LOCATION SETUP
+ *
+ * Contains:
+ * - Province identity
+ * - Province name
+ * - Province status
+ *
+ * Notes:
+ * - Provinces are used for address and location mapping
+ * - Soft deletes preserve audit history
+ */
+
+import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
+import { HydratedDocument } from 'mongoose';
+import { ProvinceStatus } from 'src/shared/enums/province.enums';
+
+export type ProvinceDocument = HydratedDocument<Province>;
+
+@Schema({ timestamps: true })
+export class Province {
+  /* ======================================================
+   * IDENTITY
+   * ====================================================== */
+
+  // Unique business identifier for province
+  @Prop({ required: true, unique: true })
+  provinceId: string;
+
+  // Reference of country
+  @Prop({ required: true })
+  countryId: string;
+
+  // Display name of province
+  @Prop({ required: true, unique: true, trim: true })
+  name: string;
+
+  /* ======================================================
+   * STATUS
+   * ====================================================== */
+
+  // Province availability status
+  @Prop({
+    type: String,
+    enum: ProvinceStatus,
+    default: ProvinceStatus.ACTIVE,
+  })
+  status: ProvinceStatus;
+
+  // Soft delete flag
+  @Prop({ default: false })
+  isDeleted: boolean;
+}
+
+export const ProvinceSchema = SchemaFactory.createForClass(Province);

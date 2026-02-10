@@ -21,7 +21,7 @@ import {
   MaxLength,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import { Status } from 'src/shared/enums/app.enum';
+import { Status } from 'src/shared/enums/app.enums';
 import { PaginationDto } from 'src/shared/dto/pagination.dto';
 
 export class RoleQueryDto extends PaginationDto {

@@ -17,7 +17,7 @@
 
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document } from 'mongoose';
-import { Status } from 'src/shared/enums/app.enum';
+import { Status } from 'src/shared/enums/app.enums';
 
 export type PermissionDocument = Permission & Document;
 

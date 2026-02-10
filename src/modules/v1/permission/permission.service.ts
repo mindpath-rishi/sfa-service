@@ -23,7 +23,7 @@ import {
   PermissionSchema,
 } from 'src/core/database/mongo/schema/permission.schema';
 
-import { Status } from 'src/shared/enums/app.enum';
+import { Status } from 'src/shared/enums/app.enums';
 import { PERMISSION } from './permission.constants';
 import { PermissionsQueryDto } from './dto/permission-query.dto';
 import { HydratedDocument } from 'mongoose';
