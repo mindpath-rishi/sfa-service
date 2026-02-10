@@ -10,8 +10,7 @@ export const API_METHOD = {
   GET: 'get',
   FETCH: 'fetch',
 };
-export const API_MODULE = {
-  USER: 'user',
+export const API_MODULE = {USER: 'user',
   EMPLOYEE: 'employee',
   CUSTOMER: 'customer',
   PRODUCT: 'product',
@@ -35,10 +34,10 @@ export const API_MODULE = {
   CUSTOMER_CATEGORY: 'customer-category',
   MARKET: 'market',
   PROVINCE: 'province',
+  COUNTRY: 'country',
 };
 
-export const API_MODULE_ENABLE_KEYS = {
-  ADDRESS: 'ENABLE_ADDRESS_MODULE',
+export const API_MODULE_ENABLE_KEYS = {ADDRESS: 'ENABLE_ADDRESS_MODULE',
   AUDIT_LOGS: 'ENABLE_AUDIT_LOGS',
   CART: 'ENABLE_CART_MODULE',
   PRODUCT_CATEGORY: 'ENABLE_CATEGORY_MODULE',
@@ -60,4 +59,5 @@ export const API_MODULE_ENABLE_KEYS = {
   CUSTOMER_CATEGORY: 'ENABLE_CUSTOMER_CATEGORY_MODULE',
   MARKET: 'ENABLE_MARKET_MODULE',
   PROVINCE: 'ENABLE_PROVINCE_MODULE',
+  COUNTRY: 'ENABLE_COUNTRY_MODULE',
 };

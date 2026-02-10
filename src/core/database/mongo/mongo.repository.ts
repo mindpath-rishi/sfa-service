@@ -10,12 +10,11 @@ import {
   PaginationOptions,
   RepoOptions,
 } from 'src/shared/interfaces/mongo-repository.interface';
-import { SoftDelete } from './mongo.interface';
+import { FilterQuery, SoftDelete } from './mongo.interface';
 
 /**
  * Safe replacement for removed mongoose FilterQuery
  */
-export type FilterQuery<T> = Partial<T> & Record<string, any>;
 
 type Doc<T> = HydratedDocument<T & SoftDelete>;
 

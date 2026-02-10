@@ -1,3 +1,4 @@
+import { CountryModule } from './modules/v1/country/country.module';
 import { Module, MiddlewareConsumer, NestModule, Global } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
@@ -39,10 +40,11 @@ import { ProvinceModule } from './modules/v1/province/province.module';
 @Global()
 @Module({
   imports: [
+    CountryModule,
     /* ================= CONFIG ================= */
     ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: [`.env.${process.env.NODE_ENV}`],
+      envFilePath: [`.env.${process.env.NODE_ENV}`  ],
       validationSchema: envValidationSchema,
     }),
 
