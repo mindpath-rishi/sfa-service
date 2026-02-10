@@ -8,7 +8,7 @@
 import { IsOptional, IsString, IsNumberString } from 'class-validator';
 import { PaginationDto } from 'src/shared/dto/pagination.dto';
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { VanStatus } from 'src/shared/constants/van.constants';
+import { VanStatus } from 'src/shared/enums/van.enums';
 
 export class VanQueryDto extends PaginationDto {
   @ApiPropertyOptional({ example: 'delivery' })

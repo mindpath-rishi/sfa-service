@@ -13,7 +13,7 @@
 
 import { ApiProperty } from '@nestjs/swagger';
 import { IsString, IsNumber, IsOptional, IsEnum } from 'class-validator';
-import { PriceType } from 'src/shared/constants/product.constants';
+import { PriceType } from 'src/shared/enums/product.enums';
 
 
 export class ProductCreateDto {

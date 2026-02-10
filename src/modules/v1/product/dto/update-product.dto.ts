@@ -15,7 +15,7 @@ import { IsOptional, IsString, IsNumber, IsEnum } from 'class-validator';
 import {
   PriceType,
   ProductStatus,
-} from 'src/shared/constants/product.constants';
+} from 'src/shared/enums/product.enums';
 
 export class ProductUpdateDto {
   /**

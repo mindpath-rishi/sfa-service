@@ -13,7 +13,7 @@
 
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IsOptional, IsString, IsNumberString } from 'class-validator';
-import { ProductStatus } from 'src/shared/constants/product.constants';
+import { ProductStatus } from 'src/shared/enums/product.enums';
 import { PaginationDto } from 'src/shared/dto/pagination.dto';
 
 export class ProductQueryDto extends PaginationDto {

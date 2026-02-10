@@ -16,7 +16,7 @@
 
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument } from 'mongoose';
-import { CustomerCategoryStatus } from 'src/shared/constants/customer-category.constants';
+import { CustomerCategoryStatus } from 'src/shared/enums/customer-category.enums';
 
 export type CustomerCategoryDocument = HydratedDocument<CustomerCategory>;
 

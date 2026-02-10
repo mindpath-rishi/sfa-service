@@ -33,6 +33,7 @@ import { ProductModule } from './modules/v1/product/product.module';
 import { ProductCategoryModule } from './modules/v1/product-category/product-category.module';
 import { VanModule } from './modules/v1/van/van.module';
 import { CustomerCategoryModule } from './modules/v1/customer-category/customer-category.module';
+import { MarketModule } from './modules/v1/market/market.module';
 
 @Global()
 @Module({
@@ -74,6 +75,7 @@ import { CustomerCategoryModule } from './modules/v1/customer-category/customer-
     ProductCategoryModule,
     VanModule,
     CustomerCategoryModule,
+    MarketModule,
   ],
   providers: [
     AppControlService,

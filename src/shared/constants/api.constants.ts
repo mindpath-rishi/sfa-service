@@ -1,4 +1,5 @@
 import { CUSTOMER_CATEGORY } from "src/modules/v1/customer-category/customer-category.constants";
+import { MARKET } from "src/modules/v1/market/market.constants";
 
 export const V1 = '1';
 export const API_PREFIX = 'api';
@@ -32,6 +33,7 @@ export const API_MODULE = {
   MEDIA: 'media',
   VAN: 'van',
   CUSTOMER_CATEGORY: 'customer-category',
+  MARKET: 'market',
 };
 
 export const API_MODULE_ENABLE_KEYS = {
@@ -55,4 +57,5 @@ export const API_MODULE_ENABLE_KEYS = {
   MEDIA: 'ENABLE_MEDIA_MODULE',
   VAN: 'ENABLE_VAN_MODULE',
   CUSTOMER_CATEGORY: 'ENABLE_CUSTOMER_CATEGORY_MODULE',
+  MARKET: 'ENABLE_MARKET_MODULE',
 };

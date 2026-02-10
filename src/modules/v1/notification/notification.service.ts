@@ -31,7 +31,7 @@ import {
 
 import { CreateNotificationDto } from './dto/create-notification.dto';
 import { NotificationQueryDto } from './dto/notification.query.dto';
-import { NotificationDeliveryStatus } from 'src/shared/constants/notification.constants';
+import { NotificationDeliveryStatus } from 'src/shared/enums/notification.enums';
 import { NOTIFICATION } from './notification.constants';
 import {
   UserDevice,

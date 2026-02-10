@@ -8,7 +8,7 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IsOptional, IsString } from 'class-validator';
 import { CustomerCategory } from 'src/core/database/mongo/schema/customer-category.schema';
-import { CustomerCategoryStatus } from 'src/shared/constants/customer-category.constants';
+import { CustomerCategoryStatus } from 'src/shared/enums/customer-category.enums';
 
 export class UpdateCustomerCategoryDto {
   @ApiPropertyOptional()

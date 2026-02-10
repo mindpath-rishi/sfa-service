@@ -7,7 +7,7 @@
 
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsOptional, IsString, IsNumberString } from 'class-validator';
-import { CustomerCategoryStatus } from 'src/shared/constants/customer-category.constants';
+import { CustomerCategoryStatus } from 'src/shared/enums/customer-category.enums';
 import { PaginationDto } from 'src/shared/dto/pagination.dto';
 
 export class CustomerCategoryQueryDto extends PaginationDto {

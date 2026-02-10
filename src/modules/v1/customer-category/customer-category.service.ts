@@ -39,7 +39,7 @@ import { UpdateCustomerCategoryDto } from './dto/update-customer-category.dto';
 import { CustomerCategoryQueryDto } from './dto/customer-category-query.dto';
 import { IdGenerator } from 'src/shared/utils/id-generator.utils';
 import { TextNormalizer } from 'src/shared/utils/text-normalizer.utils';
-import { NormalizeType } from 'src/shared/constants/normalize.constants';
+import { NormalizeType } from 'src/shared/enums/normalize.enums';
 
 @Injectable()
 export class CustomerCategoryService extends MongoRepository<CustomerCategory> {

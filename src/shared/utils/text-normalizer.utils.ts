@@ -1,4 +1,4 @@
-import { NormalizeType } from "../constants/normalize.constants";
+import { NormalizeType } from "../enums/normalize.enums";
 
 export class TextNormalizer {
   static normalize(value?: string, type: NormalizeType = NormalizeType.TITLE): string {

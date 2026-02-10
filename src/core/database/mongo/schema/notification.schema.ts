@@ -20,7 +20,7 @@ import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import {
   NotificationDeliveryStatus,
   NotificationPlatform,
-} from 'src/shared/constants/notification.constants';
+} from 'src/shared/enums/notification.enums';
 
 @Schema()
 export class Notification {

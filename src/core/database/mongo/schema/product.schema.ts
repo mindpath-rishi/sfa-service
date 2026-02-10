@@ -21,7 +21,7 @@ import { HydratedDocument } from 'mongoose';
 import {
   PriceType,
   ProductStatus,
-} from 'src/shared/constants/product.constants';
+} from 'src/shared/enums/product.enums';
 
 export type ProductDocument = HydratedDocument<Product>;
 

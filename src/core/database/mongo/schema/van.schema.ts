@@ -17,7 +17,7 @@
 
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument } from 'mongoose';
-import { VanStatus } from 'src/shared/constants/van.constants';
+import { VanStatus } from 'src/shared/enums/van.enums';
 
 export type VanDocument = HydratedDocument<Van>;
 

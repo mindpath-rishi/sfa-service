@@ -18,7 +18,7 @@ import {
   IsOptional,
   IsString,
 } from 'class-validator';
-import { NotificationPlatform } from 'src/shared/constants/notification.constants';
+import { NotificationPlatform } from 'src/shared/enums/notification.enums';
 
 export class CreateNotificationDto {
   /* ======================================================

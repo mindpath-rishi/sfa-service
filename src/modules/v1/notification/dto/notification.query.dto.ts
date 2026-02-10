@@ -13,7 +13,7 @@
 
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IsBoolean, IsEnum, IsNumberString, IsOptional } from 'class-validator';
-import { NotificationDeliveryStatus, NotificationPlatform } from 'src/shared/constants/notification.constants';
+import { NotificationDeliveryStatus, NotificationPlatform } from 'src/shared/enums/notification.enums';
 import { PaginationDto } from 'src/shared/dto/pagination.dto';
 
 
