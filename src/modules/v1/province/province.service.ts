@@ -1,22 +1,3 @@
-/**
- * Province Service
- * ----------------
- * Purpose : Handles business logic for province lifecycle management
- * Used by : ProvinceController
- *
- * Responsibilities:
- * - Create provinces
- * - Restore soft-deleted provinces
- * - Fetch province lists with filters and pagination
- * - Retrieve single province details
- * - Update province information
- * - Soft-delete provinces
- *
- * Notes:
- * - All write operations are transaction-safe
- * - Province name uniqueness is enforced per country
- * - Soft deletes preserve audit history
- */
 
 import {
   Injectable,
@@ -27,6 +8,7 @@ import {
 
 import { MongoService } from 'src/core/database/mongo/mongo.service';
 import { MongoRepository } from 'src/core/database/mongo/mongo.repository';
+import { FilterQuery } from 'src/core/database/mongo/mongo.interface';
 
 import { Province, ProvinceSchema } from 'src/core/database/mongo/schema/province.schema';
 
@@ -44,84 +26,74 @@ export class ProvinceService extends MongoRepository<Province> {
     super(mongo.getModel(Province.name, ProvinceSchema));
   }
 
-  /**
-   * Create Province
-   * ---------------
-   * Purpose : Create new province or restore soft-deleted province
-   */
   async create(payload: CreateProvinceDto) {
-    return this.withTransaction(async (session) => {
-      const normalizedName = TextNormalizer.normalize(
-        payload.name,
-        NormalizeType.TITLE,
-      );
+    try {
+      return await this.withTransaction(async (session) => {
+        if (payload.name) {
+          payload.name = TextNormalizer.normalize(payload.name, NormalizeType.TITLE);
+        }
 
-      // Duplicate check scoped by country
-      const existing = await this.findOne(
-        {
-          countryId: payload.countryId,
-          name: { $regex: `^${normalizedName}$`, $options: 'i' } as any,
-        },
-        { session, includeDeleted: true },
-      );
+        const filter: FilterQuery<Province> = {};
 
-      if (existing && !existing.isDeleted) {
-        throw new ConflictException(PROVINCE.DUPLICATE);
-      }
+        
+        if (payload.name) filter.name = payload.name;
 
-      // Restore soft-deleted province
-      if (existing?.isDeleted) {
-        await this.updateById(
-          existing._id.toString(),
+        const existing = await this.findOne(filter, {
+          session,
+          includeDeleted: true,
+        });
+
+        if (existing && !existing.isDeleted) {
+          throw new ConflictException(PROVINCE.DUPLICATE);
+        }
+
+        if (existing?.isDeleted) {
+          await this.updateById(
+            existing._id.toString(),
+            {
+              ...payload,
+              status: 'ACTIVE',
+              isDeleted: false,
+            },
+            { session },
+          );
+
+          return {
+            statusCode: HttpStatus.OK,
+            message: PROVINCE.CREATED,
+            data: { provinceId: existing.provinceId },
+          };
+        }
+
+        const doc = await this.save(
           {
-            countryId: payload.countryId,
-            name: normalizedName,
-            status: 'ACTIVE',
-            isDeleted: false,
+            provinceId: IdGenerator.generate('PROV', 8),
+            ...payload,
           },
           { session },
         );
 
         return {
-          statusCode: HttpStatus.OK,
+          statusCode: HttpStatus.CREATED,
           message: PROVINCE.CREATED,
-          data: { provinceId: existing.provinceId },
+          data: doc,
         };
-      }
-
-      // Create new province
-      const province = await this.save(
-        {
-          provinceId: IdGenerator.generate('PROV', 8),
-          countryId: payload.countryId,
-          name: normalizedName,
-        },
-        { session },
-      );
-
-      return {
-        statusCode: HttpStatus.CREATED,
-        message: PROVINCE.CREATED,
-        data: province,
-      };
-    });
+      });
+    } catch (error) {
+      this.handleDuplicateError(error);
+    }
   }
 
-  /**
-   * Get Provinces (List)
-   * -------------------
-   */
   async findAll(query: ProvinceQueryDto) {
-    const { searchText, status, countryId, page = 1, limit = 20 } = query;
+    const { searchText, status, page = 1, limit = 20 } = query;
 
-    const filter: Record<string, any> = {};
+    const filter: FilterQuery<Province> = {};
 
     if (status) filter.status = status;
-    if (countryId) filter.countryId = countryId;
 
     if (searchText) {
       const regex = new RegExp(searchText, 'i');
-      filter.$or = [{ provinceId: regex }, { name: regex }];
+      filter.$or = [{ provinceId: regex }];
     }
 
     const result = await this.paginate(filter, {
@@ -139,64 +111,62 @@ export class ProvinceService extends MongoRepository<Province> {
     };
   }
 
-  /**
-   * Get Province by ID
-   * -----------------
-   */
   async findByProvinceId(provinceId: string) {
-    const province = await this.findOne({ provinceId }, { lean: true });
+    const doc = await this.findOne({ provinceId }, { lean: true });
 
-    if (!province) throw new NotFoundException(PROVINCE.NOT_FOUND);
+    if (!doc) throw new NotFoundException(PROVINCE.NOT_FOUND);
 
     return {
       statusCode: HttpStatus.OK,
       message: PROVINCE.FETCHED,
-      data: province,
+      data: doc,
     };
   }
 
-  /**
-   * Update Province
-   * ---------------
-   */
   async update(provinceId: string, dto: UpdateProvinceDto) {
-    if (dto.name) {
-      dto.name = TextNormalizer.normalize(dto.name, NormalizeType.TITLE);
+    try {
+      return await this.withTransaction(async (session) => {
+        if (dto.name) {
+          dto.name = TextNormalizer.normalize(dto.name, NormalizeType.TITLE);
+        }
+
+        const doc = await this.updateOne(
+          { provinceId },
+          dto,
+          { session, new: true },
+        );
+
+        if (!doc) throw new NotFoundException(PROVINCE.NOT_FOUND);
+
+        return {
+          statusCode: HttpStatus.OK,
+          message: PROVINCE.UPDATED,
+          data: doc,
+        };
+      });
+    } catch (error) {
+      this.handleDuplicateError(error);
     }
-
-    const province = await this.updateOne({ provinceId }, dto);
-
-    if (!province) throw new NotFoundException(PROVINCE.NOT_FOUND);
-
-    return {
-      statusCode: HttpStatus.OK,
-      message: PROVINCE.UPDATED,
-      data: province,
-    };
   }
 
-  /**
-   * Delete Province (Soft Delete)
-   * ----------------------------
-   */
   async delete(provinceId: string) {
-    const deleted = await this.withTransaction(async (session) => {
-      const existing = await this.findOne(
-        { provinceId, isDeleted: false },
-        { session },
-      );
+    const existing = await this.findOne({ provinceId });
 
-      if (!existing) throw new NotFoundException(PROVINCE.NOT_FOUND);
+    if (!existing) throw new NotFoundException(PROVINCE.NOT_FOUND);
 
-      await this.softDelete({ provinceId }, { session });
-
-      return existing;
-    });
+    await this.softDelete({ provinceId });
 
     return {
       statusCode: HttpStatus.OK,
       message: PROVINCE.DELETED,
-      data: deleted,
+      data: existing,
     };
+  }
+
+  private handleDuplicateError(error: any): never {
+    if (error?.code === 11000 || error?.code === 11001) {
+      throw new ConflictException(PROVINCE.DUPLICATE);
+    }
+    throw error;
   }
 }

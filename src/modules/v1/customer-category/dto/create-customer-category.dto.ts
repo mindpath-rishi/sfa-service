@@ -1,15 +1,33 @@
-/**
- * Customer Category Create DTO
- * ----------------------------
- * Purpose : Create new customer category
- * Used by : BACK_OFFICE / ADMIN
- */
+import { CustomerCategoryStatus } from 'src/shared/enums/customer-category.enums';
 
-import { ApiProperty } from '@nestjs/swagger';
-import { IsString } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsNotEmpty, IsString, IsOptional, IsEnum } from 'class-validator';
 
 export class CreateCustomerCategoryDto {
-  @ApiProperty({ example: 'Retail Customers' })
+/**
+ * CustomerCategory Create DTO
+ * ====================
+ * Data Transfer Object for creating new CustomerCategory records
+ */
+  /**
+   * Name
+   * ----
+   * Display name of customer category
+   */
+
+  @ApiProperty()
+  @IsNotEmpty()
   @IsString()
   name: string;
+  /**
+   * Status
+   * ------
+   * Customer category availability status
+   */
+
+  @ApiPropertyOptional({ example: CustomerCategoryStatus.ACTIVE, enum: CustomerCategoryStatus })
+  @IsOptional()
+  @IsEnum(CustomerCategoryStatus)
+  status?: CustomerCategoryStatus;
+
 }

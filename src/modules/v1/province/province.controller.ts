@@ -1,6 +1,7 @@
+
 /**
  * Province Controller
- * -------------------
+ * --------------------
  * Purpose : Exposes APIs for managing provinces
  * Used by : WEB / MOBILE / ADMIN PANEL
  *
@@ -73,24 +74,30 @@ export class ProvinceController {
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Create province' })
   @ApiBody({ type: CreateProvinceDto })
-  @ApiSuccessResponse({ provinceId: 'PROV-001' }, PROVINCE.CREATED, HttpStatus.CREATED)
+  @ApiSuccessResponse(
+    { provinceId: 'PROV-001' },
+    PROVINCE.CREATED,
+    HttpStatus.CREATED,
+  )
   async create(@Body() dto: CreateProvinceDto) {
     return this.service.create(dto);
   }
 
   /**
    * Get Provinces
-   * ------------
+   * -------------
    */
   @Get()
+  @Permissions('PROVINCE_VIEW')
   async findAll(@Query() query: ProvinceQueryDto) {
     return this.service.findAll(query);
   }
 
   /**
    * Get Province by ID
-   * -----------------
+   * ------------------
    */
+  @Permissions('PROVINCE_VIEW')
   @Get(':provinceId')
   @ApiParam({ name: 'provinceId' })
   async findOne(@Param('provinceId') provinceId: string) {
@@ -99,7 +106,7 @@ export class ProvinceController {
 
   /**
    * Update Province
-   * ---------------
+   * ----------------
    */
   @Permissions('PROVINCE_UPDATE')
   @Patch(':provinceId')
@@ -112,7 +119,7 @@ export class ProvinceController {
 
   /**
    * Delete Province
-   * ---------------
+   * ----------------
    */
   @Permissions('PROVINCE_DELETE')
   @Delete(':provinceId')

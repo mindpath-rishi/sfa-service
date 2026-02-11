@@ -2,8 +2,27 @@ const fs = require('fs');
 const path = require('path');
 
 exports.parseSchema = (ROOT, entity) => {
-  const Entity = entity.charAt(0).toUpperCase() + entity.slice(1);
-  const ENTITY = entity.toUpperCase();
+  // kebab-case → PascalCase (customer-category → CustomerCategory)
+  const toPascalCase = (str) =>
+    str
+      .split('-')
+      .map((s) => s.charAt(0).toUpperCase() + s.slice(1))
+      .join('');
+
+  // kebab-case → CONSTANT_CASE (customer-category → CUSTOMER_CATEGORY)
+  const toConstantCase = (str) => str.replace(/-/g, '_').toUpperCase();
+
+  // kebab-case → camelCase (customer-category → customerCategory)
+  const toCamelCase = (str) =>
+    str
+      .split('-')
+      .map((s, i) => (i === 0 ? s : s.charAt(0).toUpperCase() + s.slice(1)))
+      .join('');
+
+  const camelEntity = toCamelCase(entity);
+
+  const Entity = toPascalCase(entity);
+  const ENTITY = toConstantCase(entity);
 
   const schemaPath = path.join(
     process.cwd(),
@@ -670,6 +689,7 @@ exports.parseSchema = (ROOT, entity) => {
     entity,
     Entity,
     ENTITY,
+    camelEntity,
 
     // Schema info
     schemaPath,

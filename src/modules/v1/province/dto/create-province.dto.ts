@@ -1,19 +1,53 @@
-/**
- * Province Create DTO
- * -------------------
- * Purpose : Create new province
- * Used by : BACK_OFFICE / ADMIN
- */
+import { ProvinceStatus } from 'src/shared/enums/province.enums';
 
-import { ApiProperty } from '@nestjs/swagger';
-import { IsString } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsNotEmpty, IsString, IsOptional, IsEnum, IsBoolean } from 'class-validator';
 
 export class CreateProvinceDto {
-  @ApiProperty({ example: 'Tamil Nadu' })
-  @IsString()
-  name: string;
+/**
+ * Province Create DTO
+ * ====================
+ * Data Transfer Object for creating new Province records
+ */
+  /**
+   * CountryId
+   * ---------
+   * Reference of country
+   */
 
-  @ApiProperty({ example: 'CID-0001' })
+  @ApiProperty()
+  @IsNotEmpty()
   @IsString()
   countryId: string;
+  /**
+   * Name
+   * ----
+   * Display name of province
+   */
+
+  @ApiProperty()
+  @IsNotEmpty()
+  @IsString()
+  name: string;
+  /**
+   * Status
+   * ------
+   * Province availability status
+   */
+
+  @ApiPropertyOptional({ example: ProvinceStatus.ACTIVE, enum: ProvinceStatus })
+  @IsOptional()
+  @IsEnum(ProvinceStatus)
+  status?: ProvinceStatus;
+  /**
+   * IsDeleted
+   * ---------
+   * Soft delete flag
+   */
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  isDeleted?: boolean;
+
 }

@@ -1,20 +1,20 @@
-import { MarketStatus } from 'src/shared/enums/market.enums';
+import { ChannelStatus } from 'src/shared/enums/channel.enums';
 
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IsOptional, IsString, IsEnum } from 'class-validator';
 
-export class UpdateMarketDto {
+export class UpdateChannelDto {
 /**
- * Market Update DTO
+ * Channel Update DTO
  * ====================
- * Data Transfer Object for updating Market records
+ * Data Transfer Object for updating Channel records
  * 
  * All fields are optional for partial updates
  */
   /**
    * Name
    * ----
-   * Display name of market
+   * Display name of channel
    */
 
   @ApiPropertyOptional()
@@ -24,12 +24,12 @@ export class UpdateMarketDto {
   /**
    * Status
    * ------
-   * Market availability status
+   * Channel availability status
    */
 
-  @ApiPropertyOptional({ example: MarketStatus.ACTIVE, enum: MarketStatus })
+  @ApiPropertyOptional({ example: ChannelStatus.ACTIVE, enum: ChannelStatus })
   @IsOptional()
-  @IsEnum(MarketStatus)
-  status?: MarketStatus;
+  @IsEnum(ChannelStatus)
+  status?: ChannelStatus;
 
 }

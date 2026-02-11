@@ -1,17 +1,17 @@
-import { MarketStatus } from 'src/shared/enums/market.enums';
+import { ChannelStatus } from 'src/shared/enums/channel.enums';
 
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IsOptional, IsString, IsEnum } from 'class-validator';
 import { PaginationDto } from 'src/shared/dto/pagination.dto';
 
 /**
- * Market Query DTO
+ * Channel Query DTO
  * ===================
- * Data Transfer Object for querying Market records
+ * Data Transfer Object for querying Channel records
  * 
  * Extends PaginationDto for pagination support
  */
-export class MarketQueryDto extends PaginationDto {
+export class ChannelQueryDto extends PaginationDto {
   /**
    * SearchText
    * ----------
@@ -25,7 +25,7 @@ export class MarketQueryDto extends PaginationDto {
   /**
    * Name
    * ----
-   * Display name of market
+   * Display name of channel
    */
 
   @ApiPropertyOptional()
@@ -35,11 +35,11 @@ export class MarketQueryDto extends PaginationDto {
   /**
    * Status
    * ------
-   * Market availability status
+   * Channel availability status
    */
 
-  @ApiPropertyOptional({ example: MarketStatus.ACTIVE, enum: MarketStatus })
+  @ApiPropertyOptional({ example: ChannelStatus.ACTIVE, enum: ChannelStatus })
   @IsOptional()
-  @IsEnum(MarketStatus)
-  status?: MarketStatus;
+  @IsEnum(ChannelStatus)
+  status?: ChannelStatus;
 }

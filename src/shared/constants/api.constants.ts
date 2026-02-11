@@ -1,6 +1,3 @@
-import { CUSTOMER_CATEGORY } from "src/modules/v1/customer-category/customer-category.constants";
-import { MARKET } from "src/modules/v1/market/market.constants";
-
 export const V1 = '1';
 export const API_PREFIX = 'api';
 export const API_METHOD = {
@@ -31,10 +28,11 @@ export const API_MODULE = {USER: 'user',
   PERMISSION: 'permission',
   MEDIA: 'media',
   VAN: 'van',
-  CUSTOMER_CATEGORY: 'customer-category',
   MARKET: 'market',
   PROVINCE: 'province',
   COUNTRY: 'country',
+  CHANNEL: 'channel',
+  CUSTOMER_CATEGORY: 'customer-category',
 };
 
 export const API_MODULE_ENABLE_KEYS = {ADDRESS: 'ENABLE_ADDRESS_MODULE',
@@ -56,8 +54,9 @@ export const API_MODULE_ENABLE_KEYS = {ADDRESS: 'ENABLE_ADDRESS_MODULE',
   PERMISSION: 'ENABLE_PERMISSION_MODULE',
   MEDIA: 'ENABLE_MEDIA_MODULE',
   VAN: 'ENABLE_VAN_MODULE',
-  CUSTOMER_CATEGORY: 'ENABLE_CUSTOMER_CATEGORY_MODULE',
   MARKET: 'ENABLE_MARKET_MODULE',
   PROVINCE: 'ENABLE_PROVINCE_MODULE',
   COUNTRY: 'ENABLE_COUNTRY_MODULE',
+  CHANNEL: 'ENABLE_CHANNEL_MODULE',
+  CUSTOMER_CATEGORY: 'ENABLE_CUSTOMER_CATEGORY_MODULE',
 };

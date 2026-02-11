@@ -1,4 +1,4 @@
-module.exports = ({ Entity, ENTITY, entity }) => `
+module.exports = ({ Entity, ENTITY, entity, camelEntity }) => `
 /**
  * ${Entity} Controller
  * ${'-'.repeat(Entity.length + 12)}
@@ -75,7 +75,7 @@ export class ${Entity}Controller {
   @ApiOperation({ summary: 'Create ${entity}' })
   @ApiBody({ type: Create${Entity}Dto })
   @ApiSuccessResponse(
-    { ${entity}Id: '${ENTITY.slice(0, 4)}-001' },
+    { ${camelEntity}Id: '${ENTITY.slice(0, 4)}-001' },
     ${ENTITY}.CREATED,
     HttpStatus.CREATED,
   )
@@ -98,10 +98,10 @@ export class ${Entity}Controller {
    * ${'-'.repeat(Entity.length + 10)}
    */
   @Permissions('${ENTITY}_VIEW')
-  @Get(':${entity}Id')
-  @ApiParam({ name: '${entity}Id' })
-  async findOne(@Param('${entity}Id') ${entity}Id: string) {
-    return this.service.findBy${Entity}Id(${entity}Id);
+  @Get(':${camelEntity}Id')
+  @ApiParam({ name: '${camelEntity}Id' })
+  async findOne(@Param('${camelEntity}Id') ${camelEntity}Id: string) {
+    return this.service.findBy${Entity}Id(${camelEntity}Id);
   }
 
   /**
@@ -109,12 +109,12 @@ export class ${Entity}Controller {
    * ${'-'.repeat(Entity.length + 8)}
    */
   @Permissions('${ENTITY}_UPDATE')
-  @Patch(':${entity}Id')
+  @Patch(':${camelEntity}Id')
   async update(
-    @Param('${entity}Id') ${entity}Id: string,
+    @Param('${camelEntity}Id') ${camelEntity}Id: string,
     @Body() dto: Update${Entity}Dto,
   ) {
-    return this.service.update(${entity}Id, dto);
+    return this.service.update(${camelEntity}Id, dto);
   }
 
   /**
@@ -122,9 +122,9 @@ export class ${Entity}Controller {
    * ${'-'.repeat(Entity.length + 8)}
    */
   @Permissions('${ENTITY}_DELETE')
-  @Delete(':${entity}Id')
-  async delete(@Param('${entity}Id') ${entity}Id: string) {
-    return this.service.delete(${entity}Id);
+  @Delete(':${camelEntity}Id')
+  async delete(@Param('${camelEntity}Id') ${camelEntity}Id: string) {
+    return this.service.delete(${camelEntity}Id);
   }
 }
 `;

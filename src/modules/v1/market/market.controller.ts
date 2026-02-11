@@ -1,6 +1,7 @@
+
 /**
  * Market Controller
- * -----------------
+ * ------------------
  * Purpose : Exposes APIs for managing markets
  * Used by : WEB / MOBILE / ADMIN PANEL
  *
@@ -64,33 +65,62 @@ import { MARKET } from './market.constants';
 export class MarketController {
   constructor(private readonly service: MarketService) {}
 
+  /**
+   * Create Market
+   * -------------
+   */
   @Permissions('MARKET_CREATE')
   @Post()
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Create market' })
   @ApiBody({ type: CreateMarketDto })
-  @ApiSuccessResponse({ marketId: 'MKT-001' }, MARKET.CREATED, HttpStatus.CREATED)
+  @ApiSuccessResponse(
+    { marketId: 'MARK-001' },
+    MARKET.CREATED,
+    HttpStatus.CREATED,
+  )
   async create(@Body() dto: CreateMarketDto) {
     return this.service.create(dto);
   }
 
+  /**
+   * Get Markets
+   * -----------
+   */
   @Get()
+  @Permissions('MARKET_VIEW')
   async findAll(@Query() query: MarketQueryDto) {
     return this.service.findAll(query);
   }
 
+  /**
+   * Get Market by ID
+   * ----------------
+   */
+  @Permissions('MARKET_VIEW')
   @Get(':marketId')
   @ApiParam({ name: 'marketId' })
   async findOne(@Param('marketId') marketId: string) {
     return this.service.findByMarketId(marketId);
   }
 
+  /**
+   * Update Market
+   * --------------
+   */
   @Permissions('MARKET_UPDATE')
   @Patch(':marketId')
-  async update(@Param('marketId') marketId: string, @Body() dto: UpdateMarketDto) {
+  async update(
+    @Param('marketId') marketId: string,
+    @Body() dto: UpdateMarketDto,
+  ) {
     return this.service.update(marketId, dto);
   }
 
+  /**
+   * Delete Market
+   * --------------
+   */
   @Permissions('MARKET_DELETE')
   @Delete(':marketId')
   async delete(@Param('marketId') marketId: string) {

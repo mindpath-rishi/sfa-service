@@ -1,23 +1,35 @@
-/**
- * Customer Category Update DTO
- * ----------------------------
- * Purpose : Update existing customer category
- * Used by : BACK_OFFICE / ADMIN
- */
-
-import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsString } from 'class-validator';
-import { CustomerCategory } from 'src/core/database/mongo/schema/customer-category.schema';
 import { CustomerCategoryStatus } from 'src/shared/enums/customer-category.enums';
 
+import { ApiPropertyOptional } from '@nestjs/swagger';
+import { IsOptional, IsString, IsEnum } from 'class-validator';
+
 export class UpdateCustomerCategoryDto {
+/**
+ * CustomerCategory Update DTO
+ * ====================
+ * Data Transfer Object for updating CustomerCategory records
+ * 
+ * All fields are optional for partial updates
+ */
+  /**
+   * Name
+   * ----
+   * Display name of customer category
+   */
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
   name?: string;
+  /**
+   * Status
+   * ------
+   * Customer category availability status
+   */
 
-  @ApiPropertyOptional({ example: 'ACTIVE', enum: CustomerCategoryStatus })
+  @ApiPropertyOptional({ example: CustomerCategoryStatus.ACTIVE, enum: CustomerCategoryStatus })
   @IsOptional()
-  @IsString()
-  status?: string;
+  @IsEnum(CustomerCategoryStatus)
+  status?: CustomerCategoryStatus;
+
 }

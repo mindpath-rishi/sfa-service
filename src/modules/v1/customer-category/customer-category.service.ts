@@ -1,22 +1,3 @@
-/**
- * Customer Category Service
- * ------------------------
- * Purpose : Handles business logic for customer category lifecycle management
- * Used by : CustomerCategoryController
- *
- * Responsibilities:
- * - Create customer categories
- * - Restore soft-deleted categories
- * - Fetch category lists with filters and pagination
- * - Retrieve single category details
- * - Update category information
- * - Soft-delete categories
- *
- * Notes:
- * - All write operations are transaction-safe
- * - Category name uniqueness is enforced
- * - Soft deletes preserve audit history
- */
 
 import {
   Injectable,
@@ -27,11 +8,9 @@ import {
 
 import { MongoService } from 'src/core/database/mongo/mongo.service';
 import { MongoRepository } from 'src/core/database/mongo/mongo.repository';
+import { FilterQuery } from 'src/core/database/mongo/mongo.interface';
 
-import {
-  CustomerCategory,
-  CustomerCategorySchema,
-} from 'src/core/database/mongo/schema/customer-category.schema';
+import { CustomerCategory, CustomerCategorySchema } from 'src/core/database/mongo/schema/customer-category.schema';
 
 import { CUSTOMER_CATEGORY } from './customer-category.constants';
 import { CreateCustomerCategoryDto } from './dto/create-customer-category.dto';
@@ -47,81 +26,74 @@ export class CustomerCategoryService extends MongoRepository<CustomerCategory> {
     super(mongo.getModel(CustomerCategory.name, CustomerCategorySchema));
   }
 
-  /**
-   * Create Customer Category
-   * -----------------------
-   * Purpose : Create new category or restore soft-deleted category
-   */
   async create(payload: CreateCustomerCategoryDto) {
-    return this.withTransaction(async (session) => {
-      const normalizedName = TextNormalizer.normalize(
-        payload.name,
-        NormalizeType.TITLE,
-      );
+    try {
+      return await this.withTransaction(async (session) => {
+        if (payload.name) {
+          payload.name = TextNormalizer.normalize(payload.name, NormalizeType.TITLE);
+        }
 
-      // Case-insensitive duplicate check
-      const existing = await this.findOne(
-        {
-          name: { $regex: `^${normalizedName}$`, $options: 'i' } as any,
-        },
-        { session, includeDeleted: true },
-      );
+        const filter: FilterQuery<CustomerCategory> = {};
 
-      if (existing && !existing.isDeleted) {
-        throw new ConflictException(CUSTOMER_CATEGORY.DUPLICATE);
-      }
+        
+        if (payload.name) filter.name = payload.name;
 
-      // Restore soft-deleted category
-      if (existing?.isDeleted) {
-        await this.updateById(
-          existing._id.toString(),
+        const existing = await this.findOne(filter, {
+          session,
+          includeDeleted: true,
+        });
+
+        if (existing && !existing.isDeleted) {
+          throw new ConflictException(CUSTOMER_CATEGORY.DUPLICATE);
+        }
+
+        if (existing?.isDeleted) {
+          await this.updateById(
+            existing._id.toString(),
+            {
+              ...payload,
+              status: 'ACTIVE',
+              isDeleted: false,
+            },
+            { session },
+          );
+
+          return {
+            statusCode: HttpStatus.OK,
+            message: CUSTOMER_CATEGORY.CREATED,
+            data: { customerCategoryId: existing.customerCategoryId },
+          };
+        }
+
+        const doc = await this.save(
           {
-            name: normalizedName,
-            status: 'ACTIVE',
-            isDeleted: false,
+            customerCategoryId: IdGenerator.generate('CUST', 8),
+            ...payload,
           },
           { session },
         );
 
         return {
-          statusCode: HttpStatus.OK,
+          statusCode: HttpStatus.CREATED,
           message: CUSTOMER_CATEGORY.CREATED,
-          data: { customerCategoryId: existing.customerCategoryId },
+          data: doc,
         };
-      }
-
-      // Create new category
-      const category = await this.save(
-        {
-          customerCategoryId: IdGenerator.generate('CCAT', 8),
-          name: normalizedName,
-        },
-        { session },
-      );
-
-      return {
-        statusCode: HttpStatus.CREATED,
-        message: CUSTOMER_CATEGORY.CREATED,
-        data: category,
-      };
-    });
+      });
+    } catch (error) {
+      this.handleDuplicateError(error);
+    }
   }
 
-  /**
-   * Get Customer Categories (List)
-   * -----------------------------
-   * Purpose : Retrieve categories with filtering and pagination
-   */
   async findAll(query: CustomerCategoryQueryDto) {
     const { searchText, status, page = 1, limit = 20 } = query;
 
-    const filter: Record<string, any> = {};
+    const filter: FilterQuery<CustomerCategory> = {};
 
     if (status) filter.status = status;
 
     if (searchText) {
       const regex = new RegExp(searchText, 'i');
-      filter.$or = [{ customerCategoryId: regex }, { name: regex }];
+      filter.$or = [{ customerCategoryId: regex }];
     }
 
     const result = await this.paginate(filter, {
@@ -139,67 +111,62 @@ export class CustomerCategoryService extends MongoRepository<CustomerCategory> {
     };
   }
 
-  /**
-   * Get Customer Category by ID
-   * --------------------------
-   */
   async findByCustomerCategoryId(customerCategoryId: string) {
-    const category = await this.findOne(
-      { customerCategoryId },
-      { lean: true },
-    );
+    const doc = await this.findOne({ customerCategoryId }, { lean: true });
 
-    if (!category) throw new NotFoundException(CUSTOMER_CATEGORY.NOT_FOUND);
+    if (!doc) throw new NotFoundException(CUSTOMER_CATEGORY.NOT_FOUND);
 
     return {
       statusCode: HttpStatus.OK,
       message: CUSTOMER_CATEGORY.FETCHED,
-      data: category,
+      data: doc,
     };
   }
 
-  /**
-   * Update Customer Category
-   * -----------------------
-   */
   async update(customerCategoryId: string, dto: UpdateCustomerCategoryDto) {
-    if (dto.name) {
-      dto.name = TextNormalizer.normalize(dto.name, NormalizeType.TITLE);
+    try {
+      return await this.withTransaction(async (session) => {
+        if (dto.name) {
+          dto.name = TextNormalizer.normalize(dto.name, NormalizeType.TITLE);
+        }
+
+        const doc = await this.updateOne(
+          { customerCategoryId },
+          dto,
+          { session, new: true },
+        );
+
+        if (!doc) throw new NotFoundException(CUSTOMER_CATEGORY.NOT_FOUND);
+
+        return {
+          statusCode: HttpStatus.OK,
+          message: CUSTOMER_CATEGORY.UPDATED,
+          data: doc,
+        };
+      });
+    } catch (error) {
+      this.handleDuplicateError(error);
     }
-
-    const category = await this.updateOne({ customerCategoryId }, dto);
-
-    if (!category) throw new NotFoundException(CUSTOMER_CATEGORY.NOT_FOUND);
-
-    return {
-      statusCode: HttpStatus.OK,
-      message: CUSTOMER_CATEGORY.UPDATED,
-      data: category,
-    };
   }
 
-  /**
-   * Delete Customer Category (Soft Delete)
-   * -------------------------------------
-   */
   async delete(customerCategoryId: string) {
-    const deleted = await this.withTransaction(async (session) => {
-      const existing = await this.findOne(
-        { customerCategoryId, isDeleted: false },
-        { session },
-      );
+    const existing = await this.findOne({ customerCategoryId });
 
-      if (!existing) throw new NotFoundException(CUSTOMER_CATEGORY.NOT_FOUND);
+    if (!existing) throw new NotFoundException(CUSTOMER_CATEGORY.NOT_FOUND);
 
-      await this.softDelete({ customerCategoryId }, { session });
-
-      return existing;
-    });
+    await this.softDelete({ customerCategoryId });
 
     return {
       statusCode: HttpStatus.OK,
       message: CUSTOMER_CATEGORY.DELETED,
-      data: deleted,
+      data: existing,
     };
+  }
+
+  private handleDuplicateError(error: any): never {
+    if (error?.code === 11000 || error?.code === 11001) {
+      throw new ConflictException(CUSTOMER_CATEGORY.DUPLICATE);
+    }
+    throw error;
   }
 }

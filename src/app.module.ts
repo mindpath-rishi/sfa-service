@@ -4,9 +4,10 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
-
 import { envValidationSchema } from './core/config/env.validation';
 import { mongoConfig } from './core/config/mongo.config';
+
+import { CustomerCategoryModule } from './modules/v1/customer-category/customer-category.module';
 
 import { AppLoggerModule } from './core/logger/logger.module';
 import { LoggerService } from './core/logger/logger.service';
@@ -33,7 +34,6 @@ import { NotificationModule } from './modules/v1/notification/notification.modul
 import { ProductModule } from './modules/v1/product/product.module';
 import { ProductCategoryModule } from './modules/v1/product-category/product-category.module';
 import { VanModule } from './modules/v1/van/van.module';
-import { CustomerCategoryModule } from './modules/v1/customer-category/customer-category.module';
 import { MarketModule } from './modules/v1/market/market.module';
 import { ProvinceModule } from './modules/v1/province/province.module';
 
@@ -44,7 +44,7 @@ import { ProvinceModule } from './modules/v1/province/province.module';
     /* ================= CONFIG ================= */
     ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: [`.env.${process.env.NODE_ENV}`  ],
+      envFilePath: [`.env.${process.env.NODE_ENV}`],
       validationSchema: envValidationSchema,
     }),
 
@@ -77,9 +77,9 @@ import { ProvinceModule } from './modules/v1/province/province.module';
     ProductModule,
     ProductCategoryModule,
     VanModule,
-    CustomerCategoryModule,
     MarketModule,
     ProvinceModule,
+    CustomerCategoryModule,
   ],
   providers: [
     AppControlService,

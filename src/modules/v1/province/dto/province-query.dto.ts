@@ -1,35 +1,65 @@
-/**
- * Province Query DTO
- * ------------------
- * Purpose : Filter and paginate provinces
- * Used by : PROVINCE LISTING / ADMIN SCREENS
- */
-
-import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsString, IsNumberString } from 'class-validator';
-import { PaginationDto } from 'src/shared/dto/pagination.dto';
 import { ProvinceStatus } from 'src/shared/enums/province.enums';
 
+import { ApiPropertyOptional } from '@nestjs/swagger';
+import { IsOptional, IsString, IsEnum, IsBoolean } from 'class-validator';
+import { PaginationDto } from 'src/shared/dto/pagination.dto';
+
+/**
+ * Province Query DTO
+ * ===================
+ * Data Transfer Object for querying Province records
+ * 
+ * Extends PaginationDto for pagination support
+ */
 export class ProvinceQueryDto extends PaginationDto {
-  @ApiPropertyOptional({
-    example: 'Madhya Pradesh',
-    description: 'Search text for province name',
-  })
+  /**
+   * SearchText
+   * ----------
+   * Search by name, code, or identifier
+   */
+
+  @ApiPropertyOptional({ description: "Search by name, code, or identifier" })
   @IsOptional()
   @IsString()
   searchText?: string;
+  /**
+   * CountryId
+   * ---------
+   * Reference of country
+   */
 
-  @ApiPropertyOptional({ example: 'Country ID reference' })
+  @ApiPropertyOptional()
   @IsOptional()
   @IsString()
   countryId?: string;
+  /**
+   * Name
+   * ----
+   * Display name of province
+   */
 
-  @ApiPropertyOptional({
-    example: ProvinceStatus.ACTIVE,
-    description: 'Filter by province status',
-    enum: ProvinceStatus,
-  })
+  @ApiPropertyOptional()
   @IsOptional()
   @IsString()
-  status?: string;
+  name?: string;
+  /**
+   * Status
+   * ------
+   * Province availability status
+   */
+
+  @ApiPropertyOptional({ example: ProvinceStatus.ACTIVE, enum: ProvinceStatus })
+  @IsOptional()
+  @IsEnum(ProvinceStatus)
+  status?: ProvinceStatus;
+  /**
+   * IsDeleted
+   * ---------
+   * Soft delete flag
+   */
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  isDeleted?: boolean;
 }

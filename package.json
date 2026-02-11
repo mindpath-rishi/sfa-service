@@ -27,7 +27,8 @@
     "docker:clean": "docker system prune -f",
     "docker:redis": "sudo docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d redis",
     "docker:redis:down": "sudo docker compose -f docker-compose.yml -f docker-compose.dev.yml stop redis",
-    "docker:redis:logs": "sudo docker compose -f docker-compose.yml -f docker-compose.dev.yml logs -f redis"
+    "docker:redis:logs": "sudo docker compose -f docker-compose.yml -f docker-compose.dev.yml logs -f redis",
+    "module:generate": "node module-builder/index.js --"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",

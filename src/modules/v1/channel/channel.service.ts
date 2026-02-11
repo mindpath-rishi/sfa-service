@@ -10,30 +10,30 @@ import { MongoService } from 'src/core/database/mongo/mongo.service';
 import { MongoRepository } from 'src/core/database/mongo/mongo.repository';
 import { FilterQuery } from 'src/core/database/mongo/mongo.interface';
 
-import { Market, MarketSchema } from 'src/core/database/mongo/schema/market.schema';
+import { Channel, ChannelSchema } from 'src/core/database/mongo/schema/channel.schema';
 
-import { MARKET } from './market.constants';
-import { CreateMarketDto } from './dto/create-market.dto';
-import { UpdateMarketDto } from './dto/update-market.dto';
-import { MarketQueryDto } from './dto/market-query.dto';
+import { CHANNEL } from './channel.constants';
+import { CreateChannelDto } from './dto/create-channel.dto';
+import { UpdateChannelDto } from './dto/update-channel.dto';
+import { ChannelQueryDto } from './dto/channel-query.dto';
 import { IdGenerator } from 'src/shared/utils/id-generator.utils';
 import { TextNormalizer } from 'src/shared/utils/text-normalizer.utils';
 import { NormalizeType } from 'src/shared/enums/normalize.enums';
 
 @Injectable()
-export class MarketService extends MongoRepository<Market> {
+export class ChannelService extends MongoRepository<Channel> {
   constructor(mongo: MongoService) {
-    super(mongo.getModel(Market.name, MarketSchema));
+    super(mongo.getModel(Channel.name, ChannelSchema));
   }
 
-  async create(payload: CreateMarketDto) {
+  async create(payload: CreateChannelDto) {
     try {
       return await this.withTransaction(async (session) => {
         if (payload.name) {
           payload.name = TextNormalizer.normalize(payload.name, NormalizeType.TITLE);
         }
 
-        const filter: FilterQuery<Market> = {};
+        const filter: FilterQuery<Channel> = {};
 
         
         if (payload.name) filter.name = payload.name;
@@ -44,7 +44,7 @@ export class MarketService extends MongoRepository<Market> {
         });
 
         if (existing && !existing.isDeleted) {
-          throw new ConflictException(MARKET.DUPLICATE);
+          throw new ConflictException(CHANNEL.DUPLICATE);
         }
 
         if (existing?.isDeleted) {
@@ -60,14 +60,14 @@ export class MarketService extends MongoRepository<Market> {
 
           return {
             statusCode: HttpStatus.OK,
-            message: MARKET.CREATED,
-            data: { marketId: existing.marketId },
+            message: CHANNEL.CREATED,
+            data: { channelId: existing.channelId },
           };
         }
 
         const doc = await this.save(
           {
-            marketId: IdGenerator.generate('MARK', 8),
+            channelId: IdGenerator.generate('CHAN', 8),
             ...payload,
           },
           { session },
@@ -75,7 +75,7 @@ export class MarketService extends MongoRepository<Market> {
 
         return {
           statusCode: HttpStatus.CREATED,
-          message: MARKET.CREATED,
+          message: CHANNEL.CREATED,
           data: doc,
         };
       });
@@ -84,16 +84,16 @@ export class MarketService extends MongoRepository<Market> {
     }
   }
 
-  async findAll(query: MarketQueryDto) {
+  async findAll(query: ChannelQueryDto) {
     const { searchText, status, page = 1, limit = 20 } = query;
 
-    const filter: FilterQuery<Market> = {};
+    const filter: FilterQuery<Channel> = {};
 
     if (status) filter.status = status;
 
     if (searchText) {
       const regex = new RegExp(searchText, 'i');
-      filter.$or = [{ marketId: regex }];
+      filter.$or = [{ channelId: regex }];
     }
 
     const result = await this.paginate(filter, {
@@ -105,25 +105,25 @@ export class MarketService extends MongoRepository<Market> {
 
     return {
       statusCode: HttpStatus.OK,
-      message: MARKET.FETCHED,
+      message: CHANNEL.FETCHED,
       data: result.items,
       meta: result.meta,
     };
   }
 
-  async findByMarketId(marketId: string) {
-    const doc = await this.findOne({ marketId }, { lean: true });
+  async findByChannelId(channelId: string) {
+    const doc = await this.findOne({ channelId }, { lean: true });
 
-    if (!doc) throw new NotFoundException(MARKET.NOT_FOUND);
+    if (!doc) throw new NotFoundException(CHANNEL.NOT_FOUND);
 
     return {
       statusCode: HttpStatus.OK,
-      message: MARKET.FETCHED,
+      message: CHANNEL.FETCHED,
       data: doc,
     };
   }
 
-  async update(marketId: string, dto: UpdateMarketDto) {
+  async update(channelId: string, dto: UpdateChannelDto) {
     try {
       return await this.withTransaction(async (session) => {
         if (dto.name) {
@@ -131,16 +131,16 @@ export class MarketService extends MongoRepository<Market> {
         }
 
         const doc = await this.updateOne(
-          { marketId },
+          { channelId },
           dto,
           { session, new: true },
         );
 
-        if (!doc) throw new NotFoundException(MARKET.NOT_FOUND);
+        if (!doc) throw new NotFoundException(CHANNEL.NOT_FOUND);
 
         return {
           statusCode: HttpStatus.OK,
-          message: MARKET.UPDATED,
+          message: CHANNEL.UPDATED,
           data: doc,
         };
       });
@@ -149,23 +149,23 @@ export class MarketService extends MongoRepository<Market> {
     }
   }
 
-  async delete(marketId: string) {
-    const existing = await this.findOne({ marketId });
+  async delete(channelId: string) {
+    const existing = await this.findOne({ channelId });
 
-    if (!existing) throw new NotFoundException(MARKET.NOT_FOUND);
+    if (!existing) throw new NotFoundException(CHANNEL.NOT_FOUND);
 
-    await this.softDelete({ marketId });
+    await this.softDelete({ channelId });
 
     return {
       statusCode: HttpStatus.OK,
-      message: MARKET.DELETED,
+      message: CHANNEL.DELETED,
       data: existing,
     };
   }
 
   private handleDuplicateError(error: any): never {
     if (error?.code === 11000 || error?.code === 11001) {
-      throw new ConflictException(MARKET.DUPLICATE);
+      throw new ConflictException(CHANNEL.DUPLICATE);
     }
     throw error;
   }
