@@ -1,42 +1,41 @@
-Below is a clean, professional, production-ready README.md tailored to your actual project setup
-(NestJS + Node 22 + Docker + Mongo Replica Set + Prometheus + Grafana).
+# 🚀 SFA Service – Backend API
 
-This is not boilerplate — it reflects everything we fixed and implemented.
+> Enterprise-grade backend service built with **NestJS**, **Node.js 22**, **MongoDB (Replica Set)**, **Docker**, and full observability using **Prometheus & Grafana**.
 
-You can copy–paste this directly as README.md.
+---
 
-🚀 SFA Service – Backend API
+## 🧱 Tech Stack
 
-An enterprise-grade backend service built using NestJS, Node.js 22, MongoDB (Replica Set), Docker, and Observability tooling (Prometheus & Grafana).
+- 🟢 **Node.js** v22.x
+- 🧩 **NestJS**
+- 🗄️ **MongoDB (Replica Set)**
+- 🐳 **Docker & Docker Compose**
+- 📊 **Prometheus** (metrics scraping)
+- 📈 **Grafana** (monitoring dashboards)
+- 🧾 **nestjs-pino** (structured logging)
 
-🧱 Tech Stack
+---
 
-Node.js: v22.x
+## ✅ Node.js Requirement
 
-NestJS
+This project requires **Node.js v22**.
 
-MongoDB
+### 🔍 Check version
 
-Docker & Docker Compose
-
-Prometheus (metrics scraping)
-
-Grafana (monitoring dashboards)
-
-nestjs-pino (structured logging)
-
-✅ Node.js Requirement
-
-This project requires Node.js v22.
-
-Check version
+```bash
 node -v
+```
 
-Install via nvm (recommended)
+📦 Install via nvm (recommended)
+
+```bash
 nvm install 22
 nvm use 22
+```
 
 📁 Project Structure (Key Parts)
+
+```bash
 src/
 ├── app.module.ts
 ├── main.ts
@@ -56,36 +55,35 @@ docker-compose.dev.yml
 docker-compose.prod.yml
 Dockerfile
 Dockerfile.dev
+```
 
 ⚙️ Environment Configuration
 
-All environment variables are injected via Docker Compose.
+Example .env.development -development
+.env.production - production
 
-Example .env.development:
-
-NODE_ENV=development
-PORT=3000
-
-MONGO_URI=mongodb://mongo1:27017,mongo2:27017,mongo3:27017/sfa?replicaSet=rs0
-
-
-⚠️ Never use localhost, 127.0.0.1, or container IPs for MongoDB inside Docker.
+        copy env.example and update values according the envirement
 
 ▶️ Run Locally (Without Docker)
+
+```bash
 npm install
 npm run start:dev
+```
 
 🐳 Docker Setup
-🔧 Development (hot reload)
+🔧 Development (Hot Reload)
+
+```bash
 sudo docker compose \
   -f docker-compose.yml \
   -f docker-compose.dev.yml \
   up --build
+```
 
-🔥 Development – Clean / Uncached Build (Recommended)
+🔥 Clean Build (Recommended for Debugging)
 
-Use this when debugging routing, middleware, or module issues.
-
+```bash
 sudo docker compose \
   -f docker-compose.yml \
   -f docker-compose.dev.yml \
@@ -95,42 +93,42 @@ sudo docker compose \
   -f docker-compose.yml \
   -f docker-compose.dev.yml \
   up
+```
 
 🚀 Production
+
+```bash
 sudo docker compose \
   -f docker-compose.yml \
   -f docker-compose.prod.yml \
   up -d --build
+```
 
 🌍 Available Endpoints
-Purpose	URL
-API Base	http://localhost:3000/api/v1
-Health Check	http://localhost:3000/api/v1/health
-Metrics	http://localhost:3000/metrics
-Swagger (dev only)	http://localhost:3000/api-docs
-Prometheus UI	http://localhost:9090
-Grafana UI	http://localhost:3001
+| Purpose | URL |
+| ------------- | -------------------------------------------------------------------------- |
+| API Base | [http://localhost:3000/api/v1](http://localhost:3000/api/v1) |
+| Health | [http://localhost:3000/api/v1/health](http://localhost:3000/api/v1/health) |
+| Metrics | [http://localhost:3000/metrics](http://localhost:3000/metrics) |
+| Swagger (dev) | [http://localhost:3000/api-docs](http://localhost:3000/api-docs) |
+| Prometheus | [http://localhost:9090](http://localhost:9090) |
+| Grafana | [http://localhost:3001](http://localhost:3001) |
+
 📊 Metrics & Observability
-Metrics Endpoint
+
+```bash
 curl http://localhost:3000/metrics
+```
 
-Prometheus
+Grafana Login
 
-Scrapes: backend:3000/metrics
-
-UI: http://localhost:9090
-
-Grafana
-
-UI: http://localhost:3001
-
-Default login:
-
+```bash
 admin / admin
+```
 
 🧠 MongoDB (Replica Set)
 
-MongoDB runs as three containers:
+Containers:
 
 mongo1
 
@@ -138,43 +136,214 @@ mongo2
 
 mongo3
 
-All communication uses Docker service names, not host ports.
+Connection:
 
-Example connection string:
-
-MONGO_URI=mongodb://mongo1:27017,mongo2:27017,mongo3:27017/anavilam?replicaSet=rs0
+```bash
+mongodb://mongo1:27017,mongo2:27017,mongo3:27017/anavilam?replicaSet=rs0
+```
 
 🧪 Testing
-# unit tests
+
+```bash
 npm run test
-
-# e2e tests
 npm run test:e2e
-
-# coverage
 npm run test:cov
+```
 
-🧹 Reset Docker Environment (If Needed)
+🧹 Reset Docker Environment
+
+```bash
 sudo docker compose down -v
 sudo docker builder prune -af
 sudo docker image prune -af
 
-
-Then rebuild:
-
 sudo docker compose build --no-cache
 sudo docker compose up
+```
+
+🧩 Module Generation (Scaffold Generator)
+
+This project includes a custom module generator that scaffolds a complete NestJS feature module directly from a Mongo schema.
+
+✨ Zero boilerplate.
+✨ Consistent architecture.
+✨ Production-safe CRUD.
+
+✅ What It Generates
+
+From a single schema file:
+
+Controller
+
+Service
+
+Module
+
+DTOs (Create / Update / Query)
+
+Constants
+
+Enums (if required)
+
+Auto-import into app.module.ts
+
+API constants
+
+Feature flags
+
+No manual wiring required.
+
+📌 Prerequisite
+
+Create schema first:
+
+```bash
+src/core/database/mongo/schema/<entity>.schema.ts
+```
+
+Example:
+
+```bash
+/**
+ * Countries Collection
+ * -------------------
+ * Purpose : Country master classification
+ * Used by : BACK_OFFICE / ADMIN / LOCATION SETUP
+ *
+ * Contains:
+ * - Country identity
+ * - Country name
+ * - Country status
+ *
+ * Notes:
+ * - Countries are used for address and location mapping
+ * - Soft deletes preserve audit history
+ */
+
+import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
+import { HydratedDocument } from 'mongoose';
+import { AutoGenerated } from 'src/core/decorators/auto-generated.decorator';
+import { CountryStatus } from 'src/shared/enums/country.enums';
+
+
+
+export type CountryDocument = HydratedDocument<Country>;
+
+@Schema({ timestamps: true, collection: 'country_master' })
+export class Country {
+  /* ======================================================
+   * IDENTITY
+   * ====================================================== */
+
+  // Reference of country
+  @AutoGenerated() // if it generated by system then use this decorator
+  @Prop({ required: true, unique: true })
+  countryId: string;
+
+  // Display name of country
+  @Prop({ required: true, unique: true, trim: true })
+  name: string;
+
+  /* ======================================================
+   * STATUS
+   * ====================================================== */
+
+  // Country availability status
+  @Prop({
+    type: String,
+    enum: CountryStatus,
+    default: CountryStatus.ACTIVE,
+  })
+  status: CountryStatus;
+}
+
+export const CountrySchema = SchemaFactory.createForClass(Country);
+```
+
+▶️ Generate Module
+
+```bash
+npm run module:generate customer-category
+```
+
+Example:
+
+```bash
+npm run module:generate product-category
+```
+
+🧠 Naming Rules
+
+Always use kebab-case if module name has two words:
+
+✅ customer-category
+✅ product-category
+✅ sales-order
+| Input | Output |
+| ----------- | ------------------ |
+| Folder | customer-category |
+| Entity | CustomerCategory |
+| Constant | CUSTOMER_CATEGORY |
+| Route Param | customerCategoryId |
+
+📁 Generated Structure Example
+
+```bash
+src/modules/v1/customer-category/
+├── customer-category.controller.ts
+├── customer-category.service.ts
+├── customer-category.module.ts
+├── customer-category.constants.ts
+└── dto/
+    ├── create-customer-category.dto.ts
+    ├── update-customer-category.dto.ts
+    └── customer-category-query.dto.ts
+```
+
+⚙️ Automatic Behavior
+
+The generator:
+
+Reads schema fields
+
+Detects unique constraints
+
+Detects reference fields
+
+Builds DTO validation
+
+Generates CRUD services
+
+Creates REST controllers
+
+Injects module into AppModule
+
+Updates API constants
+
+Prevents duplicates
+
+Uses bracket-safe parsing (no fragile regex)
+
+🧹 Regenerate (If Needed)
+
+```bash
+rm -rf src/modules/v1/<module-name>
+npm run module:generate <module-name>
+```
 
 🔐 Security Notes
 
-/metrics is public by design for Prometheus
-(restrict by IP or network in production)
+/metrics is public for Prometheus
 
-CORS is enabled with credentials
+CORS enabled
 
-Helmet and compression are enabled globally
+Helmet enabled
 
-Graceful shutdown hooks are enabled
+Compression enabled
+
+Graceful shutdown
+
+JWT + Permission Guards globally applied
 
 📜 License
 
@@ -183,15 +352,3 @@ MIT License
 👨‍💻 Maintained By
 
 SFA Engineering Team
-
-✅ Summary
-
-Node.js v22 required
-
-Docker-first architecture
-
-MongoDB replica set
-
-Production-grade metrics & monitoring
-
-Clean separation of dev & prod configs
