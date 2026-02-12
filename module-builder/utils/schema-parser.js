@@ -41,19 +41,16 @@ exports.parseSchema = (ROOT, entity) => {
   // ============================================
   const imports = {
     all: [],
-    enums: new Map(), // enum name -> import info
-    types: new Map(), // type name -> import info
-    schemas: new Map(), // schema name -> import info
-    fromPaths: new Map(), // path -> imports
-    decorators: new Map(), // decorator imports
+    enums: new Map(),
+    types: new Map(),
+    schemas: new Map(),
+    fromPaths: new Map(),
+    decorators: new Map(),
   };
 
   const importPatterns = [
-    // Standard import
     /import\s*{([^}]+)}\s*from\s*['"]([^'"]+)['"]/g,
-    // Default import
     /import\s+(\w+)\s+from\s+['"]([^'"]+)['"]/g,
-    // Mixed imports
     /import\s+(\w+),\s*{([^}]+)}\s+from\s+['"]([^'"]+)['"]/g,
   ];
 
@@ -65,27 +62,22 @@ exports.parseSchema = (ROOT, entity) => {
 
       const importPath = match[match.length - 1];
 
-      // Parse imported items
       let importedItems = [];
 
       if (match[1] && match[1].includes('{')) {
-        // Has named imports { x, y, z }
         const itemsMatch = match[1].match(/{([^}]+)}/);
         if (itemsMatch) {
           importedItems = itemsMatch[1].split(',').map((item) => item.trim());
         }
       } else if (match[1]) {
-        // Single default import or named import
         importedItems = [match[1].trim()];
       }
 
       if (match[2] && !match[2].includes('{')) {
-        // Additional named imports from mixed pattern
         const additionalItems = match[2].split(',').map((item) => item.trim());
         importedItems.push(...additionalItems);
       }
 
-      // Categorize imports
       importedItems.forEach((item) => {
         if (!item) return;
 
@@ -99,7 +91,6 @@ exports.parseSchema = (ROOT, entity) => {
           isDecorator: false,
         };
 
-        // Detect import type
         if (importPath.includes('/enums/') || importPath.includes('.enum')) {
           importInfo.isEnum = true;
           imports.enums.set(item, importInfo);
@@ -124,7 +115,6 @@ exports.parseSchema = (ROOT, entity) => {
           imports.decorators.set(item, importInfo);
         }
 
-        // Track by path
         if (!imports.fromPaths.has(importPath)) {
           imports.fromPaths.set(importPath, new Set());
         }
@@ -134,16 +124,121 @@ exports.parseSchema = (ROOT, entity) => {
   }
 
   // ============================================
-  // PHASE 2: Extract class-level documentation
+  // PHASE 2: Extract main schema class body
+  // ============================================
+  const mainSchemaRegex = new RegExp(
+    `export\\s+class\\s+${Entity}\\s*{([\\s\\S]*?)^}`,
+    'm',
+  );
+  const mainSchemaMatch = schema.match(mainSchemaRegex);
+
+  if (!mainSchemaMatch) {
+    throw new Error(`Could not find main schema class: ${Entity}`);
+  }
+
+  const mainSchemaBody = mainSchemaMatch[1];
+
+  // ============================================
+  // PHASE 3: Parse embedded schemas (other class definitions)
+  // ============================================
+  const embeddedSchemas = [];
+
+  // Find all other class definitions (embedded schemas)
+  const classRegex = /export\s+class\s+(\w+)\s*{([\s\S]*?)^}/gm;
+  let classMatch;
+
+  while ((classMatch = classRegex.exec(schema)) !== null) {
+    const className = classMatch[1];
+    const classBody = classMatch[2];
+
+    // Skip the main schema class
+    if (className === Entity) {
+      continue;
+    }
+
+    // Check if this class has @Schema decorator or is referenced in main schema
+    const classPosition = classMatch.index;
+    const hasSchemaDecorator = schema
+      .slice(0, classPosition)
+      .includes('@Schema(');
+
+    // Also check if this class is referenced in main schema
+    const isReferenced =
+      mainSchemaBody.includes(className) ||
+      mainSchemaBody.includes(`${className}[]`) ||
+      mainSchemaBody.includes(`[${className}Schema]`);
+
+    if (hasSchemaDecorator || isReferenced) {
+      const embeddedFields = [];
+
+      // Parse fields in embedded schema
+      const embeddedFieldRegex =
+        /@Prop\(([\s\S]*?)\)\s*(\w+)\s*(\??)\s*:\s*([^;\n]+);/g;
+      let fieldMatch;
+
+      while ((fieldMatch = embeddedFieldRegex.exec(classBody)) !== null) {
+        const propContent = fieldMatch[1];
+        const fieldName = fieldMatch[2];
+        const optionalMark = fieldMatch[3] || '';
+        const fieldType = fieldMatch[4].trim();
+
+        embeddedFields.push({
+          name: fieldName,
+          tsType: fieldType,
+          rawType: fieldType,
+          isOptional: optionalMark === '?',
+          isArray: fieldType.endsWith('[]'),
+          isRequired: propContent.includes('required: true'),
+          isUnique: propContent.includes('unique: true'),
+          hasIndex: propContent.includes('index: true'),
+          propOptions: {
+            required: propContent.includes('required: true'),
+            unique: propContent.includes('unique: true'),
+            index: propContent.includes('index: true'),
+            default: extractDefaultValue(propContent),
+          },
+          comment: null,
+          source: 'user',
+          dtoInclude: ['create', 'update', 'response'],
+          validation: {
+            required: propContent.includes('required: true'),
+            min: extractMin(propContent),
+            max: extractMax(propContent),
+            minlength: extractMinLength(propContent),
+            maxlength: extractMaxLength(propContent),
+            pattern: extractPattern(propContent),
+          },
+          isEmbeddedSchemaField: false,
+        });
+      }
+
+      embeddedSchemas.push({
+        name: className,
+        schemaName: `${className}Schema`,
+        fields: embeddedFields,
+        hasTimestamps: schema
+          .slice(0, classPosition)
+          .includes('timestamps: true'),
+        hasId: !schema.slice(0, classPosition).includes('_id: false'),
+      });
+    }
+  }
+
+  // ============================================
+  // PHASE 4: Extract class-level documentation
   // ============================================
   let classComment = null;
   let classPurpose = null;
   let classAudience = null;
   let classNotes = [];
 
-  const classCommentMatch = schema.match(
-    /\/\*\*([\s\S]*?)\*\/\s*export\s+class\s+\w+/,
+  // Look for JSDoc comment before the main schema class
+  const classCommentRegex = new RegExp(
+    `\\/\\*\\*([\\s\\S]*?)\\*\\/\\s*export\\s+class\\s+${Entity}`,
+    'm',
   );
+  const classCommentMatch = schema.match(classCommentRegex);
+
   if (classCommentMatch) {
     const commentText = classCommentMatch[1];
     classComment = commentText.replace(/\*/g, '').replace(/\s+/g, ' ').trim();
@@ -173,7 +268,6 @@ exports.parseSchema = (ROOT, entity) => {
       ) {
         currentSection = 'notes';
       } else if (cleanLine.includes(':')) {
-        // Section header
         currentSection = cleanLine.replace(':', '').trim().toLowerCase();
       } else if (currentSection === 'notes' && cleanLine.startsWith('-')) {
         classNotes.push(cleanLine.substring(1).trim());
@@ -182,39 +276,32 @@ exports.parseSchema = (ROOT, entity) => {
   }
 
   // ============================================
-  // PHASE 3: Parse fields with decorator detection
+  // PHASE 5: Parse ONLY main schema fields
   // ============================================
   const fields = [];
 
-  // Enhanced regex to capture decorators before @Prop
+  // Parse fields only from the main schema body
   const fieldPattern =
-    /((?:@\w+\([^)]*\)\s*\n?\s*)*)@Prop\(([\s\S]*?)\)\s*([\w\s?:\n[\]]+?);/g;
+    /((?:@\w+\([^)]*\)\s*\n?\s*)*)@Prop\(([\s\S]*?)\)\s*(\w+)\s*(\??)\s*:\s*([^;\n]+);/g;
   let fieldMatch;
 
-  while ((fieldMatch = fieldPattern.exec(schema)) !== null) {
+  while ((fieldMatch = fieldPattern.exec(mainSchemaBody)) !== null) {
     const allDecorators = fieldMatch[1] || '';
     const propContent = fieldMatch[2];
-    const fieldDefinition = fieldMatch[3].trim();
+    const fieldName = fieldMatch[3];
+    const optionalMark = fieldMatch[4] || '';
+    const rawType = fieldMatch[5].trim();
 
-    // Parse field definition
-    const fieldRegex = /(\w+)\s*(\??)\s*:\s*([\w<>[\]|]+)/;
-    const fieldDefMatch = fieldDefinition.match(fieldRegex);
-
-    if (!fieldDefMatch) continue;
-
-    const [, fieldName, optionalMark, rawType] = fieldDefMatch;
-
-    // ============================================
     // Detect custom decorators
-    // ============================================
-    const decoratorLines = allDecorators
-      .trim()
-      .split(/\s+/)
-      .filter((line) => line.startsWith('@'));
     let hasAutoGenerated = false;
     let hasSystemField = false;
     let hasDtoExclude = false;
     let hasUserInput = false;
+
+    const decoratorLines = allDecorators
+      .trim()
+      .split(/\s+/)
+      .filter((line) => line.startsWith('@'));
 
     for (const decoratorLine of decoratorLines) {
       const decoratorMatch = decoratorLine.match(/@(\w+)\(/);
@@ -241,108 +328,120 @@ exports.parseSchema = (ROOT, entity) => {
       }
     }
 
-    // ============================================
-    // Parse @Prop() options
-    // ============================================
-    const propOptions = {
-      raw: propContent,
-      type: null,
-      required: false,
-      unique: false,
-      index: false,
-      enum: null,
-      default: null,
-      ref: null,
-      validate: null,
-      min: null,
-      max: null,
-      minlength: null,
-      maxlength: null,
-      match: null,
-    };
+    // Check if this field references an embedded schema
+    const isEmbeddedSchemaField = embeddedSchemas.some(
+      (es) => rawType === es.name || rawType === `${es.name}[]`,
+    );
 
-    // Extract type
-    const typeMatch = propContent.match(/type:\s*([^,\n}]+)/);
-    if (typeMatch) {
-      propOptions.type = typeMatch[1].trim();
-    }
+    // If it's an embedded schema field, add it with special handling
+    if (isEmbeddedSchemaField) {
+      const embeddedSchema = embeddedSchemas.find(
+        (es) => rawType === es.name || rawType === `${es.name}[]`,
+      );
 
-    // Extract enum
-    const enumMatch = propContent.match(/enum:\s*([^,\n}]+)/);
-    if (enumMatch) {
-      propOptions.enum = enumMatch[1].trim();
-    }
+      // Determine field source for embedded schema field
+      const fieldSource = determineFieldSource(
+        allDecorators,
+        fieldName,
+        propContent,
+      );
 
-    // Extract ref (for relationships)
-    const refMatch = propContent.match(/ref:\s*['"]([^'"]+)['"]/);
-    if (refMatch) {
-      propOptions.ref = refMatch[1];
-    } else {
-      const refMatch2 = propContent.match(/ref:\s*([^,\n}]+)/);
-      if (refMatch2) {
-        propOptions.ref = refMatch2[1].trim();
+      // IMPORTANT: Ensure embedded schema fields are included in update DTO
+      let dtoInclude = ['create', 'update', 'response']; // Always include in update
+
+      // Override if there are specific decorators
+      if (hasDtoExclude) {
+        dtoInclude = [];
+      } else if (hasUserInput) {
+        dtoInclude = ['create', 'update', 'response', 'query'];
+      } else if (
+        fieldSource === 'system' ||
+        fieldSource === 'auto' ||
+        fieldSource === 'audit'
+      ) {
+        // For system fields, only include in response
+        dtoInclude = ['response'];
       }
+
+      fields.push({
+        name: fieldName,
+        tsType: rawType,
+        rawType: rawType,
+        isOptional:
+          optionalMark === '?' || !propContent.includes('required: true'),
+        isArray: rawType.endsWith('[]'),
+        isRequired: propContent.includes('required: true'),
+        isUnique: propContent.includes('unique: true'),
+        hasIndex: propContent.includes('index: true'),
+        defaultValue: extractDefaultValue(propContent),
+        propOptions: parsePropOptions(propContent),
+        comment: extractFieldComment(schema, fieldMatch.index),
+
+        source: fieldSource,
+        isSystemGenerated: hasAutoGenerated || fieldSource === 'system',
+        isAutoGenerated: hasAutoGenerated || fieldSource === 'auto',
+        isAuditField: fieldSource === 'audit',
+        dtoInclude: dtoInclude,
+        hasAutoGeneratedDecorator: hasAutoGenerated,
+        hasSystemFieldDecorator: hasSystemField,
+        hasDtoExcludeDecorator: hasDtoExclude,
+        hasUserInputDecorator: hasUserInput,
+
+        isEmbeddedSchemaField: true,
+        embeddedSchema: embeddedSchema,
+
+        isIdField: fieldName === '_id' || fieldName.endsWith('Id'),
+        isTimestampField: ['createdAt', 'updatedAt', 'deletedAt'].includes(
+          fieldName,
+        ),
+        isReferenceField: !!propContent.includes('ref:'),
+        isStatusField: fieldName === 'status',
+        isBusinessKey:
+          propContent.includes('required: true') &&
+          propContent.includes('unique: true') &&
+          /Id$|Code$|Key$/.test(fieldName),
+        isSearchable:
+          !fieldName.startsWith('_') &&
+          (fieldName === 'name' ||
+            fieldName.endsWith('Id') ||
+            fieldName === 'status'),
+
+        validation: {
+          required: propContent.includes('required: true'),
+          min: extractMin(propContent),
+          max: extractMax(propContent),
+          minlength: extractMinLength(propContent),
+          maxlength: extractMaxLength(propContent),
+          pattern: extractPattern(propContent),
+        },
+      });
+
+      continue;
     }
 
-    // Extract validation rules
-    const validateMatch = propContent.match(/validate:\s*({[^}]+})/);
-    if (validateMatch) {
-      propOptions.validate = validateMatch[1];
-    }
+    // Process regular fields (non-embedded)
 
-    // Extract other options
-    propOptions.required = propContent.includes('required: true');
-    propOptions.unique = propContent.includes('unique: true');
-    propOptions.index = propContent.includes('index: true');
+    // Parse Prop options
+    const propOptions = parsePropOptions(propContent);
 
-    // Extract default value
-    const defaultMatch = propContent.match(/default:\s*([^,\n}]+)/);
-    if (defaultMatch) {
-      propOptions.default = defaultMatch[1].trim();
-    }
-
-    // Extract min/max for numbers
-    const minMatch = propContent.match(/min:\s*([^,\n}]+)/);
-    if (minMatch) propOptions.min = minMatch[1].trim();
-
-    const maxMatch = propContent.match(/max:\s*([^,\n}]+)/);
-    if (maxMatch) propOptions.max = maxMatch[1].trim();
-
-    // Extract minlength/maxlength for strings
-    const minLengthMatch = propContent.match(/minlength:\s*([^,\n}]+)/);
-    if (minLengthMatch) propOptions.minlength = minLengthMatch[1].trim();
-
-    const maxLengthMatch = propContent.match(/maxlength:\s*([^,\n}]+)/);
-    if (maxLengthMatch) propOptions.maxlength = maxLengthMatch[1].trim();
-
-    // Extract regex pattern
-    const matchPattern = propContent.match(/match:\s*\/([^/]+)\//);
-    if (matchPattern) propOptions.match = matchPattern[1];
-
-    // ============================================
-    // Determine field characteristics
-    // ============================================
     const isArray = rawType.endsWith('[]') || propContent.includes('type: [');
     const isTypeScriptOptional = optionalMark === '?';
     const isMongooseRequired = propOptions.required;
     const isOptional = isTypeScriptOptional || !isMongooseRequired;
 
-    // Determine TypeScript type
+    // Determine TypeScript type and enum info
     let tsType = rawType;
     let enumType = propOptions.enum;
     let enumImport = null;
 
-    // Check if rawType is an enum from imports
     if (!enumType && imports.enums.has(rawType)) {
       enumType = rawType;
     }
 
-    // Get enum import info
     if (enumType && imports.enums.has(enumType)) {
       enumImport = imports.enums.get(enumType);
     }
 
-    // Handle array types
     if (isArray) {
       if (rawType.endsWith('[]')) {
         const baseType = rawType.slice(0, -2);
@@ -357,7 +456,6 @@ exports.parseSchema = (ROOT, entity) => {
     let refType = null;
     let refImport = null;
     if (propOptions.ref) {
-      // Try to find the referenced schema in imports
       const refName = propOptions.ref.replace(/Schema$/, '');
       if (imports.schemas.has(refName)) {
         refType = refName;
@@ -368,197 +466,27 @@ exports.parseSchema = (ROOT, entity) => {
       }
     }
 
-    // ============================================
-    // Extract field documentation
-    // ============================================
-    let fieldComment = null;
+    // Determine field source
+    const fieldSource = determineFieldSource(
+      allDecorators,
+      fieldName,
+      propContent,
+    );
+    const isSystemGenerated = hasAutoGenerated || fieldSource === 'system';
+    const isAutoGeneratedField = hasAutoGenerated || fieldSource === 'auto';
+    const isAuditField = fieldSource === 'audit';
 
-    // Look for comments before the field
-    const lines = schema.split('\n');
-    const startIndex = fieldMatch.index;
-    let lineIndex = 0;
-    let currentIndex = 0;
+    // Determine DTO inclusion
+    const dtoInclude = determineDtoInclude(
+      fieldName,
+      allDecorators,
+      fieldSource,
+    );
 
-    // Find which line contains the field definition
-    for (let i = 0; i < lines.length; i++) {
-      currentIndex += lines[i].length + 1; // +1 for newline
-      if (currentIndex > startIndex) {
-        lineIndex = i;
-        break;
-      }
-    }
+    // Extract field comment
+    const fieldComment = extractFieldComment(schema, fieldMatch.index);
 
-    // Look backward for comments
-    let commentLines = [];
-    for (let i = lineIndex - 1; i >= 0; i--) {
-      const line = lines[i].trim();
-      if (line.startsWith('//')) {
-        commentLines.unshift(line.substring(2).trim());
-      } else if (line.includes('*/')) {
-        // Start of block comment
-        let blockComment = '';
-        for (let j = i; j >= 0; j--) {
-          const blockLine = lines[j];
-          if (blockLine.includes('/**')) {
-            // Extract the comment content
-            blockComment = lines
-              .slice(j, i + 1)
-              .join('\n')
-              .replace(/\/\*\*/, '')
-              .replace(/\*\//, '')
-              .replace(/\*/g, '')
-              .trim();
-            break;
-          }
-        }
-        if (blockComment) {
-          fieldComment = blockComment;
-          break;
-        }
-      } else if (line === '' || line.includes('@')) {
-        // Empty line or another decorator, stop looking
-        if (commentLines.length > 0) {
-          fieldComment = commentLines.join('\n');
-        }
-        break;
-      } else {
-        // Not a comment line, stop
-        if (commentLines.length > 0) {
-          fieldComment = commentLines.join('\n');
-        }
-        break;
-      }
-    }
-
-    // ============================================
-    // Determine field source based on decorators, comments, and patterns
-    // ============================================
-    let fieldSource = 'user';
-    let isSystemGenerated = false;
-    let isAutoGeneratedField = false;
-    let isAuditField = false;
-
-    // 1. Check decorators first (highest priority)
-    if (hasAutoGenerated) {
-      fieldSource = 'system';
-      isSystemGenerated = true;
-      isAutoGeneratedField = true;
-    } else if (hasSystemField) {
-      fieldSource = 'system';
-      isSystemGenerated = true;
-    } else if (hasDtoExclude) {
-      fieldSource = 'exclude';
-    } else if (hasUserInput) {
-      fieldSource = 'user';
-    } else {
-      // 2. Check JSDoc tags in comments
-      if (fieldComment) {
-        if (
-          fieldComment.includes('@system-generated') ||
-          fieldComment.includes('@system')
-        ) {
-          fieldSource = 'system';
-          isSystemGenerated = true;
-        } else if (
-          fieldComment.includes('@auto-generated') ||
-          fieldComment.includes('@auto')
-        ) {
-          fieldSource = 'auto';
-          isAutoGeneratedField = true;
-        } else if (
-          fieldComment.includes('@dto-exclude') ||
-          fieldComment.includes('@exclude')
-        ) {
-          fieldSource = 'exclude';
-        } else if (
-          fieldComment.includes('@user-input') ||
-          fieldComment.includes('@user')
-        ) {
-          fieldSource = 'user';
-        }
-      }
-
-      // 3. Check field name patterns (lowest priority)
-      if (fieldSource === 'user') {
-        // System-generated identifier patterns
-        const systemPatterns = [
-          /^_id$/i,
-          /^__v$/i,
-          /^createdAt$/i,
-          /^updatedAt$/i,
-          /^deletedAt$/i,
-        ];
-
-        // Auto-generated business key patterns
-        const businessKeyPatterns = [/Id$/i, /SysCode$/i, /Code$/i, /Key$/i];
-
-        // Auto-generated timestamp patterns
-        const autoPatterns = [/At$/i, /On$/i];
-
-        // Audit/log fields
-        const auditPatterns = [
-          /^createdBy$/i,
-          /^updatedBy$/i,
-          /^deletedBy$/i,
-          /By$/i,
-        ];
-
-        if (systemPatterns.some((pattern) => pattern.test(fieldName))) {
-          fieldSource = 'system';
-          isSystemGenerated = true;
-        } else if (
-          businessKeyPatterns.some((pattern) => pattern.test(fieldName)) &&
-          propOptions.required &&
-          propOptions.unique
-        ) {
-          fieldSource = 'system';
-          isSystemGenerated = true;
-        } else if (autoPatterns.some((pattern) => pattern.test(fieldName))) {
-          fieldSource = 'auto';
-          isAutoGeneratedField = true;
-        } else if (auditPatterns.some((pattern) => pattern.test(fieldName))) {
-          fieldSource = 'audit';
-          isAuditField = true;
-        }
-      }
-    }
-
-    // ============================================
-    // Determine DTO inclusion based on source
-    // ============================================
-    let dtoInclude = [];
-    switch (fieldSource) {
-      case 'user':
-        dtoInclude = ['create', 'update', 'response', 'query'];
-        break;
-      case 'system':
-        dtoInclude = ['response']; // Only in response DTOs
-        break;
-      case 'auto':
-      case 'audit':
-        dtoInclude = ['response']; // Only in response DTOs
-        break;
-      case 'exclude':
-        dtoInclude = []; // Exclude from all DTOs
-        break;
-      default:
-        dtoInclude = ['create', 'update', 'response', 'query'];
-    }
-
-    // Special rule: For query DTOs, include system fields only if they're searchable
-    if (dtoInclude.includes('query') && fieldSource === 'system') {
-      // For query DTOs, we might want to allow searching by ID
-      if (
-        fieldName.toLowerCase().includes('id') &&
-        !fieldName.startsWith('_')
-      ) {
-        dtoInclude = ['response', 'query']; // Allow in query DTO for search
-      }
-    }
-
-    // ============================================
-    // Create comprehensive field object
-    // ============================================
+    // Create field object
     const field = {
       name: fieldName,
       tsType: tsType,
@@ -572,6 +500,7 @@ exports.parseSchema = (ROOT, entity) => {
       enumImport: enumImport,
       refType: refType,
       refImport: refImport,
+      embeddedSchema: null,
       defaultValue: propOptions.default,
       propOptions: propOptions,
       comment: fieldComment,
@@ -585,7 +514,6 @@ exports.parseSchema = (ROOT, entity) => {
         validate: propOptions.validate,
       },
 
-      // Field source detection
       source: fieldSource,
       isSystemGenerated: isSystemGenerated,
       isAutoGenerated: isAutoGeneratedField,
@@ -596,14 +524,13 @@ exports.parseSchema = (ROOT, entity) => {
       hasDtoExcludeDecorator: hasDtoExclude,
       hasUserInputDecorator: hasUserInput,
 
-      // Field categories
-      isIdField: fieldName.toLowerCase().includes('id') || fieldName === '_id',
-      isTimestampField:
-        fieldName === 'createdAt' ||
-        fieldName === 'updatedAt' ||
-        fieldName === 'deletedAt',
+      isIdField: fieldName === '_id' || fieldName.endsWith('Id'),
+      isTimestampField: ['createdAt', 'updatedAt', 'deletedAt'].includes(
+        fieldName,
+      ),
       isStatusField: fieldName === 'status',
       isReferenceField: !!propOptions.ref,
+      isEmbeddedSchemaField: false,
       isBusinessKey:
         propOptions.required &&
         propOptions.unique &&
@@ -618,7 +545,7 @@ exports.parseSchema = (ROOT, entity) => {
   }
 
   // ============================================
-  // PHASE 4: Collect unique imports for DTOs
+  // PHASE 6: Collect unique imports for DTOs
   // ============================================
   const uniqueEnumImports = new Set();
   const uniqueRefImports = new Set();
@@ -633,14 +560,18 @@ exports.parseSchema = (ROOT, entity) => {
   });
 
   // ============================================
-  // PHASE 5: Extract additional metadata
+  // PHASE 7: Extract additional metadata
   // ============================================
   const schemaOptions = {
-    timestamps: schema.includes('@Schema({ timestamps: true })'),
+    timestamps:
+      mainSchemaBody.includes('timestamps: true') ||
+      schema.includes('@Schema({ timestamps: true })'),
     collection: null,
+    _id:
+      !mainSchemaBody.includes('_id: false') &&
+      !schema.includes('@Schema({ _id: false'),
   };
 
-  // Extract collection name
   const collectionMatch = schema.match(
     /@Schema\([^)]*collection:\s*['"]([^'"]+)['"][^)]*\)/,
   );
@@ -649,7 +580,7 @@ exports.parseSchema = (ROOT, entity) => {
   }
 
   // ============================================
-  // PHASE 6: Group fields by DTO type
+  // PHASE 8: Group fields by DTO type - INCLUDE embedded schema fields
   // ============================================
   const dtoFields = {
     create: fields.filter((f) => f.dtoInclude.includes('create')),
@@ -659,9 +590,8 @@ exports.parseSchema = (ROOT, entity) => {
   };
 
   // ============================================
-  // PHASE 7: Filter query fields (special logic)
+  // PHASE 9: Filter query fields
   // ============================================
-  // For query DTOs, we typically want a subset of fields
   const defaultQueryFields = [
     {
       name: 'searchText',
@@ -677,7 +607,6 @@ exports.parseSchema = (ROOT, entity) => {
     },
   ];
 
-  // If no user-defined query fields, use defaults
   const queryFields =
     dtoFields.query.length > 0 ? dtoFields.query : defaultQueryFields;
 
@@ -695,6 +624,9 @@ exports.parseSchema = (ROOT, entity) => {
     schemaPath,
     schemaOptions,
 
+    // Embedded schemas
+    embeddedSchemas,
+
     // Documentation
     classComment,
     classPurpose,
@@ -704,26 +636,49 @@ exports.parseSchema = (ROOT, entity) => {
     // All fields
     fields,
 
-    // Grouped by DTO type
+    // Grouped by DTO type (INCLUDING embedded schema fields)
     dtoFields,
-    queryFields, // Special query fields
+    queryFields,
 
-    // Field categories
-    userInputFields: fields.filter((f) => f.source === 'user'),
-    systemGeneratedFields: fields.filter((f) => f.source === 'system'),
-    autoGeneratedFields: fields.filter((f) => f.source === 'auto'),
-    excludedFields: fields.filter((f) => f.source === 'exclude'),
+    // Field categories (excluding embedded schema fields for regular fields)
+    userInputFields: fields.filter(
+      (f) => f.source === 'user' && !f.isEmbeddedSchemaField,
+    ),
+    systemGeneratedFields: fields.filter(
+      (f) => f.source === 'system' && !f.isEmbeddedSchemaField,
+    ),
+    autoGeneratedFields: fields.filter(
+      (f) => f.source === 'auto' && !f.isEmbeddedSchemaField,
+    ),
+    excludedFields: fields.filter(
+      (f) => f.source === 'exclude' && !f.isEmbeddedSchemaField,
+    ),
 
-    idFields: fields.filter((f) => f.isIdField),
-    requiredFields: fields.filter((f) => f.isRequired && !f.isOptional),
-    optionalFields: fields.filter((f) => f.isOptional),
-    enumFields: fields.filter((f) => f.enumType),
-    refFields: fields.filter((f) => f.refType),
-    arrayFields: fields.filter((f) => f.isArray),
-    timestampFields: fields.filter((f) => f.isTimestampField),
-    statusFields: fields.filter((f) => f.isStatusField),
-    businessKeyFields: fields.filter((f) => f.isBusinessKey),
-    searchableFields: fields.filter((f) => f.isSearchable),
+    idFields: fields.filter((f) => f.isIdField && !f.isEmbeddedSchemaField),
+    requiredFields: fields.filter(
+      (f) => f.isRequired && !f.isOptional && !f.isEmbeddedSchemaField,
+    ),
+    optionalFields: fields.filter(
+      (f) => f.isOptional && !f.isEmbeddedSchemaField,
+    ),
+    enumFields: fields.filter((f) => f.enumType && !f.isEmbeddedSchemaField),
+    refFields: fields.filter((f) => f.refType && !f.isEmbeddedSchemaField),
+    arrayFields: fields.filter((f) => f.isArray && !f.isEmbeddedSchemaField),
+    timestampFields: fields.filter(
+      (f) => f.isTimestampField && !f.isEmbeddedSchemaField,
+    ),
+    statusFields: fields.filter(
+      (f) => f.isStatusField && !f.isEmbeddedSchemaField,
+    ),
+    businessKeyFields: fields.filter(
+      (f) => f.isBusinessKey && !f.isEmbeddedSchemaField,
+    ),
+    searchableFields: fields.filter(
+      (f) => f.isSearchable && !f.isEmbeddedSchemaField,
+    ),
+
+    // Embedded schema fields (separate category)
+    embeddedSchemaFields: fields.filter((f) => f.isEmbeddedSchemaField),
 
     // Imports
     imports: imports.all,
@@ -748,3 +703,189 @@ exports.parseSchema = (ROOT, entity) => {
     rawSchema: schema,
   };
 };
+
+// ============================================
+// Helper Functions (keep existing helper functions)
+// ============================================
+// ... (keep all your existing helper functions: parsePropOptions, extractDefaultValue, etc.)
+
+// ============================================
+// Helper Functions
+// ============================================
+
+function parsePropOptions(propContent) {
+  const options = {
+    raw: propContent,
+    type: null,
+    required: false,
+    unique: false,
+    index: false,
+    enum: null,
+    default: null,
+    ref: null,
+    validate: null,
+    min: null,
+    max: null,
+    minlength: null,
+    maxlength: null,
+    match: null,
+  };
+
+  const typeMatch = propContent.match(/type:\s*([^,\n}]+)/);
+  if (typeMatch) options.type = typeMatch[1].trim();
+
+  const enumMatch = propContent.match(/enum:\s*([^,\n}]+)/);
+  if (enumMatch) options.enum = enumMatch[1].trim();
+
+  const refMatch = propContent.match(/ref:\s*['"]([^'"]+)['"]/);
+  if (refMatch) {
+    options.ref = refMatch[1];
+  } else {
+    const refMatch2 = propContent.match(/ref:\s*([^,\n}]+)/);
+    if (refMatch2) options.ref = refMatch2[1].trim();
+  }
+
+  const validateMatch = propContent.match(/validate:\s*({[^}]+})/);
+  if (validateMatch) options.validate = validateMatch[1];
+
+  options.required = propContent.includes('required: true');
+  options.unique = propContent.includes('unique: true');
+  options.index = propContent.includes('index: true');
+
+  const defaultMatch = propContent.match(/default:\s*([^,\n}]+)/);
+  if (defaultMatch) options.default = defaultMatch[1].trim();
+
+  const minMatch = propContent.match(/min:\s*([^,\n}]+)/);
+  if (minMatch) options.min = minMatch[1].trim();
+
+  const maxMatch = propContent.match(/max:\s*([^,\n}]+)/);
+  if (maxMatch) options.max = maxMatch[1].trim();
+
+  const minLengthMatch = propContent.match(/minlength:\s*([^,\n}]+)/);
+  if (minLengthMatch) options.minlength = minLengthMatch[1].trim();
+
+  const maxLengthMatch = propContent.match(/maxlength:\s*([^,\n}]+)/);
+  if (maxLengthMatch) options.maxlength = maxLengthMatch[1].trim();
+
+  const matchPattern = propContent.match(/match:\s*\/([^\/]+)\//);
+  if (matchPattern) options.match = matchPattern[1];
+
+  return options;
+}
+
+function extractDefaultValue(propContent) {
+  const match = propContent.match(/default:\s*([^,\n}]+)/);
+  return match ? match[1].trim() : null;
+}
+
+function extractMin(propContent) {
+  const match = propContent.match(/min:\s*([^,\n}]+)/);
+  return match ? match[1].trim() : null;
+}
+
+function extractMax(propContent) {
+  const match = propContent.match(/max:\s*([^,\n}]+)/);
+  return match ? match[1].trim() : null;
+}
+
+function extractMinLength(propContent) {
+  const match = propContent.match(/minlength:\s*([^,\n}]+)/);
+  return match ? match[1].trim() : null;
+}
+
+function extractMaxLength(propContent) {
+  const match = propContent.match(/maxlength:\s*([^,\n}]+)/);
+  return match ? match[1].trim() : null;
+}
+
+function extractPattern(propContent) {
+  const match = propContent.match(/match:\s*\/([^\/]+)\//);
+  return match ? match[1] : null;
+}
+
+function extractFieldComment(schema, fieldIndex) {
+  // Simple implementation - can be enhanced
+  const lines = schema.split('\n');
+  let lineIndex = 0;
+  let currentIndex = 0;
+
+  for (let i = 0; i < lines.length; i++) {
+    currentIndex += lines[i].length + 1;
+    if (currentIndex > fieldIndex) {
+      lineIndex = i;
+      break;
+    }
+  }
+
+  let commentLines = [];
+  for (let i = lineIndex - 1; i >= 0; i--) {
+    const line = lines[i].trim();
+    if (line.startsWith('//')) {
+      commentLines.unshift(line.substring(2).trim());
+    } else if (line.includes('*/')) {
+      break;
+    } else if (line === '' || line.includes('@')) {
+      break;
+    } else {
+      break;
+    }
+  }
+
+  return commentLines.length > 0 ? commentLines.join('\n') : null;
+}
+
+function determineFieldSource(decorators, fieldName, propContent) {
+  if (decorators.includes('@AutoGenerated')) return 'system';
+  if (decorators.includes('@SystemField')) return 'system';
+  if (decorators.includes('@DtoExclude')) return 'exclude';
+  if (decorators.includes('@UserInput')) return 'user';
+
+  const systemPatterns = [
+    /^_id$/i,
+    /^__v$/i,
+    /^createdAt$/i,
+    /^updatedAt$/i,
+    /^deletedAt$/i,
+  ];
+
+  if (systemPatterns.some((p) => p.test(fieldName))) return 'system';
+
+  const autoPatterns = [/At$/i, /On$/i];
+  if (
+    autoPatterns.some((p) => p.test(fieldName)) &&
+    !['createdAt', 'updatedAt', 'deletedAt'].includes(fieldName)
+  ) {
+    return 'auto';
+  }
+
+  const auditPatterns = [
+    /^createdBy$/i,
+    /^updatedBy$/i,
+    /^deletedBy$/i,
+    /By$/i,
+  ];
+  if (auditPatterns.some((p) => p.test(fieldName))) return 'audit';
+
+  return 'user';
+}
+
+function determineDtoInclude(fieldName, decorators, source) {
+  if (decorators.includes('@DtoExclude')) return [];
+
+  switch (source) {
+    case 'user':
+      return ['create', 'update', 'response', 'query'];
+    case 'system':
+      return fieldName.toLowerCase().includes('id') &&
+        !fieldName.startsWith('_')
+        ? ['response', 'query']
+        : ['response'];
+    case 'auto':
+    case 'audit':
+      return ['response'];
+    case 'exclude':
+      return [];
+    default:
+      return ['create', 'update', 'response', 'query'];
+  }
+}

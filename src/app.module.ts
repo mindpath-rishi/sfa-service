@@ -36,6 +36,10 @@ import { ProductCategoryModule } from './modules/v1/product-category/product-cat
 import { VanModule } from './modules/v1/van/van.module';
 import { MarketModule } from './modules/v1/market/market.module';
 import { ProvinceModule } from './modules/v1/province/province.module';
+import { OutletTypeModule } from './modules/v1/outlet-type/outlet-type.module';
+import { BeatModule } from './modules/v1/beat/beat.module';
+import { RouteModule } from './modules/v1/route/route.module';
+import { CustomerModule } from './modules/v1/customer/customer.module';
 
 @Global()
 @Module({
@@ -80,7 +84,10 @@ import { ProvinceModule } from './modules/v1/province/province.module';
     MarketModule,
     ProvinceModule,
     CustomerCategoryModule,
-  ],
+    OutletTypeModule,
+    BeatModule,
+    RouteModule,
+    CustomerModule,],
   providers: [
     AppControlService,
     MongoService,
