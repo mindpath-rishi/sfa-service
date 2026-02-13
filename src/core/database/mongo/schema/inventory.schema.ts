@@ -25,7 +25,6 @@ export type InventoryDocument = HydratedDocument<Inventory>;
 
 @Schema({ timestamps: true, collection: 'inventories' })
 export class Inventory {
-
   /* ======================================================
    * IDENTITY
    * ====================================================== */
@@ -40,6 +39,12 @@ export class Inventory {
 
   @Prop({ required: true, index: true })
   productId: string;
+
+  /* ======================================================
+   * VAN REFERENCE
+   * ====================================================== */
+  @Prop({ required: true, index: true })
+  vanId: string;
 
   /* ======================================================
    * QUANTITY DETAILS

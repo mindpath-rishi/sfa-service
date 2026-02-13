@@ -1,12 +1,11 @@
-// create-dto.hbs - Fixed version with proper nested DTO support
+// create-dto.hbs - Fixed version with proper nested DTO and enum support
 const { mapType } = require('../utils/type-mapper');
 
 module.exports = ({ Entity, dtoFields, classComment, enumImports, entity, embeddedSchemas = [] }) => {
   const swaggerImports = new Set(['ApiProperty', 'ApiPropertyOptional']);
   const validatorImports = new Set(['IsNotEmpty', 'IsOptional']);
   const transformerImports = new Set();
-  const customImports = new Map();
-  const fieldEnumImports = new Set();
+  const enumImportsMap = new Map(); // Track enum imports by path to avoid duplicates
   const nestedDtoClasses = [];
   let body = '';
 
@@ -16,8 +15,8 @@ module.exports = ({ Entity, dtoFields, classComment, enumImports, entity, embedd
     
     if (classComment) {
       return `/**
- * ${Entity} Create DTO
- * ${'='.repeat(Entity.length + 12)}
+ * Create${Entity}Dto
+ * =================
  * ${classComment}
  * 
  * Used for creating new ${entityName} records
@@ -25,12 +24,63 @@ module.exports = ({ Entity, dtoFields, classComment, enumImports, entity, embedd
 `;
     }
     return `/**
- * ${Entity} Create DTO
- * ====================
+ * Create${Entity}Dto
+ * =================
  * Data Transfer Object for creating new ${Entity} records
  */
 `;
   };
+
+  // ============================================
+  // Dynamic enum example generator - NO HARDCODED VALUES
+  // ============================================
+  const getEnumExample = (enumType, fieldInfo = {}) => {
+    // If we have actual enum values from the parsed schema, use the first one
+    if (fieldInfo.enumValues && fieldInfo.enumValues.length > 0) {
+      const firstValue = fieldInfo.enumValues[0];
+      // Return the key if it's an object with key/value, otherwise return the value
+      return firstValue.key || firstValue;
+    }
+    
+    // If we have enum map, get the first key
+    if (fieldInfo.enumMap && Object.keys(fieldInfo.enumMap).length > 0) {
+      return Object.keys(fieldInfo.enumMap)[0];
+    }
+    
+    // If we have enum import with values, get the first key
+    if (fieldInfo.enumImport && fieldInfo.enumImport.values && fieldInfo.enumImport.values.length > 0) {
+      return fieldInfo.enumImport.values[0].key || fieldInfo.enumImport.values[0];
+    }
+    
+    // Try to get from defaultValue if available
+    if (fieldInfo.defaultValue) {
+      const defaultMatch = fieldInfo.defaultValue.match(/\.(\w+)$/);
+      if (defaultMatch) {
+        return defaultMatch[1];
+      }
+    }
+    
+    // Last resort - return null (no example)
+    return null;
+  };
+
+  // ============================================
+  // Format default value for Swagger
+  // ============================================
+  const formatDefaultValue = (field) => {
+    if (!field.defaultValue) return null;
+    
+    if (field.enumType) {
+      // Extract the enum key from defaultValue (e.g., "InventoryTransactionStatus.POSTED" -> "POSTED")
+      const match = field.defaultValue.match(/\.(\w+)$/);
+      if (match) {
+        return `${field.enumType}.${match[1]}`;
+      }
+    }
+    return field.defaultValue;
+  };
+
+  body += generateClassDoc();
 
   // ============================================
   // Generate Nested DTO Class for Embedded Schemas
@@ -43,11 +93,13 @@ module.exports = ({ Entity, dtoFields, classComment, enumImports, entity, embedd
 
     schema.fields.forEach(field => {
       // Skip system fields
-      if (field.name === '_id' || field.name === '__v') {
+      if (field.name === '_id' || field.name === '__v' || field.name === 'createdAt' || field.name === 'updatedAt' || field.name === 'deletedAt') {
         return;
       }
 
-      const isRequired = field.propOptions?.required === true;
+      // Check if field has default value - if yes, it should be optional
+      const hasDefaultValue = field.hasDefaultValue === true;
+      const isRequired = field.propOptions?.required === true && !hasDefaultValue;
       
       const mapped = mapType(field.tsType, {
         ...field,
@@ -66,11 +118,58 @@ module.exports = ({ Entity, dtoFields, classComment, enumImports, entity, embedd
         .replace('({,', '({')
         .replace(/,(\s*[}])/g, '$1');
 
+      // Handle enum fields in nested DTO
+      if (field.enumType) {
+        const exampleValue = getEnumExample(field.enumType, field);
+        const defaultValue = formatDefaultValue(field);
+        
+        // Build swagger decorator with all options
+        const options = [];
+        options.push(`enum: ${field.enumType}`);
+        if (exampleValue) {
+          options.push(`example: ${field.enumType}.${exampleValue}`);
+        }
+        if (defaultValue) {
+          options.push(`default: ${field.enumType}.${defaultValue}`);
+        }
+        
+        const optionsString = options.join(', ');
+        
+        // Determine if should be ApiProperty or ApiPropertyOptional
+        if (isRequired) {
+          swaggerDecorator = `@ApiProperty({ ${optionsString} })`;
+        } else {
+          swaggerDecorator = `@ApiPropertyOptional({ ${optionsString} })`;
+        }
+        
+        // Track enum import
+        const enumPath = field.enumImport?.path || `src/shared/enums/${entity}.enums`;
+        if (!enumImportsMap.has(enumPath)) {
+          enumImportsMap.set(enumPath, new Set());
+        }
+        enumImportsMap.get(enumPath).add(field.enumType);
+      }
+
       // Clean up validators
-      const validators = mapped.validator
+      let validators = mapped.validator
         .split('\n')
         .map(v => v.trim())
         .filter(v => v && !v.includes('@Min(null') && !v.includes('@Max(null'));
+
+      // Remove IsOptional if field is required
+      if (isRequired) {
+        validators = validators.filter(v => !v.includes('@IsOptional'));
+      } else {
+        // Add IsOptional if not present and field is optional
+        if (!validators.some(v => v.includes('@IsOptional'))) {
+          validators.unshift('@IsOptional()');
+        }
+      }
+
+      // Add IsEnum for enum fields if not present
+      if (field.enumType && !validators.some(v => v.includes('@IsEnum'))) {
+        validators.push(`@IsEnum(${field.enumType})`);
+      }
 
       // Add validator imports
       if (mapped.extraImports) {
@@ -81,25 +180,51 @@ module.exports = ({ Entity, dtoFields, classComment, enumImports, entity, embedd
         extraImports.forEach(imp => {
           const trimmedImp = imp.trim();
           if (trimmedImp) {
-            validatorImports.add(trimmedImp);
+            // Check if it's a validator decorator
+            const validatorDecorators = [
+              'IsNotEmpty', 'IsOptional', 'IsString', 'IsNumber', 'IsBoolean', 
+              'IsDate', 'IsArray', 'IsEnum', 'IsMongoId', 'Min', 'Max', 
+              'MinLength', 'MaxLength', 'Matches', 'ValidateNested'
+            ];
+            
+            if (validatorDecorators.includes(trimmedImp)) {
+              validatorImports.add(trimmedImp);
+            }
           }
         });
       }
 
       nestedClassBody += `  ${swaggerDecorator}\n`;
+      
+      // Deduplicate validators
+      const uniqueValidators = [];
+      const validatorSet = new Set();
       validators.forEach(v => {
+        const normalized = v.replace(/\s+/g, ' ').trim();
+        if (!validatorSet.has(normalized)) {
+          validatorSet.add(normalized);
+          uniqueValidators.push(v);
+        }
+      });
+
+      uniqueValidators.forEach(v => {
         if (v.trim()) {
           nestedClassBody += `  ${v}\n`;
         }
       });
-      nestedClassBody += `  ${field.name}${isRequired ? '' : '?'}: ${field.tsType};\n\n`;
+      
+      // Determine TypeScript type
+      let tsType = field.tsType;
+      if (field.enumType) {
+        tsType = field.enumType;
+      }
+      
+      nestedClassBody += `  ${field.name}${isRequired ? '' : '?'}: ${tsType};\n\n`;
     });
 
     nestedClassBody += `}\n`;
     return { className, body: nestedClassBody };
   };
-
-  body += generateClassDoc();
 
   // ============================================
   // First Pass: Generate Nested DTO Classes
@@ -116,27 +241,6 @@ module.exports = ({ Entity, dtoFields, classComment, enumImports, entity, embedd
       if (!alreadyGenerated) {
         const nestedDto = generateNestedDtoClass(schema);
         nestedDtoClasses.push(nestedDto);
-        
-        // Add all validators from nested schema fields to imports
-        schema.fields.forEach(field => {
-          const mapped = mapType(field.tsType, {
-            ...field,
-            isRequired: field.propOptions?.required === true,
-          });
-          
-          if (mapped.extraImports) {
-            const extraImports = Array.isArray(mapped.extraImports) 
-              ? mapped.extraImports 
-              : mapped.extraImports.split(', ').filter(Boolean);
-            
-            extraImports.forEach(imp => {
-              const trimmedImp = imp.trim();
-              if (trimmedImp) {
-                validatorImports.add(trimmedImp);
-              }
-            });
-          }
-        });
       }
     }
   });
@@ -159,14 +263,19 @@ module.exports = ({ Entity, dtoFields, classComment, enumImports, entity, embedd
   // Second Pass: Generate Main DTO Fields
   // ============================================
   for (const field of createFields) {
-    // Skip auto-generated and system fields
+    // Skip only auto-generated and system fields - KEEP fields with defaults
     if (field.source === 'system' || field.source === 'auto' || field.source === 'audit') {
-      continue;
+      // But keep status field if it's user field with default
+      if (field.name === 'status' && field.source === 'user') {
+        // Include it
+      } else {
+        continue;
+      }
     }
 
     // Determine if field should be required in Create DTO
-    const isRequiredInCreate = field.isRequired === true && !field.isOptional;
-    const isOptionalInCreate = field.isOptional || !field.isRequired;
+    // Fields with defaults are optional even if marked required in schema
+    const isRequiredInCreate = field.isRequiredInCreate === true && !field.hasDefaultValue;
 
     const mapped = mapType(field.tsType, {
       ...field,
@@ -174,19 +283,31 @@ module.exports = ({ Entity, dtoFields, classComment, enumImports, entity, embedd
     });
 
     // ============================================
-    // Handle Custom Imports
+    // Handle Enum Imports (deduplicated)
     // ============================================
-    
-    // Store enum import if exists
-    if (mapped.enumInfo?.importStatement) {
-      fieldEnumImports.add(mapped.enumInfo.importStatement);
-    } else if (field.enumType) {
-      const enumPath = `src/shared/enums/${entity}.enums`;
-      const importStatement = `import { ${field.enumType} } from '${enumPath}';`;
-      fieldEnumImports.add(importStatement);
+    if (field.enumType) {
+      // Determine the import path for the enum
+      let enumPath = 'src/shared/enums';
+      
+      if (field.enumImport?.path) {
+        enumPath = field.enumImport.path;
+      } else {
+        // Try to construct path based on entity name
+        enumPath = `src/shared/enums/${entity}.enums`;
+      }
+      
+      // Ensure .ts extension is not included in import path
+      enumPath = enumPath.replace(/\.ts$/, '');
+      
+      if (!enumImportsMap.has(enumPath)) {
+        enumImportsMap.set(enumPath, new Set());
+      }
+      enumImportsMap.get(enumPath).add(field.enumType);
     }
 
-    // Handle validator and transformer imports
+    // ============================================
+    // Handle Validator and Transformer Imports
+    // ============================================
     if (mapped.extraImports) {
       const extraImports = Array.isArray(mapped.extraImports) 
         ? mapped.extraImports 
@@ -199,7 +320,7 @@ module.exports = ({ Entity, dtoFields, classComment, enumImports, entity, embedd
         const validatorDecorators = [
           'IsNotEmpty', 'IsOptional', 'IsString', 'IsNumber', 'IsBoolean', 
           'IsDate', 'IsArray', 'IsEnum', 'IsMongoId', 'Min', 'Max', 
-          'MinLength', 'MaxLength', 'Matches', 'ValidateNested'
+          'MinLength', 'MaxLength', 'Matches', 'ValidateNested', 'ArrayNotEmpty'
         ];
         
         const transformerDecorators = ['Type'];
@@ -208,14 +329,6 @@ module.exports = ({ Entity, dtoFields, classComment, enumImports, entity, embedd
           validatorImports.add(trimmedImp);
         } else if (transformerDecorators.includes(trimmedImp)) {
           transformerImports.add(trimmedImp);
-        } else if (/^[A-Z]/.test(trimmedImp) && !trimmedImp.includes('.')) {
-          if (trimmedImp.includes('Status') || trimmedImp.includes('Enum') || trimmedImp.includes('Type')) {
-            const enumPath = `src/shared/enums/${entity}.enums`;
-            if (!customImports.has(enumPath)) {
-              customImports.set(enumPath, new Set());
-            }
-            customImports.get(enumPath).add(trimmedImp);
-          }
         }
       });
     }
@@ -228,8 +341,20 @@ module.exports = ({ Entity, dtoFields, classComment, enumImports, entity, embedd
       .map(v => v.trim())
       .filter(v => v && !v.includes('@Min(null') && !v.includes('@Max(null'));
 
-    // Remove duplicate IsOptional if it exists (shouldn't be in create DTO anyway)
-    validatorDecorators = validatorDecorators.filter(v => !v.includes('@IsOptional'));
+    // Remove any IsOptional for required fields in create DTO
+    if (isRequiredInCreate) {
+      validatorDecorators = validatorDecorators.filter(v => !v.includes('@IsOptional'));
+    } else {
+      // Add IsOptional if not present for optional fields
+      if (!validatorDecorators.some(v => v.includes('@IsOptional'))) {
+        validatorDecorators.unshift('@IsOptional()');
+      }
+    }
+
+    // Make sure IsNotEmpty is present for required fields
+    if (isRequiredInCreate && !validatorDecorators.some(v => v.includes('@IsNotEmpty'))) {
+      validatorDecorators.unshift('@IsNotEmpty()');
+    }
 
     // ============================================
     // Enhance Swagger Decorator
@@ -243,13 +368,40 @@ module.exports = ({ Entity, dtoFields, classComment, enumImports, entity, embedd
       .replace('({,', '({')
       .replace(/,(\s*[}])/g, '$1');
 
-    // Handle enum fields
+    // Handle enum fields with dynamic examples and defaults
     if (field.enumType) {
-      const exampleValue = getEnumExample(field.enumType);
-      if (swaggerDecorator.includes('@ApiProperty(')) {
-        swaggerDecorator = `@ApiProperty({ enum: ${field.enumType}, example: ${field.enumType}.${exampleValue} })`;
+      const exampleValue = getEnumExample(field.enumType, field);
+      const defaultValue = formatDefaultValue(field);
+      
+      // Build options array
+      const options = [];
+      options.push(`enum: ${field.enumType}`);
+      
+      if (exampleValue) {
+        options.push(`example: ${field.enumType}.${exampleValue}`);
+      }
+      
+      if (defaultValue) {
+        options.push(`default: ${field.enumType}.${defaultValue}`);
+      }
+      
+      // Add description if available
+      if (field.comment) {
+        options.push(`description: '${field.comment}'`);
+      }
+      
+      const optionsString = options.join(', ');
+      
+      // Check if field is required in create DTO
+      if (isRequiredInCreate) {
+        swaggerDecorator = `@ApiProperty({ ${optionsString} })`;
       } else {
-        swaggerDecorator = `@ApiPropertyOptional({ enum: ${field.enumType}, example: ${field.enumType}.${exampleValue} })`;
+        swaggerDecorator = `@ApiPropertyOptional({ ${optionsString} })`;
+      }
+      
+      // Make sure IsEnum validator is present
+      if (!validatorDecorators.some(v => v.includes('@IsEnum'))) {
+        validatorDecorators.push(`@IsEnum(${field.enumType})`);
       }
     }
 
@@ -269,35 +421,50 @@ module.exports = ({ Entity, dtoFields, classComment, enumImports, entity, embedd
       }
       
       // Add ValidateNested and Type validators for embedded schemas
-      if (!validatorImports.has('ValidateNested')) {
-        validatorImports.add('ValidateNested');
-      }
-      if (!transformerImports.has('Type')) {
-        transformerImports.add('Type');
-      }
+      validatorImports.add('ValidateNested');
+      transformerImports.add('Type');
 
-      // Replace Type decorator to use the nested DTO class
+      // Replace or add Type decorator
       validatorDecorators = validatorDecorators.filter(v => !v.includes('@Type('));
       if (field.isArray) {
         validatorDecorators.push(`@Type(() => ${nestedDtoName})`);
+        if (isRequiredInCreate) {
+          validatorDecorators.push('@ArrayNotEmpty()');
+          validatorImports.add('ArrayNotEmpty');
+        }
       } else {
         validatorDecorators.push(`@Type(() => ${nestedDtoName})`);
       }
     }
 
-    // Handle description for reference fields
+    // Handle reference fields
     if (field.isReferenceField && field.refType) {
-      // Fix the "null ID" description
       swaggerDecorator = swaggerDecorator.replace(
         /description: 'null ID'/,
         `description: '${field.refType} ID'`
       );
     }
 
+    // Handle regular fields with default values
+    if (field.hasDefaultValue && field.defaultValue && !field.enumType) {
+      // Add default to swagger decorator
+      if (swaggerDecorator.includes('@ApiProperty({') && !swaggerDecorator.includes('default:')) {
+        swaggerDecorator = swaggerDecorator.replace(
+          '})',
+          `, default: ${field.defaultValue} })`
+        );
+      } else if (swaggerDecorator.includes('@ApiPropertyOptional({') && !swaggerDecorator.includes('default:')) {
+        swaggerDecorator = swaggerDecorator.replace(
+          '})',
+          `, default: ${field.defaultValue} })`
+        );
+      }
+    }
+
     // ============================================
     // Add field documentation
     // ============================================
-    if (field.comment) {
+    if (field.comment && !field.enumType) {
       const fieldTitle = field.name.charAt(0).toUpperCase() + field.name.slice(1);
       const separator = '-'.repeat(fieldTitle.length);
       
@@ -309,10 +476,15 @@ module.exports = ({ Entity, dtoFields, classComment, enumImports, entity, embedd
     }
 
     // Determine TypeScript optional syntax
-    const tsOptional = isOptionalInCreate ? '?' : '';
+    const tsOptional = !isRequiredInCreate ? '?' : '';
     
     // Determine TypeScript type
     let dtoType = mapped.dtoType || field.tsType;
+    
+    // For enum fields, ensure the type is the enum type, not string
+    if (field.enumType) {
+      dtoType = field.enumType;
+    }
     
     // For embedded schemas, use the nested DTO class
     if (field.isEmbeddedSchemaField && field.embeddedSchema) {
@@ -324,8 +496,18 @@ module.exports = ({ Entity, dtoFields, classComment, enumImports, entity, embedd
     
     body += `  ${swaggerDecorator}\n`;
     
-    // Add validators
+    // Add validators (deduplicate)
+    const uniqueValidators = [];
+    const validatorSet = new Set();
     validatorDecorators.forEach(v => {
+      const normalized = v.replace(/\s+/g, ' ').trim();
+      if (!validatorSet.has(normalized)) {
+        validatorSet.add(normalized);
+        uniqueValidators.push(v);
+      }
+    });
+
+    uniqueValidators.forEach(v => {
       if (v.trim()) {
         body += `  ${v}\n`;
       }
@@ -335,48 +517,57 @@ module.exports = ({ Entity, dtoFields, classComment, enumImports, entity, embedd
   }
 
   // ============================================
-  // Generate Import Section
+  // Generate Import Section (deduplicated)
   // ============================================
   let importSection = '';
 
-  // Add enum imports
-  const uniqueEnumImports = new Set();
-  fieldEnumImports.forEach(imp => {
-    if (imp && imp.trim()) {
-      uniqueEnumImports.add(imp.trim());
-    }
-  });
-
-  // Add custom imports (enums)
-  for (const [importPath, imports] of customImports) {
-    if (imports.size > 0) {
-      const sortedImports = Array.from(imports).sort();
-      importSection += `import { ${sortedImports.join(', ')} } from '${importPath}';\n`;
+  // Add enum imports (deduplicated by path)
+  for (const [importPath, enumSet] of enumImportsMap) {
+    if (enumSet.size > 0) {
+      const sortedEnums = Array.from(enumSet).sort();
+      importSection += `import { ${sortedEnums.join(', ')} } from '${importPath}';\n`;
     }
   }
 
-  // Add enum imports from parameters
+  // Add any additional enum imports from parameters (deduplicated)
   if (enumImports && enumImports.length > 0) {
+    // Parse enum imports to avoid duplicates
     enumImports.forEach(imp => {
-      if (imp && !importSection.includes(imp)) {
-        importSection += imp + '\n';
+      if (imp && imp.trim()) {
+        // Try to extract path and enums from import statement
+        const match = imp.match(/import\s*{\s*([^}]+)\s*}\s*from\s*['"]([^'"]+)['"]/);
+        if (match) {
+          const [, enums, path] = match;
+          const enumList = enums.split(',').map(e => e.trim());
+          
+          if (!enumImportsMap.has(path)) {
+            enumImportsMap.set(path, new Set());
+          }
+          
+          enumList.forEach(e => {
+            if (e) enumImportsMap.get(path).add(e);
+          });
+        }
       }
     });
   }
 
-  // Add unique enum imports
-  uniqueEnumImports.forEach(imp => {
-    if (!importSection.includes(imp)) {
-      importSection += imp + '\n';
+  // Regenerate enum imports after processing parameters
+  importSection = '';
+  for (const [importPath, enumSet] of enumImportsMap) {
+    if (enumSet.size > 0) {
+      const sortedEnums = Array.from(enumSet).sort();
+      importSection += `import { ${sortedEnums.join(', ')} } from '${importPath}';\n`;
     }
-  });
+  }
 
+  // Add a blank line after imports if we have any
   if (importSection) {
     importSection += '\n';
   }
 
   // ============================================
-  // Generate Imports
+  // Generate Decorator Imports
   // ============================================
   const sortedValidatorImports = Array.from(validatorImports)
     .filter(Boolean)
@@ -396,7 +587,9 @@ module.exports = ({ Entity, dtoFields, classComment, enumImports, entity, embedd
   let fileContent = importSection;
 
   // Add Swagger imports
-  fileContent += `import { ${sortedSwaggerImports.join(', ')} } from '@nestjs/swagger';\n`;
+  if (sortedSwaggerImports.length > 0) {
+    fileContent += `import { ${sortedSwaggerImports.join(', ')} } from '@nestjs/swagger';\n`;
+  }
   
   // Add class-validator imports
   if (sortedValidatorImports.length > 0) {
@@ -406,6 +599,11 @@ module.exports = ({ Entity, dtoFields, classComment, enumImports, entity, embedd
   // Add class-transformer imports
   if (sortedTransformerImports.length > 0) {
     fileContent += `import { ${sortedTransformerImports.join(', ')} } from 'class-transformer';\n`;
+  }
+
+  // Add a blank line before class definitions
+  if (fileContent) {
+    fileContent += '\n';
   }
 
   // Add nested DTO classes
@@ -418,39 +616,3 @@ module.exports = ({ Entity, dtoFields, classComment, enumImports, entity, embedd
 
   return fileContent;
 };
-
-/**
- * Dynamic enum example generator
- */
-function getEnumExample(enumType) {
-  const patterns = [
-    { pattern: /Status$/, example: 'ACTIVE' },
-    { pattern: /Type$/, example: 'DEFAULT' },
-    { pattern: /Role$/, example: 'USER' },
-    { pattern: /Gender$/, example: 'MALE' },
-    { pattern: /Priority$/, example: 'MEDIUM' },
-    { pattern: /State$/, example: 'ACTIVE' },
-    { pattern: /Mode$/, example: 'EDIT' },
-    { pattern: /Level$/, example: 'BASIC' },
-    { pattern: /Category$/, example: 'GENERAL' },
-  ];
-
-  for (const { pattern, example } of patterns) {
-    if (pattern.test(enumType)) {
-      return example;
-    }
-  }
-
-  const commonExamples = {
-    CustomerStatus: 'ACTIVE',
-    OrderStatus: 'PENDING',
-    PaymentStatus: 'PENDING',
-    ShipmentStatus: 'DRAFT',
-    ApprovalStatus: 'PENDING',
-    DayOfWeek: 'MONDAY',
-    Month: 'JANUARY',
-    Quarter: 'Q1',
-  };
-
-  return commonExamples[enumType] || 'ACTIVE';
-}

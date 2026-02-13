@@ -44,7 +44,7 @@ import {
   V1,
 } from 'src/shared/constants/api.constants';
 
-import { Permissions } from 'src/core/decorators/permissioin.decorator';
+import { Permissions } from 'src/core/decorators/permission.decorator';
 
 import { ProductCategoryService } from './product-category.service';
 import { ProductCategoryQueryDto } from './dto/product-category-query.dto';

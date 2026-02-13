@@ -4,8 +4,9 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsEnum, IsNotEmpty, IsNumber, IsOptional, IsString, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 
+
 export class RouteCustomerDto {
-  @ApiProperty({ type: String })
+  @ApiProperty({ type: String, description: 'Business identifier for customer' })
   @IsNotEmpty()
   @IsString()
   customerId: string;
@@ -19,8 +20,8 @@ export class RouteCustomerDto {
 
 export class CreateRouteDto {
 /**
- * Route Create DTO
- * ====================
+ * CreateRouteDto
+ * =================
  * Data Transfer Object for creating new Route records
  */
   @ApiProperty({ type: String })
@@ -28,12 +29,13 @@ export class CreateRouteDto {
   @IsString()
   name: string;
 
-  @ApiProperty({ type: String })
+  @ApiProperty({ type: String, description: 'Business identifier for beat' })
   @IsNotEmpty()
   @IsString()
   beatId: string;
 
-  @ApiPropertyOptional({ type: () => [RouteCustomerDto], description: 'Embedded RouteCustomer array' })
+  @ApiPropertyOptional({ type: () => [RouteCustomerDto], description: 'Embedded RouteCustomer array' , default: [] })
+  @IsOptional()
   @ValidateNested({ each: true })
   @Type(() => RouteCustomerDto)
   associatedCustomers?: RouteCustomerDto[];
@@ -43,11 +45,13 @@ export class CreateRouteDto {
   @IsString()
   day: string;
 
-  @ApiPropertyOptional({ type: Number })
+  @ApiPropertyOptional({ type: Number , default: 0 })
+  @IsOptional()
   @IsNumber()
   distance?: number;
 
-  @ApiPropertyOptional({ enum: RouteStatus, example: RouteStatus.ACTIVE })
+  @ApiPropertyOptional({ enum: RouteStatus, default: RouteStatus.ACTIVE })
+  @IsOptional()
   @IsEnum(RouteStatus)
   status?: RouteStatus;
 

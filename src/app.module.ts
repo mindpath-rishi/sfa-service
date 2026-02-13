@@ -41,6 +41,7 @@ import { BeatModule } from './modules/v1/beat/beat.module';
 import { RouteModule } from './modules/v1/route/route.module';
 import { CustomerModule } from './modules/v1/customer/customer.module';
 import { InventoryModule } from './modules/v1/inventory/inventory.module';
+import { InventoryTransactionModule } from './modules/v1/inventory-transaction/inventory-transaction.module';
 
 @Global()
 @Module({
@@ -89,7 +90,8 @@ import { InventoryModule } from './modules/v1/inventory/inventory.module';
     BeatModule,
     RouteModule,
     CustomerModule,
-    InventoryModule,],
+    InventoryModule,
+    InventoryTransactionModule,],
   providers: [
     AppControlService,
     MongoService,

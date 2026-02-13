@@ -49,7 +49,7 @@ import {
   V1,
 } from 'src/shared/constants/api.constants';
 import { EMPLOYEE } from './employee.constants';
-import { Permissions } from 'src/core/decorators/permissioin.decorator';
+import { Permissions } from 'src/core/decorators/permission.decorator';
 import { EmployeeQueryDto } from './dto/employee.query.dto';
 
 @ApiTags('Employee')

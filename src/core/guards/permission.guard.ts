@@ -8,7 +8,7 @@ import {
 import { Reflector } from '@nestjs/core';
 
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
-import { PERMISSIONS_KEY } from '../decorators/permissioin.decorator';
+import { PERMISSIONS_KEY } from '../decorators/permission.decorator';
 
 import { EmployeeService } from 'src/modules/v1/employee/employee.service';
 import { RoleService } from 'src/modules/v1/role/role.service';

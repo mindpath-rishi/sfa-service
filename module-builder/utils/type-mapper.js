@@ -1,39 +1,68 @@
 exports.mapType = (type, fieldInfo = {}) => {
   // ============================================
-  // Helper function for enum examples - defined inside
+  // Enhanced enum helper functions
   // ============================================
-  const getEnumExample = (enumType) => {
-    const patterns = [
-      { pattern: /Status$/, example: 'ACTIVE' },
-      { pattern: /Type$/, example: 'DEFAULT' },
-      { pattern: /Role$/, example: 'USER' },
-      { pattern: /Gender$/, example: 'MALE' },
-      { pattern: /Priority$/, example: 'MEDIUM' },
-      { pattern: /State$/, example: 'ACTIVE' },
-      { pattern: /Mode$/, example: 'EDIT' },
-      { pattern: /Level$/, example: 'BASIC' },
-      { pattern: /Category$/, example: 'GENERAL' },
-    ];
-
-    for (const { pattern, example } of patterns) {
-      if (pattern.test(enumType)) {
-        return example;
-      }
+  
+  // Get enum values from fieldInfo or try to infer
+  const getEnumValues = (enumType, fieldInfo = {}) => {
+    // If we have enum values from the parsed schema
+    if (fieldInfo.enumValues && Array.isArray(fieldInfo.enumValues) && fieldInfo.enumValues.length > 0) {
+      return fieldInfo.enumValues.map(v => v.value || v);
     }
+    
+    // If we have enum map
+    if (fieldInfo.enumMap) {
+      return Object.values(fieldInfo.enumMap);
+    }
+    
+    // Try to get from enum import info
+    if (fieldInfo.enumImport && fieldInfo.enumImport.values) {
+      return fieldInfo.enumImport.values.map(v => v.value || v);
+    }
+    
+    return [];
+  };
 
-    const commonExamples = {
-      CustomerStatus: 'ACTIVE',
-      RouteStatus: 'ACTIVE',
-      OrderStatus: 'PENDING',
-      PaymentStatus: 'PENDING',
-      ShipmentStatus: 'DRAFT',
-      ApprovalStatus: 'PENDING',
-      DayOfWeek: 'MONDAY',
-      Month: 'JANUARY',
-      Quarter: 'Q1',
-    };
+  // Get appropriate example for enum type
+  const getEnumExample = (enumType, fieldInfo = {}) => {
+    // Try to get first value from enum values if available
+    const enumValues = getEnumValues(enumType, fieldInfo);
+    if (enumValues.length > 0) {
+      return enumValues[0];
+    }
+    
+    return null;
+  };
 
-    return commonExamples[enumType] || 'ACTIVE';
+  // Format enum values for Swagger description
+  const getEnumDescription = (enumType, fieldInfo = {}) => {
+    const enumValues = getEnumValues(enumType, fieldInfo);
+    if (enumValues.length > 0) {
+      return `Available values: ${enumValues.map(v => `'${v}'`).join(', ')}`;
+    }
+    return '';
+  };
+
+  // ============================================
+  // Business field name detection
+  // ============================================
+  const isBusinessIdField = (fieldInfo) => {
+    return fieldInfo.isBusinessKey === true || 
+           (fieldInfo.name && fieldInfo.name.endsWith('Id') && 
+            !fieldInfo.name.startsWith('_') && 
+            fieldInfo.name !== 'id' && 
+            fieldInfo.name !== '_id' &&
+            (fieldInfo.isRequired || fieldInfo.isUnique));
+  };
+
+  const getBusinessFieldName = (fieldInfo) => {
+    if (fieldInfo.businessFieldName) {
+      return fieldInfo.businessFieldName;
+    }
+    if (fieldInfo.name && fieldInfo.name.endsWith('Id')) {
+      return fieldInfo.name;
+    }
+    return null;
   };
 
   const result = {
@@ -45,24 +74,26 @@ exports.mapType = (type, fieldInfo = {}) => {
     embeddedSchemaInfo: null,
     validationRules: [],
     refType: null,
+    isBusinessIdField: isBusinessIdField(fieldInfo),
+    businessFieldName: getBusinessFieldName(fieldInfo),
   };
 
-  const isRequired = fieldInfo.isRequired === true; // Strict check
+  const isRequired = fieldInfo.isRequired === true;
   const isArray = fieldInfo.isArray || false;
   const isEmbeddedSchema = fieldInfo.isEmbeddedSchemaField || false;
   const isReference = fieldInfo.isReferenceField || false;
   const isObjectId = fieldInfo.isObjectId || false;
-  const isUpdateDto = fieldInfo.isUpdateDto || false; // Flag for update DTO
-  const isQueryDto = fieldInfo.isQueryDto || false; // Flag for query DTO
+  const isUpdateDto = fieldInfo.isUpdateDto || false;
+  const isQueryDto = fieldInfo.isQueryDto || false;
 
-  // Helper to determine if type is enum - improved detection
+  // Enhanced enum detection
   const isEnum = () => {
-    if (fieldInfo.enumType || fieldInfo.enumImport) {
+    if (fieldInfo.enumType || fieldInfo.enumImport || fieldInfo.enumValues) {
       return true;
     }
     
     const enumPatterns = [
-      /^[A-Z][a-zA-Z]*(Status|Type|Role|Category|State|Mode|Level)$/,
+      /^[A-Z][a-zA-Z]*(Status|Type|Role|Category|State|Mode|Level|Direction)$/,
       /Enum$/,
       /^[A-Z]+(_[A-Z]+)*$/,
     ];
@@ -96,7 +127,7 @@ exports.mapType = (type, fieldInfo = {}) => {
   }
 
   // ============================================
-  // Handle Swagger Decorator
+  // Handle Swagger Decorator with enhanced enum support
   // ============================================
   if (isEmbeddedSchema && fieldInfo.embeddedSchema) {
     // Embedded schema field
@@ -110,15 +141,13 @@ exports.mapType = (type, fieldInfo = {}) => {
         : `@ApiPropertyOptional({ type: () => ${cleanType} })`;
     }
     
-    // Add import for the embedded schema class
     if (cleanType) {
       result.extraImports.add(cleanType);
     }
   } else if (isReference) {
-    // Reference field (String ID, not MongoDB ObjectId)
+    // Reference field
     result.refType = fieldInfo.refType || 'Reference';
     
-    // Format the reference name for display
     let refDisplayName = result.refType;
     if (refDisplayName.includes('_')) {
       refDisplayName = refDisplayName
@@ -132,30 +161,50 @@ exports.mapType = (type, fieldInfo = {}) => {
       .replace('Document', '')
       .replace('Id', '');
     
+    // Check if this is a business ID reference
+    const isBusinessRef = result.isBusinessIdField;
+    const description = isBusinessRef 
+      ? `Business identifier for ${refDisplayName}`
+      : `Array of ${refDisplayName} IDs`;
+    
     if (isArray) {
       result.swagger = isRequired && !isUpdateDto && !isQueryDto
-        ? `@ApiProperty({ type: [String], description: 'Array of ${refDisplayName} IDs' })`
-        : `@ApiPropertyOptional({ type: [String], description: 'Array of ${refDisplayName} IDs' })`;
+        ? `@ApiProperty({ type: [String], description: '${description}' })`
+        : `@ApiPropertyOptional({ type: [String], description: '${description}' })`;
     } else {
       result.swagger = isRequired && !isUpdateDto && !isQueryDto
-        ? `@ApiProperty({ type: String, description: '${refDisplayName} ID' })`
-        : `@ApiPropertyOptional({ type: String, description: '${refDisplayName} ID' })`;
+        ? `@ApiProperty({ type: String, description: '${description}' })`
+        : `@ApiPropertyOptional({ type: String, description: '${description}' })`;
     }
   } else if (isArray) {
     // Array field
     const itemType = getArrayItemType(type);
     
     if (isEnum() && (fieldInfo.enumType || itemType)) {
-      // Enum array
+      // Enum array with enhanced documentation
       const enumType = fieldInfo.enumType || itemType;
+      const enumValues = getEnumValues(enumType, fieldInfo);
+      const enumDescription = getEnumDescription(enumType, fieldInfo);
+      
       result.swagger = isRequired && !isUpdateDto && !isQueryDto
-        ? `@ApiProperty({ enum: ${enumType}, isArray: true })`
-        : `@ApiPropertyOptional({ enum: ${enumType}, isArray: true })`;
+        ? `@ApiProperty({ 
+  enum: ${enumType}, 
+  isArray: true,
+  description: '${enumDescription}',
+  example: [${enumValues.slice(0, 2).map(v => `'${v}'`).join(', ')}]
+})`
+        : `@ApiPropertyOptional({ 
+  enum: ${enumType}, 
+  isArray: true,
+  description: '${enumDescription}',
+  example: [${enumValues.slice(0, 2).map(v => `'${v}'`).join(', ')}]
+})`;
       
       result.enumInfo = {
         name: enumType,
         importStatement: fieldInfo.enumImport?.statement || null,
         isArray: true,
+        values: enumValues
       };
       
       result.extraImports.add(enumType);
@@ -165,45 +214,71 @@ exports.mapType = (type, fieldInfo = {}) => {
         ? `@ApiProperty({ type: [${itemType}] })`
         : `@ApiPropertyOptional({ type: [${itemType}] })`;
       
-      // Add type import if it looks like a custom class
       if (itemType && /^[A-Z]/.test(itemType) && 
           !['String', 'Number', 'Boolean', 'Date'].includes(itemType)) {
         result.extraImports.add(itemType);
       }
     }
   } else if (isEnum() && (fieldInfo.enumType || cleanType)) {
-    // Enum field (non-array)
+    // Enum field with enhanced documentation
     const enumType = fieldInfo.enumType || cleanType;
-    const exampleValue = getEnumExample(enumType);
+    const exampleValue = getEnumExample(enumType, fieldInfo);
+    const enumValues = getEnumValues(enumType, fieldInfo);
+    const enumDescription = getEnumDescription(enumType, fieldInfo);
+    
+    // Build example string
+    const exampleStr = exampleValue 
+      ? `example: ${enumType}.${exampleValue},`
+      : '';
     
     result.swagger = isRequired && !isUpdateDto && !isQueryDto
-      ? `@ApiProperty({ enum: ${enumType}, example: ${enumType}.${exampleValue} })`
-      : `@ApiPropertyOptional({ enum: ${enumType}, example: ${enumType}.${exampleValue} })`;
+      ? `@ApiProperty({ 
+  enum: ${enumType}, 
+  ${exampleStr}
+  description: '${enumDescription}'
+})`
+      : `@ApiPropertyOptional({ 
+  enum: ${enumType}, 
+  ${exampleStr}
+  description: '${enumDescription}'
+})`;
     
     result.enumInfo = {
       name: enumType,
       importStatement: fieldInfo.enumImport?.statement || null,
       isArray: false,
+      values: enumValues
     };
     
     result.extraImports.add(enumType);
   } else {
     // Regular field
     let swaggerParams = [];
+    let description = '';
+    
+    // Add special description for business ID fields
+    if (result.isBusinessIdField && result.businessFieldName) {
+      const fieldName = result.businessFieldName.replace(/Id$/, '');
+      description = `Business identifier for ${fieldName}`;
+    }
     
     // Map TypeScript types to Swagger types
     switch (cleanType.toLowerCase()) {
       case 'string':
         swaggerParams.push('type: String');
+        if (description) swaggerParams.push(`description: '${description}'`);
         break;
       case 'number':
         swaggerParams.push('type: Number');
+        if (description) swaggerParams.push(`description: '${description}'`);
         break;
       case 'boolean':
         swaggerParams.push('type: Boolean');
+        if (description) swaggerParams.push(`description: '${description}'`);
         break;
       case 'date':
         swaggerParams.push('type: Date');
+        if (description) swaggerParams.push(`description: '${description}'`);
         break;
       case 'objectid':
         swaggerParams.push('type: String');
@@ -215,6 +290,7 @@ exports.mapType = (type, fieldInfo = {}) => {
           result.extraImports.add(cleanType);
         } else {
           swaggerParams.push('type: String');
+          if (description) swaggerParams.push(`description: '${description}'`);
         }
     }
     
@@ -225,11 +301,11 @@ exports.mapType = (type, fieldInfo = {}) => {
   }
 
   // ============================================
-  // Handle Validator Decorators
+  // Handle Validator Decorators with enhanced enum support
   // ============================================
   const validators = [];
 
-  // Required/Optional validator - ONLY add IsNotEmpty if it's actually required AND not an update/query DTO
+  // Required/Optional validator
   if (isRequired && !isUpdateDto && !isQueryDto) {
     validators.push('@IsNotEmpty()');
     result.extraImports.add('IsNotEmpty');
@@ -259,10 +335,9 @@ exports.mapType = (type, fieldInfo = {}) => {
     }
   }
   // ============================================
-  // Handle Reference Fields (String IDs, NOT ObjectId)
+  // Handle Reference Fields (including business IDs)
   // ============================================
-  else if (isReference) {
-    // These are string references, not MongoDB ObjectIds
+  else if (isReference || result.isBusinessIdField) {
     if (isArray) {
       validators.push('@IsArray()');
       validators.push('@IsString({ each: true })');
@@ -272,9 +347,16 @@ exports.mapType = (type, fieldInfo = {}) => {
       validators.push('@IsString()');
       result.extraImports.add('IsString');
     }
+    
+    // Add custom validation for business ID format if needed
+    if (result.isBusinessIdField && fieldInfo.pattern) {
+      validators.push(`@Matches(/${fieldInfo.pattern}/)`);
+      result.extraImports.add('Matches');
+      result.validationRules.push(`Must match format: ${fieldInfo.pattern}`);
+    }
   }
   // ============================================
-  // Handle Actual MongoDB ObjectId Validation (explicit)
+  // Handle ObjectId Validation
   // ============================================
   else if (isObjectId || cleanType === 'objectid' || type.includes('ObjectId')) {
     if (isArray) {
@@ -288,20 +370,37 @@ exports.mapType = (type, fieldInfo = {}) => {
     }
   }
   // ============================================
-  // Handle Enum Validation
+  // Handle Enhanced Enum Validation
   // ============================================
   else if (isEnum() && (fieldInfo.enumType || cleanType)) {
     const enumType = fieldInfo.enumType || cleanType;
+    const enumValues = getEnumValues(enumType, fieldInfo);
     
     if (isArray) {
       validators.push('@IsArray()');
       validators.push(`@IsEnum(${enumType}, { each: true })`);
       result.extraImports.add('IsArray');
       result.extraImports.add('IsEnum');
+      
+      // Add validation rule for documentation
+      if (enumValues.length > 0) {
+        result.validationRules.push(`Each value must be one of: ${enumValues.join(', ')}`);
+      }
     } else {
       validators.push(`@IsEnum(${enumType})`);
       result.extraImports.add('IsEnum');
+      
+      // Add validation rule for documentation
+      if (enumValues.length > 0) {
+        result.validationRules.push(`Must be one of: ${enumValues.join(', ')}`);
+      }
     }
+    
+    // Add enum values to fieldInfo for later use
+    result.enumInfo = {
+      ...result.enumInfo,
+      values: enumValues
+    };
   }
   // ============================================
   // Handle Primitive Types
@@ -322,14 +421,17 @@ exports.mapType = (type, fieldInfo = {}) => {
         if (fieldInfo.validation?.minlength) {
           validators.push(`@MinLength(${fieldInfo.validation.minlength})`);
           result.extraImports.add('MinLength');
+          result.validationRules.push(`Minimum length: ${fieldInfo.validation.minlength}`);
         }
         if (fieldInfo.validation?.maxlength) {
           validators.push(`@MaxLength(${fieldInfo.validation.maxlength})`);
           result.extraImports.add('MaxLength');
+          result.validationRules.push(`Maximum length: ${fieldInfo.validation.maxlength}`);
         }
         if (fieldInfo.validation?.pattern) {
           validators.push(`@Matches(/${fieldInfo.validation.pattern}/)`);
           result.extraImports.add('Matches');
+          result.validationRules.push(`Must match pattern: ${fieldInfo.validation.pattern}`);
         }
         break;
 
@@ -347,10 +449,12 @@ exports.mapType = (type, fieldInfo = {}) => {
         if (fieldInfo.validation?.min !== undefined && fieldInfo.validation?.min !== null) {
           validators.push(`@Min(${fieldInfo.validation.min})`);
           result.extraImports.add('Min');
+          result.validationRules.push(`Minimum value: ${fieldInfo.validation.min}`);
         }
         if (fieldInfo.validation?.max !== undefined && fieldInfo.validation?.max !== null) {
           validators.push(`@Max(${fieldInfo.validation.max})`);
           result.extraImports.add('Max');
+          result.validationRules.push(`Maximum value: ${fieldInfo.validation.max}`);
         }
         break;
 
@@ -417,11 +521,12 @@ exports.mapType = (type, fieldInfo = {}) => {
   }
 
   // ============================================
-  // Add unique validation for system fields that are unique
+  // Add unique validation for system fields and business IDs
   // ============================================
   if (fieldInfo.isUnique && fieldInfo.source === 'user' && !isUpdateDto && !isQueryDto) {
     validators.push('@IsUnique()');
     result.extraImports.add('IsUnique');
+    result.validationRules.push('Must be unique');
   }
 
   // Filter out any duplicate validators
@@ -429,7 +534,6 @@ exports.mapType = (type, fieldInfo = {}) => {
   const validatorSet = new Set();
   
   validators.forEach(v => {
-    // Normalize the validator string for comparison
     const normalized = v.replace(/\s+/g, ' ').trim();
     if (!validatorSet.has(normalized)) {
       validatorSet.add(normalized);
@@ -441,9 +545,11 @@ exports.mapType = (type, fieldInfo = {}) => {
   
   // Convert Set to array for flexible handling
   result.extraImports = Array.from(result.extraImports).sort();
-  result.validationRules = uniqueValidators
-    .filter(v => v)
-    .map(v => v.replace(/[@()]/g, '').replace(/{.*}/, '').trim());
+  
+  // Add any additional validation rules from fieldInfo
+  if (fieldInfo.validation?.customRules) {
+    result.validationRules.push(...fieldInfo.validation.customRules);
+  }
 
   return result;
 };

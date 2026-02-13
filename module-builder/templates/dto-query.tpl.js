@@ -1,4 +1,4 @@
-// query-dto.hbs - Fixed version with proper class structure
+// query-dto.hbs - Updated with create-dto improvements
 const { mapType } = require('../utils/type-mapper');
 
 module.exports = ({
@@ -12,8 +12,7 @@ module.exports = ({
   const swaggerImports = new Set(['ApiPropertyOptional']);
   const validatorImports = new Set(['IsOptional']);
   const transformerImports = new Set();
-  const customImports = new Map();
-  const fieldEnumImports = new Set();
+  const enumImportsMap = new Map(); // Track enum imports by path to avoid duplicates
   let body = '';
 
   // Generate dynamic class documentation
@@ -22,54 +21,122 @@ module.exports = ({
 
     if (classComment) {
       return `/**
- * ${Entity} Query DTO
- * ${'='.repeat(Entity.length + 10)}
+ * ${Entity}QueryDto
+ * =================
  * ${classComment}
  * 
  * Used for: Filtering and searching ${entityName} records
+ * All fields are optional - supports partial matching and range queries
  * Extends PaginationDto for pagination support
  */
 `;
     }
     return `/**
- * ${Entity} Query DTO
- * ===================
+ * ${Entity}QueryDto
+ * =================
  * Data Transfer Object for querying ${Entity} records
  * 
+ * All fields are optional - supports partial matching and range queries
  * Extends PaginationDto for pagination support
  */
 `;
   };
 
+  // ============================================
+  // Dynamic enum example generator - NO HARDCODED VALUES
+  // ============================================
+  const getEnumExample = (enumType, fieldInfo = {}) => {
+    // If we have actual enum values from the parsed schema, use the first one
+    if (fieldInfo.enumValues && fieldInfo.enumValues.length > 0) {
+      const firstValue = fieldInfo.enumValues[0];
+      return firstValue.key || firstValue;
+    }
+    
+    // If we have enum map, get the first key
+    if (fieldInfo.enumMap && Object.keys(fieldInfo.enumMap).length > 0) {
+      return Object.keys(fieldInfo.enumMap)[0];
+    }
+    
+    // If we have enum import with values, get the first key
+    if (fieldInfo.enumImport && fieldInfo.enumImport.values && fieldInfo.enumImport.values.length > 0) {
+      return fieldInfo.enumImport.values[0].key || fieldInfo.enumImport.values[0];
+    }
+    
+    // Try to get from defaultValue if available
+    if (fieldInfo.defaultValue) {
+      const defaultMatch = fieldInfo.defaultValue.match(/\.(\w+)$/);
+      if (defaultMatch) {
+        return defaultMatch[1];
+      }
+    }
+    
+    return null;
+  };
+
+  // ============================================
+  // Format default value for Swagger
+  // ============================================
+  const formatDefaultValue = (field) => {
+    if (!field.defaultValue) return null;
+    
+    if (field.enumType) {
+      const match = field.defaultValue.match(/\.(\w+)$/);
+      if (match) {
+        return `${field.enumType}.${match[1]}`;
+      }
+    }
+    return field.defaultValue;
+  };
+
   // Get query fields - if none provided, use empty array
   let fieldsToUse =
     queryFields && queryFields.length > 0
-      ? queryFields.filter(
-          (f) => !f.isEmbeddedSchemaField && f.name !== 'searchText',
-        ) // Exclude embedded schema fields and potential duplicate searchText
+      ? queryFields.filter((f) => !f.isEmbeddedSchemaField)
       : [];
 
-  // Always include searchText field for generic searching
-  fieldsToUse.unshift({
+  // Define searchText field - ALWAYS INCLUDED
+  const searchField = {
     name: 'searchText',
     tsType: 'string',
     isOptional: true,
-    comment: 'Search by name, code, or identifier',
+    comment: 'Search by name, code, or identifier (supports partial matching)',
     source: 'query',
     validation: {},
-  });
+    isSearchable: true
+  };
+  
+  // Create a Set to track field names and avoid duplicates
+  const fieldNames = new Set(fieldsToUse.map(f => f.name));
+  
+  // Only add searchText if it doesn't already exist
+  if (!fieldNames.has('searchText')) {
+    fieldsToUse = [searchField, ...fieldsToUse];
+  }
 
-  // Add class declaration
+  // Add class declaration with documentation
+  body += generateClassDoc();
   body += `export class ${Entity}QueryDto extends PaginationDto {\n`;
 
   // Process each field
   for (const field of fieldsToUse) {
-    // Skip auto-generated and system fields for query DTO
-    if (
-      field.source === 'system' ||
-      field.source === 'auto' ||
-      field.source === 'audit'
-    ) {
+    // For query DTO, we want to include:
+    // - All user fields that make sense for filtering
+    // - ID fields (even if system-generated)
+    // - Status fields
+    // - Date fields for range queries
+    // - Enum fields for exact matching
+    // - ALWAYS include searchText
+    
+    const isRelevantForQuery = 
+      field.name === 'searchText' || // Always include searchText
+      field.source === 'user' ||
+      field.name.includes('Id') ||
+      field.name === 'status' ||
+      field.name.includes('Date') ||
+      field.name.includes('At') ||
+      field.enumType;
+
+    if (!isRelevantForQuery) {
       continue;
     }
 
@@ -78,24 +145,34 @@ module.exports = ({
       ...field,
       isRequired: false,
       isOptional: true,
+      isQueryDto: true,
     });
 
     // ============================================
-    // Handle Custom Imports
+    // Handle Enum Imports (deduplicated)
     // ============================================
-
-    // Store enum import if exists
-    if (mapped.enumInfo?.importStatement) {
-      fieldEnumImports.add(mapped.enumInfo.importStatement);
-    } else if (field.enumType) {
-      const enumPath = `src/shared/enums/${entity}.enums`;
-      const importStatement = `import { ${field.enumType} } from '${enumPath}';`;
-      fieldEnumImports.add(importStatement);
-    } else if (field.enumImport?.statement) {
-      fieldEnumImports.add(field.enumImport.statement);
+    if (field.enumType) {
+      let enumPath = 'src/shared/enums';
+      
+      if (field.enumImport?.path) {
+        enumPath = field.enumImport.path;
+      } else if (entity) {
+        enumPath = `src/shared/enums/${entity}.enums`;
+      } else {
+        enumPath = `src/shared/enums/${Entity.toLowerCase()}.enums`;
+      }
+      
+      enumPath = enumPath.replace(/\.ts$/, '');
+      
+      if (!enumImportsMap.has(enumPath)) {
+        enumImportsMap.set(enumPath, new Set());
+      }
+      enumImportsMap.get(enumPath).add(field.enumType);
     }
 
-    // Handle validator and transformer imports
+    // ============================================
+    // Handle Validator and Transformer Imports
+    // ============================================
     if (mapped.extraImports) {
       const extraImports = Array.isArray(mapped.extraImports)
         ? mapped.extraImports
@@ -106,7 +183,6 @@ module.exports = ({
         if (!trimmedImp) return;
 
         const validatorDecorators = [
-          'IsNotEmpty',
           'IsOptional',
           'IsString',
           'IsNumber',
@@ -120,29 +196,14 @@ module.exports = ({
           'MinLength',
           'MaxLength',
           'Matches',
-          'ValidateNested',
         ];
 
         const transformerDecorators = ['Type'];
 
         if (validatorDecorators.includes(trimmedImp)) {
-          if (trimmedImp !== 'IsOptional') {
-            validatorImports.add(trimmedImp);
-          }
+          validatorImports.add(trimmedImp);
         } else if (transformerDecorators.includes(trimmedImp)) {
           transformerImports.add(trimmedImp);
-        } else if (/^[A-Z]/.test(trimmedImp) && !trimmedImp.includes('.')) {
-          if (
-            trimmedImp.includes('Status') ||
-            trimmedImp.includes('Enum') ||
-            trimmedImp.includes('Type')
-          ) {
-            const enumPath = `src/shared/enums/${entity}.enums`;
-            if (!customImports.has(enumPath)) {
-              customImports.set(enumPath, new Set());
-            }
-            customImports.get(enumPath).add(trimmedImp);
-          }
         }
       });
     }
@@ -161,13 +222,9 @@ module.exports = ({
           !v.includes('@Max(null'),
       );
 
-    // Remove any duplicate IsOptional
-    validatorDecorators = [...new Set(validatorDecorators)];
-
-    // Add IsOptional if not already present
-    if (!validatorDecorators.some((v) => v.includes('@IsOptional'))) {
-      validatorDecorators.unshift('@IsOptional()');
-    }
+    // Remove any IsOptional and add a single one at the beginning
+    validatorDecorators = validatorDecorators.filter(v => !v.includes('@IsOptional'));
+    validatorDecorators.unshift('@IsOptional()');
 
     // ============================================
     // Enhance Swagger Decorator
@@ -191,30 +248,106 @@ module.exports = ({
       );
     }
 
-    // Handle enum fields
+    // Handle enum fields with dynamic examples
     if (field.enumType) {
-      const exampleValue = getEnumExample(field.enumType);
-      swaggerDecorator = `@ApiPropertyOptional({ enum: ${field.enumType}, example: ${field.enumType}.${exampleValue} })`;
+      const exampleValue = getEnumExample(field.enumType, field);
+      const defaultValue = formatDefaultValue(field);
+      
+      const options = [];
+      options.push(`enum: ${field.enumType}`);
+      options.push(`description: 'Filter by ${field.name}'`);
+      
+      if (exampleValue) {
+        options.push(`example: ${field.enumType}.${exampleValue}`);
+      }
+      
+      if (defaultValue) {
+        options.push(`default: ${field.enumType}.${defaultValue}`);
+      }
+      
+      const optionsString = options.join(', ');
+      swaggerDecorator = `@ApiPropertyOptional({ ${optionsString} })`;
+      
+      // Add IsEnum validator
+      if (!validatorDecorators.some(v => v.includes('@IsEnum'))) {
+        validatorDecorators.push(`@IsEnum(${field.enumType})`);
+      }
     }
 
-    // Special handling for searchText
+    // Special handling for searchText - ALWAYS APPLIED
     if (field.name === 'searchText') {
-      swaggerDecorator =
-        '@ApiPropertyOptional({ description: "Search by name, code, or identifier", example: "search term" })';
+      swaggerDecorator = '@ApiPropertyOptional({ description: "Search by name, code, or identifier (supports partial matching)", example: "search term" })';
+      
+      // Override validators for searchText
+      validatorDecorators = [
+        '@IsOptional()',
+        '@IsString()',
+        '@MinLength(2)',
+        '@MaxLength(100)'
+      ];
+      
+      // Add required imports
+      validatorImports.add('IsString');
+      validatorImports.add('MinLength');
+      validatorImports.add('MaxLength');
+      
+      // Add validation rules
+      if (!result) var result = { validationRules: [] };
+      result.validationRules = result.validationRules || [];
+      result.validationRules.push('Minimum length: 2 characters');
+      result.validationRules.push('Maximum length: 100 characters');
     }
 
-    // Special handling for status field
-    if (field.name === 'status') {
-      swaggerDecorator =
-        '@ApiPropertyOptional({ description: "Filter by status" })';
+    // Special handling for ID fields
+    if (field.name.includes('Id') && field.name !== 'searchText' && field.name !== 'id') {
+      if (!swaggerDecorator.includes('description:')) {
+        const idName = field.name.replace(/Id$/, '');
+        const displayName = idName || 'record';
+        swaggerDecorator = swaggerDecorator.replace(
+          '})',
+          `, description: 'Filter by ${displayName} ID' })`
+        );
+      }
+      
+      // Ensure string validator for ID fields
+      if (!validatorDecorators.some(v => v.includes('@IsString'))) {
+        validatorDecorators.push('@IsString()');
+        validatorImports.add('IsString');
+      }
+    }
+
+    // Handle date range fields
+    if ((field.name.includes('Date') || field.name.includes('At')) && field.name !== 'searchText') {
+      swaggerDecorator = swaggerDecorator.replace(
+        '})',
+        ', description: "Filter by date range (supports operators: gt, gte, lt, lte)", example: "2024-01-01T00:00:00.000Z" })'
+      );
+      
+      // Add date validator
+      if (!validatorDecorators.some(v => v.includes('@IsDate'))) {
+        validatorDecorators.push('@IsDate()');
+        validatorImports.add('IsDate');
+      }
+    }
+
+    // Handle status field
+    if (field.name === 'status' && !field.enumType) {
+      swaggerDecorator = '@ApiPropertyOptional({ description: "Filter by status", example: "ACTIVE" })';
+    }
+
+    // Handle number fields with range support
+    if (field.tsType && field.tsType.toLowerCase() === 'number' && !field.enumType && field.name !== 'searchText') {
+      swaggerDecorator = swaggerDecorator.replace(
+        '})',
+        ', description: "Supports operators: gt, gte, lt, lte", example: 10 })'
+      );
     }
 
     // ============================================
-    // Add field documentation INSIDE the class
+    // Add field documentation
     // ============================================
-    if (field.comment) {
-      const fieldTitle =
-        field.name.charAt(0).toUpperCase() + field.name.slice(1);
+    if (field.comment && field.name !== 'searchText') {
+      const fieldTitle = field.name.charAt(0).toUpperCase() + field.name.slice(1);
       const separator = '-'.repeat(fieldTitle.length);
 
       body += `  /**
@@ -224,14 +357,39 @@ module.exports = ({
    */\n`;
     }
 
+    // For searchText, add documentation if not present
+    if (field.name === 'searchText' && !field.comment) {
+      body += `  /**
+   * Search Text
+   * -----------
+   * Search by name, code, or identifier (supports partial matching)
+   * Minimum 2 characters, maximum 100 characters
+   */\n`;
+    }
+
     // Determine TypeScript type
     let dtoType = mapped.dtoType || field.tsType;
+    
+    // For enum fields, use the enum type
+    if (field.enumType) {
+      dtoType = field.enumType;
+    }
 
-    // Add field decorators and declaration
     body += `  ${swaggerDecorator}\n`;
 
-    // Add validators
-    validatorDecorators.forEach((v) => {
+    // Deduplicate validators
+    const uniqueValidators = [];
+    const validatorSet = new Set();
+    
+    validatorDecorators.forEach(v => {
+      const normalized = v.replace(/\s+/g, ' ').trim();
+      if (!validatorSet.has(normalized)) {
+        validatorSet.add(normalized);
+        uniqueValidators.push(v);
+      }
+    });
+
+    uniqueValidators.forEach((v) => {
       if (v.trim()) {
         body += `  ${v}\n`;
       }
@@ -240,52 +398,85 @@ module.exports = ({
     body += `  ${field.name}?: ${dtoType};\n\n`;
   }
 
+  // Ensure searchText is always present even if no fields were processed
+  if (!fieldsToUse.some(f => f.name === 'searchText')) {
+    const searchFieldDef = {
+      name: 'searchText',
+      tsType: 'string',
+      isOptional: true,
+    };
+    
+    body += `  /**
+   * Search Text
+   * -----------
+   * Search by name, code, or identifier (supports partial matching)
+   * Minimum 2 characters, maximum 100 characters
+   */
+  @ApiPropertyOptional({ description: "Search by name, code, or identifier (supports partial matching)", example: "search term" })
+  @IsOptional()
+  @IsString()
+  @MinLength(2)
+  @MaxLength(100)
+  searchText?: string;\n\n`;
+    
+    // Add required imports
+    validatorImports.add('IsString');
+    validatorImports.add('MinLength');
+    validatorImports.add('MaxLength');
+  }
+
   // Close the class
   body += `}`;
 
   // ============================================
-  // Generate Import Section
+  // Generate Import Section (deduplicated)
   // ============================================
   let importSection = '';
 
-  // Add enum imports
-  const uniqueEnumImports = new Set();
-  fieldEnumImports.forEach((imp) => {
-    if (imp && imp.trim()) {
-      uniqueEnumImports.add(imp.trim());
-    }
-  });
-
-  // Add custom imports (enums)
-  for (const [importPath, imports] of customImports) {
-    if (imports.size > 0) {
-      const sortedImports = Array.from(imports).sort();
-      importSection += `import { ${sortedImports.join(', ')} } from '${importPath}';\n`;
+  // Add enum imports (deduplicated by path)
+  for (const [importPath, enumSet] of enumImportsMap) {
+    if (enumSet.size > 0) {
+      const sortedEnums = Array.from(enumSet).sort();
+      importSection += `import { ${sortedEnums.join(', ')} } from '${importPath}';\n`;
     }
   }
 
-  // Add enum imports from parameters
+  // Add any additional enum imports from parameters
   if (enumImports && enumImports.length > 0) {
-    enumImports.forEach((imp) => {
-      if (imp && !importSection.includes(imp)) {
-        importSection += imp + '\n';
+    enumImports.forEach(imp => {
+      if (imp && imp.trim()) {
+        const match = imp.match(/import\s*{\s*([^}]+)\s*}\s*from\s*['"]([^'"]+)['"]/);
+        if (match) {
+          const [, enums, path] = match;
+          const enumList = enums.split(',').map(e => e.trim());
+          
+          if (!enumImportsMap.has(path)) {
+            enumImportsMap.set(path, new Set());
+          }
+          
+          enumList.forEach(e => {
+            if (e) enumImportsMap.get(path).add(e);
+          });
+        }
       }
     });
   }
 
-  // Add unique enum imports
-  uniqueEnumImports.forEach((imp) => {
-    if (!importSection.includes(imp)) {
-      importSection += imp + '\n';
+  // Regenerate enum imports after processing parameters
+  importSection = '';
+  for (const [importPath, enumSet] of enumImportsMap) {
+    if (enumSet.size > 0) {
+      const sortedEnums = Array.from(enumSet).sort();
+      importSection += `import { ${sortedEnums.join(', ')} } from '${importPath}';\n`;
     }
-  });
+  }
 
   if (importSection) {
     importSection += '\n';
   }
 
   // ============================================
-  // Generate Imports
+  // Generate Decorator Imports
   // ============================================
   const sortedValidatorImports = Array.from(validatorImports)
     .filter(Boolean)
@@ -305,7 +496,9 @@ module.exports = ({
   let fileContent = importSection;
 
   // Add Swagger imports
-  fileContent += `import { ${sortedSwaggerImports.join(', ')} } from '@nestjs/swagger';\n`;
+  if (sortedSwaggerImports.length > 0) {
+    fileContent += `import { ${sortedSwaggerImports.join(', ')} } from '@nestjs/swagger';\n`;
+  }
 
   // Add class-validator imports
   if (sortedValidatorImports.length > 0) {
@@ -320,44 +513,8 @@ module.exports = ({
   // Add PaginationDto import
   fileContent += `import { PaginationDto } from 'src/shared/dto/pagination.dto';\n\n`;
 
-  // Add the class documentation and class
+  // Add the class body
   fileContent += body;
 
   return fileContent;
 };
-
-/**
- * Dynamic enum example generator
- */
-function getEnumExample(enumType) {
-  const patterns = [
-    { pattern: /Status$/, example: 'ACTIVE' },
-    { pattern: /Type$/, example: 'DEFAULT' },
-    { pattern: /Role$/, example: 'USER' },
-    { pattern: /Gender$/, example: 'MALE' },
-    { pattern: /Priority$/, example: 'MEDIUM' },
-    { pattern: /State$/, example: 'ACTIVE' },
-    { pattern: /Mode$/, example: 'EDIT' },
-    { pattern: /Level$/, example: 'BASIC' },
-    { pattern: /Category$/, example: 'GENERAL' },
-  ];
-
-  for (const { pattern, example } of patterns) {
-    if (pattern.test(enumType)) {
-      return example;
-    }
-  }
-
-  const commonExamples = {
-    RouteStatus: 'ACTIVE',
-    OrderStatus: 'PENDING',
-    PaymentStatus: 'PENDING',
-    ShipmentStatus: 'DRAFT',
-    ApprovalStatus: 'PENDING',
-    DayOfWeek: 'MONDAY',
-    Month: 'JANUARY',
-    Quarter: 'Q1',
-  };
-
-  return commonExamples[enumType] || 'ACTIVE';
-}

@@ -10,34 +10,37 @@ import { MongoService } from 'src/core/database/mongo/mongo.service';
 import { MongoRepository } from 'src/core/database/mongo/mongo.repository';
 import { FilterQuery } from 'src/core/database/mongo/mongo.interface';
 
-import { Inventory, InventorySchema } from 'src/core/database/mongo/schema/inventory.schema';
+import { InventoryTransaction, InventoryTransactionSchema } from 'src/core/database/mongo/schema/inventory-transaction.schema';
 
-import { INVENTORY } from './inventory.constants';
-import { CreateInventoryDto } from './dto/create-inventory.dto';
-import { UpdateInventoryDto } from './dto/update-inventory.dto';
-import { InventoryQueryDto } from './dto/inventory-query.dto';
+import { INVENTORY_TRANSACTION } from './inventory-transaction.constants';
+import { CreateInventoryTransactionDto } from './dto/create-inventory-transaction.dto';
+import { UpdateInventoryTransactionDto } from './dto/update-inventory-transaction.dto';
+import { InventoryTransactionQueryDto } from './dto/inventory-transaction-query.dto';
 import { IdGenerator } from 'src/shared/utils/id-generator.utils';
 
 
 @Injectable()
-export class InventoryService extends MongoRepository<Inventory> {
+export class InventoryTransactionService extends MongoRepository<InventoryTransaction> {
   constructor(mongo: MongoService) {
-    super(mongo.getModel(Inventory.name, InventorySchema));
+    super(mongo.getModel(InventoryTransaction.name, InventoryTransactionSchema));
   }
 
-  async create(payload: CreateInventoryDto) {
+  async create(payload: CreateInventoryTransactionDto) {
     try {
       return await this.withTransaction(async (session) => {
         
 
-        const filter: FilterQuery<Inventory> = {};
+        const filter: FilterQuery<InventoryTransaction> = {};
+
+        
+
         const existing = await this.findOne(filter, {
           session,
           includeDeleted: true,
         });
 
         if (existing && !existing.isDeleted) {
-          throw new ConflictException(INVENTORY.DUPLICATE);
+          throw new ConflictException(INVENTORY_TRANSACTION.DUPLICATE);
         }
 
         if (existing?.isDeleted) {
@@ -53,14 +56,14 @@ export class InventoryService extends MongoRepository<Inventory> {
 
           return {
             statusCode: HttpStatus.OK,
-            message: INVENTORY.CREATED,
-            data: { inventoryId: existing.inventoryId },
+            message: INVENTORY_TRANSACTION.CREATED,
+            data: { transactionId: existing.transactionId },
           };
         }
 
         const doc = await this.save(
           {
-            inventoryId: IdGenerator.generate('INVE', 8),
+            transactionId: IdGenerator.generate('INVE', 8),
             ...payload,
           },
           { session },
@@ -68,7 +71,7 @@ export class InventoryService extends MongoRepository<Inventory> {
 
         return {
           statusCode: HttpStatus.CREATED,
-          message: INVENTORY.CREATED,
+          message: INVENTORY_TRANSACTION.CREATED,
           data: doc,
         };
       });
@@ -77,16 +80,16 @@ export class InventoryService extends MongoRepository<Inventory> {
     }
   }
 
-  async findAll(query: InventoryQueryDto) {
+  async findAll(query: InventoryTransactionQueryDto) {
     const { searchText, status, page = 1, limit = 20 } = query;
 
-    const filter: FilterQuery<Inventory> = {};
+    const filter: FilterQuery<InventoryTransaction> = {};
 
     if (status) filter.status = status;
 
     if (searchText) {
       const regex = new RegExp(searchText, 'i');
-      filter.$or = [{ inventoryId: regex }];
+      filter.$or = [{ transactionId: regex }];
     }
 
     const result = await this.paginate(filter, {
@@ -98,40 +101,40 @@ export class InventoryService extends MongoRepository<Inventory> {
 
     return {
       statusCode: HttpStatus.OK,
-      message: INVENTORY.FETCHED,
+      message: INVENTORY_TRANSACTION.FETCHED,
       data: result.items,
       meta: result.meta,
     };
   }
 
-  async findByInventoryId(inventoryId: string) {
-    const doc = await this.findOne({ inventoryId }, { lean: true });
+  async findByTransactionId(transactionId: string) {
+    const doc = await this.findOne({ transactionId }, { lean: true });
 
-    if (!doc) throw new NotFoundException(INVENTORY.NOT_FOUND);
+    if (!doc) throw new NotFoundException(INVENTORY_TRANSACTION.NOT_FOUND);
 
     return {
       statusCode: HttpStatus.OK,
-      message: INVENTORY.FETCHED,
+      message: INVENTORY_TRANSACTION.FETCHED,
       data: doc,
     };
   }
 
-  async update(inventoryId: string, dto: UpdateInventoryDto) {
+  async update(transactionId: string, dto: UpdateInventoryTransactionDto) {
     try {
       return await this.withTransaction(async (session) => {
         
 
         const doc = await this.updateOne(
-          { inventoryId },
+          { transactionId },
           dto,
           { session, new: true },
         );
 
-        if (!doc) throw new NotFoundException(INVENTORY.NOT_FOUND);
+        if (!doc) throw new NotFoundException(INVENTORY_TRANSACTION.NOT_FOUND);
 
         return {
           statusCode: HttpStatus.OK,
-          message: INVENTORY.UPDATED,
+          message: INVENTORY_TRANSACTION.UPDATED,
           data: doc,
         };
       });
@@ -140,23 +143,23 @@ export class InventoryService extends MongoRepository<Inventory> {
     }
   }
 
-  async delete(inventoryId: string) {
-    const existing = await this.findOne({ inventoryId });
+  async delete(transactionId: string) {
+    const existing = await this.findOne({ transactionId });
 
-    if (!existing) throw new NotFoundException(INVENTORY.NOT_FOUND);
+    if (!existing) throw new NotFoundException(INVENTORY_TRANSACTION.NOT_FOUND);
 
-    await this.softDelete({ inventoryId });
+    await this.softDelete({ transactionId });
 
     return {
       statusCode: HttpStatus.OK,
-      message: INVENTORY.DELETED,
+      message: INVENTORY_TRANSACTION.DELETED,
       data: existing,
     };
   }
 
   private handleDuplicateError(error: any): never {
     if (error?.code === 11000 || error?.code === 11001) {
-      throw new ConflictException(INVENTORY.DUPLICATE);
+      throw new ConflictException(INVENTORY_TRANSACTION.DUPLICATE);
     }
     throw error;
   }

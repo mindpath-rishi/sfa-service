@@ -4,6 +4,7 @@ import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IsEnum, IsNumber, IsOptional, IsString, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 
+
 export class UpdateRouteCustomerDto {
   @ApiPropertyOptional({ type: String })
   @IsOptional()
@@ -19,11 +20,12 @@ export class UpdateRouteCustomerDto {
 
 export class UpdateRouteDto {
 /**
- * Route Update DTO
- * ====================
+ * UpdateRouteDto
+ * =================
  * Data Transfer Object for updating Route records
  * 
  * All fields are optional for partial updates
+ * Supports partial updates - omitted fields will retain their existing values
  */
   @ApiPropertyOptional({ type: String })
   @IsOptional()
@@ -35,9 +37,8 @@ export class UpdateRouteDto {
   @IsString()
   beatId?: string;
 
-  @ApiPropertyOptional({ type: () => [UpdateRouteCustomerDto], description: 'Update embedded RouteCustomer array' })
+  @ApiPropertyOptional({ type: () => [UpdateRouteCustomerDto], description: 'Update embedded RouteCustomer array' , default: [] })
   @IsOptional()
-  @ValidateNested({ each: true })
   @ValidateNested({ each: true })
   @Type(() => UpdateRouteCustomerDto)
   associatedCustomers?: UpdateRouteCustomerDto[];
@@ -47,12 +48,12 @@ export class UpdateRouteDto {
   @IsString()
   day?: string;
 
-  @ApiPropertyOptional({ type: Number })
+  @ApiPropertyOptional({ type: Number , default: 0 })
   @IsOptional()
   @IsNumber()
   distance?: number;
 
-  @ApiPropertyOptional({ enum: RouteStatus, example: RouteStatus.ACTIVE })
+  @ApiPropertyOptional({ enum: RouteStatus, default: RouteStatus.ACTIVE })
   @IsOptional()
   @IsEnum(RouteStatus)
   status?: RouteStatus;

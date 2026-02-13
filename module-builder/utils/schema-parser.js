@@ -124,6 +124,93 @@ exports.parseSchema = (ROOT, entity) => {
   }
 
   // ============================================
+  // PHASE 1.5: Load actual enum values from enum files
+  // ============================================
+  const loadEnumValues = (enumName, enumImport) => {
+    try {
+      if (!enumImport) return null;
+      
+      // Resolve enum file path
+      let enumPath = enumImport.path;
+      if (enumPath.startsWith('.')) {
+        enumPath = path.resolve(path.dirname(schemaPath), enumPath);
+      } else if (enumPath.startsWith('src/')) {
+        enumPath = path.join(process.cwd(), enumPath);
+      }
+      
+      if (!enumPath.endsWith('.ts') && !enumPath.endsWith('.js')) {
+        enumPath += '.ts';
+      }
+      
+      if (!fs.existsSync(enumPath)) {
+        return null;
+      }
+      
+      const enumContent = fs.readFileSync(enumPath, 'utf8');
+      
+      // Find the specific enum
+      const enumRegex = new RegExp(`export\\s+enum\\s+${enumName}\\s*{([\\s\\S]*?)}`, 'm');
+      const enumMatch = enumContent.match(enumRegex);
+      
+      if (!enumMatch) return null;
+      
+      const enumBody = enumMatch[1];
+      const enumValues = [];
+      const enumMap = {};
+      const enumList = [];
+      
+      const lines = enumBody.split('\n');
+      
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith('//') || trimmed.startsWith('/*')) continue;
+        
+        // Pattern: KEY = 'value',
+        const stringMatch = trimmed.match(/^(\w+)\s*=\s*['"]([^'"]+)['"],?/);
+        if (stringMatch) {
+          const key = stringMatch[1];
+          const value = stringMatch[2];
+          enumValues.push({ key, value });
+          enumMap[key] = value;
+          enumList.push(value);
+          continue;
+        }
+        
+        // Pattern: KEY = value,
+        const numericMatch = trimmed.match(/^(\w+)\s*=\s*(\d+),?/);
+        if (numericMatch) {
+          const key = numericMatch[1];
+          const value = parseInt(numericMatch[2], 10);
+          enumValues.push({ key, value });
+          enumMap[key] = value;
+          enumList.push(value);
+          continue;
+        }
+        
+        // Pattern: KEY,
+        const simpleMatch = trimmed.match(/^(\w+),?$/);
+        if (simpleMatch) {
+          const key = simpleMatch[1];
+          const value = key;
+          enumValues.push({ key, value });
+          enumMap[key] = value;
+          enumList.push(value);
+        }
+      }
+      
+      return {
+        name: enumName,
+        values: enumValues,
+        map: enumMap,
+        list: enumList
+      };
+    } catch (error) {
+      console.error(`Error loading enum ${enumName}:`, error);
+      return null;
+    }
+  };
+
+  // ============================================
   // PHASE 2: Extract main schema class body
   // ============================================
   const mainSchemaRegex = new RegExp(
@@ -182,6 +269,36 @@ exports.parseSchema = (ROOT, entity) => {
         const optionalMark = fieldMatch[3] || '';
         const fieldType = fieldMatch[4].trim();
 
+        // Parse enum info for embedded schema fields
+        let enumType = null;
+        let enumImport = null;
+        let enumValues = null;
+        
+        const enumMatch = propContent.match(/enum:\s*(\w+)/);
+        if (enumMatch) {
+          enumType = enumMatch[1];
+          if (imports.enums.has(enumType)) {
+            enumImport = imports.enums.get(enumType);
+            // Load enum values
+            const enumData = loadEnumValues(enumType, enumImport);
+            if (enumData) {
+              enumValues = enumData;
+            }
+          }
+        }
+
+        // Extract default value
+        let defaultValue = extractDefaultValue(propContent);
+        
+        // If default is an enum reference, resolve it
+        if (defaultValue && enumType && enumValues) {
+          const defaultMatch = defaultValue.match(/^(\w+)\.(\w+)$/);
+          if (defaultMatch) {
+            const enumRef = defaultMatch[2];
+            defaultValue = enumValues.map[enumRef] || defaultValue;
+          }
+        }
+
         embeddedFields.push({
           name: fieldName,
           tsType: fieldType,
@@ -191,15 +308,20 @@ exports.parseSchema = (ROOT, entity) => {
           isRequired: propContent.includes('required: true'),
           isUnique: propContent.includes('unique: true'),
           hasIndex: propContent.includes('index: true'),
+          enumType: enumType,
+          enumImport: enumImport,
+          enumValues: enumValues,
+          defaultValue: defaultValue,
           propOptions: {
             required: propContent.includes('required: true'),
             unique: propContent.includes('unique: true'),
             index: propContent.includes('index: true'),
-            default: extractDefaultValue(propContent),
+            default: defaultValue,
+            enum: enumType,
           },
           comment: null,
           source: 'user',
-          dtoInclude: ['create', 'update', 'response'],
+          dtoInclude: determineDtoInclude(fieldName, '', 'user'),
           validation: {
             required: propContent.includes('required: true'),
             min: extractMin(propContent),
@@ -363,14 +485,19 @@ exports.parseSchema = (ROOT, entity) => {
         dtoInclude = ['response'];
       }
 
+      // Check if field has default value - if yes, it should not be required in create DTO
+      const hasDefaultValue = !!extractDefaultValue(propContent);
+      const isRequiredInCreate = propContent.includes('required: true') && !hasDefaultValue;
+
       fields.push({
         name: fieldName,
         tsType: rawType,
         rawType: rawType,
-        isOptional:
-          optionalMark === '?' || !propContent.includes('required: true'),
+        isOptional: optionalMark === '?' || !propContent.includes('required: true') || hasDefaultValue,
         isArray: rawType.endsWith('[]'),
         isRequired: propContent.includes('required: true'),
+        isRequiredInCreate: isRequiredInCreate,
+        hasDefaultValue: hasDefaultValue,
         isUnique: propContent.includes('unique: true'),
         hasIndex: propContent.includes('index: true'),
         defaultValue: extractDefaultValue(propContent),
@@ -427,12 +554,17 @@ exports.parseSchema = (ROOT, entity) => {
     const isArray = rawType.endsWith('[]') || propContent.includes('type: [');
     const isTypeScriptOptional = optionalMark === '?';
     const isMongooseRequired = propOptions.required;
-    const isOptional = isTypeScriptOptional || !isMongooseRequired;
+    
+    // Check if field has default value - if yes, it should not be required in create DTO
+    const hasDefaultValue = !!propOptions.default;
+    const isOptional = isTypeScriptOptional || !isMongooseRequired || hasDefaultValue;
+    const isRequiredInCreate = isMongooseRequired && !hasDefaultValue;
 
     // Determine TypeScript type and enum info
     let tsType = rawType;
     let enumType = propOptions.enum;
     let enumImport = null;
+    let enumValues = null;
 
     if (!enumType && imports.enums.has(rawType)) {
       enumType = rawType;
@@ -440,6 +572,11 @@ exports.parseSchema = (ROOT, entity) => {
 
     if (enumType && imports.enums.has(enumType)) {
       enumImport = imports.enums.get(enumType);
+      // Load actual enum values
+      const enumData = loadEnumValues(enumType, enumImport);
+      if (enumData) {
+        enumValues = enumData;
+      }
     }
 
     if (isArray) {
@@ -448,7 +585,23 @@ exports.parseSchema = (ROOT, entity) => {
         if (imports.enums.has(baseType)) {
           enumType = baseType;
           enumImport = imports.enums.get(baseType);
+          // Load actual enum values
+          const enumData = loadEnumValues(enumType, enumImport);
+          if (enumData) {
+            enumValues = enumData;
+          }
         }
+      }
+    }
+
+    // Resolve default value if it's an enum reference
+    let defaultValue = propOptions.default;
+    if (defaultValue && enumType && enumValues) {
+      // Check if default is in format EnumName.VALUE
+      const defaultMatch = defaultValue.match(/^(\w+)\.(\w+)$/);
+      if (defaultMatch) {
+        const enumRef = defaultMatch[2];
+        defaultValue = enumValues.map[enumRef] || defaultValue;
       }
     }
 
@@ -476,12 +629,17 @@ exports.parseSchema = (ROOT, entity) => {
     const isAutoGeneratedField = hasAutoGenerated || fieldSource === 'auto';
     const isAuditField = fieldSource === 'audit';
 
-    // Determine DTO inclusion
-    const dtoInclude = determineDtoInclude(
+    // Determine DTO inclusion - fields with defaults should NOT be in create DTO
+    let dtoInclude = determineDtoInclude(
       fieldName,
       allDecorators,
       fieldSource,
     );
+
+    // If field has default value, remove it from create DTO
+    // if (hasDefaultValue && dtoInclude.includes('create')) {
+    //   dtoInclude = dtoInclude.filter(type => type !== 'create');
+    // }
 
     // Extract field comment
     const fieldComment = extractFieldComment(schema, fieldMatch.index);
@@ -494,14 +652,17 @@ exports.parseSchema = (ROOT, entity) => {
       isOptional: isOptional,
       isArray: isArray,
       isRequired: isMongooseRequired,
+      isRequiredInCreate: isRequiredInCreate,
+      hasDefaultValue: hasDefaultValue,
       isUnique: propOptions.unique,
       hasIndex: propOptions.index,
       enumType: enumType,
       enumImport: enumImport,
+      enumValues: enumValues,
       refType: refType,
       refImport: refImport,
       embeddedSchema: null,
-      defaultValue: propOptions.default,
+      defaultValue: defaultValue,
       propOptions: propOptions,
       comment: fieldComment,
       validation: {
@@ -658,6 +819,9 @@ exports.parseSchema = (ROOT, entity) => {
     requiredFields: fields.filter(
       (f) => f.isRequired && !f.isOptional && !f.isEmbeddedSchemaField,
     ),
+    requiredInCreateFields: fields.filter(
+      (f) => f.isRequiredInCreate && !f.isEmbeddedSchemaField,
+    ),
     optionalFields: fields.filter(
       (f) => f.isOptional && !f.isEmbeddedSchemaField,
     ),
@@ -675,6 +839,9 @@ exports.parseSchema = (ROOT, entity) => {
     ),
     searchableFields: fields.filter(
       (f) => f.isSearchable && !f.isEmbeddedSchemaField,
+    ),
+    fieldsWithDefault: fields.filter(
+      (f) => f.hasDefaultValue && !f.isEmbeddedSchemaField,
     ),
 
     // Embedded schema fields (separate category)
@@ -703,11 +870,6 @@ exports.parseSchema = (ROOT, entity) => {
     rawSchema: schema,
   };
 };
-
-// ============================================
-// Helper Functions (keep existing helper functions)
-// ============================================
-// ... (keep all your existing helper functions: parsePropOptions, extractDefaultValue, etc.)
 
 // ============================================
 // Helper Functions
@@ -804,7 +966,6 @@ function extractPattern(propContent) {
 }
 
 function extractFieldComment(schema, fieldIndex) {
-  // Simple implementation - can be enhanced
   const lines = schema.split('\n');
   let lineIndex = 0;
   let currentIndex = 0;

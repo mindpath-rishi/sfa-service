@@ -14,6 +14,11 @@ export class CreateInventoryDto {
   @IsString()
   productId: string;
 
+  @ApiProperty({ type: String })
+  @IsNotEmpty()
+  @IsString()
+  vanId: string;
+
   @ApiProperty({ type: Number })
   @IsNotEmpty()
   @IsNumber()

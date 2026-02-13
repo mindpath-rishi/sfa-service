@@ -1,4 +1,3 @@
-
 /**
  * Route Controller
  * -----------------
@@ -9,7 +8,7 @@
  * - Create routes
  * - Fetch routes with filters & pagination
  * - Retrieve individual route details
- * - Update routes
+ * - Update route
  * - Soft delete routes
  *
  * Notes:
@@ -45,7 +44,7 @@ import {
   V1,
 } from 'src/shared/constants/api.constants';
 
-import { Permissions } from 'src/core/decorators/permissioin.decorator';
+import { Permissions } from 'src/core/decorators/permission.decorator';
 
 import { RouteService } from './route.service';
 import { CreateRouteDto } from './dto/create-route.dto';
@@ -99,7 +98,7 @@ export class RouteController {
    */
   @Permissions('ROUTE_VIEW')
   @Get(':routeId')
-  @ApiParam({ name: 'routeId' })
+  @ApiParam({ name: 'routeId', description: 'Route routeId' })
   async findOne(@Param('routeId') routeId: string) {
     return this.service.findByRouteId(routeId);
   }
@@ -110,6 +109,7 @@ export class RouteController {
    */
   @Permissions('ROUTE_UPDATE')
   @Patch(':routeId')
+  @ApiParam({ name: 'routeId', description: 'Route routeId' })
   async update(
     @Param('routeId') routeId: string,
     @Body() dto: UpdateRouteDto,
@@ -123,6 +123,7 @@ export class RouteController {
    */
   @Permissions('ROUTE_DELETE')
   @Delete(':routeId')
+  @ApiParam({ name: 'routeId', description: 'Route routeId' })
   async delete(@Param('routeId') routeId: string) {
     return this.service.delete(routeId);
   }

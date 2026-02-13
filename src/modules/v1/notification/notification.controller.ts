@@ -47,7 +47,7 @@ import {
   V1,
 } from 'src/shared/constants/api.constants';
 
-import { Permissions } from 'src/core/decorators/permissioin.decorator';
+import { Permissions } from 'src/core/decorators/permission.decorator';
 import { NOTIFICATION } from './notification.constants';
 import { NotificationQueryDto } from './dto/notification.query.dto';
 import { NotificationService } from './notification.service';

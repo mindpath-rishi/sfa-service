@@ -1,5 +1,27 @@
-module.exports = ({ Entity, ENTITY, entity, camelEntity }) => `
-/**
+module.exports = ({ Entity, ENTITY, entity, camelEntity, fields }) => {
+  // Find the business ID field (e.g., transactionId, productId, etc.)
+  const businessIdField = fields?.find(
+    (f) =>
+      (f.name?.endsWith('Id') || f.isBusinessKey) &&
+      !f.name?.startsWith('_') &&
+      f.name !== 'id' &&
+      f.name !== '_id' &&
+      (f.isRequired || f.isUnique)
+  );
+
+  // Get the business ID field name (default to ${entity}Id if not found)
+  const businessIdFieldName = businessIdField 
+    ? businessIdField.name 
+    : `${entity}Id`;
+  
+  // Create camelCase version for params (ensure first letter is lowercase)
+  const camelIdParam = businessIdFieldName.charAt(0).toLowerCase() + 
+                      businessIdFieldName.slice(1);
+
+  // Get the method name for findByBusinessId (e.g., findByTransactionId)
+  const findByIdMethodName = `findBy${businessIdFieldName.charAt(0).toUpperCase() + businessIdFieldName.slice(1)}`;
+
+  return `/**
  * ${Entity} Controller
  * ${'-'.repeat(Entity.length + 12)}
  * Purpose : Exposes APIs for managing ${entity}s
@@ -9,7 +31,7 @@ module.exports = ({ Entity, ENTITY, entity, camelEntity }) => `
  * - Create ${entity}s
  * - Fetch ${entity}s with filters & pagination
  * - Retrieve individual ${entity} details
- * - Update ${entity}s
+ * - Update ${entity}
  * - Soft delete ${entity}s
  *
  * Notes:
@@ -45,7 +67,7 @@ import {
   V1,
 } from 'src/shared/constants/api.constants';
 
-import { Permissions } from 'src/core/decorators/permissioin.decorator';
+import { Permissions } from 'src/core/decorators/permission.decorator';
 
 import { ${Entity}Service } from './${entity}.service';
 import { Create${Entity}Dto } from './dto/create-${entity}.dto';
@@ -75,7 +97,7 @@ export class ${Entity}Controller {
   @ApiOperation({ summary: 'Create ${entity}' })
   @ApiBody({ type: Create${Entity}Dto })
   @ApiSuccessResponse(
-    { ${camelEntity}Id: '${ENTITY.slice(0, 4)}-001' },
+    { ${camelIdParam}: '${ENTITY.slice(0, 4)}-001' },
     ${ENTITY}.CREATED,
     HttpStatus.CREATED,
   )
@@ -98,10 +120,10 @@ export class ${Entity}Controller {
    * ${'-'.repeat(Entity.length + 10)}
    */
   @Permissions('${ENTITY}_VIEW')
-  @Get(':${camelEntity}Id')
-  @ApiParam({ name: '${camelEntity}Id' })
-  async findOne(@Param('${camelEntity}Id') ${camelEntity}Id: string) {
-    return this.service.findBy${Entity}Id(${camelEntity}Id);
+  @Get(':${camelIdParam}')
+  @ApiParam({ name: '${camelIdParam}', description: '${Entity} ${businessIdFieldName}' })
+  async findOne(@Param('${camelIdParam}') ${camelIdParam}: string) {
+    return this.service.${findByIdMethodName}(${camelIdParam});
   }
 
   /**
@@ -109,12 +131,13 @@ export class ${Entity}Controller {
    * ${'-'.repeat(Entity.length + 8)}
    */
   @Permissions('${ENTITY}_UPDATE')
-  @Patch(':${camelEntity}Id')
+  @Patch(':${camelIdParam}')
+  @ApiParam({ name: '${camelIdParam}', description: '${Entity} ${businessIdFieldName}' })
   async update(
-    @Param('${camelEntity}Id') ${camelEntity}Id: string,
+    @Param('${camelIdParam}') ${camelIdParam}: string,
     @Body() dto: Update${Entity}Dto,
   ) {
-    return this.service.update(${camelEntity}Id, dto);
+    return this.service.update(${camelIdParam}, dto);
   }
 
   /**
@@ -122,9 +145,11 @@ export class ${Entity}Controller {
    * ${'-'.repeat(Entity.length + 8)}
    */
   @Permissions('${ENTITY}_DELETE')
-  @Delete(':${camelEntity}Id')
-  async delete(@Param('${camelEntity}Id') ${camelEntity}Id: string) {
-    return this.service.delete(${camelEntity}Id);
+  @Delete(':${camelIdParam}')
+  @ApiParam({ name: '${camelIdParam}', description: '${Entity} ${businessIdFieldName}' })
+  async delete(@Param('${camelIdParam}') ${camelIdParam}: string) {
+    return this.service.delete(${camelIdParam});
   }
 }
 `;
+};

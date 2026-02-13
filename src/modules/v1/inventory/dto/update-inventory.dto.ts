@@ -16,6 +16,11 @@ export class UpdateInventoryDto {
   @IsString()
   productId?: string;
 
+  @ApiPropertyOptional({ type: String })
+  @IsOptional()
+  @IsString()
+  vanId?: string;
+
   @ApiPropertyOptional({ type: Number })
   @IsOptional()
   @IsNumber()

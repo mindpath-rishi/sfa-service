@@ -45,7 +45,7 @@ import {
   V1,
 } from 'src/shared/constants/api.constants';
 
-import { Permissions } from 'src/core/decorators/permissioin.decorator';
+import { Permissions } from 'src/core/decorators/permission.decorator';
 
 import { OutletTypeService } from './outlet-type.service';
 import { CreateOutletTypeDto } from './dto/create-outlet-type.dto';

@@ -45,7 +45,7 @@ import {
   V1,
 } from 'src/shared/constants/api.constants';
 
-import { Permissions } from 'src/core/decorators/permissioin.decorator';
+import { Permissions } from 'src/core/decorators/permission.decorator';
 
 import { ProductQueryDto } from './dto/product-query.dto';
 import { PRODUCT } from './product.constants';

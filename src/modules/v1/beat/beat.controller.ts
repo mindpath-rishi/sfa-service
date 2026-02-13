@@ -45,7 +45,7 @@ import {
   V1,
 } from 'src/shared/constants/api.constants';
 
-import { Permissions } from 'src/core/decorators/permissioin.decorator';
+import { Permissions } from 'src/core/decorators/permission.decorator';
 
 import { BeatService } from './beat.service';
 import { CreateBeatDto } from './dto/create-beat.dto';
