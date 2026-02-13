@@ -40,6 +40,7 @@ import { OutletTypeModule } from './modules/v1/outlet-type/outlet-type.module';
 import { BeatModule } from './modules/v1/beat/beat.module';
 import { RouteModule } from './modules/v1/route/route.module';
 import { CustomerModule } from './modules/v1/customer/customer.module';
+import { InventoryModule } from './modules/v1/inventory/inventory.module';
 
 @Global()
 @Module({
@@ -87,7 +88,8 @@ import { CustomerModule } from './modules/v1/customer/customer.module';
     OutletTypeModule,
     BeatModule,
     RouteModule,
-    CustomerModule,],
+    CustomerModule,
+    InventoryModule,],
   providers: [
     AppControlService,
     MongoService,

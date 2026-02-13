@@ -1,8 +1,8 @@
 {
-  "name": "anavilam-service",
+  "name": "sfa-service",
   "version": "0.0.1",
   "description": "",
-  "author": "",
+  "author": "<Lokesh Kose>",
   "private": true,
   "license": "UNLICENSED",
   "engines": {
