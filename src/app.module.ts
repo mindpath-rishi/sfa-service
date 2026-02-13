@@ -42,6 +42,11 @@ import { RouteModule } from './modules/v1/route/route.module';
 import { CustomerModule } from './modules/v1/customer/customer.module';
 import { InventoryModule } from './modules/v1/inventory/inventory.module';
 import { InventoryTransactionModule } from './modules/v1/inventory-transaction/inventory-transaction.module';
+import { DailyInventoryModule } from './modules/v1/daily-inventory/daily-inventory.module';
+import { StockCountModule } from './modules/v1/stock-count/stock-count.module';
+import { StockCountItemModule } from './modules/v1/stock-count-item/stock-count-item.module';
+import { StockSalesModule } from './modules/v1/stock-sales/stock-sales.module';
+import { StockSalesItemModule } from './modules/v1/stock-sales-item/stock-sales-item.module';
 
 @Global()
 @Module({
@@ -91,7 +96,12 @@ import { InventoryTransactionModule } from './modules/v1/inventory-transaction/i
     RouteModule,
     CustomerModule,
     InventoryModule,
-    InventoryTransactionModule,],
+    InventoryTransactionModule,
+    DailyInventoryModule,
+    StockCountModule,
+    StockCountItemModule,
+    StockSalesModule,
+    StockSalesItemModule,],
   providers: [
     AppControlService,
     MongoService,

@@ -1,4 +1,4 @@
-module.exports = ({ Entity, ENTITY, entity, camelEntity, fields }) => {
+module.exports = ({ Entity, ENTITY, entity, titleCase, fields }) => {
   // Find the business ID field (e.g., transactionId, productId, etc.)
   const businessIdField = fields?.find(
     (f) =>
@@ -6,17 +6,17 @@ module.exports = ({ Entity, ENTITY, entity, camelEntity, fields }) => {
       !f.name?.startsWith('_') &&
       f.name !== 'id' &&
       f.name !== '_id' &&
-      (f.isRequired || f.isUnique)
+      (f.isRequired || f.isUnique),
   );
 
   // Get the business ID field name (default to ${entity}Id if not found)
-  const businessIdFieldName = businessIdField 
-    ? businessIdField.name 
+  const businessIdFieldName = businessIdField
+    ? businessIdField.name
     : `${entity}Id`;
-  
+
   // Create camelCase version for params (ensure first letter is lowercase)
-  const camelIdParam = businessIdFieldName.charAt(0).toLowerCase() + 
-                      businessIdFieldName.slice(1);
+  const camelIdParam =
+    businessIdFieldName.charAt(0).toLowerCase() + businessIdFieldName.slice(1);
 
   // Get the method name for findByBusinessId (e.g., findByTransactionId)
   const findByIdMethodName = `findBy${businessIdFieldName.charAt(0).toUpperCase() + businessIdFieldName.slice(1)}`;
@@ -75,7 +75,7 @@ import { Update${Entity}Dto } from './dto/update-${entity}.dto';
 import { ${Entity}QueryDto } from './dto/${entity}-query.dto';
 import { ${ENTITY} } from './${entity}.constants';
 
-@ApiTags('${Entity}')
+@ApiTags('${titleCase}')
 @FeatureFlag(API_MODULE_ENABLE_KEYS.${ENTITY})
 @ApiUnauthorizedResponse()
 @ApiUnprocessableEntityResponse()

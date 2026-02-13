@@ -65,8 +65,16 @@ dirsToCreate.forEach((dir) => {
   }
 });
 
+const toTitleCase = (value) =>
+  value
+    .split('_')
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+
+let titleCase = toTitleCase(entity);
+
 // Generate core module files
-writeFileSafe(`${meta.moduleDir}/${entity}.controller.ts`, controllerTpl(meta));
+writeFileSafe(`${meta.moduleDir}/${entity}.controller.ts`, controllerTpl({...meta, titleCase}));
 writeFileSafe(`${meta.moduleDir}/${entity}.service.ts`, serviceTpl(meta));
 writeFileSafe(`${meta.moduleDir}/${entity}.module.ts`, moduleTpl(meta));
 writeFileSafe(`${meta.moduleDir}/${entity}.constants.ts`, constantsTpl(meta));

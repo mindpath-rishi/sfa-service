@@ -130,7 +130,7 @@ module.exports = ({ Entity, dtoFields, classComment, enumImports, entity, embedd
           options.push(`example: ${field.enumType}.${exampleValue}`);
         }
         if (defaultValue) {
-          options.push(`default: ${field.enumType}.${defaultValue}`);
+          options.push(`default: ${defaultValue}`);
         }
         
         const optionsString = options.join(', ');

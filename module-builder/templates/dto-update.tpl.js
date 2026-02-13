@@ -170,7 +170,7 @@ module.exports = ({
         }
         
         if (defaultValue) {
-          options.push(`default: ${field.enumType}.${defaultValue}`);
+          options.push(`default: ${defaultValue}`);
         }
         
         if (field.comment) {
