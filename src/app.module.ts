@@ -6,19 +6,14 @@ import { ThrottlerModule } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
 import { envValidationSchema } from './core/config/env.validation';
 import { mongoConfig } from './core/config/mongo.config';
-
 import { CustomerCategoryModule } from './modules/v1/customer-category/customer-category.module';
-
 import { AppLoggerModule } from './core/logger/logger.module';
 import { LoggerService } from './core/logger/logger.service';
-
 import { MetricsModule } from './core/metrics/metrics.module';
 import { HealthModule } from './modules/v1/health/health.service';
-
 import { SessionMiddleware } from './core/middlewares/session.middleware';
 import { MongoService } from './core/database/mongo/mongo.service';
 import { RedisRepository } from './core/database/radis/radis.repository';
-
 import { AppControlService } from './core/config/app-control.service';
 import { AppControlGuard } from './core/guards/app-control.guard';
 import { JwtAuthGuard } from './core/guards/jwt.guard';
@@ -40,13 +35,17 @@ import { OutletTypeModule } from './modules/v1/outlet-type/outlet-type.module';
 import { BeatModule } from './modules/v1/beat/beat.module';
 import { RouteModule } from './modules/v1/route/route.module';
 import { CustomerModule } from './modules/v1/customer/customer.module';
-import { InventoryModule } from './modules/v1/inventory/inventory.module';
 import { InventoryTransactionModule } from './modules/v1/inventory-transaction/inventory-transaction.module';
-import { DailyInventoryModule } from './modules/v1/daily-inventory/daily-inventory.module';
 import { StockCountModule } from './modules/v1/stock-count/stock-count.module';
 import { StockCountItemModule } from './modules/v1/stock-count-item/stock-count-item.module';
 import { StockSalesModule } from './modules/v1/stock-sales/stock-sales.module';
 import { StockSalesItemModule } from './modules/v1/stock-sales-item/stock-sales-item.module';
+import { VanInventoryModule } from './modules/v1/van-inventory/van-inventory.module';
+import { VanDailyStockModule } from './modules/v1/van-daily-stock/van-daily-stock.module';
+import { VanInventoryTopupModule } from './modules/v1/van-inventory-topup/van-inventory-topup.module';
+import { VanInventoryTopupItemModule } from './modules/v1/van-inventory-topup-item/van-inventory-topup-item.module';
+import { CustomerSalesModule } from './modules/v1/customer-sales/customer-sales.module';
+import { CustomerSalesItemModule } from './modules/v1/customer-sales-item/customer-sales-item.module';
 
 @Global()
 @Module({
@@ -95,13 +94,17 @@ import { StockSalesItemModule } from './modules/v1/stock-sales-item/stock-sales-
     BeatModule,
     RouteModule,
     CustomerModule,
-    InventoryModule,
     InventoryTransactionModule,
-    DailyInventoryModule,
     StockCountModule,
     StockCountItemModule,
     StockSalesModule,
-    StockSalesItemModule,],
+    StockSalesItemModule,
+    VanInventoryModule,
+    VanDailyStockModule,
+    VanInventoryTopupModule,
+    VanInventoryTopupItemModule,
+    CustomerSalesModule,
+    CustomerSalesItemModule,],
   providers: [
     AppControlService,
     MongoService,
