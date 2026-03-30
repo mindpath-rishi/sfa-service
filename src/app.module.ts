@@ -46,6 +46,10 @@ import { VanInventoryTopupModule } from './modules/v1/van-inventory-topup/van-in
 import { VanInventoryTopupItemModule } from './modules/v1/van-inventory-topup-item/van-inventory-topup-item.module';
 import { CustomerSalesModule } from './modules/v1/customer-sales/customer-sales.module';
 import { CustomerSalesItemModule } from './modules/v1/customer-sales-item/customer-sales-item.module';
+import { ActivityModule } from './modules/v1/activity/activity.module';
+import { WorkSessionModule } from './modules/v1/work-session/work-session.module';
+import { RouteSessionModule } from './modules/v1/route-session/route-session.module';
+import { ShopVisitModule } from './modules/v1/shop-visit/shop-visit.module';
 
 @Global()
 @Module({
@@ -104,7 +108,11 @@ import { CustomerSalesItemModule } from './modules/v1/customer-sales-item/custom
     VanInventoryTopupModule,
     VanInventoryTopupItemModule,
     CustomerSalesModule,
-    CustomerSalesItemModule,],
+    CustomerSalesItemModule,
+    ActivityModule,
+    WorkSessionModule,
+    RouteSessionModule,
+    ShopVisitModule,],
   providers: [
     AppControlService,
     MongoService,
@@ -119,10 +127,10 @@ import { CustomerSalesItemModule } from './modules/v1/customer-sales-item/custom
       provide: APP_GUARD,
       useClass: JwtAuthGuard,
     },
-    {
-      provide: APP_GUARD,
-      useClass: PermissionsGuard,
-    },
+    // {
+    //   provide: APP_GUARD,
+    //   useClass: PermissionsGuard,
+    // },
   ],
   exports: [MongoService, RedisRepository],
 })

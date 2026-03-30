@@ -6,4 +6,6 @@ export interface JwtPayload {
   exp?: number;
   name: string;
   deviceId: string;
+  vanId?: string; // optional but useful
+  vanName?: string; // optional but useful
 }

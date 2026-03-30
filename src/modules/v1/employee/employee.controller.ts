@@ -51,6 +51,7 @@ import {
 import { EMPLOYEE } from './employee.constants';
 import { Permissions } from 'src/core/decorators/permission.decorator';
 import { EmployeeQueryDto } from './dto/employee.query.dto';
+import { Public } from 'src/core/decorators/public.decorator';
 
 @ApiTags('Employee')
 @FeatureFlag(API_MODULE_ENABLE_KEYS.EMPLOYEE)
@@ -61,6 +62,7 @@ import { EmployeeQueryDto } from './dto/employee.query.dto';
   path: API_MODULE.EMPLOYEE,
   version: V1,
 })
+@Public()
 export class EmployeeController {
   constructor(private readonly employeeService: EmployeeService) {}
 

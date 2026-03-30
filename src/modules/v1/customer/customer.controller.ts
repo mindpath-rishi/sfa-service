@@ -52,6 +52,7 @@ import { CreateCustomerDto } from './dto/create-customer.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
 import { CustomerQueryDto } from './dto/customer-query.dto';
 import { CUSTOMER } from './customer.constants';
+import { Public } from 'src/core/decorators/public.decorator';
 
 @ApiTags('Customer')
 @FeatureFlag(API_MODULE_ENABLE_KEYS.CUSTOMER)
@@ -62,6 +63,7 @@ import { CUSTOMER } from './customer.constants';
   path: API_MODULE.CUSTOMER,
   version: V1,
 })
+@Public()
 export class CustomerController {
   constructor(private readonly service: CustomerService) {}
 

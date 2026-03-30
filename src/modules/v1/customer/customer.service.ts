@@ -1,4 +1,3 @@
-
 import {
   Injectable,
   NotFoundException,
@@ -10,14 +9,16 @@ import { MongoService } from 'src/core/database/mongo/mongo.service';
 import { MongoRepository } from 'src/core/database/mongo/mongo.repository';
 import { FilterQuery } from 'src/core/database/mongo/mongo.interface';
 
-import { Customer, CustomerSchema } from 'src/core/database/mongo/schema/customer.schema';
+import {
+  Customer,
+  CustomerSchema,
+} from 'src/core/database/mongo/schema/customer.schema';
 
 import { CUSTOMER } from './customer.constants';
 import { CreateCustomerDto } from './dto/create-customer.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
 import { CustomerQueryDto } from './dto/customer-query.dto';
 import { IdGenerator } from 'src/shared/utils/id-generator.utils';
-
 
 @Injectable()
 export class CustomerService extends MongoRepository<Customer> {
@@ -28,11 +29,7 @@ export class CustomerService extends MongoRepository<Customer> {
   async create(payload: CreateCustomerDto) {
     try {
       return await this.withTransaction(async (session) => {
-        
-
         const filter: FilterQuery<Customer> = {};
-
-        
 
         const existing = await this.findOne(filter, {
           session,
@@ -122,13 +119,10 @@ export class CustomerService extends MongoRepository<Customer> {
   async update(customerId: string, dto: UpdateCustomerDto) {
     try {
       return await this.withTransaction(async (session) => {
-        
-
-        const doc = await this.updateOne(
-          { customerId },
-          dto,
-          { session, new: true },
-        );
+        const doc = await this.updateOne({ customerId }, dto, {
+          session,
+          new: true,
+        });
 
         if (!doc) throw new NotFoundException(CUSTOMER.NOT_FOUND);
 

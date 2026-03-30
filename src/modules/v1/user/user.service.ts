@@ -44,12 +44,14 @@ import { USER } from './user.constants';
 import { jwtConfig } from 'src/core/config/jwt.config';
 import { Employee } from 'src/core/database/mongo/schema/employee.schema';
 import { UserDevice } from 'src/core/database/mongo/schema/device.schema';
+import { VanService } from '../van/van.service';
 
 @Injectable()
 export class UserService extends MongoRepository<User> {
   constructor(
     private readonly jwtService: JwtService,
     private readonly redis: RedisRepository,
+    private readonly vanService: VanService,
     mongo: MongoService,
     @InjectModel(Employee.name)
     private readonly employeeModel: Model<Employee>,
@@ -132,19 +134,18 @@ export class UserService extends MongoRepository<User> {
   ) {
     const { loginId, password, deviceInfo } = body;
 
-    if (!agent) {
-      throw new BadRequestException(USER.AGENT_MISSED);
-    }
+    // if (!agent) {
+    //   throw new BadRequestException(USER.AGENT_MISSED);
+    // }
 
     if (!deviceInfo) {
       throw new BadRequestException('Device info missing');
     }
 
     /* ---------- USER AUTH ---------- */
-    const user: any = await this.findOneWithSelect(
-      { loginId, agent },
-      '+password',
-    );
+    const user: any = await this.findOneWithSelect({ loginId }, '+password');
+
+    console.log('User found for login:', user || 'No user');
 
     if (!user || user.status !== UserStatus.ACTIVE) {
       throw new UnauthorizedException(USER.INVALID_CREDENTIALS);
@@ -158,11 +159,11 @@ export class UserService extends MongoRepository<User> {
     /* ---------- PROFILE RESOLUTION ---------- */
     let profile: any = null;
 
-    if (user.agent === Agent.BACK_OFFICE) {
-      profile = await this.employeeModel.findOne({
-        employeeId: user.profileId,
-      });
-    }
+    // if (user.agent === Agent.BACK_OFFICE) {
+    profile = await this.employeeModel.findOne({
+      employeeId: user.profileId,
+    });
+    // }
 
     if (!profile) {
       throw new ForbiddenException(USER.PROFILE_NOT_FOUND);
@@ -181,7 +182,7 @@ export class UserService extends MongoRepository<User> {
           appVersion: deviceInfo.appVersion,
           ipAddress,
           lastLoginAt: new Date(),
-          pushToken: deviceInfo.pushToken,
+          fcmToken: deviceInfo.fcmToken,
           isActive: true,
         },
       },
@@ -202,8 +203,8 @@ export class UserService extends MongoRepository<User> {
     );
 
     /* ---------- TOKEN GENERATION ---------- */
-    const expiresIn = '15m';
-    const expiresInMs = 15 * 60 * 1000;
+    const expiresIn = '1000m';
+    const expiresInMs = 100 * 60 * 1000;
     const refreshToken = randomUUID();
 
     await this.redis.setJson(
@@ -215,13 +216,16 @@ export class UserService extends MongoRepository<User> {
       60 * 60 * 24 * 7,
     );
 
+    const vanId: string = profile?.associatedVans?.[0];
+
     const accessToken = this.jwtService.sign(
       {
         sub: user.profileId,
         role: user.role,
         sid: sessionId,
-        deviceId,
+        // deviceId,
         name: profile?.name,
+        vanId,
       },
       {
         expiresIn,
@@ -229,6 +233,12 @@ export class UserService extends MongoRepository<User> {
         audience: jwtConfig.audience,
       },
     );
+
+    // if (vanId) {
+    //   const van = await this.vanService.findByVanId(vanId);
+    //   profile.van = van.data;
+    //   // const routes = await this.routeService.findAll(vanId);
+    // }
 
     await this.updateById(user._id.toString(), {
       lastLoginAt: new Date(),

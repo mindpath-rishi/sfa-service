@@ -72,7 +72,7 @@ export class UserDevice {
 
   // Push notification token (mobile clients)
   @Prop()
-  pushToken?: string;
+  fcmToken?: string;
 }
 
 export const UserDeviceSchema = SchemaFactory.createForClass(UserDevice);

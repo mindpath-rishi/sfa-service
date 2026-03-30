@@ -138,7 +138,7 @@ export class DeviceInfoDto {
    */
   @IsOptional()
   @IsString()
-  pushToken?: string;
+  fcmToken?: string;
 }
 
 /**

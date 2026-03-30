@@ -1,4 +1,3 @@
-
 import {
   Injectable,
   NotFoundException,
@@ -10,7 +9,10 @@ import { MongoService } from 'src/core/database/mongo/mongo.service';
 import { MongoRepository } from 'src/core/database/mongo/mongo.repository';
 import { FilterQuery } from 'src/core/database/mongo/mongo.interface';
 
-import { Route, RouteSchema } from 'src/core/database/mongo/schema/route.schema';
+import {
+  Route,
+  RouteSchema,
+} from 'src/core/database/mongo/schema/route.schema';
 
 import { ROUTE } from './route.constants';
 import { CreateRouteDto } from './dto/create-route.dto';
@@ -30,12 +32,13 @@ export class RouteService extends MongoRepository<Route> {
     try {
       return await this.withTransaction(async (session) => {
         if (payload.name) {
-          payload.name = TextNormalizer.normalize(payload.name, NormalizeType.TITLE);
+          payload.name = TextNormalizer.normalize(
+            payload.name,
+            NormalizeType.TITLE,
+          );
         }
 
         const filter: FilterQuery<Route> = {};
-
-        
 
         const existing = await this.findOne(filter, {
           session,
@@ -110,17 +113,95 @@ export class RouteService extends MongoRepository<Route> {
     };
   }
 
+ 
   async findByRouteId(routeId: string) {
-    const doc = await this.findOne({ routeId }, { lean: true });
+  const pipeline: any[] = [
+    {
+      $match: { routeId },
+    },
 
-    if (!doc) throw new NotFoundException(ROUTE.NOT_FOUND);
+    /**
+     * ✅ unwind customers
+     */
+    {
+      $unwind: {
+        path: '$associatedCustomers',
+        preserveNullAndEmptyArrays: true,
+      },
+    },
 
-    return {
-      statusCode: HttpStatus.OK,
-      message: ROUTE.FETCHED,
-      data: doc,
-    };
+    /**
+     * ✅ SORT BEFORE GROUP (IMPORTANT FIX)
+     */
+    {
+      $sort: {
+        'associatedCustomers.sequence': 1,
+      },
+    },
+
+    /**
+     * ✅ lookup customer details
+     */
+    {
+      $lookup: {
+        from: 'customer_master',
+        localField: 'associatedCustomers.customerId',
+        foreignField: 'customerId',
+        as: 'customerDetails',
+      },
+    },
+    {
+      $unwind: {
+        path: '$customerDetails',
+        preserveNullAndEmptyArrays: true,
+      },
+    },
+
+    /**
+     * ✅ merge customer
+     */
+    {
+      $addFields: {
+        'associatedCustomers.customer': '$customerDetails',
+      },
+    },
+
+    /**
+     * ✅ group back
+     */
+    {
+      $group: {
+        _id: '$routeId',
+        routeId: { $first: '$routeId' },
+        name: { $first: '$name' },
+        beatId: { $first: '$beatId' },
+        day: { $first: '$day' },
+        distance: { $first: '$distance' },
+        status: { $first: '$status' },
+        associatedCustomers: {
+          $push: {
+            customerId: '$associatedCustomers.customerId',
+            sequence: '$associatedCustomers.sequence',
+            customer: '$associatedCustomers.customer',
+          },
+        },
+      },
+    },
+  ];
+
+  const result = await this.model.aggregate(pipeline);
+  const doc = result?.[0];
+
+  if (!doc) {
+    throw new NotFoundException(ROUTE.NOT_FOUND);
   }
+
+  return {
+    statusCode: HttpStatus.OK,
+    message: ROUTE.FETCHED,
+    data: doc,
+  };
+}
 
   async update(routeId: string, dto: UpdateRouteDto) {
     try {
@@ -129,11 +210,10 @@ export class RouteService extends MongoRepository<Route> {
           dto.name = TextNormalizer.normalize(dto.name, NormalizeType.TITLE);
         }
 
-        const doc = await this.updateOne(
-          { routeId },
-          dto,
-          { session, new: true },
-        );
+        const doc = await this.updateOne({ routeId }, dto, {
+          session,
+          new: true,
+        });
 
         if (!doc) throw new NotFoundException(ROUTE.NOT_FOUND);
 

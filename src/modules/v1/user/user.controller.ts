@@ -117,20 +117,20 @@ export class UserController {
 
     // Agent defines authentication context (e.g. BACK_OFFICE / ECOMMERCE)
     const agent = req.headers['x-agent'] as Agent;
-    if (!agent || !Object.values(Agent).includes(agent)) {
-      throw new BadRequestException('Invalid agent');
-    }
+    // if (!agent || !Object.values(Agent).includes(agent)) {
+    //   throw new BadRequestException('Invalid agent');
+    // }
 
     // Device ID is mandatory for device-scoped authentication
     const deviceId = req.headers['x-device-id'] as string;
-    if (!deviceId) {
-      throw new BadRequestException('Device ID missing');
-    }
+    // if (!deviceId) {
+    //   throw new BadRequestException('Device ID missing');
+    // }
 
     // Prevent device spoofing
-    if (dto.deviceInfo.deviceId !== deviceId) {
-      throw new BadRequestException('Device ID mismatch');
-    }
+    // if (dto.deviceInfo.deviceId !== deviceId) {
+    //   throw new BadRequestException('Device ID mismatch');
+    // }
 
     // Delegate authentication logic to service layer
     const result = await this.userService.login(

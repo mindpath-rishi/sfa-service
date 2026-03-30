@@ -8,6 +8,7 @@ export const jwtExtractor = (req: Request): string | null => {
    * 1️⃣ Authorization: Bearer <token> (Mobile / API)
    * ====================================================== */
   const bearerToken = ExtractJwt.fromAuthHeaderAsBearerToken()(req);
+  console.log('Extracted JWT from Authorization header:', bearerToken);
   if (bearerToken) {
     return bearerToken;
   }

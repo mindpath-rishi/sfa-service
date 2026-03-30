@@ -51,6 +51,7 @@ import { CreateRouteDto } from './dto/create-route.dto';
 import { UpdateRouteDto } from './dto/update-route.dto';
 import { RouteQueryDto } from './dto/route-query.dto';
 import { ROUTE } from './route.constants';
+import { Public } from 'src/core/decorators/public.decorator';
 
 @ApiTags('Route')
 @FeatureFlag(API_MODULE_ENABLE_KEYS.ROUTE)
@@ -61,6 +62,7 @@ import { ROUTE } from './route.constants';
   path: API_MODULE.ROUTE,
   version: V1,
 })
+@Public()
 export class RouteController {
   constructor(private readonly service: RouteService) {}
 

@@ -5,7 +5,7 @@ import { RouteStatus } from 'src/shared/enums/route.enums';
 
 export type RouteDocument = HydratedDocument<Route>;
 
-@Schema({ _id: false, timestamps:false })
+@Schema({ _id: false, timestamps: false })
 export class RouteCustomer {
   @Prop({ required: true })
   customerId: string;
@@ -14,8 +14,7 @@ export class RouteCustomer {
   sequence: number;
 }
 
-export const RouteCustomerSchema =
-  SchemaFactory.createForClass(RouteCustomer);
+export const RouteCustomerSchema = SchemaFactory.createForClass(RouteCustomer);
 
 @Schema({ timestamps: true, collection: 'route_master' })
 export class Route {
@@ -35,7 +34,10 @@ export class Route {
   })
   associatedCustomers: RouteCustomer[];
 
-  @Prop({ required: true })
+  @Prop({
+    required: true,
+    enum: ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'],
+  })
   day: string;
 
   @Prop({ type: Number, default: 0 })

@@ -83,11 +83,11 @@ export class NotificationService extends MongoRepository<Notification> {
       const devices = await this.deviceModel.find({
         userId: payload.recipientId,
         isActive: true,
-        pushToken: { $exists: true, $ne: null },
+        fcmToken: { $exists: true, $ne: null },
       });
 
       const tokens: string[] = devices
-        .map((d) => d.pushToken)
+        .map((d) => d.fcmToken)
         .filter((token): token is string => Boolean(token));
 
       if (tokens.length) {

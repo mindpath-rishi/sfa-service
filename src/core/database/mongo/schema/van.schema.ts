@@ -8,10 +8,12 @@
  * - Van identity and registration details
  * - Capacity and manufacture year
  * - Associated users
+ * - Associated routes (date-based)
  * - Operational status
  *
  * Notes:
  * - Vans are assigned to employees/drivers
+ * - Routes can be assigned with date ranges
  * - Soft deletes preserve audit history
  */
 
@@ -21,21 +23,40 @@ import { VanStatus } from 'src/shared/enums/van.enums';
 
 export type VanDocument = HydratedDocument<Van>;
 
+/* ======================================================
+ * ROUTE ASSIGNMENT SUB SCHEMA
+ * ====================================================== */
+
+@Schema({ _id: false, timestamps: false })
+export class VanRoute {
+  @Prop({ required: true })
+  routeId: string;
+
+  @Prop({ required: true, type: Date })
+  fromDate: Date;
+
+  @Prop({ required: true, type: Date })
+  toDate: Date;
+}
+
+export const VanRouteSchema = SchemaFactory.createForClass(VanRoute);
+
+/* ======================================================
+ * VAN SCHEMA
+ * ====================================================== */
+
 @Schema({ timestamps: true })
 export class Van {
   /* ======================================================
    * IDENTITY
    * ====================================================== */
 
-  // Unique business identifier for van
   @Prop({ required: true, unique: true, index: true })
   vanId: string;
 
-  // Display name of van
   @Prop({ required: true })
   name: string;
 
-  // Vehicle registration / van number
   @Prop({ required: true, unique: true, index: true })
   vanNumber: string;
 
@@ -43,11 +64,9 @@ export class Van {
    * SPECIFICATIONS
    * ====================================================== */
 
-  // Load capacity (example: 1000 kg)
   @Prop({ required: false, type: Number })
   capacity?: number;
 
-  // Manufacturing year
   @Prop({ required: false, type: Number })
   madeYear?: number;
 
@@ -55,19 +74,25 @@ export class Van {
    * ASSOCIATIONS
    * ====================================================== */
 
-  // Users associated with this van
-  // Users associated with this van
   @Prop({
     type: [String],
     default: [],
   })
   associatedUsers: string[];
 
+  /**
+   * Routes associated with this van (date-based)
+   */
+  @Prop({
+    type: [VanRouteSchema],
+    default: [],
+  })
+  associatedRoutes: VanRoute[];
+
   /* ======================================================
    * STATUS
    * ====================================================== */
 
-  // Van operational status
   @Prop({
     type: String,
     enum: VanStatus,

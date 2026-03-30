@@ -35,7 +35,10 @@ export abstract class MongoRepository<T> {
     return doc;
   }
 
-  async bulkCreate(data: Partial<T>[], options?: RepoOptions): Promise<Doc<T>[]> {
+  async bulkCreate(
+    data: Partial<T>[],
+    options?: RepoOptions,
+  ): Promise<Doc<T>[]> {
     return this.model.insertMany(data, {
       session: options?.session,
     }) as unknown as Promise<Doc<T>[]>;
@@ -68,7 +71,10 @@ export abstract class MongoRepository<T> {
   }
 
   async findById(id: string, options?: RepoOptions): Promise<Doc<T> | null> {
-    return this.model.findById(id).setOptions(options ?? {}).exec();
+    return this.model
+      .findById(id)
+      .setOptions(options ?? {})
+      .exec();
   }
 
   async find(
@@ -95,8 +101,13 @@ export abstract class MongoRepository<T> {
       .exec();
   }
 
-  async exists(filter: FilterQuery<T>, options?: RepoOptions): Promise<boolean> {
-    return Boolean(await this.model.exists(this.applySoftDelete(filter, options)));
+  async exists(
+    filter: FilterQuery<T>,
+    options?: RepoOptions,
+  ): Promise<boolean> {
+    return Boolean(
+      await this.model.exists(this.applySoftDelete(filter, options)),
+    );
   }
 
   /* ======================================================
@@ -114,12 +125,7 @@ export abstract class MongoRepository<T> {
     const query = this.applySoftDelete(filter, options);
 
     const [items, total] = await Promise.all([
-      this.model
-        .find(query)
-        .sort(options.sort)
-        .skip(skip)
-        .limit(limit)
-        .exec(),
+      this.model.find(query).sort(options.sort).skip(skip).limit(limit).exec(),
       this.model.countDocuments(query),
     ]);
 
@@ -218,23 +224,37 @@ export abstract class MongoRepository<T> {
    * TRANSACTIONS
    * ====================================================== */
 
-  async withTransaction<R>(
-    fn: (session: ClientSession) => Promise<R>,
-  ): Promise<R> {
-    const session = await this.model.db.startSession();
-    session.startTransaction();
+ async withTransaction<R>(
+  fn: (session: ClientSession) => Promise<R>,
+  existingSession?: ClientSession,
+): Promise<R> {
+  const session = existingSession || (await this.model.db.startSession());
 
-    try {
-      const result = await fn(session);
+  const isNewSession = !existingSession;
+
+  if (isNewSession) {
+    session.startTransaction();
+  }
+
+  try {
+    const result = await fn(session);
+
+    if (isNewSession) {
       await session.commitTransaction();
-      return result;
-    } catch (e) {
+    }
+
+    return result;
+  } catch (e) {
+    if (isNewSession) {
       await session.abortTransaction();
-      throw e;
-    } finally {
+    }
+    throw e;
+  } finally {
+    if (isNewSession) {
       session.endSession();
     }
   }
+}
 
   /* ======================================================
    * INTERNAL
@@ -297,7 +317,9 @@ export abstract class MongoRepository<T> {
     return this.model.countDocuments(this.applySoftDelete(filter));
   }
 
-  async deleteDocument(filter: FilterQuery<T> = {} as any): Promise<Doc<T> | null> {
+  async deleteDocument(
+    filter: FilterQuery<T> = {} as any,
+  ): Promise<Doc<T> | null> {
     return this.model.findOneAndDelete(filter);
   }
 }

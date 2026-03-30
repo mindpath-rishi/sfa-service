@@ -1,58 +1,116 @@
 import { RouteStatus } from 'src/shared/enums/route.enums';
-
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEnum, IsNotEmpty, IsNumber, IsOptional, IsString, ValidateNested } from 'class-validator';
+import {
+  IsEnum,
+  IsNotEmpty,
+  IsNumber,
+  IsOptional,
+  IsString,
+  ValidateNested,
+  ArrayNotEmpty,
+  IsArray,
+  Min,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 
+/**
+ * ✅ Day Enum (recommended)
+ */
+export enum RouteDay {
+  MON = 'MON',
+  TUE = 'TUE',
+  WED = 'WED',
+  THU = 'THU',
+  FRI = 'FRI',
+  SAT = 'SAT',
+  SUN = 'SUN',
+}
+
+/* ======================================================
+ * ROUTE CUSTOMER DTO
+ * ====================================================== */
 
 export class RouteCustomerDto {
-  @ApiProperty({ type: String, description: 'Business identifier for customer' })
+  @ApiProperty({
+    type: String,
+    description: 'Business identifier for customer',
+  })
   @IsNotEmpty()
   @IsString()
   customerId: string;
 
-  @ApiProperty({ type: Number })
+  @ApiProperty({ type: Number, description: 'Visit sequence order' })
   @IsNotEmpty()
+  @Type(() => Number) // ✅ FIX string → number
   @IsNumber()
+  @Min(1)
   sequence: number;
-
 }
 
+/* ======================================================
+ * CREATE ROUTE DTO
+ * ====================================================== */
+
 export class CreateRouteDto {
-/**
- * CreateRouteDto
- * =================
- * Data Transfer Object for creating new Route records
- */
   @ApiProperty({ type: String })
   @IsNotEmpty()
   @IsString()
   name: string;
 
-  @ApiProperty({ type: String, description: 'Business identifier for beat' })
+  @ApiProperty({
+    type: String,
+    description: 'Business identifier for beat',
+  })
   @IsNotEmpty()
   @IsString()
   beatId: string;
 
-  @ApiPropertyOptional({ type: () => [RouteCustomerDto], description: 'Embedded RouteCustomer array' , default: [] })
+  /**
+   * ✅ Customers Array
+   */
+  @ApiPropertyOptional({
+    type: () => [RouteCustomerDto],
+    description: 'List of customers with sequence',
+    default: [],
+  })
   @IsOptional()
+  @IsArray()
   @ValidateNested({ each: true })
   @Type(() => RouteCustomerDto)
   associatedCustomers?: RouteCustomerDto[];
 
-  @ApiProperty({ type: String })
+  /**
+   * ✅ Day Validation (ENUM)
+   */
+  @ApiProperty({
+    enum: RouteDay,
+    description: 'Route day of execution',
+  })
   @IsNotEmpty()
-  @IsString()
-  day: string;
+  @IsEnum(RouteDay)
+  day: RouteDay;
 
-  @ApiPropertyOptional({ type: Number , default: 0 })
+  /**
+   * ✅ Distance
+   */
+  @ApiPropertyOptional({
+    type: Number,
+    default: 0,
+  })
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
+  @Min(0)
   distance?: number;
 
-  @ApiPropertyOptional({ enum: RouteStatus, default: RouteStatus.ACTIVE })
+  /**
+   * ✅ Status
+   */
+  @ApiPropertyOptional({
+    enum: RouteStatus,
+    default: RouteStatus.ACTIVE,
+  })
   @IsOptional()
   @IsEnum(RouteStatus)
   status?: RouteStatus;
-
 }

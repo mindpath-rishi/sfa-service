@@ -33,6 +33,8 @@ import { CreateVanDto } from './dto/create-van.dto';
 import { UpdateVanDto } from './dto/update-van.dto';
 import { VanQueryDto } from './dto/van-query.dto';
 import { VAN } from './van.constants';
+import { RequestContextStore } from 'src/core/context/request-context';
+import { VanStatus } from 'src/shared/enums/van.enums';
 
 @Injectable()
 export class VanService extends MongoRepository<Van> {
@@ -115,9 +117,14 @@ export class VanService extends MongoRepository<Van> {
    * - Pagination & sorting
    */
   async findAll(query: VanQueryDto) {
+    const cxt = RequestContextStore.getStore();
+    const userId = cxt?.userId;
+
     const { searchText, status, page = 1, limit = 20 } = query;
 
-    const filter: Record<string, any> = {};
+    const filter: Record<string, any> = {
+      associatedUsers: { $in: [userId] },
+    };
 
     if (status) {
       filter.status = status;
@@ -143,25 +150,146 @@ export class VanService extends MongoRepository<Van> {
     };
   }
 
-  /**
-   * Get Van by ID
-   * -------------
-   * Purpose : Retrieve a single van record
-   *
-   * Throws:
-   * - NotFoundException if van does not exist
-   */
   async findByVanId(vanId: string) {
-    const van = await this.findOne({ vanId }, { lean: true });
+    const today = new Date();
 
-    if (!van) {
+    const pipeline: any[] = [
+      { $match: { vanId } },
+
+      {
+        $unwind: {
+          path: '$associatedRoutes',
+          preserveNullAndEmptyArrays: true,
+        },
+      },
+
+      /**
+       * ✅ lookup route
+       */
+      {
+        $lookup: {
+          from: 'route_master',
+          let: { routeId: '$associatedRoutes.routeId' },
+          pipeline: [
+            {
+              $match: {
+                $expr: { $eq: ['$routeId', '$$routeId'] },
+              },
+            },
+            {
+              $project: {
+                _id: 0,
+                routeId: 1,
+                name: 1,
+                day: 1,
+                distance: 1,
+                status: 1,
+              },
+            },
+          ],
+          as: 'route',
+        },
+      },
+
+      {
+        $addFields: {
+          route: { $arrayElemAt: ['$route', 0] },
+        },
+      },
+
+      /**
+       * ✅ active flag
+       */
+      {
+        $addFields: {
+          isActive: {
+            $and: [
+              { $lte: ['$associatedRoutes.fromDate', today] },
+              { $gte: ['$associatedRoutes.toDate', today] },
+            ],
+          },
+        },
+      },
+
+      /**
+       * 🚀 REMOVE DUPLICATES HERE (KEY FIX)
+       */
+      {
+        $group: {
+          _id: {
+            vanId: '$vanId',
+            routeId: '$associatedRoutes.routeId',
+          },
+
+          vanId: { $first: '$vanId' },
+          name: { $first: '$name' },
+          vanNumber: { $first: '$vanNumber' },
+          capacity: { $first: '$capacity' },
+          madeYear: { $first: '$madeYear' },
+          associatedUsers: { $first: '$associatedUsers' },
+          status: { $first: '$status' },
+
+          routeData: {
+            $first: {
+              routeId: '$associatedRoutes.routeId',
+              fromDate: '$associatedRoutes.fromDate',
+              toDate: '$associatedRoutes.toDate',
+              isActive: '$isActive',
+              route: '$route',
+            },
+          },
+        },
+      },
+
+      /**
+       * ✅ regroup by van
+       */
+      {
+        $group: {
+          _id: '$vanId',
+          vanId: { $first: '$vanId' },
+          name: { $first: '$name' },
+          vanNumber: { $first: '$vanNumber' },
+          capacity: { $first: '$capacity' },
+          madeYear: { $first: '$madeYear' },
+          associatedUsers: { $first: '$associatedUsers' },
+          status: { $first: '$status' },
+
+          routes: {
+            $push: '$routeData',
+          },
+        },
+      },
+
+      /**
+       * ✅ active route
+       */
+      {
+        $addFields: {
+          activeRoute: {
+            $first: {
+              $filter: {
+                input: '$routes',
+                as: 'r',
+                cond: { $eq: ['$$r.isActive', true] },
+              },
+            },
+          },
+        },
+      },
+    ];
+
+    const result = await this.model.aggregate(pipeline);
+    const doc = result?.[0];
+
+    if (!doc) {
       throw new NotFoundException(VAN.NOT_FOUND);
     }
 
     return {
       statusCode: HttpStatus.OK,
       message: VAN.FETCHED,
-      data: van,
+      data: doc,
     };
   }
 
@@ -219,6 +347,144 @@ export class VanService extends MongoRepository<Van> {
       statusCode: HttpStatus.OK,
       message: VAN.DELETED,
       data: deletedVan,
+    };
+  }
+
+  async getVanMappedRoutes() {
+    const ctx: any = RequestContextStore.getStore();
+    const userId = ctx?.userId;
+
+    const today = new Date();
+
+    const pipeline: any[] = [
+      /**
+       * ✅ Match vans for logged-in user
+       */
+      {
+        $match: {
+          associatedUsers: { $in: [userId] },
+          status: VanStatus.ACTIVE,
+        },
+      },
+
+      /**
+       * ✅ Unwind routes
+       */
+      {
+        $unwind: {
+          path: '$associatedRoutes',
+          preserveNullAndEmptyArrays: false,
+        },
+      },
+
+      /**
+       * ✅ Lookup route details
+       */
+      {
+        $lookup: {
+          from: 'route_master',
+          localField: 'associatedRoutes.routeId',
+          foreignField: 'routeId',
+          as: 'route',
+        },
+      },
+
+      /**
+       * ✅ Convert route array → object
+       */
+      {
+        $addFields: {
+          route: { $arrayElemAt: ['$route', 0] },
+        },
+      },
+
+      /**
+       * ✅ Calculate active flag
+       */
+      {
+        $addFields: {
+          isActive: {
+            $and: [
+              { $lte: ['$associatedRoutes.fromDate', today] },
+              { $gte: ['$associatedRoutes.toDate', today] },
+            ],
+          },
+        },
+      },
+
+      /**
+       * ✅ Shape flat structure before grouping
+       */
+      {
+        $project: {
+          _id: 0,
+          vanId: '$vanId',
+          vanName: '$name',
+          vanNumber: '$vanNumber',
+          status: '$status',
+          routeId: '$associatedRoutes.routeId',
+          fromDate: '$associatedRoutes.fromDate',
+          toDate: '$associatedRoutes.toDate',
+          isActive: 1,
+          route: {
+            routeId: '$route.routeId',
+            name: '$route.name',
+            distance: '$route.distance',
+            day: '$route.day',
+            status: '$route.status',
+            associatedUsers: '$associatedUsers',
+          },
+        },
+      },
+
+      /**
+       * 🚀 Group by van (MAIN FIX)
+       */
+      {
+        $group: {
+          _id: '$vanId',
+          vanName: { $first: '$vanName' },
+          vanId: { $first: '$vanId' },
+          vanNumber: { $first: '$vanNumber' },
+          status: { $first: '$status' },
+          routes: {
+            $push: {
+              routeId: '$routeId',
+              fromDate: '$fromDate',
+              toDate: '$toDate',
+              isActive: '$isActive',
+              route: '$route',
+            },
+          },
+        },
+      },
+
+      /**
+       * ✅ Final response shape
+       */
+      {
+        $project: {
+          _id: 0,
+          vanName: 1,
+          vanId: 1,
+          vanNumber: 1,
+          status: 1,
+          routes: 1,
+          associatedUsers: '$associatedUsers',
+        },
+      },
+    ];
+
+    const result = await this.model.aggregate(pipeline);
+
+    if (!result || result.length === 0) {
+      throw new NotFoundException(VAN.NOT_FOUND);
+    }
+
+    return {
+      statusCode: HttpStatus.OK,
+      message: VAN.FETCHED,
+      data: result[0],
     };
   }
 }

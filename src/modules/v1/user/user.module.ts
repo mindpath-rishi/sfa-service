@@ -18,12 +18,12 @@ import {
   UserDevice,
   UserDeviceSchema,
 } from 'src/core/database/mongo/schema/device.schema';
-// import { Employee, EmployeeSchema } from 'src/core/database/mongo/schema/employee.schema';
+import { VanModule } from '../van/van.module';
+
 
 @Module({
   imports: [
     PassportModule,
-
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
@@ -38,6 +38,8 @@ import {
       { name: Employee.name, schema: EmployeeSchema },
       { name: UserDevice.name, schema: UserDeviceSchema },
     ]),
+    VanModule
+    
   ],
   controllers: [UserController],
   providers: [UserService, JwtStrategy],

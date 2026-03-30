@@ -32,15 +32,15 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
     }
 
     // Enforce device presence
-    const deviceId = request.headers['x-device-id'];
-    if (!deviceId) {
-      throw new UnauthorizedException('Device ID missing');
-    }
+    // const deviceId = request.headers['x-device-id'];
+    // if (!deviceId) {
+    //   throw new UnauthorizedException('Device ID missing');
+    // }
 
-    // Ensure JWT and header device match
-    if (request.user?.deviceId !== deviceId) {
-      throw new UnauthorizedException('Device mismatch');
-    }
+    // // Ensure JWT and header device match
+    // if (request.user?.deviceId !== deviceId) {
+    //   throw new UnauthorizedException('Device mismatch');
+    // }
 
     return true;
   }

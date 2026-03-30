@@ -52,6 +52,7 @@ import { CreateVanDto } from './dto/create-van.dto';
 import { UpdateVanDto } from './dto/update-van.dto';
 import { VanQueryDto } from './dto/van-query.dto';
 import { VAN } from './van.constants';
+import { Public } from 'src/core/decorators/public.decorator';
 
 @ApiTags('Van')
 @FeatureFlag(API_MODULE_ENABLE_KEYS.VAN)
@@ -62,6 +63,7 @@ import { VAN } from './van.constants';
   path: API_MODULE.VAN,
   version: V1,
 })
+// @Public()
 export class VanController {
   constructor(private readonly vanService: VanService) {}
 
@@ -86,6 +88,28 @@ export class VanController {
   )
   async create(@Body() dto: CreateVanDto) {
     return this.vanService.create(dto);
+  }
+
+  /**
+   * Get Van mapped routes
+   * -------------
+   * Purpose : Retrieve single van details
+   * Used by : VAN DETAIL VIEW
+   */
+  @Get('mapped-routes')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Get van mapped routes' })
+  // @ApiParam({ name: 'vanId' })
+  @ApiSuccessResponse(
+    {
+      vanId: 'VID-001',
+      name: 'Delivery Van 1',
+    },
+    VAN.FETCHED,
+  )
+  @ApiNotFoundResponse()
+  async getVanMappedRoutes() {
+    return this.vanService.getVanMappedRoutes();
   }
 
   /**
