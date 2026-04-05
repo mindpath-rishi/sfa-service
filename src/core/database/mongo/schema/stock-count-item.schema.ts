@@ -18,10 +18,10 @@ export type StockCountItemDocument = HydratedDocument<StockCountItem>;
 
 @Schema({ timestamps: true, collection: 'stock_count_items' })
 export class StockCountItem {
-  @Prop({ required: true, index: true })
+  @Prop({ required: true, index: true, type: String })
   stockCountId: string;
 
-  @Prop({ required: true, index: true })
+  @Prop({ required: true, index: true, type: String })
   productId: string;
 
   @Prop({ type: Number, required: true })
@@ -40,7 +40,4 @@ export class StockCountItem {
 export const StockCountItemSchema =
   SchemaFactory.createForClass(StockCountItem);
 
-StockCountItemSchema.index(
-  { stockCountId: 1, productId: 1 },
-  { unique: true },
-);
+StockCountItemSchema.index({ stockCountId: 1, productId: 1 }, { unique: true });

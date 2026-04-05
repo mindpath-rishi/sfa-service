@@ -28,7 +28,7 @@ export class Employee {
    * ====================================================== */
 
   // Unique business identifier for the employee
-  @Prop({ required: true, trim: true })
+  @Prop({ required: true, trim: true, type: String })
   employeeId: string;
 
   // Optional contact mobile number
@@ -37,11 +37,12 @@ export class Employee {
     trim: true,
     unique: true,
     sparse: true,
+    type: String,
   })
   mobile?: string;
 
   // Display name of the employee
-  @Prop({ required: true, trim: true })
+  @Prop({ required: true, trim: true, type: String })
   name: string;
 
   // Optional email address
@@ -51,6 +52,7 @@ export class Employee {
     trim: true,
     unique: true,
     sparse: true,
+    type: String,
   })
   email?: string;
 
@@ -59,7 +61,7 @@ export class Employee {
    * ====================================================== */
 
   // Role reference used for RBAC
-  @Prop({ required: true })
+  @Prop({ required: true, type: String })
   roleId: string;
 
   /* ======================================================

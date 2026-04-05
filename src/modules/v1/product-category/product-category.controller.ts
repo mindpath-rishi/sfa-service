@@ -50,7 +50,8 @@ import { ProductCategoryService } from './product-category.service';
 import { ProductCategoryQueryDto } from './dto/product-category-query.dto';
 import { ProductCategoryUpdateDto } from './dto/update-product-category.dto';
 import { PRODUCT_CATEGORY } from './product-category.constants';
-import { ProductCategoryCreateDto } from './dto/create-product.dto';
+import { ProductCategoryCreateDto } from './dto/create-product-category.dto';
+import { Public } from 'src/core/decorators/public.decorator';
 
 @ApiTags('Product Category')
 @FeatureFlag(API_MODULE_ENABLE_KEYS.PRODUCT_CATEGORY)
@@ -61,6 +62,7 @@ import { ProductCategoryCreateDto } from './dto/create-product.dto';
   path: API_MODULE.PRODUCT_CATEGORY,
   version: V1,
 })
+@Public()
 export class ProductCategoryController {
   constructor(private readonly service: ProductCategoryService) {}
 

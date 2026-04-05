@@ -1,7 +1,7 @@
 import { InventoryTransactionStatus, TransactionType } from 'src/shared/enums/inventory-transaction.enums';
 
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEnum, IsNumber, IsOptional, IsString, MaxLength, Min, MinLength } from 'class-validator';
+import { IsDate, IsEnum, IsNumber, IsOptional, IsString, MaxLength, Min, MinLength } from 'class-validator';
 import { PaginationDto } from 'src/shared/dto/pagination.dto';
 
 /**
@@ -56,6 +56,16 @@ export class InventoryTransactionQueryDto extends PaginationDto {
   @Min(0.0001)
   quantity?: number;
 
+  @ApiPropertyOptional({ type: Number , description: "Supports operators: gt, gte, lt, lte", example: 10 })
+  @IsOptional()
+  @IsNumber()
+  cases?: number;
+
+  @ApiPropertyOptional({ type: Number , description: "Supports operators: gt, gte, lt, lte", example: 10 })
+  @IsOptional()
+  @IsNumber()
+  pieces?: number;
+
   @ApiPropertyOptional({ type: String })
   @IsOptional()
   @IsString()
@@ -65,6 +75,11 @@ export class InventoryTransactionQueryDto extends PaginationDto {
   @IsOptional()
   @IsString()
   remark?: string;
+
+  @ApiPropertyOptional({ type: Date , description: "Filter by date range (supports operators: gt, gte, lt, lte)", example: "2024-01-01T00:00:00.000Z" })
+  @IsOptional()
+  @IsDate()
+  transactionDate?: Date;
 
   @ApiPropertyOptional({ enum: InventoryTransactionStatus, description: 'Filter by status', example: InventoryTransactionStatus.POSTED, default: InventoryTransactionStatus.POSTED })
   @IsOptional()

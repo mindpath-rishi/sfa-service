@@ -1,7 +1,17 @@
 import { CustomerStatus } from 'src/shared/enums/customer.enums';
 
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEnum, IsNotEmpty, IsNumber, IsOptional, IsString, Max, Min, ValidateNested } from 'class-validator';
+import {
+  IsEnum,
+  IsNotEmpty,
+  IsNumber,
+  IsOptional,
+  IsString,
+  Length,
+  Max,
+  Min,
+  ValidateNested,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class GeoTagDto {
@@ -18,15 +28,28 @@ export class GeoTagDto {
   @Min(-180)
   @Max(180)
   lng: number;
+}
 
+class AddressDto {
+  @ApiProperty({ example: '123 Main Street' })
+  @IsNotEmpty()
+  @IsString()
+  @Length(3, 150)
+  line1: string;
+
+  @ApiProperty({ example: 'Near City Mall', required: false })
+  @IsOptional()
+  @IsString()
+  @Length(0, 150)
+  line2?: string;
 }
 
 export class CreateCustomerDto {
-/**
- * Customer Create DTO
- * ====================
- * Data Transfer Object for creating new Customer records
- */
+  /**
+   * Outlet Create DTO
+   * ====================
+   * Data Transfer Object for creating new Outlet records
+   */
   @ApiProperty({ type: String, description: 'Reference ID' })
   @IsNotEmpty()
   @IsString()
@@ -40,7 +63,7 @@ export class CreateCustomerDto {
   @ApiProperty({ type: String, description: 'Reference ID' })
   @IsNotEmpty()
   @IsString()
-  outletTypeId: string;
+  customerTypeId: string;
 
   @ApiProperty({ type: String, description: 'Reference ID' })
   @IsNotEmpty()
@@ -65,14 +88,27 @@ export class CreateCustomerDto {
   @ApiProperty({ type: String })
   @IsNotEmpty()
   @IsString()
-  outletName: string;
+  name: string;
 
-  @ApiProperty({ type: String })
+  @ApiProperty({ type: AddressDto })
+  @ValidateNested()
+  @Type(() => AddressDto)
+  address: AddressDto;
+
+  @ApiProperty({ type: Number })
   @IsNotEmpty()
-  @IsString()
-  address: string;
+  @IsNumber()
+  creditLimit: number;
 
-  @ApiPropertyOptional({ type: () => GeoTagDto, description: 'Embedded GeoTag object' })
+  @ApiProperty({ type: Number })
+  @IsNotEmpty()
+  @IsNumber()
+  outstanding: number;
+
+  @ApiPropertyOptional({
+    type: () => GeoTagDto,
+    description: 'Embedded GeoTag object',
+  })
   @ValidateNested()
   @Type(() => GeoTagDto)
   geoTag?: GeoTagDto;
@@ -85,5 +121,4 @@ export class CreateCustomerDto {
   @ApiPropertyOptional({ enum: CustomerStatus, example: CustomerStatus.ACTIVE })
   @IsEnum(CustomerStatus)
   status?: CustomerStatus;
-
 }

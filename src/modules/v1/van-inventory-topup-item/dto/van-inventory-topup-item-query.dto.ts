@@ -1,5 +1,5 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsNumber, IsOptional, IsString, MaxLength, Min, MinLength } from 'class-validator';
+import { IsNumber, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 import { PaginationDto } from 'src/shared/dto/pagination.dto';
 
 /**
@@ -28,11 +28,60 @@ export class VanInventoryTopupItemQueryDto extends PaginationDto {
   @IsString()
   productId?: string;
 
+  @ApiPropertyOptional({ type: String })
+  @IsOptional()
+  @IsString()
+  productName?: string;
+
   @ApiPropertyOptional({ type: Number , description: "Supports operators: gt, gte, lt, lte", example: 10 })
   @IsOptional()
   @IsNumber()
-  @Min(0.0001)
-  requestedQty?: number;
+  requestedCaseQty?: number;
+
+  @ApiPropertyOptional({ type: Number , description: "Supports operators: gt, gte, lt, lte", example: 10 })
+  @IsOptional()
+  @IsNumber()
+  requestedPieceQty?: number;
+
+  @ApiPropertyOptional({ type: Number , description: "Supports operators: gt, gte, lt, lte", example: 10 })
+  @IsOptional()
+  @IsNumber()
+  requestedQuantity?: number;
+
+  @ApiPropertyOptional({ type: Number , description: "Supports operators: gt, gte, lt, lte", example: 10 })
+  @IsOptional()
+  @IsNumber()
+  approvedCaseQty?: number;
+
+  @ApiPropertyOptional({ type: Number , description: "Supports operators: gt, gte, lt, lte", example: 10 })
+  @IsOptional()
+  @IsNumber()
+  approvedPieceQty?: number;
+
+  @ApiPropertyOptional({ type: Number , description: "Supports operators: gt, gte, lt, lte", example: 10 })
+  @IsOptional()
+  @IsNumber()
+  approvedQuantity?: number;
+
+  @ApiPropertyOptional({ type: Number , description: "Supports operators: gt, gte, lt, lte", example: 10 })
+  @IsOptional()
+  @IsNumber()
+  piecePrice?: number;
+
+  @ApiPropertyOptional({ type: Number , description: "Supports operators: gt, gte, lt, lte", example: 10 })
+  @IsOptional()
+  @IsNumber()
+  casePrice?: number;
+
+  @ApiPropertyOptional({ type: Number , description: "Supports operators: gt, gte, lt, lte", example: 10 })
+  @IsOptional()
+  @IsNumber()
+  pieceNetWeight?: number;
+
+  @ApiPropertyOptional({ type: Number , description: "Supports operators: gt, gte, lt, lte", example: 10 })
+  @IsOptional()
+  @IsNumber()
+  caseNetWeight?: number;
 
   @ApiPropertyOptional({ type: Number , description: "Supports operators: gt, gte, lt, lte", example: 10 })
   @IsOptional()
@@ -44,22 +93,6 @@ export class VanInventoryTopupItemQueryDto extends PaginationDto {
   @IsNumber()
   requestedValue?: number;
 
-  /**
-   * ApprovedQty
-   * -----------
-   * Van Inventory Top-Up reference (van_inventory_topup.vanInventoryTopupId)
-   */
-  @ApiPropertyOptional({ type: Number , description: "Supports operators: gt, gte, lt, lte", example: 10 })
-  @IsOptional()
-  @IsNumber()
-  @Min(0)
-  approvedQty?: number;
-
-  /**
-   * ApprovedWeight
-   * --------------
-   * Product reference (product_master.productId)
-   */
   @ApiPropertyOptional({ type: Number , description: "Supports operators: gt, gte, lt, lte", example: 10 })
   @IsOptional()
   @IsNumber()
@@ -70,31 +103,11 @@ export class VanInventoryTopupItemQueryDto extends PaginationDto {
   @IsNumber()
   approvedValue?: number;
 
-  /**
-   * ProductPrice
-   * ------------
-   * Requested weight = requestedQty * product_master.netWeight
-   */
   @ApiPropertyOptional({ type: Number , description: "Supports operators: gt, gte, lt, lte", example: 10 })
   @IsOptional()
   @IsNumber()
-  productPrice?: number;
+  unitQtyInCase?: number;
 
-  /**
-   * ProductNetWeight
-   * ----------------
-   * Requested value = requestedQty * product_master.price
-   */
-  @ApiPropertyOptional({ type: Number , description: "Supports operators: gt, gte, lt, lte", example: 10 })
-  @IsOptional()
-  @IsNumber()
-  productNetWeight?: number;
-
-  /**
-   * Remark
-   * ------
-   * Approved quantity
-   */
   @ApiPropertyOptional({ type: String })
   @IsOptional()
   @IsString()

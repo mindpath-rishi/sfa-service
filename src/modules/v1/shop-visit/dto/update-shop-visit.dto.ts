@@ -21,12 +21,17 @@ export class UpdateShopVisitDto {
   @ApiPropertyOptional({ type: String })
   @IsOptional()
   @IsString()
-  userId?: string;
+  workSessionId?: string;
 
   @ApiPropertyOptional({ type: String })
   @IsOptional()
   @IsString()
-  userName?: string;
+  employeeId?: string;
+
+  @ApiPropertyOptional({ type: String })
+  @IsOptional()
+  @IsString()
+  employeeName?: string;
 
   @ApiPropertyOptional({ type: String })
   @IsOptional()
@@ -41,12 +46,12 @@ export class UpdateShopVisitDto {
   @ApiPropertyOptional({ type: String })
   @IsOptional()
   @IsString()
-  shopId?: string;
+  outletId?: string;
 
   @ApiPropertyOptional({ type: String })
   @IsOptional()
   @IsString()
-  shopName?: string;
+  outletName?: string;
 
   @ApiPropertyOptional({ type: Number })
   @IsOptional()

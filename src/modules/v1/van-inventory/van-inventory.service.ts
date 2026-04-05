@@ -1,4 +1,3 @@
-
 import {
   Injectable,
   NotFoundException,
@@ -10,14 +9,16 @@ import { MongoService } from 'src/core/database/mongo/mongo.service';
 import { MongoRepository } from 'src/core/database/mongo/mongo.repository';
 import { FilterQuery } from 'src/core/database/mongo/mongo.interface';
 
-import { VanInventory, VanInventorySchema } from 'src/core/database/mongo/schema/van-inventory.schema';
+import {
+  VanInventory,
+  VanInventorySchema,
+} from 'src/core/database/mongo/schema/van-inventory.schema';
 
 import { VAN_INVENTORY } from './van-inventory.constants';
 import { CreateVanInventoryDto } from './dto/create-van-inventory.dto';
 import { UpdateVanInventoryDto } from './dto/update-van-inventory.dto';
 import { VanInventoryQueryDto } from './dto/van-inventory-query.dto';
 import { IdGenerator } from 'src/shared/utils/id-generator.utils';
-
 
 @Injectable()
 export class VanInventoryService extends MongoRepository<VanInventory> {
@@ -28,11 +29,12 @@ export class VanInventoryService extends MongoRepository<VanInventory> {
   async create(payload: CreateVanInventoryDto) {
     try {
       return await this.withTransaction(async (session) => {
-        
+        const { vanId, productId } = payload;
 
-        const filter: FilterQuery<VanInventory> = {};
-
-        
+        const filter: FilterQuery<VanInventory> = {
+          vanId,
+          productId,
+        };
 
         const existing = await this.findOne(filter, {
           session,
@@ -122,13 +124,10 @@ export class VanInventoryService extends MongoRepository<VanInventory> {
   async update(inventoryId: string, dto: UpdateVanInventoryDto) {
     try {
       return await this.withTransaction(async (session) => {
-        
-
-        const doc = await this.updateOne(
-          { inventoryId },
-          dto,
-          { session, new: true },
-        );
+        const doc = await this.updateOne({ inventoryId }, dto, {
+          session,
+          new: true,
+        });
 
         if (!doc) throw new NotFoundException(VAN_INVENTORY.NOT_FOUND);
 

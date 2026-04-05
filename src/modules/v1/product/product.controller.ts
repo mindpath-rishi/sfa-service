@@ -52,7 +52,9 @@ import { PRODUCT } from './product.constants';
 import { ProductUpdateDto } from './dto/update-product.dto';
 import { ProductCreateDto } from './dto/create-product.dto';
 import { ProductService } from './product.service';
+import { Public } from 'src/core/decorators/public.decorator';
 
+// @Public()
 @ApiTags('Product')
 @FeatureFlag(API_MODULE_ENABLE_KEYS.PRODUCT)
 @ApiUnauthorizedResponse()

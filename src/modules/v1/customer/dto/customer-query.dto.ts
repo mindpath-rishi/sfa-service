@@ -1,8 +1,9 @@
 import { CustomerStatus } from 'src/shared/enums/customer.enums';
 
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEnum, IsOptional, IsString } from 'class-validator';
+import { IsArray, IsEnum, IsOptional, IsString } from 'class-validator';
 import { PaginationDto } from 'src/shared/dto/pagination.dto';
+import { Type } from 'class-transformer';
 
 export class CustomerQueryDto extends PaginationDto {
   /**
@@ -10,7 +11,10 @@ export class CustomerQueryDto extends PaginationDto {
    * ----------
    * Search by name, code, or identifier
    */
-  @ApiPropertyOptional({ description: "Search by name, code, or identifier", example: "search term" })
+  @ApiPropertyOptional({
+    description: 'Search by name, code, or identifier',
+    example: 'search term',
+  })
   @IsOptional()
   @IsString()
   searchText?: string;
@@ -65,9 +69,19 @@ export class CustomerQueryDto extends PaginationDto {
    * ------
    * Reference of customer category
    */
-  @ApiPropertyOptional({ description: "Filter by status" })
+  @ApiPropertyOptional({ description: 'Filter by status' })
   @IsOptional()
   @IsEnum(CustomerStatus)
   status?: CustomerStatus;
 
+  @ApiPropertyOptional({
+    type: [String],
+    isArray: true,
+    description: 'Filter by multiple customerIds',
+    example: ['CUST-001', 'CUST-002'],
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  customerIds?: string[];
 }

@@ -1,7 +1,15 @@
 import { CustomerStatus } from 'src/shared/enums/customer.enums';
 
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEnum, IsNumber, IsOptional, IsString, Max, Min, ValidateNested } from 'class-validator';
+import {
+  IsEnum,
+  IsNumber,
+  IsOptional,
+  IsString,
+  Max,
+  Min,
+  ValidateNested,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class UpdateGeoTagDto {
@@ -18,17 +26,16 @@ export class UpdateGeoTagDto {
   @Min(-180)
   @Max(180)
   lng?: number;
-
 }
 
 export class UpdateCustomerDto {
-/**
- * Customer Update DTO
- * ====================
- * Data Transfer Object for updating Customer records
- * 
- * All fields are optional for partial updates
- */
+  /**
+   * Customer Update DTO
+   * ====================
+   * Data Transfer Object for updating Customer records
+   *
+   * All fields are optional for partial updates
+   */
   @ApiPropertyOptional({ type: String, description: 'Reference ID' })
   @IsOptional()
   @IsString()
@@ -74,7 +81,10 @@ export class UpdateCustomerDto {
   @IsString()
   address?: string;
 
-  @ApiPropertyOptional({ type: () => UpdateGeoTagDto, description: 'Update embedded GeoTag object' })
+  @ApiPropertyOptional({
+    type: () => UpdateGeoTagDto,
+    description: 'Update embedded GeoTag object',
+  })
   @IsOptional()
   @ValidateNested()
   @ValidateNested()
@@ -91,4 +101,7 @@ export class UpdateCustomerDto {
   @IsEnum(CustomerStatus)
   status?: CustomerStatus;
 
+  @ApiPropertyOptional({ type: Date })
+  @IsOptional()
+  lastVisitedAt?: Date;
 }

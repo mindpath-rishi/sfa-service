@@ -1,4 +1,3 @@
-
 export const ROUTE = {
   CREATED: 'Route created successfully',
   FETCHED: 'Route fetched successfully',

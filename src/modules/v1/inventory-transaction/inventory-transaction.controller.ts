@@ -52,7 +52,7 @@ import { UpdateInventoryTransactionDto } from './dto/update-inventory-transactio
 import { InventoryTransactionQueryDto } from './dto/inventory-transaction-query.dto';
 import { INVENTORY_TRANSACTION } from './inventory-transaction.constants';
 
-@ApiTags('InventoryTransaction')
+@ApiTags('Inventory-transaction')
 @FeatureFlag(API_MODULE_ENABLE_KEYS.INVENTORY_TRANSACTION)
 @ApiUnauthorizedResponse()
 @ApiUnprocessableEntityResponse()

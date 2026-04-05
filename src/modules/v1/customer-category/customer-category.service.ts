@@ -1,4 +1,3 @@
-
 import {
   Injectable,
   NotFoundException,
@@ -10,7 +9,10 @@ import { MongoService } from 'src/core/database/mongo/mongo.service';
 import { MongoRepository } from 'src/core/database/mongo/mongo.repository';
 import { FilterQuery } from 'src/core/database/mongo/mongo.interface';
 
-import { CustomerCategory, CustomerCategorySchema } from 'src/core/database/mongo/schema/customer-category.schema';
+import {
+  CustomerCategory,
+  CustomerCategorySchema,
+} from 'src/core/database/mongo/schema/customer-category.schema';
 
 import { CUSTOMER_CATEGORY } from './customer-category.constants';
 import { CreateCustomerCategoryDto } from './dto/create-customer-category.dto';
@@ -30,12 +32,14 @@ export class CustomerCategoryService extends MongoRepository<CustomerCategory> {
     try {
       return await this.withTransaction(async (session) => {
         if (payload.name) {
-          payload.name = TextNormalizer.normalize(payload.name, NormalizeType.TITLE);
+          payload.name = TextNormalizer.normalize(
+            payload.name,
+            NormalizeType.TITLE,
+          );
         }
 
         const filter: FilterQuery<CustomerCategory> = {};
 
-        
         if (payload.name) filter.name = payload.name;
 
         const existing = await this.findOne(filter, {
@@ -130,11 +134,10 @@ export class CustomerCategoryService extends MongoRepository<CustomerCategory> {
           dto.name = TextNormalizer.normalize(dto.name, NormalizeType.TITLE);
         }
 
-        const doc = await this.updateOne(
-          { customerCategoryId },
-          dto,
-          { session, new: true },
-        );
+        const doc = await this.updateOne({ customerCategoryId }, dto, {
+          session,
+          new: true,
+        });
 
         if (!doc) throw new NotFoundException(CUSTOMER_CATEGORY.NOT_FOUND);
 

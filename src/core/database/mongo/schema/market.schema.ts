@@ -33,7 +33,7 @@ export class Market {
   marketId: string;
 
   // Display name of market
-  @Prop({ required: true, unique: true, trim: true })
+  @Prop({ required: true, unique: true, trim: true, type: String})
   name: string;
 
   /* ======================================================

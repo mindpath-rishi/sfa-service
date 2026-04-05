@@ -1,4 +1,3 @@
-
 import {
   Injectable,
   NotFoundException,
@@ -10,7 +9,10 @@ import { MongoService } from 'src/core/database/mongo/mongo.service';
 import { MongoRepository } from 'src/core/database/mongo/mongo.repository';
 import { FilterQuery } from 'src/core/database/mongo/mongo.interface';
 
-import { InventoryTransaction, InventoryTransactionSchema } from 'src/core/database/mongo/schema/inventory-transaction.schema';
+import {
+  InventoryTransaction,
+  InventoryTransactionSchema,
+} from 'src/core/database/mongo/schema/inventory-transaction.schema';
 
 import { INVENTORY_TRANSACTION } from './inventory-transaction.constants';
 import { CreateInventoryTransactionDto } from './dto/create-inventory-transaction.dto';
@@ -18,21 +20,19 @@ import { UpdateInventoryTransactionDto } from './dto/update-inventory-transactio
 import { InventoryTransactionQueryDto } from './dto/inventory-transaction-query.dto';
 import { IdGenerator } from 'src/shared/utils/id-generator.utils';
 
-
 @Injectable()
 export class InventoryTransactionService extends MongoRepository<InventoryTransaction> {
   constructor(mongo: MongoService) {
-    super(mongo.getModel(InventoryTransaction.name, InventoryTransactionSchema));
+    super(
+      mongo.getModel(InventoryTransaction.name, InventoryTransactionSchema),
+    );
   }
 
   async create(payload: CreateInventoryTransactionDto) {
     try {
       return await this.withTransaction(async (session) => {
         
-
         const filter: FilterQuery<InventoryTransaction> = {};
-
-        
 
         const existing = await this.findOne(filter, {
           session,
@@ -122,13 +122,10 @@ export class InventoryTransactionService extends MongoRepository<InventoryTransa
   async update(transactionId: string, dto: UpdateInventoryTransactionDto) {
     try {
       return await this.withTransaction(async (session) => {
-        
-
-        const doc = await this.updateOne(
-          { transactionId },
-          dto,
-          { session, new: true },
-        );
+        const doc = await this.updateOne({ transactionId }, dto, {
+          session,
+          new: true,
+        });
 
         if (!doc) throw new NotFoundException(INVENTORY_TRANSACTION.NOT_FOUND);
 

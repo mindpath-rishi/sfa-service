@@ -23,18 +23,22 @@ import {
   NotFoundException,
   ConflictException,
   HttpStatus,
+  BadRequestException,
 } from '@nestjs/common';
 
 import { MongoService } from 'src/core/database/mongo/mongo.service';
 import { MongoRepository } from 'src/core/database/mongo/mongo.repository';
 
-
-
 import { PRODUCT_CATEGORY } from './product-category.constants';
-import { ProductCategory, ProductCategorySchema } from 'src/core/database/mongo/schema/product-category';
-import { ProductCategoryCreateDto } from './dto/create-product.dto';
+import {
+  ProductCategory,
+  ProductCategorySchema,
+} from 'src/core/database/mongo/schema/product-category';
+import { ProductCategoryCreateDto } from './dto/create-product-category.dto';
 import { ProductCategoryQueryDto } from './dto/product-category-query.dto';
 import { ProductCategoryUpdateDto } from './dto/update-product-category.dto';
+import { IdGenerator } from 'src/shared/utils/id-generator.utils';
+import { StringCaseUtils } from 'src/shared/utils/string-case.units';
 
 @Injectable()
 export class ProductCategoryService extends MongoRepository<ProductCategory> {
@@ -59,9 +63,10 @@ export class ProductCategoryService extends MongoRepository<ProductCategory> {
   async create(payload: ProductCategoryCreateDto) {
     return this.withTransaction(async (session) => {
       // Check existing category (including soft-deleted)
+      const titleCaseName = StringCaseUtils.titleCase(payload.name);
       const existing = await this.findOne(
         {
-          $or: [{ categoryId: payload.categoryId }, { name: payload.name }],
+          name: titleCaseName,
         },
         { session, includeDeleted: true },
       );
@@ -76,7 +81,7 @@ export class ProductCategoryService extends MongoRepository<ProductCategory> {
         await this.updateById(
           existing._id.toString(),
           {
-            name: payload.name,
+            name: titleCaseName,
             status: 'ACTIVE',
             isDeleted: false,
           },
@@ -93,8 +98,8 @@ export class ProductCategoryService extends MongoRepository<ProductCategory> {
       // Create new category
       const category = await this.save(
         {
-          categoryId: payload.categoryId,
-          name: payload.name,
+          categoryId: IdGenerator.generate('CAT', 8),
+          name: titleCaseName,
         },
         { session },
       );
@@ -172,6 +177,24 @@ export class ProductCategoryService extends MongoRepository<ProductCategory> {
    * Purpose : Update editable category fields
    */
   async update(categoryId: string, dto: ProductCategoryUpdateDto) {
+    // 1️⃣ Handle name formatting + validation
+    if (dto.name) {
+      const formattedName = StringCaseUtils.titleCase(dto.name.trim());
+
+      // Check duplicate (excluding current category)
+      const existing = await this.findOne({
+        name: formattedName,
+        categoryId: { $ne: categoryId } as any,
+      });
+
+      if (existing) {
+        throw new BadRequestException(PRODUCT_CATEGORY.DUPLICATE);
+      }
+
+      dto.name = formattedName;
+    }
+
+    // 2️⃣ Update category
     const category = await this.updateOne({ categoryId }, dto);
 
     if (!category) {

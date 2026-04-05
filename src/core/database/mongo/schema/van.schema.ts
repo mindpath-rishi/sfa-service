@@ -29,7 +29,7 @@ export type VanDocument = HydratedDocument<Van>;
 
 @Schema({ _id: false, timestamps: false })
 export class VanRoute {
-  @Prop({ required: true })
+  @Prop({ required: true, type: String })
   routeId: string;
 
   @Prop({ required: true, type: Date })
@@ -51,13 +51,13 @@ export class Van {
    * IDENTITY
    * ====================================================== */
 
-  @Prop({ required: true, unique: true, index: true })
+  @Prop({ required: true, unique: true, index: true, type: String })
   vanId: string;
 
-  @Prop({ required: true })
+  @Prop({ required: true, type: String })
   name: string;
 
-  @Prop({ required: true, unique: true, index: true })
+  @Prop({ required: true, unique: true, index: true, type: String })
   vanNumber: string;
 
   /* ======================================================

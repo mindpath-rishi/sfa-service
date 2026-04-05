@@ -51,6 +51,7 @@ import { CreateVanInventoryTopupDto } from './dto/create-van-inventory-topup.dto
 import { UpdateVanInventoryTopupDto } from './dto/update-van-inventory-topup.dto';
 import { VanInventoryTopupQueryDto } from './dto/van-inventory-topup-query.dto';
 import { VAN_INVENTORY_TOPUP } from './van-inventory-topup.constants';
+import { Public } from 'src/core/decorators/public.decorator';
 
 @ApiTags('Van-inventory-topup')
 @FeatureFlag(API_MODULE_ENABLE_KEYS.VAN_INVENTORY_TOPUP)
@@ -61,6 +62,7 @@ import { VAN_INVENTORY_TOPUP } from './van-inventory-topup.constants';
   path: API_MODULE.VAN_INVENTORY_TOPUP,
   version: V1,
 })
+@Public()
 export class VanInventoryTopupController {
   constructor(private readonly service: VanInventoryTopupService) {}
 
@@ -98,7 +100,10 @@ export class VanInventoryTopupController {
    */
   @Permissions('VAN_INVENTORY_TOPUP_VIEW')
   @Get(':vanInventoryTopupId')
-  @ApiParam({ name: 'vanInventoryTopupId', description: 'VanInventoryTopup vanInventoryTopupId' })
+  @ApiParam({
+    name: 'vanInventoryTopupId',
+    description: 'VanInventoryTopup vanInventoryTopupId',
+  })
   async findOne(@Param('vanInventoryTopupId') vanInventoryTopupId: string) {
     return this.service.findByVanInventoryTopupId(vanInventoryTopupId);
   }
@@ -109,7 +114,10 @@ export class VanInventoryTopupController {
    */
   @Permissions('VAN_INVENTORY_TOPUP_UPDATE')
   @Patch(':vanInventoryTopupId')
-  @ApiParam({ name: 'vanInventoryTopupId', description: 'VanInventoryTopup vanInventoryTopupId' })
+  @ApiParam({
+    name: 'vanInventoryTopupId',
+    description: 'VanInventoryTopup vanInventoryTopupId',
+  })
   async update(
     @Param('vanInventoryTopupId') vanInventoryTopupId: string,
     @Body() dto: UpdateVanInventoryTopupDto,
@@ -123,7 +131,10 @@ export class VanInventoryTopupController {
    */
   @Permissions('VAN_INVENTORY_TOPUP_DELETE')
   @Delete(':vanInventoryTopupId')
-  @ApiParam({ name: 'vanInventoryTopupId', description: 'VanInventoryTopup vanInventoryTopupId' })
+  @ApiParam({
+    name: 'vanInventoryTopupId',
+    description: 'VanInventoryTopup vanInventoryTopupId',
+  })
   async delete(@Param('vanInventoryTopupId') vanInventoryTopupId: string) {
     return this.service.delete(vanInventoryTopupId);
   }

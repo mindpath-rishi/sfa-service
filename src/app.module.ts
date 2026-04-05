@@ -44,12 +44,15 @@ import { VanInventoryModule } from './modules/v1/van-inventory/van-inventory.mod
 import { VanDailyStockModule } from './modules/v1/van-daily-stock/van-daily-stock.module';
 import { VanInventoryTopupModule } from './modules/v1/van-inventory-topup/van-inventory-topup.module';
 import { VanInventoryTopupItemModule } from './modules/v1/van-inventory-topup-item/van-inventory-topup-item.module';
-import { CustomerSalesModule } from './modules/v1/customer-sales/customer-sales.module';
-import { CustomerSalesItemModule } from './modules/v1/customer-sales-item/customer-sales-item.module';
 import { ActivityModule } from './modules/v1/activity/activity.module';
 import { WorkSessionModule } from './modules/v1/work-session/work-session.module';
 import { RouteSessionModule } from './modules/v1/route-session/route-session.module';
 import { ShopVisitModule } from './modules/v1/shop-visit/shop-visit.module';
+import { RouteCustomerMappingModule } from './modules/v1/route-customer-mapping/route-customer-mapping.module';
+import { NonSaleModule } from './modules/v1/non-sale/non-sale.module';
+import { PaymentModule } from './modules/v1/payment/payment.module';
+import { SaleModule } from './modules/v1/sale/sale.module';
+import { SaleItemModule } from './modules/v1/sale-item/sale-item.module';
 
 @Global()
 @Module({
@@ -107,12 +110,16 @@ import { ShopVisitModule } from './modules/v1/shop-visit/shop-visit.module';
     VanDailyStockModule,
     VanInventoryTopupModule,
     VanInventoryTopupItemModule,
-    CustomerSalesModule,
-    CustomerSalesItemModule,
     ActivityModule,
     WorkSessionModule,
     RouteSessionModule,
-    ShopVisitModule,],
+    ShopVisitModule,
+    RouteCustomerMappingModule,
+    NonSaleModule,
+    PaymentModule,
+    SaleModule,
+    SaleItemModule,
+  ],
   providers: [
     AppControlService,
     MongoService,

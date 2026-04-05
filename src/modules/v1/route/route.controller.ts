@@ -47,9 +47,9 @@ import {
 import { Permissions } from 'src/core/decorators/permission.decorator';
 
 import { RouteService } from './route.service';
-import { CreateRouteDto } from './dto/create-route.dto';
+import { CreateRouteDto, RouteCustomerDto } from './dto/create-route.dto';
 import { UpdateRouteDto } from './dto/update-route.dto';
-import { RouteQueryDto } from './dto/route-query.dto';
+import { RouteCustomerQueryDto, RouteQueryDto } from './dto/route-query.dto';
 import { ROUTE } from './route.constants';
 import { Public } from 'src/core/decorators/public.decorator';
 
@@ -83,6 +83,7 @@ export class RouteController {
   async create(@Body() dto: CreateRouteDto) {
     return this.service.create(dto);
   }
+  z;
 
   /**
    * Get Routes
@@ -112,10 +113,7 @@ export class RouteController {
   @Permissions('ROUTE_UPDATE')
   @Patch(':routeId')
   @ApiParam({ name: 'routeId', description: 'Route routeId' })
-  async update(
-    @Param('routeId') routeId: string,
-    @Body() dto: UpdateRouteDto,
-  ) {
+  async update(@Param('routeId') routeId: string, @Body() dto: UpdateRouteDto) {
     return this.service.update(routeId, dto);
   }
 
@@ -129,4 +127,17 @@ export class RouteController {
   async delete(@Param('routeId') routeId: string) {
     return this.service.delete(routeId);
   }
+
+  @Permissions('ROUTE_VIEW')
+  @Get(':routeId/customers')
+  @ApiOperation({ summary: 'Get customers for a route' })
+  @ApiParam({ name: 'routeId', description: 'Route routeId' })
+  async getRouteCustomers(
+    @Param('routeId') routeId: string,
+    @Query() query: RouteCustomerQueryDto,
+  ) {
+    console.log("==============139===========")
+    return this.service.getRouteCustomers(routeId, query);
+  }
 }
+  

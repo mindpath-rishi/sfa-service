@@ -1,38 +1,148 @@
-
 import {
   Injectable,
   NotFoundException,
   ConflictException,
   HttpStatus,
+  BadRequestException,
 } from '@nestjs/common';
 
 import { MongoService } from 'src/core/database/mongo/mongo.service';
 import { MongoRepository } from 'src/core/database/mongo/mongo.repository';
 import { FilterQuery } from 'src/core/database/mongo/mongo.interface';
 
-import { VanInventoryTopup, VanInventoryTopupSchema } from 'src/core/database/mongo/schema/van-inventory-topup.schema';
+import {
+  VanInventoryTopup,
+  VanInventoryTopupSchema,
+} from 'src/core/database/mongo/schema/van-inventory-topup.schema';
 
 import { VAN_INVENTORY_TOPUP } from './van-inventory-topup.constants';
 import { CreateVanInventoryTopupDto } from './dto/create-van-inventory-topup.dto';
 import { UpdateVanInventoryTopupDto } from './dto/update-van-inventory-topup.dto';
 import { VanInventoryTopupQueryDto } from './dto/van-inventory-topup-query.dto';
 import { IdGenerator } from 'src/shared/utils/id-generator.utils';
-
+import { VanInventoryTopupItemService } from '../van-inventory-topup-item/van-inventory-topup-item.service';
+import { ProductService } from '../product/product.service';
 
 @Injectable()
 export class VanInventoryTopupService extends MongoRepository<VanInventoryTopup> {
-  constructor(mongo: MongoService) {
+  constructor(
+    mongo: MongoService,
+    private readonly vanInventoryTopupItemService: VanInventoryTopupItemService,
+    private readonly productService: ProductService,
+  ) {
     super(mongo.getModel(VanInventoryTopup.name, VanInventoryTopupSchema));
   }
 
   async create(payload: CreateVanInventoryTopupDto) {
     try {
       return await this.withTransaction(async (session) => {
-        
+        /**
+         * 1. Validate duplicate products
+         */
+        if (payload.items?.length) {
+          const seen = new Set();
 
-        const filter: FilterQuery<VanInventoryTopup> = {};
+          for (const item of payload.items) {
+            if (seen.has(item.productId)) {
+              throw new ConflictException(
+                `Duplicate product in items: ${item.productId}`,
+              );
+            }
+            seen.add(item.productId);
+          }
+        }
 
-        
+        /**
+         * 2. Calculate totals using product data (IMPORTANT)
+         */
+        let totalRequestedQty = 0;
+        let totalRequestedWeight = 0;
+        let totalRequestedValue = 0;
+
+        const processedItems: any[] = [];
+
+        for (const item of payload.items) {
+          /**
+           * Fetch product (like sales)
+           */
+          const response = await this.productService.findByProductId(
+            item.productId,
+          );
+          const product = response?.data;
+
+          if (!product) {
+            throw new BadRequestException(
+              `Product not found: ${item.productId}`,
+            );
+          }
+
+          const unitQtyInCase = product.unitQtyInCase || 1;
+          const casePrice = product.casePrice || 0;
+
+          /**
+           * If you have direct qty → use it
+           * OR if case/piece → calculate (adjust based on your DTO)
+           */
+          const requestedQty = item.requestedQty || 0;
+
+          const piecePrice = casePrice / unitQtyInCase;
+
+          /**
+           * Value calculation (case-based logic)
+           */
+          const requestedValue = requestedQty * piecePrice;
+
+          const pieceWeight = product.pieceWeight || 0;
+          const requestedWeight = requestedQty * pieceWeight;
+
+          /**
+           * Accumulate totals
+           */
+          totalRequestedQty += requestedQty;
+          totalRequestedWeight += requestedWeight;
+          totalRequestedValue += requestedValue;
+
+          /**
+           * Prepare item
+           */
+          processedItems.push({
+            vanInventoryTopupId: '',
+
+            productId: item.productId,
+            productName: product.name,
+
+            requestedQty,
+            requestedWeight,
+            requestedValue,
+
+            casePrice,
+            unitQtyInCase,
+            piecePrice,
+          });
+        }
+
+        /**
+         * 3. Validate totals (ANTI-TAMPER)
+         */
+        if (
+          (payload.totalRequestedQty ?? totalRequestedQty) !==
+            totalRequestedQty ||
+          (payload.totalRequestedWeight ?? totalRequestedWeight) !==
+            totalRequestedWeight ||
+          (payload.totalRequestedValue ?? totalRequestedValue) !==
+            totalRequestedValue
+        ) {
+          throw new ConflictException('Requested totals mismatch with items');
+        }
+
+        /**
+         * 4. Check duplicate parent
+         */
+        const filter: FilterQuery<VanInventoryTopup> = {
+          vanId: payload.vanId,
+          warehouseId: payload.warehouseId,
+          date: payload.date,
+        };
 
         const existing = await this.findOne(filter, {
           session,
@@ -43,30 +153,37 @@ export class VanInventoryTopupService extends MongoRepository<VanInventoryTopup>
           throw new ConflictException(VAN_INVENTORY_TOPUP.DUPLICATE);
         }
 
-        if (existing?.isDeleted) {
-          await this.updateById(
-            existing._id.toString(),
-            {
-              ...payload,
-              status: 'ACTIVE',
-              isDeleted: false,
-            },
-            { session },
-          );
-
-          return {
-            statusCode: HttpStatus.OK,
-            message: VAN_INVENTORY_TOPUP.CREATED,
-            data: { vanInventoryTopupId: existing.vanInventoryTopupId },
-          };
-        }
+        /**
+         * 5. Create parent
+         */
+        const vanInventoryTopupId = IdGenerator.generate('VAN_', 8);
 
         const doc = await this.save(
           {
-            vanInventoryTopupId: IdGenerator.generate('VAN_', 8),
+            vanInventoryTopupId,
             ...payload,
+
+            totalRequestedQty,
+            totalRequestedWeight,
+            totalRequestedValue,
           },
           { session },
+        );
+
+        /**
+         * 6. Attach parent id to items
+         */
+        const itemsToInsert = processedItems.map((item) => ({
+          ...item,
+          vanInventoryTopupId,
+        }));
+
+        /**
+         * 7. Insert items
+         */
+        await this.vanInventoryTopupItemService.insertMany(
+          itemsToInsert,
+          session,
         );
 
         return {
@@ -122,13 +239,10 @@ export class VanInventoryTopupService extends MongoRepository<VanInventoryTopup>
   async update(vanInventoryTopupId: string, dto: UpdateVanInventoryTopupDto) {
     try {
       return await this.withTransaction(async (session) => {
-        
-
-        const doc = await this.updateOne(
-          { vanInventoryTopupId },
-          dto,
-          { session, new: true },
-        );
+        const doc = await this.updateOne({ vanInventoryTopupId }, dto, {
+          session,
+          new: true,
+        });
 
         if (!doc) throw new NotFoundException(VAN_INVENTORY_TOPUP.NOT_FOUND);
 

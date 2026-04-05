@@ -1,69 +1,43 @@
-/**
- * Products Collection
- * -------------------
- * Purpose : Product master and pricing context
- * Used by : BACK_OFFICE / ADMIN / SALES
- *
- * Contains:
- * - Product identity and system codes
- * - Category association
- * - Pricing and weight information
- * - Unit configuration
- * - Product availability status
- *
- * Notes:
- * - Category is referenced via ProductCategory collection
- * - All identifiers are stored as String (no ObjectId)
- */
-
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument } from 'mongoose';
-import {
-  PriceType,
-  ProductStatus,
-} from 'src/shared/enums/product.enums';
+import { PriceType, ProductStatus } from 'src/shared/enums/product.enums';
 
 export type ProductDocument = HydratedDocument<Product>;
 
 @Schema({ collection: 'product_master' })
 export class Product {
-  /* ======================================================
-   * IDENTITY
-   * ====================================================== */
+  /* ================= IDENTITY ================= */
 
-  // Unique business identifier for the product
-  @Prop({ required: true, trim: true, unique: true })
+  @Prop({ required: true, trim: true, unique: true, type: String })
   productId: string;
 
-  // Display name of the product
-  @Prop({ required: true, trim: true })
+  @Prop({ required: true, trim: true, type: String })
   name: string;
 
-  // System generated product code
-  @Prop({ required: true, trim: true, unique: true })
+  @Prop({ required: true, trim: true, unique: true, type: String })
   productSysCode: string;
 
-  /* ======================================================
-   * ASSOCIATIONS
-   * ====================================================== */
+  /* ================= ASSOCIATIONS ================= */
 
-  // Product category reference
   @Prop({ required: true, type: String, ref: 'ProductCategory' })
   categoryId: string;
 
-  /* ======================================================
-   * PRICING / WEIGHT
-   * ====================================================== */
+  /* ================= PRICING ================= */
 
-  // Product selling price
+  @Prop({ required: true, type: Number })
+  casePrice: number;
+
+  @Prop({ required: true, type: Number })
+  piecePrice: number;
+
+  /* ================= WEIGHT ================= */
+
   @Prop({ required: true })
-  price: number;
+  caseWeight: number; // ✅ SOURCE OF TRUTH
 
-  // Net weight of product
   @Prop({ required: true })
-  netWeight: number;
+  pieceWeight: number; // ⚠️ DERIVED (auto-calculated)
 
-  // Price classification
   @Prop({
     type: String,
     enum: PriceType,
@@ -71,27 +45,19 @@ export class Product {
   })
   priceType: PriceType;
 
-  /* ======================================================
-   * UNIT DETAILS
-   * ====================================================== */
+  /* ================= UNIT ================= */
 
-  // Unit type (example: box, bottle)
-  @Prop()
+  @Prop({ type: String })
   unitType?: string;
 
-  // Unit size (example: 500ml)
-  @Prop()
+  @Prop({ type: String })
   unitSize?: string;
 
-  // Quantity per case
-  @Prop()
-  unitQtyInCase?: string;
+  @Prop({ required: true, type: Number })
+  unitQtyInCase: number;
 
-  /* ======================================================
-   * STATUS
-   * ====================================================== */
+  /* ================= STATUS ================= */
 
-  // Product availability status
   @Prop({
     type: String,
     enum: ProductStatus,
@@ -101,3 +67,60 @@ export class Product {
 }
 
 export const ProductSchema = SchemaFactory.createForClass(Product);
+
+ProductSchema.pre('save', function (next: Function) {
+  const doc = this as any;
+
+  if (doc.casePrice && doc.unitQtyInCase) {
+    doc.piecePrice = doc.casePrice / doc.unitQtyInCase;
+  }
+
+  next();
+});
+
+ProductSchema.pre('findOneAndUpdate', async function (next: Function) {
+  const update: any = this.getUpdate();
+
+  const doc: any = await this.model.findOne(this.getQuery());
+
+  const casePrice = update.casePrice ?? doc?.casePrice;
+  const unitQtyInCase = update.unitQtyInCase ?? doc?.unitQtyInCase;
+
+  if (casePrice && unitQtyInCase) {
+    update.piecePrice = casePrice / unitQtyInCase;
+  }
+
+  next();
+});
+
+ProductSchema.pre('save', function (next: Function) {
+  const doc: any = this as any;
+
+  if (doc.caseWeight && doc.unitQtyInCase) {
+    doc.pieceWeight = Number((doc.caseWeight / doc.unitQtyInCase).toFixed(4));
+  }
+
+  next();
+});
+
+ProductSchema.pre('findOneAndUpdate', async function (next: Function) {
+  const update: any = this.getUpdate();
+  const data = update.$set || update;
+
+  const doc: any = await this.model.findOne(this.getQuery());
+
+  const caseWeight = data.caseWeight ?? doc?.caseWeight;
+  const unitQtyInCase = data.unitQtyInCase ?? doc?.unitQtyInCase;
+
+  if (caseWeight && unitQtyInCase) {
+    const pieceWeight = Number((caseWeight / unitQtyInCase).toFixed(4));
+
+    if (update.$set) {
+      update.$set.pieceWeight = pieceWeight;
+    } else {
+      update.pieceWeight = pieceWeight;
+    }
+  }
+
+  next();
+});

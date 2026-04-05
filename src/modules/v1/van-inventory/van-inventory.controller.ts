@@ -51,6 +51,7 @@ import { CreateVanInventoryDto } from './dto/create-van-inventory.dto';
 import { UpdateVanInventoryDto } from './dto/update-van-inventory.dto';
 import { VanInventoryQueryDto } from './dto/van-inventory-query.dto';
 import { VAN_INVENTORY } from './van-inventory.constants';
+import { Public } from 'src/core/decorators/public.decorator';
 
 @ApiTags('Van-inventory')
 @FeatureFlag(API_MODULE_ENABLE_KEYS.VAN_INVENTORY)
@@ -61,6 +62,7 @@ import { VAN_INVENTORY } from './van-inventory.constants';
   path: API_MODULE.VAN_INVENTORY,
   version: V1,
 })
+@Public()
 export class VanInventoryController {
   constructor(private readonly service: VanInventoryService) {}
 

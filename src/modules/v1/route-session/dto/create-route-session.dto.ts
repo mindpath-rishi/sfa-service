@@ -16,20 +16,20 @@ export class CreateRouteSessionDto {
   })
   @IsNotEmpty()
   @IsString()
-  workSessionId: String;
+  workSessionId: string;
 
   @ApiProperty({ type: String, description: 'Business identifier for route' })
   @IsNotEmpty()
   @IsString()
-  routeId: String;
+  routeId: string;
 
   @ApiPropertyOptional({ type: String })
   @IsOptional()
   @IsString()
-  routeName?: String;
+  routeName?: string;
 
   @ApiPropertyOptional({ type: Number })
   @IsNotEmpty()
   @IsNumber()
-  totalShops?: Number;
+  totalShops?: number;
 }

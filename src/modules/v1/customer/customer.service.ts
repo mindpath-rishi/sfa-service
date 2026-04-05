@@ -78,7 +78,7 @@ export class CustomerService extends MongoRepository<Customer> {
   }
 
   async findAll(query: CustomerQueryDto) {
-    const { searchText, status, page = 1, limit = 20 } = query;
+    const { searchText, status, page = 1, limit = 20, customerIds } = query;
 
     const filter: FilterQuery<Customer> = {};
 
@@ -86,7 +86,11 @@ export class CustomerService extends MongoRepository<Customer> {
 
     if (searchText) {
       const regex = new RegExp(searchText, 'i');
-      filter.$or = [{ customerId: regex }];
+      filter.$or = [{ name: regex }];
+    }
+
+    if (customerIds) {
+      filter.customerId = { $in: customerIds } as any;
     }
 
     const result = await this.paginate(filter, {

@@ -27,7 +27,7 @@ export class Role extends Document {
    * ROLE ID
    * ====================================================== */
 
-  @Prop({ required: true, unique: true, index: true })
+  @Prop({ required: true, unique: true, index: true, type: String })
   roleId: string;
 
   /* ======================================================
@@ -48,7 +48,7 @@ export class Role extends Document {
   })
   displayName: string;
 
-  @Prop()
+  @Prop({ type: String })
   description?: string;
 
   /* ======================================================
@@ -89,7 +89,7 @@ export class Role extends Document {
   })
   status: Status;
 
-  @Prop({ default: false, index: true })
+  @Prop({ default: false, index: true, type: Boolean })
   isSystemAdmin: boolean;
 }
 

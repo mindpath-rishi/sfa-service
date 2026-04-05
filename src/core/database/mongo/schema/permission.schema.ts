@@ -28,11 +28,11 @@ export class Permission {
    * ====================================================== */
 
   // Unique permission code (used in guards and decorators)
-  @Prop({ required: true, unique: true, trim: true })
+  @Prop({ required: true, unique: true, trim: true, type: String })
   code: string;
 
   // Human-readable permission name
-  @Prop({ required: true, trim: true })
+  @Prop({ required: true, trim: true, type: String })
   name: string;
 
   /* ======================================================
@@ -40,7 +40,7 @@ export class Permission {
    * ====================================================== */
 
   // Logical module grouping (EMPLOYEE, ORDER, INVENTORY, etc.)
-  @Prop({ required: true, trim: true })
+  @Prop({ required: true, trim: true, type: String })
   module: string;
 
   /* ======================================================

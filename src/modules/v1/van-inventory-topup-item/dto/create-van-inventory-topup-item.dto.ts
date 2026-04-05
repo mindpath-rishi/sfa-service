@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsNotEmpty, IsNumber, IsOptional, IsString, Min } from 'class-validator';
+import { IsNotEmpty, IsNumber, IsOptional, IsString } from 'class-validator';
 
 
 export class CreateVanInventoryTopupItemDto {
@@ -18,11 +18,60 @@ export class CreateVanInventoryTopupItemDto {
   @IsString()
   productId: string;
 
+  @ApiProperty({ type: String })
+  @IsNotEmpty()
+  @IsString()
+  productName: string;
+
+  @ApiPropertyOptional({ type: Number , default: 0 })
+  @IsOptional()
+  @IsNumber()
+  requestedCaseQty?: number;
+
+  @ApiPropertyOptional({ type: Number , default: 0 })
+  @IsOptional()
+  @IsNumber()
+  requestedPieceQty?: number;
+
   @ApiProperty({ type: Number })
   @IsNotEmpty()
   @IsNumber()
-  @Min(0.0001)
   requestedQty: number;
+
+  @ApiPropertyOptional({ type: Number , default: 0 })
+  @IsOptional()
+  @IsNumber()
+  approvedCaseQty?: number;
+
+  @ApiPropertyOptional({ type: Number , default: 0 })
+  @IsOptional()
+  @IsNumber()
+  approvedPieceQty?: number;
+
+  @ApiPropertyOptional({ type: Number , default: 0 })
+  @IsOptional()
+  @IsNumber()
+  approvedQty?: number;
+
+  @ApiProperty({ type: Number })
+  @IsNotEmpty()
+  @IsNumber()
+  piecePrice: number;
+
+  @ApiProperty({ type: Number })
+  @IsNotEmpty()
+  @IsNumber()
+  casePrice: number;
+
+  @ApiProperty({ type: Number })
+  @IsNotEmpty()
+  @IsNumber()
+  pieceNetWeight: number;
+
+  @ApiProperty({ type: Number })
+  @IsNotEmpty()
+  @IsNumber()
+  caseNetWeight: number;
 
   @ApiPropertyOptional({ type: Number , default: 0 })
   @IsOptional()
@@ -34,22 +83,6 @@ export class CreateVanInventoryTopupItemDto {
   @IsNumber()
   requestedValue?: number;
 
-  /**
-   * ApprovedQty
-   * -----------
-   * Van Inventory Top-Up reference (van_inventory_topup.vanInventoryTopupId)
-   */
-  @ApiPropertyOptional({ type: Number , default: 0 })
-  @IsOptional()
-  @IsNumber()
-  @Min(0)
-  approvedQty?: number;
-
-  /**
-   * ApprovedWeight
-   * --------------
-   * Product reference (product_master.productId)
-   */
   @ApiPropertyOptional({ type: Number , default: 0 })
   @IsOptional()
   @IsNumber()
@@ -60,31 +93,11 @@ export class CreateVanInventoryTopupItemDto {
   @IsNumber()
   approvedValue?: number;
 
-  /**
-   * ProductPrice
-   * ------------
-   * Requested weight = requestedQty * product_master.netWeight
-   */
   @ApiProperty({ type: Number })
   @IsNotEmpty()
   @IsNumber()
-  productPrice: number;
+  unitQtyInCase: number;
 
-  /**
-   * ProductNetWeight
-   * ----------------
-   * Requested value = requestedQty * product_master.price
-   */
-  @ApiProperty({ type: Number })
-  @IsNotEmpty()
-  @IsNumber()
-  productNetWeight: number;
-
-  /**
-   * Remark
-   * ------
-   * Approved quantity
-   */
   @ApiPropertyOptional({ type: String })
   @IsOptional()
   @IsString()

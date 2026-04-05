@@ -99,6 +99,7 @@ export class RouteSessionService extends MongoRepository<RouteSession> {
             vanId: ctx?.vanId,
             vanName: ctx?.vanName,
             startTime: new Date(),
+            remainingShops: payload.totalShops,
             ...payload,
           },
           { session },
@@ -143,14 +144,149 @@ export class RouteSessionService extends MongoRepository<RouteSession> {
   }
 
   async findByRouteSessionId(routeSessionId: string) {
-    const doc = await this.findOne({ routeSessionId }, { lean: true });
+    const data = await this.model.aggregate([
+      // 1️⃣ Match route session
+      {
+        $match: { routeSessionId },
+      },
 
-    if (!doc) throw new NotFoundException(ROUTE_SESSION.NOT_FOUND);
+      // 2️⃣ Get Route
+      {
+        $lookup: {
+          from: 'route_master',
+          localField: 'routeId',
+          foreignField: 'routeId',
+          as: 'route',
+        },
+      },
+      { $unwind: '$route' },
+
+      // 3️⃣ Get Route-Customer Mapping
+      {
+        $lookup: {
+          from: 'route_customer_mappings',
+          localField: 'routeId',
+          foreignField: 'routeId',
+          as: 'mappings',
+        },
+      },
+
+      // 4️⃣ Get Shop Visits (NEW 🔥)
+      {
+        $lookup: {
+          from: 'shop_visits',
+          let: { routeSessionId: '$routeSessionId' },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $eq: ['$routeSessionId', '$$routeSessionId'],
+                },
+              },
+            },
+          ],
+          as: 'visits',
+        },
+      },
+
+      // 5️⃣ Get Customers
+      {
+        $lookup: {
+          from: 'customer_master',
+          localField: 'mappings.customerId',
+          foreignField: 'customerId',
+          as: 'customers',
+        },
+      },
+
+      // 6️⃣ Merge sequence + visit info
+      {
+        $addFields: {
+          customers: {
+            $map: {
+              input: '$customers',
+              as: 'cust',
+              in: {
+                $let: {
+                  vars: {
+                    mapping: {
+                      $arrayElemAt: [
+                        {
+                          $filter: {
+                            input: '$mappings',
+                            as: 'm',
+                            cond: {
+                              $eq: ['$$m.customerId', '$$cust.customerId'],
+                            },
+                          },
+                        },
+                        0,
+                      ],
+                    },
+                    visit: {
+                      $arrayElemAt: [
+                        {
+                          $filter: {
+                            input: '$visits',
+                            as: 'v',
+                            cond: {
+                              $eq: ['$$v.customerId', '$$cust.customerId'],
+                            },
+                          },
+                        },
+                        0,
+                      ],
+                    },
+                  },
+                  in: {
+                    $mergeObjects: [
+                      '$$cust',
+                      {
+                        sequence: '$$mapping.sequence',
+                        isVisited: {
+                          $cond: [{ $ifNull: ['$$visit', false] }, true, false],
+                        },
+                        visitStatus: '$$visit.status',
+                        visitedAt: '$$visit.visitedAt',
+                      },
+                    ],
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+
+      // 7️⃣ Sort customers by sequence
+      {
+        $addFields: {
+          customers: {
+            $sortArray: {
+              input: '$customers',
+              sortBy: { sequence: 1 },
+            },
+          },
+        },
+      },
+
+      // 8️⃣ Optional cleanup (remove heavy arrays)
+      {
+        $project: {
+          mappings: 0,
+          visits: 0,
+        },
+      },
+    ]);
+
+    if (!data.length) {
+      throw new NotFoundException(ROUTE_SESSION.NOT_FOUND);
+    }
 
     return {
       statusCode: HttpStatus.OK,
       message: ROUTE_SESSION.FETCHED,
-      data: doc,
+      data: data[0],
     };
   }
 
@@ -200,10 +336,14 @@ export class RouteSessionService extends MongoRepository<RouteSession> {
   ) {
     try {
       return await this.withTransaction(async (session) => {
-        const doc = await this.updateOne({ workSessionId, status: RouteSessionStatus.ACTIVE }, dto, {
-          session,
-          new: true,
-        });
+        const doc = await this.updateOne(
+          { workSessionId, status: RouteSessionStatus.ACTIVE },
+          dto,
+          {
+            session,
+            new: true,
+          },
+        );
 
         if (!doc) throw new NotFoundException(ROUTE_SESSION.NOT_FOUND);
 

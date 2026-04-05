@@ -28,9 +28,8 @@ export class Notification {
    * RECEIVER
    * ====================================================== */
 
-
   // User who receives this notification
-  @Prop({ required: true, index: true })
+  @Prop({ required: true, index: true, type: String })
   recipientId: string;
 
   /* ======================================================
@@ -38,11 +37,11 @@ export class Notification {
    * ====================================================== */
 
   // Notification title
-  @Prop({ required: true, trim: true })
+  @Prop({ required: true, trim: true, type: String })
   title: string;
 
   // Notification body/message
-  @Prop({ required: true, trim: true })
+  @Prop({ required: true, trim: true, type: String })
   body: string;
 
   // Custom payload (orderId, routeId, etc.)
@@ -63,11 +62,11 @@ export class Notification {
   deliveryStatus: NotificationDeliveryStatus;
 
   // Error message if push failed
-  @Prop()
+  @Prop({ type: String })
   deliveryError?: string;
 
   // Timestamp when push was sent
-  @Prop()
+  @Prop({ type: Date })
   sentAt?: Date;
 
   /* ======================================================
@@ -75,11 +74,11 @@ export class Notification {
    * ====================================================== */
 
   // Whether user has read this notification
-  @Prop({ default: false, index: true })
+  @Prop({ default: false, index: true, type: Boolean })
   isRead: boolean;
 
   // Timestamp when notification was read
-  @Prop()
+  @Prop({ type: Date })
   readAt?: Date;
 
   /* ======================================================
@@ -95,7 +94,7 @@ export class Notification {
   platform?: NotificationPlatform;
 
   // Category/type (order, payment, system, etc.)
-  @Prop({ index: true })
+  @Prop({ index: true, type: String })
   category?: string;
 }
 
@@ -107,4 +106,3 @@ export const NotificationSchema = SchemaFactory.createForClass(Notification);
 
 NotificationSchema.index({ recipientId: 1, createdAt: -1 });
 NotificationSchema.index({ recipientId: 1, isRead: 1 });
-

@@ -31,11 +31,11 @@ export class ProductCategory {
    * ====================================================== */
 
   // Unique business identifier for category
-  @Prop({ required: true, unique: true })
+  @Prop({ required: true, unique: true, type: String })
   categoryId: string;
 
   // Display name of category
-  @Prop({ required: true })
+  @Prop({ required: true, type: String })
   name: string;
 
   /* ======================================================
@@ -50,7 +50,7 @@ export class ProductCategory {
   })
   status: ProductCategoryStatus;
 
-  @Prop({ default: false })
+  @Prop({ default: false, type: Boolean })
   isDeleted: boolean;
 }
 

@@ -23,15 +23,15 @@ export class UserDevice {
    * ====================================================== */
 
   // Business user identifier (profileId)
-  @Prop({ required: true, index: true })
+  @Prop({ required: true, index: true, type: String })
   userId: string;
 
   // Server-generated session identifier
-  @Prop({ required: true })
+  @Prop({ required: true, type: String })
   sessionId: string;
 
   // Stable client device identifier
-  @Prop({ required: true })
+  @Prop({ required: true, type: String})
   deviceId: string;
 
   /* ======================================================
@@ -39,23 +39,23 @@ export class UserDevice {
    * ====================================================== */
 
   // Device platform (web / android / ios)
-  @Prop()
+  @Prop({ type: String})
   deviceType: string;
 
   // Operating system name
-  @Prop()
+  @Prop({type: String})
   os: string;
 
   // Operating system version
-  @Prop()
+  @Prop({type: String})
   osVersion: string;
 
   // Browser name/version (web clients)
-  @Prop()
+  @Prop({type: String})
   browser: string;
 
   // Last known IP address
-  @Prop()
+  @Prop({type: String})
   ipAddress: string;
 
   /* ======================================================
@@ -63,15 +63,15 @@ export class UserDevice {
    * ====================================================== */
 
   // Indicates whether the session is currently active
-  @Prop({ default: true })
+  @Prop({ default: true, type: Boolean })
   isActive: boolean;
 
   // Timestamp of last successful login from this device
-  @Prop()
+  @Prop({ type: Date})
   lastLoginAt: Date;
 
   // Push notification token (mobile clients)
-  @Prop()
+  @Prop({ type: String})
   fcmToken?: string;
 }
 

@@ -38,6 +38,7 @@ import { ProductQueryDto } from './dto/product-query.dto';
 import { PRODUCT } from './product.constants';
 import { ProductCreateDto } from './dto/create-product.dto';
 import { ProductUpdateDto } from './dto/update-product.dto';
+import { RequestContextStore } from 'src/core/context/request-context';
 
 @Injectable()
 export class ProductService extends MongoRepository<Product> {
@@ -111,8 +112,8 @@ export class ProductService extends MongoRepository<Product> {
           name: payload.name,
           categoryId: payload.categoryId,
           productSysCode: payload.productSysCode,
-          price: payload.price,
-          netWeight: payload.netWeight,
+          casePrice: payload.price,
+          caseWeight: payload.netWeight,
           priceType: payload.priceType,
           unitType: payload.unitType,
           unitSize: payload.unitSize,
@@ -133,37 +134,190 @@ export class ProductService extends MongoRepository<Product> {
    * Get Products
    * ------------
    * Purpose : Retrieve products with filtering and pagination
+   * Supports: Search, multiple categories, multiple brands, price range, stock status, discounts
    */
   async findAll(query: ProductQueryDto) {
-    const { searchText, categoryId, status, page = 1, limit = 20 } = query;
+    const {
+      searchText,
+      categoryIds,
+      brands,
+      status,
+      minPrice,
+      maxPrice,
+      inStockOnly,
+      hasDiscount,
+      page = 1,
+      limit = 20,
+    } = query;
 
-    const filter: Record<string, any> = {};
+    /**
+     * ================= GET USER =================
+     */
+    const ctx = RequestContextStore.getStore();
+    const userId = ctx?.userId;
 
-    if (status) filter.status = status;
+    /**
+     * ================= BUILD MATCH =================
+     */
+    const match: any = {};
 
-    if (categoryId) filter.categoryId = categoryId;
+    if (status) match.status = status;
+
+    if (categoryIds) {
+      match.categoryId = { $in: categoryIds.split(',') };
+    }
+
+    if (brands) {
+      match.brand = { $in: brands.split(',') };
+    }
+
+    if (minPrice || maxPrice) {
+      match.price = {};
+      if (minPrice) match.price.$gte = Number(minPrice);
+      if (maxPrice) match.price.$lte = Number(maxPrice);
+    }
+
+    if (hasDiscount === 'true') {
+      match.discount = { $gt: 0 };
+    }
 
     if (searchText) {
       const regex = new RegExp(searchText, 'i');
-      filter.$or = [
+      match.$or = [
         { name: regex },
         { productSysCode: regex },
         { productId: regex },
+        { sku: regex },
+        { brand: regex },
       ];
     }
 
-    const result = await this.paginate(filter, {
-      page,
-      limit,
-      sort: { createdAt: -1 },
-      lean: true,
-    });
+    /**
+     * ================= PAGINATION =================
+     */
+    const skip = (page - 1) * limit;
+
+    /**
+     * ================= PIPELINE =================
+     */
+    const pipeline: any[] = [
+      { $match: match },
+
+      /**
+       * 1. Get van from user
+       */
+      {
+        $lookup: {
+          from: 'vans',
+          let: { userId: userId },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $in: ['$$userId', '$associatedUsers'], // adjust if object
+                },
+              },
+            },
+            { $project: { vanId: 1, _id: 0 } },
+          ],
+          as: 'van',
+        },
+      },
+
+      {
+        $addFields: {
+          vanId: { $arrayElemAt: ['$van.vanId', 0] },
+        },
+      },
+
+      /**
+       * 2. Lookup inventory
+       */
+      {
+        $lookup: {
+          from: 'inventories',
+          let: { productId: '$productId', vanId: '$vanId' },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $eq: ['$productId', '$$productId'] },
+                    { $eq: ['$vanId', '$$vanId'] },
+                  ],
+                },
+              },
+            },
+            {
+              $project: {
+                quantity: 1, // adjust field
+                _id: 0,
+              },
+            },
+          ],
+          as: 'inventory',
+        },
+      },
+
+      /**
+       * 3. Add stock
+       */
+      {
+        $addFields: {
+          stock: {
+            $ifNull: [{ $arrayElemAt: ['$inventory.quantity', 0] }, 0],
+          },
+        },
+      },
+
+      /**
+       * 4. Filter inStock
+       */
+      ...(inStockOnly === 'true' ? [{ $match: { stock: { $gt: 0 } } }] : []),
+
+      /**
+       * 5. Clean fields
+       */
+      {
+        $project: {
+          inventory: 0,
+          van: 0,
+        },
+      },
+
+      /**
+       * 6. Sort + paginate
+       */
+      { $sort: { createdAt: -1 } },
+      { $skip: skip },
+      { $limit: limit },
+    ];
+
+    /**
+     * ================= EXECUTE =================
+     */
+    const items = await this.model.aggregate(pipeline);
+
+    /**
+     * ================= COUNT =================
+     */
+    const totalResult = await this.model.aggregate([
+      { $match: match },
+      { $count: 'total' },
+    ]);
+
+    const total = totalResult[0]?.total || 0;
 
     return {
       statusCode: HttpStatus.OK,
       message: PRODUCT.FETCHED,
-      data: result.items,
-      meta: result.meta,
+      data: items,
+      meta: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      },
     };
   }
 
