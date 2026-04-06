@@ -18,13 +18,13 @@ export class PaymentSaleItemDto {
   @ApiProperty({ type: String })
   @IsNotEmpty()
   @IsString()
-  saleId: string;
+  saleId!: string;
 
   @ApiProperty({ type: Number })
   @IsNotEmpty()
   @IsNumber()
   @Min(0)
-  amount: number;
+  amount!: number;
 }
 
 export class CreatePaymentDto {
@@ -39,12 +39,12 @@ export class CreatePaymentDto {
   })
   @IsNotEmpty()
   @IsString()
-  customerId: string;
+  customerId!: string;
 
   @ApiProperty({ type: String, description: 'Business identifier for van' })
   @IsNotEmpty()
   @IsString()
-  vanId: string;
+  vanId!: string;
 
   @ApiProperty({
     type: String,
@@ -52,17 +52,17 @@ export class CreatePaymentDto {
   })
   @IsNotEmpty()
   @IsString()
-  employeeId: string;
+  employeeId!: string;
 
   @ApiProperty({ type: Number })
   @IsNotEmpty()
   @IsNumber()
-  amount: number;
+  amount!: number;
 
   @ApiProperty({ enum: PaymentMode })
   @IsNotEmpty()
   @IsEnum(PaymentMode)
-  paymentMode: PaymentMode;
+  paymentMode!: PaymentMode;
 
   @ApiPropertyOptional({
     enum: PaymentStatus,
@@ -76,7 +76,7 @@ export class CreatePaymentDto {
   @ApiProperty({ type: Date })
   @IsNotEmpty()
   @IsDate()
-  date: Date;
+  date!: Date;
 
   /**
    * ReferenceNo

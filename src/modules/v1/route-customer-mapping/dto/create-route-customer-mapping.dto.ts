@@ -13,23 +13,23 @@ export class CreateRouteCustomerMappingDto {
   @ApiProperty({ type: String, description: 'Business identifier for Reference' })
   @IsNotEmpty()
   @IsString()
-  routeId: string;
+  routeId!: string;
 
   @ApiProperty({ type: String, description: 'Business identifier for Reference' })
   @IsNotEmpty()
   @IsString()
-  customerId: string;
+  customerId!: string;
 
   @ApiProperty({ type: Number })
   @IsNotEmpty()
   @IsNumber()
   @Min(1)
-  sequence: number;
+  sequence!: number;
 
   @ApiProperty({ enum: Days, description: 'Day of the week for the route-customer mapping' })
   @IsNotEmpty()
   @IsEnum(Days)
-  day: Days;
+  day!: Days;
 
   @ApiPropertyOptional({ type: Date  })
   @IsOptional()

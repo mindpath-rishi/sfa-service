@@ -19,68 +19,68 @@ export class SaleItem {
   /* ================= REFERENCES ================= */
 
   @Prop({ type: String, required: true, index: true })
-  saleId: string;
+  saleId!: string;
 
   @Prop({ type: String, required: true, index: true })
-  productId: string;
+  productId!: string;
 
   @Prop({ type: String, required: true })
-  productName: string;
+  productName!: string;
 
   /* ================= QUANTITY ================= */
 
   @Prop({ type: Number, default: 0 })
-  caseQty: number;
+  caseQty!: number;
 
   @Prop({ type: Number, default: 0 })
-  pieceQty: number;
+  pieceQty!: number;
 
   @Prop({ type: Number, required: true })
-  quantity: number;
+  quantity!: number;
 
   /* ================= RETURNS ================= */
 
   @Prop({ type: Number, default: 0 })
-  returnCaseQty: number;
+  returnCaseQty!: number;
 
   @Prop({ type: Number, default: 0 })
-  returnPieceQty: number;
+  returnPieceQty!: number;
 
   @Prop({ type: Number, default: 0 })
-  returnQty: number;
+  returnQty!: number;
 
   /* ================= PRICE ================= */
 
   // 🔥 Base (source of truth)
   @Prop({ type: Number, required: true })
-  piecePrice: number;
+  piecePrice!: number;
 
   // 🔥 Derived snapshot
   @Prop({ type: Number, required: true })
-  casePrice: number;
+  casePrice!: number;
 
   /* ================= WEIGHT ================= */
 
   // 🔥 Base (source of truth)
   @Prop({ type: Number, required: true })
-  pieceNetWeight: number;
+  pieceNetWeight!: number;
 
   // 🔥 Derived snapshot
   @Prop({ type: Number, required: true })
-  caseNetWeight: number;
+  caseNetWeight!: number;
 
   /* ================= TOTALS ================= */
 
   @Prop({ type: Number, default: 0 })
-  totalWeight: number;
+  totalWeight!: number;
 
   @Prop({ type: Number, default: 0 })
-  totalValue: number;
+  totalValue!: number;
 
   /* ================= CONVERSION ================= */
 
   @Prop({ required: true, type: Number })
-  unitQtyInCase: number;
+  unitQtyInCase!: number;
 }
 
 export const SaleItemSchema = SchemaFactory.createForClass(SaleItem);

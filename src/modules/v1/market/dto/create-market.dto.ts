@@ -18,7 +18,7 @@ export class CreateMarketDto {
   @ApiProperty()
   @IsNotEmpty()
   @IsString()
-  name: string;
+  name!: string;
   /**
    * Status
    * ------

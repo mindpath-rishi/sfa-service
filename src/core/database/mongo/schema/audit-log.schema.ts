@@ -28,10 +28,10 @@ export class AuditLog extends Document {
    * ====================================================== */
 
   @Prop({ required: true, index: true })
-  entity: string; // e.g. Customer, Employee, Order
+  entity!: string; // e.g. Customer, Employee, Order
 
   @Prop({ required: true, index: true })
-  entityId: string; // customerId / employeeId / orderId
+  entityId!: string; // customerId / employeeId / orderId
 
   @Prop({
     type: String,
@@ -39,7 +39,7 @@ export class AuditLog extends Document {
     required: true,
     index: true,
   })
-  action: AuditAction;
+  action!: AuditAction;
 
   /* ======================================================
    * CHANGE SNAPSHOTS
@@ -63,7 +63,7 @@ export class AuditLog extends Document {
     },
     required: true,
   })
-  performedBy: {
+  performedBy!: {
     employeeId: string;
     name?: string;
     role?: string;

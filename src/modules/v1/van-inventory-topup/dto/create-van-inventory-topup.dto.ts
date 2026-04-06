@@ -23,12 +23,12 @@ export class CreateVanInventoryTopupDto {
   @ApiProperty({ type: String, description: 'Business identifier for van' })
   @IsNotEmpty()
   @IsString()
-  vanId: string;
+  vanId!: string;
 
   @ApiProperty({ type: String })
   @IsNotEmpty()
   @IsString()
-  vanName: string;
+  vanName!: string;
 
   @ApiProperty({
     type: String,
@@ -36,7 +36,7 @@ export class CreateVanInventoryTopupDto {
   })
   @IsNotEmpty()
   @IsString()
-  employeeId: string;
+  employeeId!: string;
 
   @ApiProperty({
     type: String,
@@ -44,12 +44,12 @@ export class CreateVanInventoryTopupDto {
   })
   @IsNotEmpty()
   @IsString()
-  warehouseId: string;
+  warehouseId!: string;
 
   @ApiProperty({ type: Date })
   @IsNotEmpty()
   @IsDate()
-  date: Date;
+  date!: Date;
 
   @ApiPropertyOptional({ type: Number, default: 0 })
   @IsOptional()
@@ -110,5 +110,5 @@ export class CreateVanInventoryTopupDto {
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => CreateVanInventoryTopupItemDto)
-  items: CreateVanInventoryTopupItemDto[];
+  items!: CreateVanInventoryTopupItemDto[];
 }

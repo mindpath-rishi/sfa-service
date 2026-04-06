@@ -20,14 +20,14 @@ export class GeoTagDto {
   @IsNumber()
   @Min(-90)
   @Max(90)
-  lat: number;
+  lat!: number;
 
   @ApiProperty({ type: Number })
   @IsNotEmpty()
   @IsNumber()
   @Min(-180)
   @Max(180)
-  lng: number;
+  lng!: number;
 }
 
 class AddressDto {
@@ -35,7 +35,7 @@ class AddressDto {
   @IsNotEmpty()
   @IsString()
   @Length(3, 150)
-  line1: string;
+  line1!: string;
 
   @ApiProperty({ example: 'Near City Mall', required: false })
   @IsOptional()
@@ -53,57 +53,57 @@ export class CreateCustomerDto {
   @ApiProperty({ type: String, description: 'Reference ID' })
   @IsNotEmpty()
   @IsString()
-  customerCategoryId: string;
+  customerCategoryId!: string;
 
   @ApiProperty({ type: String, description: 'Reference ID' })
   @IsNotEmpty()
   @IsString()
-  channelId: string;
+  channelId!: string;
 
   @ApiProperty({ type: String, description: 'Reference ID' })
   @IsNotEmpty()
   @IsString()
-  customerTypeId: string;
+  customerTypeId!: string;
 
   @ApiProperty({ type: String, description: 'Reference ID' })
   @IsNotEmpty()
   @IsString()
-  marketId: string;
+  marketId!: string;
 
   @ApiProperty({ type: String, description: 'Reference ID' })
   @IsNotEmpty()
   @IsString()
-  provinceId: string;
+  provinceId!: string;
 
   @ApiProperty({ type: String })
   @IsNotEmpty()
   @IsString()
-  ownerName: string;
+  ownerName!: string;
 
   @ApiProperty({ type: String })
   @IsNotEmpty()
   @IsString()
-  phoneNumber: string;
+  phoneNumber!: string;
 
   @ApiProperty({ type: String })
   @IsNotEmpty()
   @IsString()
-  name: string;
+  name!: string;
 
   @ApiProperty({ type: AddressDto })
   @ValidateNested()
   @Type(() => AddressDto)
-  address: AddressDto;
+  address!: AddressDto;
 
   @ApiProperty({ type: Number })
   @IsNotEmpty()
   @IsNumber()
-  creditLimit: number;
+  creditLimit!: number;
 
   @ApiProperty({ type: Number })
   @IsNotEmpty()
   @IsNumber()
-  outstanding: number;
+  outstanding!: number;
 
   @ApiPropertyOptional({
     type: () => GeoTagDto,

@@ -17,12 +17,12 @@ export class CreateActivityDto {
   @ApiProperty({ type: String })
   @IsNotEmpty()
   @IsString()
-  name: string;
+  name!: string;
 
   @ApiProperty({ type: String })
   @IsNotEmpty()
   @IsString()
-  workSessionId: string;
+  workSessionId!: string;
 
   /**
    * ✅ Required only if activityName = Retailing

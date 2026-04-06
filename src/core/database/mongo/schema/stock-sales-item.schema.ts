@@ -27,84 +27,84 @@ export class StockSalesItem {
    * ====================================================== */
 
   @Prop({ type: String, required: true, index: true })
-  stockSalesId: string;
+  stockSalesId!: string;
 
   @Prop({ type: String, required: true, index: true })
-  productId: string;
+  productId!: string;
 
   /* ======================================================
    * PRICE & WEIGHT
    * ====================================================== */
 
   @Prop({ type: Number, required: true })
-  price: number;
+  price!: number;
 
   @Prop({ type: Number, required: true })
-  weight: number;
+  weight!: number;
 
   /* ======================================================
    * SYSTEM STOCK SNAPSHOT
    * ====================================================== */
 
   @Prop({ type: Number, default: 0 })
-  systemStock: number;
+  systemStock!: number;
 
   @Prop({ type: Number, default: 0 })
-  systemStockWeight: number;
+  systemStockWeight!: number;
 
   @Prop({ type: Number, default: 0 })
-  systemStockValue: number;
+  systemStockValue!: number;
 
   /* ======================================================
    * STOCK MOVEMENT
    * ====================================================== */
 
   @Prop({ type: Number, default: 0 })
-  openingBalance: number;
+  openingBalance!: number;
 
   @Prop({ type: Number, default: 0 })
-  receivedQuantity: number;
+  receivedQuantity!: number;
 
   @Prop({ type: Number, default: 0 })
-  physicalStock: number;
+  physicalStock!: number;
 
   @Prop({ type: Number, default: 0 })
-  returnsQuantity: number;
+  returnsQuantity!: number;
 
   @Prop({ type: Number, default: 0 })
-  damageQuantity: number;
+  damageQuantity!: number;
 
   @Prop({ type: Number, default: 0 })
-  transferOutQuantity: number;
+  transferOutQuantity!: number;
 
   @Prop({ type: Number, default: 0 })
-  transferInQuantity: number;
+  transferInQuantity!: number;
 
   /* ======================================================
    * SALES
    * ====================================================== */
 
   @Prop({ type: Number, default: 0 })
-  salesQuantity: number;
+  salesQuantity!: number;
 
   @Prop({ type: Number, default: 0 })
-  salesValue: number;
+  salesValue!: number;
 
   @Prop({ type: Number, default: 0 })
-  salesWeight: number;
+  salesWeight!: number;
 
   /* ======================================================
    * VARIANCE
    * ====================================================== */
 
   @Prop({ type: Number, default: 0 })
-  expectedClosingBalance: number;
+  expectedClosingBalance!: number;
 
   @Prop({ type: Number, default: 0 })
-  variance: number;
+  variance!: number;
 
   @Prop({ type: Number, default: 0 })
-  varianceWeight: number;
+  varianceWeight!: number;
 }
 
 export const StockSalesItemSchema =

@@ -11,17 +11,17 @@ export class CreateVanInventoryTopupItemDto {
   @ApiProperty({ type: String, description: 'Business identifier for vanInventoryTopup' })
   @IsNotEmpty()
   @IsString()
-  vanInventoryTopupId: string;
+  vanInventoryTopupId!: string;
 
   @ApiProperty({ type: String, description: 'Business identifier for product' })
   @IsNotEmpty()
   @IsString()
-  productId: string;
+  productId!: string;
 
   @ApiProperty({ type: String })
   @IsNotEmpty()
   @IsString()
-  productName: string;
+  productName!: string;
 
   @ApiPropertyOptional({ type: Number , default: 0 })
   @IsOptional()
@@ -36,7 +36,7 @@ export class CreateVanInventoryTopupItemDto {
   @ApiProperty({ type: Number })
   @IsNotEmpty()
   @IsNumber()
-  requestedQty: number;
+  requestedQty!: number;
 
   @ApiPropertyOptional({ type: Number , default: 0 })
   @IsOptional()
@@ -56,22 +56,22 @@ export class CreateVanInventoryTopupItemDto {
   @ApiProperty({ type: Number })
   @IsNotEmpty()
   @IsNumber()
-  piecePrice: number;
+  piecePrice!: number;
 
   @ApiProperty({ type: Number })
   @IsNotEmpty()
   @IsNumber()
-  casePrice: number;
+  casePrice!: number;
 
   @ApiProperty({ type: Number })
   @IsNotEmpty()
   @IsNumber()
-  pieceNetWeight: number;
+  pieceNetWeight!: number;
 
   @ApiProperty({ type: Number })
   @IsNotEmpty()
   @IsNumber()
-  caseNetWeight: number;
+  caseNetWeight!: number;
 
   @ApiPropertyOptional({ type: Number , default: 0 })
   @IsOptional()
@@ -96,7 +96,7 @@ export class CreateVanInventoryTopupItemDto {
   @ApiProperty({ type: Number })
   @IsNotEmpty()
   @IsNumber()
-  unitQtyInCase: number;
+  unitQtyInCase!: number;
 
   @ApiPropertyOptional({ type: String })
   @IsOptional()

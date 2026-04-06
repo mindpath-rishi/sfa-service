@@ -41,7 +41,7 @@ export class CreateRoleDto {
   })
   @IsString()
   @MaxLength(50)
-  name: string;
+  name!: string;
 
   /**
    * Role Description
@@ -78,7 +78,7 @@ export class CreateRoleDto {
   @IsArray()
   @ArrayUnique()
   @IsString({ each: true })
-  permissions: string[];
+  permissions!: string[];
 
   /**
    * Max Associated Vans

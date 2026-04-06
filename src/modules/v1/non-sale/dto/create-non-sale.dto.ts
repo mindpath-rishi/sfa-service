@@ -21,7 +21,7 @@ export class CreateNonSaleDto {
   })
   @IsNotEmpty()
   @IsString()
-  visitId: string;
+  visitId!: string;
 
   @ApiProperty({
     type: String,
@@ -29,7 +29,7 @@ export class CreateNonSaleDto {
   })
   @IsNotEmpty()
   @IsString()
-  outletId: string;
+  outletId!: string;
 
   // @ApiProperty({
   //   type: String,
@@ -45,17 +45,17 @@ export class CreateNonSaleDto {
   })
   @IsNotEmpty()
   @IsString()
-  vanId: string;
+  vanId!: string;
 
   @ApiProperty({ type: String })
   @IsNotEmpty()
   @IsString()
-  reasonCategoryId: string;
+  reasonCategoryId!: string;
 
   @ApiProperty({ type: String })
   @IsNotEmpty()
   @IsString()
-  reasonId: string;
+  reasonId!: string;
 
   /**
    * Remark

@@ -11,31 +11,31 @@ export class CreateStockCountItemDto {
   @ApiProperty({ type: String, description: 'Business identifier for stockCount' })
   @IsNotEmpty()
   @IsString()
-  stockCountId: string;
+  stockCountId!: string;
 
   @ApiProperty({ type: String, description: 'Business identifier for product' })
   @IsNotEmpty()
   @IsString()
-  productId: string;
+  productId!: string;
 
   @ApiProperty({ type: Number })
   @IsNotEmpty()
   @IsNumber()
-  stock: number;
+  stock!: number;
 
   @ApiProperty({ type: Number })
   @IsNotEmpty()
   @IsNumber()
-  weight: number;
+  weight!: number;
 
   @ApiProperty({ type: Number })
   @IsNotEmpty()
   @IsNumber()
-  value: number;
+  value!: number;
 
   @ApiProperty({ type: Number })
   @IsNotEmpty()
   @IsNumber()
-  price: number;
+  price!: number;
 
 }

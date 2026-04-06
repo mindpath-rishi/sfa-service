@@ -4,13 +4,13 @@ import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IsOptional, IsString, IsEnum } from 'class-validator';
 
 export class UpdateCustomerCategoryDto {
-/**
- * CustomerCategory Update DTO
- * ====================
- * Data Transfer Object for updating CustomerCategory records
- * 
- * All fields are optional for partial updates
- */
+  /**
+   * CustomerCategory Update DTO
+   * ====================
+   * Data Transfer Object for updating CustomerCategory records
+   *
+   * All fields are optional for partial updates
+   */
   /**
    * Name
    * ----
@@ -27,9 +27,11 @@ export class UpdateCustomerCategoryDto {
    * Customer category availability status
    */
 
-  @ApiPropertyOptional({ example: CustomerCategoryStatus.ACTIVE, enum: CustomerCategoryStatus })
+  @ApiPropertyOptional({
+    example: CustomerCategoryStatus.ACTIVE,
+    enum: CustomerCategoryStatus,
+  })
   @IsOptional()
   @IsEnum(CustomerCategoryStatus)
   status?: CustomerCategoryStatus;
-
 }

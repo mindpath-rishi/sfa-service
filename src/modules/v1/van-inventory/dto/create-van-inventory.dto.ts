@@ -13,18 +13,18 @@ export class CreateVanInventoryDto {
   @ApiProperty({ type: String, description: 'Business identifier for product' })
   @IsNotEmpty()
   @IsString()
-  productId: string;
+  productId!: string;
 
   @ApiProperty({ type: String, description: 'Business identifier for van' })
   @IsNotEmpty()
   @IsString()
-  vanId: string;
+  vanId!: string;
 
   @ApiProperty({ type: Number })
   @IsNotEmpty()
   @IsNumber()
   @Min(0.00001)
-  quantity: number;
+  quantity!: number;
 
   @ApiPropertyOptional({ type: Number , default: 0 })
   @IsOptional()

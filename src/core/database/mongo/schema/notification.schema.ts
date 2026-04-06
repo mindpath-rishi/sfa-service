@@ -30,7 +30,7 @@ export class Notification {
 
   // User who receives this notification
   @Prop({ required: true, index: true, type: String })
-  recipientId: string;
+  recipientId!: string;
 
   /* ======================================================
    * CONTENT
@@ -38,15 +38,15 @@ export class Notification {
 
   // Notification title
   @Prop({ required: true, trim: true, type: String })
-  title: string;
+  title!: string;
 
   // Notification body/message
   @Prop({ required: true, trim: true, type: String })
-  body: string;
+  body!: string;
 
   // Custom payload (orderId, routeId, etc.)
   @Prop({ type: Object, default: {} })
-  data: Record<string, any>;
+  data!: Record<string, any>;
 
   /* ======================================================
    * DELIVERY
@@ -59,7 +59,7 @@ export class Notification {
     default: NotificationDeliveryStatus.PENDING,
     index: true,
   })
-  deliveryStatus: NotificationDeliveryStatus;
+  deliveryStatus!: NotificationDeliveryStatus;
 
   // Error message if push failed
   @Prop({ type: String })
@@ -75,7 +75,7 @@ export class Notification {
 
   // Whether user has read this notification
   @Prop({ default: false, index: true, type: Boolean })
-  isRead: boolean;
+  isRead!: boolean;
 
   // Timestamp when notification was read
   @Prop({ type: Date })

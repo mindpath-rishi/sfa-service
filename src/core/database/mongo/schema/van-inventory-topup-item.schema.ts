@@ -7,70 +7,70 @@ export type VanInventoryTopupItemDocument =
 @Schema({ collection: 'van_inventory_topup_items', timestamps: true })
 export class VanInventoryTopupItem {
   @Prop({ type: String, required: true, index: true })
-  vanInventoryTopupId: string;
+  vanInventoryTopupId!: string;
 
   @Prop({ type: String, required: true, index: true })
-  productId: string;
+  productId!: string;
 
   @Prop({ type: String, required: true })
-  productName: string;
+  productName!: string;
 
   /* ================= REQUESTED ================= */
 
   @Prop({ type: Number, default: 0 })
-  requestedCaseQty: number;
+  requestedCaseQty!: number;
 
   @Prop({ type: Number, default: 0 })
-  requestedPieceQty: number;
+  requestedPieceQty!: number;
 
   @Prop({ type: Number, required: true })
-  requestedQty: number;
+  requestedQty!: number;
 
   /* ================= APPROVED ================= */
 
   @Prop({ type: Number, default: 0 })
-  approvedCaseQty: number;
+  approvedCaseQty!: number;
 
   @Prop({ type: Number, default: 0 })
-  approvedPieceQty: number;
+  approvedPieceQty!: number;
 
   @Prop({ type: Number, default: 0 })
-  approvedQty: number;
+  approvedQty!: number;
 
   /* ================= PRICE ================= */
 
   @Prop({ type: Number, required: true })
-  piecePrice: number;
+  piecePrice!: number;
 
   @Prop({ type: Number, required: true })
-  casePrice: number;
+  casePrice!: number;
 
   /* ================= WEIGHT ================= */
 
   @Prop({ type: Number, required: true })
-  pieceNetWeight: number;
+  pieceNetWeight!: number;
 
   @Prop({ type: Number, required: true })
-  caseNetWeight: number;
+  caseNetWeight!: number;
 
   /* ================= TOTALS ================= */
 
   @Prop({ type: Number, default: 0 })
-  requestedWeight: number;
+  requestedWeight!: number;
 
   @Prop({ type: Number, default: 0 })
-  requestedValue: number;
+  requestedValue!: number;
 
   @Prop({ type: Number, default: 0 })
-  approvedWeight: number;
+  approvedWeight!: number;
 
   @Prop({ type: Number, default: 0 })
-  approvedValue: number;
+  approvedValue!: number;
 
   /* ================= CONVERSION ================= */
 
   @Prop({ required: true, type: Number })
-  unitQtyInCase: number;
+  unitQtyInCase!: number;
 
   /* ================= META ================= */
 

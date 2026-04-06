@@ -18,7 +18,7 @@ export class CreateOutletTypeDto {
   @ApiProperty()
   @IsNotEmpty()
   @IsString()
-  name: string;
+  name!: string;
   /**
    * Status
    * ------

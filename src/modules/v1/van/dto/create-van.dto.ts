@@ -22,7 +22,7 @@ export class CreateVanDto {
    */
   @ApiProperty({ example: 'VID-001' })
   @IsString()
-  vanId: string;
+  vanId!: string;
 
   /**
    * Van Name
@@ -32,7 +32,7 @@ export class CreateVanDto {
    */
   @ApiProperty({ example: 'Delivery Van 1' })
   @IsString()
-  name: string;
+  name!: string;
 
   /**
    * Van Number
@@ -42,7 +42,7 @@ export class CreateVanDto {
    */
   @ApiProperty({ example: 'KA01AB1234' })
   @IsString()
-  vanNumber: string;
+  vanNumber!: string;
 
   /**
    * Capacity

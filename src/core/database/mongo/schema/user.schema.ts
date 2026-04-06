@@ -33,7 +33,7 @@ export class User {
     unique: true,
     index: true,
   })
-  profileId: string;
+  profileId!: string;
 
   /* ======================================================
    * LOGIN CREDENTIALS
@@ -46,7 +46,7 @@ export class User {
     trim: true,
     index: true,
   })
-  loginId: string;
+  loginId!: string;
 
   // Unique PER AGENT (composite index below)
   @Prop({
@@ -54,7 +54,7 @@ export class User {
     required: true,
     index: true,
   })
-  mobile: string;
+  mobile!: string;
 
   // Optional, unique PER AGENT (composite index below)
   @Prop({
@@ -71,7 +71,7 @@ export class User {
     required: true,
     select: false,
   })
-  password: string;
+  password!: string;
 
   /* ======================================================
    * STATUS & METADATA
@@ -83,7 +83,7 @@ export class User {
     default: UserStatus.ACTIVE,
     index: true,
   })
-  status: UserStatus;
+  status!: UserStatus;
 
   @Prop()
   lastLoginAt?: Date;

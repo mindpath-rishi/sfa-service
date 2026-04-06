@@ -99,7 +99,6 @@ export class RouteSessionService extends MongoRepository<RouteSession> {
             vanId: ctx?.vanId,
             vanName: ctx?.vanName,
             startTime: new Date(),
-            remainingShops: payload.totalShops,
             ...payload,
           },
           { session },

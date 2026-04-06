@@ -24,12 +24,12 @@ export class CreateSaleDto {
   @ApiProperty({ type: String, description: 'Business identifier for van' })
   @IsNotEmpty()
   @IsString()
-  vanId: string;
+  vanId!: string;
 
   @ApiProperty({ type: String })
   @IsNotEmpty()
   @IsString()
-  vanName: string;
+  vanName!: string;
 
   @ApiProperty({
     type: String,
@@ -37,12 +37,12 @@ export class CreateSaleDto {
   })
   @IsNotEmpty()
   @IsString()
-  customerId: string;
+  customerId!: string;
 
   @ApiProperty({ type: String })
   @IsNotEmpty()
   @IsString()
-  customerName: string;
+  customerName!: string;
 
   @ApiProperty({
     type: String,
@@ -50,17 +50,17 @@ export class CreateSaleDto {
   })
   @IsNotEmpty()
   @IsString()
-  employeeId: string;
+  employeeId!: string;
 
   @ApiProperty({ type: String })
   @IsNotEmpty()
   @IsString()
-  employeeName: string;
+  employeeName!: string;
 
   @ApiProperty({ type: Date })
   @IsNotEmpty()
   @IsDate()
-  date: Date;
+  date!: Date;
 
   @ApiPropertyOptional({ type: Number, default: 0 })
   @IsOptional()
@@ -75,17 +75,17 @@ export class CreateSaleDto {
   @ApiPropertyOptional({ type: Number, default: 0 })
   @IsNotEmpty()
   @IsNumber()
-  totalQty: number;
+  totalQty!: number;
 
   @ApiPropertyOptional({ type: Number, default: 0 })
   @IsNotEmpty()
   @IsNumber()
-  totalWeight: number;
+  totalWeight!: number;
 
   @ApiPropertyOptional({ type: Number, default: 0 })
   @IsNotEmpty()
   @IsNumber()
-  totalValue: number;
+  totalValue!: number;
 
   @ApiPropertyOptional({
     enum: SaleType,
@@ -104,12 +104,12 @@ export class CreateSaleDto {
   @ApiPropertyOptional({ type: Number, default: 0 })
   @IsOptional()
   @IsNumber()
-  paidAmount: number;
+  paidAmount!: number;
 
   @ApiPropertyOptional({ type: Number, default: 0 })
   @IsOptional()
   @IsNumber()
-  pendingAmount: number;
+  pendingAmount!: number;
 
   @ApiPropertyOptional({ type: String })
   @IsOptional()
@@ -129,7 +129,7 @@ export class CreateSaleDto {
   @ApiProperty({ enum: PaymentMode })
   @IsNotEmpty()
   @IsEnum(PaymentMode)
-  paymentMode: PaymentMode;
+  paymentMode!: PaymentMode;
 
   @ApiProperty({
     type: [CreateSaleItemDto],
@@ -138,5 +138,5 @@ export class CreateSaleDto {
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => CreateSaleItemDto)
-  items: CreateSaleItemDto[];
+  items!: CreateSaleItemDto[];
 }

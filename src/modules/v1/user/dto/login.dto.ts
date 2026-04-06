@@ -49,7 +49,7 @@ export class DeviceInfoDto {
   })
   @IsString({ message: 'Device ID must be a string' })
   @IsNotEmpty({ message: 'Device ID is required' })
-  deviceId: string;
+  deviceId!: string;
 
   /**
    * Device Type
@@ -70,7 +70,7 @@ export class DeviceInfoDto {
   @IsIn(['web', 'android', 'ios'], {
     message: 'Device type must be web, android, or ios',
   })
-  deviceType: 'web' | 'android' | 'ios';
+  deviceType!: 'web' | 'android' | 'ios';
 
   /**
    * Operating System
@@ -171,7 +171,7 @@ export class LoginDto {
   @IsNotEmpty({ message: 'Login ID is required' })
   @MinLength(3, { message: 'Login ID must be at least 3 characters' })
   @MaxLength(50, { message: 'Login ID must not exceed 50 characters' })
-  loginId: string;
+  loginId!: string;
 
   /**
    * Password
@@ -189,7 +189,7 @@ export class LoginDto {
   @IsString({ message: 'Password must be a string' })
   @IsNotEmpty({ message: 'Password is required' })
   @MinLength(6, { message: 'Password must be at least 6 characters' })
-  password: string;
+  password!: string;
 
   /**
    * Device Information
@@ -206,5 +206,5 @@ export class LoginDto {
   @IsObject({ message: 'Device info must be an object' })
   @ValidateNested()
   @Type(() => DeviceInfoDto)
-  deviceInfo: DeviceInfoDto;
+  deviceInfo!: DeviceInfoDto;
 }

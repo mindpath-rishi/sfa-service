@@ -83,13 +83,25 @@ export class WorkSessionController {
   }
 
   /**
+   * End WorkSession
+   * -------------------
+   */
+  @Permissions('WORK_SESSION_END')
+  @Post('complete')
+  // @ApiParam({ name: 'workSessionId', description: 'WorkSession workSessionId' })
+  async complete() {
+    // @Param('workSessionId') workSessionId: string,
+    // @Body() dto: UpdateWorkSessionDto,
+    return this.service.complete();
+  }
+  /**
    * Get Today Active Work Session
    * ---------------------
    */
   @Permissions('WORK_SESSION_VIEW')
-  @Get('today-active')
-  async getTodayActiveWorkSession() {
-    return this.service.getTodayActiveWorkSession();
+  @Get('today-activity')
+  async todayActivity() {
+    return this.service.todayActivity();
   }
 
   /**

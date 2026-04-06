@@ -32,11 +32,11 @@ export class ProductCategory {
 
   // Unique business identifier for category
   @Prop({ required: true, unique: true, type: String })
-  categoryId: string;
+  categoryId!: string;
 
   // Display name of category
   @Prop({ required: true, type: String })
-  name: string;
+  name!: string;
 
   /* ======================================================
    * STATUS
@@ -48,10 +48,10 @@ export class ProductCategory {
     enum: ProductCategoryStatus,
     default: ProductCategoryStatus.ACTIVE,
   })
-  status: ProductCategoryStatus;
+  status!: ProductCategoryStatus;
 
   @Prop({ default: false, type: Boolean })
-  isDeleted: boolean;
+  isDeleted!: boolean;
 }
 
 export const ProductCategorySchema =

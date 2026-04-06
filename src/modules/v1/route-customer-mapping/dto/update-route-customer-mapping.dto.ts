@@ -40,10 +40,11 @@ export class UpdateRouteCustomerMappingDto {
   @ApiPropertyOptional({
     enum: Days,
     description: 'Day of the week for the route-customer mapping',
+    default: Days.MON
   })
   @IsOptional()
   @IsEnum(Days)
-  day: Days;
+  day!: Days;
 
   @ApiPropertyOptional({
     enum: RouteCustomerMappingStatus,

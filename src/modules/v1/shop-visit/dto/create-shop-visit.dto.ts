@@ -22,7 +22,7 @@ export class CreateShopVisitDto {
   })
   @IsNotEmpty()
   @IsString()
-  routeSessionId: string;
+  routeSessionId!: string;
 
   @ApiProperty({
     type: String,
@@ -30,15 +30,15 @@ export class CreateShopVisitDto {
   })
   @IsNotEmpty()
   @IsString()
-  workSessionId: string;
+  workSessionId!: string;
 
   @ApiProperty({ type: String, description: 'Business identifier for van' })
   @IsNotEmpty()
   @IsString()
-  vanId: string;
+  vanId!: string;
 
   @ApiProperty({ type: String, description: 'Business identifier for outlet' })
   @IsNotEmpty()
   @IsString()
-  outletId: string;
+  outletId!: string;
 }

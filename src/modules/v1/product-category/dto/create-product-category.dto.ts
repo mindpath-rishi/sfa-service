@@ -12,5 +12,5 @@ export class ProductCategoryCreateDto {
 
   @ApiProperty({ example: 'Dairy Products' })
   @IsString()
-  name: string;
+  name!: string;
 }

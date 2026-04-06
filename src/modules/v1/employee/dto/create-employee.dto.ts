@@ -90,7 +90,7 @@ export class CreateEmployeeDto {
   @Matches(/^[0-9]{8,15}$/, {
     message: 'Mobile must contain only digits (8–15 characters)',
   })
-  mobile: string;
+  mobile!: string;
 
   /**
    * Login ID
@@ -103,7 +103,7 @@ export class CreateEmployeeDto {
   })
   @IsString({ message: 'Login ID must be a string' })
   @IsNotEmpty({ message: 'Login ID is required' })
-  loginId: string;
+  loginId!: string;
 
   /**
    * Full Name
@@ -116,7 +116,7 @@ export class CreateEmployeeDto {
   })
   @IsString({ message: 'Name must be a string' })
   @IsNotEmpty({ message: 'Name is required' })
-  name: string;
+  name!: string;
 
   /**
    * Email Address
@@ -128,7 +128,7 @@ export class CreateEmployeeDto {
     description: 'Employee email address',
   })
   @IsEmail({}, { message: 'Email must be a valid email address' })
-  email: string;
+  email!: string;
 
   /**
    * Password
@@ -140,18 +140,16 @@ export class CreateEmployeeDto {
    * - Must include uppercase, lowercase, number, and special character
    */
   @ApiProperty({
-    description:
-      'Strong password (min 8 chars, uppercase, lowercase, number, special character)',
+    description: 'Strong password (min 8 chars, uppercase, lowercase, number, special character)',
     example: 'Passw0rd@123',
   })
   @IsString({ message: 'Password must be a string' })
   @IsNotEmpty({ message: 'Password is required' })
   @MinLength(8, { message: 'Password must be at least 8 characters long' })
   @Matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])/, {
-    message:
-      'Password must include uppercase, lowercase, number, and special character',
+    message: 'Password must include uppercase, lowercase, number, and special character',
   })
-  password: string;
+  password!: string;
 
   /**
    * Role ID
@@ -164,7 +162,7 @@ export class CreateEmployeeDto {
   })
   @IsString({ message: 'roleId must be a string' })
   @IsNotEmpty({ message: 'roleId is required' })
-  roleId: string;
+  roleId!: string;
 
   /**
    * Permission Overrides

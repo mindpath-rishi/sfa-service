@@ -18,7 +18,7 @@ export class CreateCustomerCategoryDto {
   @ApiProperty()
   @IsNotEmpty()
   @IsString()
-  name: string;
+  name!: string;
   /**
    * Status
    * ------

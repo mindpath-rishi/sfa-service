@@ -37,14 +37,14 @@ export class RouteCustomerDto {
   })
   @IsNotEmpty()
   @IsString()
-  customerId: string;
+  customerId!: string;
 
   @ApiProperty({ type: Number, description: 'Visit sequence order' })
   @IsNotEmpty()
   @Type(() => Number) // ✅ FIX string → number
   @IsNumber()
   @Min(1)
-  sequence: number;
+  sequence!: number;
 }
 
 /* ======================================================
@@ -55,7 +55,7 @@ export class CreateRouteDto {
   @ApiProperty({ type: String })
   @IsNotEmpty()
   @IsString()
-  name: string;
+  name!: string;
 
   @ApiProperty({
     type: String,
@@ -63,7 +63,7 @@ export class CreateRouteDto {
   })
   @IsNotEmpty()
   @IsString()
-  beatId: string;
+  beatId!: string;
 
   /**
    * ✅ Customers Array
@@ -88,7 +88,7 @@ export class CreateRouteDto {
   })
   @IsNotEmpty()
   @IsEnum(RouteDay)
-  day: RouteDay;
+  day!: RouteDay;
 
   /**
    * ✅ Distance

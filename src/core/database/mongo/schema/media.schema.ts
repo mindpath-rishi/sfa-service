@@ -89,7 +89,7 @@ export class Media {
    * ====================================================== */
 
   @Prop({ type: String, required: true, unique: true, trim: true })
-  mediaId: string;
+  mediaId!: string;
 
   /* ======================================================
    * OWNER LINKAGE
@@ -101,10 +101,10 @@ export class Media {
     enum: Object.values(MEDIA_OWNER_TYPE),
     index: true,
   })
-  ownerType: string;
+  ownerType!: string;
 
   @Prop({ type: String, required: true, index: true })
-  ownerId: string;
+  ownerId!: string;
 
   @Prop({ type: String, default: null, index: true })
   subOwnerId?: string | null;
@@ -119,7 +119,7 @@ export class Media {
     default: MEDIA_TYPE.IMAGE,
     index: true,
   })
-  mediaType: string;
+  mediaType!: string;
 
   @Prop({
     type: String,
@@ -127,17 +127,17 @@ export class Media {
     default: MEDIA_PURPOSE.OTHER,
     index: true,
   })
-  purpose: string;
+  purpose!: string;
 
   /* ======================================================
    * STORAGE
    * ====================================================== */
 
   @Prop({ type: String, required: true, index: true })
-  storageKey: string;
+  storageKey!: string;
 
   @Prop({ type: String, required: true })
-  url: string;
+  url!: string;
 
   @Prop({ type: MediaUrlsSchema, default: undefined })
   urls?: MediaUrls;
@@ -166,10 +166,10 @@ export class Media {
    * ====================================================== */
 
   @Prop({ type: Number, default: 1, index: true })
-  sortOrder: number;
+  sortOrder!: number;
 
   @Prop({ type: Boolean, default: false, index: true })
-  isPrimary: boolean;
+  isPrimary!: boolean;
 
   /* ======================================================
    * METADATA
@@ -183,7 +183,7 @@ export class Media {
    * ====================================================== */
 
   @Prop({ type: Boolean, default: false, index: true })
-  isDeleted: boolean;
+  isDeleted!: boolean;
 }
 
 export const MediaSchema = SchemaFactory.createForClass(Media);

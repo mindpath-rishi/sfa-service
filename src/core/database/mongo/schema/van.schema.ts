@@ -30,13 +30,13 @@ export type VanDocument = HydratedDocument<Van>;
 @Schema({ _id: false, timestamps: false })
 export class VanRoute {
   @Prop({ required: true, type: String })
-  routeId: string;
+  routeId!: string;
 
   @Prop({ required: true, type: Date })
-  fromDate: Date;
+  fromDate!: Date;
 
   @Prop({ required: true, type: Date })
-  toDate: Date;
+  toDate!: Date;
 }
 
 export const VanRouteSchema = SchemaFactory.createForClass(VanRoute);
@@ -52,13 +52,13 @@ export class Van {
    * ====================================================== */
 
   @Prop({ required: true, unique: true, index: true, type: String })
-  vanId: string;
+  vanId!: string;
 
   @Prop({ required: true, type: String })
-  name: string;
+  name!: string;
 
   @Prop({ required: true, unique: true, index: true, type: String })
-  vanNumber: string;
+  vanNumber!: string;
 
   /* ======================================================
    * SPECIFICATIONS
@@ -78,7 +78,7 @@ export class Van {
     type: [String],
     default: [],
   })
-  associatedUsers: string[];
+  associatedUsers!: string[];
 
   /**
    * Routes associated with this van (date-based)
@@ -87,7 +87,7 @@ export class Van {
     type: [VanRouteSchema],
     default: [],
   })
-  associatedRoutes: VanRoute[];
+  associatedRoutes!: VanRoute[];
 
   /* ======================================================
    * STATUS
@@ -99,7 +99,7 @@ export class Van {
     default: VanStatus.ACTIVE,
     required: true,
   })
-  status: VanStatus;
+  status!: VanStatus;
 }
 
 export const VanSchema = SchemaFactory.createForClass(Van);

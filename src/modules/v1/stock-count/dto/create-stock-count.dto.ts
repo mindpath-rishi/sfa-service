@@ -13,12 +13,12 @@ export class CreateStockCountDto {
   @ApiProperty({ type: String, description: 'Business identifier for van' })
   @IsNotEmpty()
   @IsString()
-  vanId: string;
+  vanId!: string;
 
   @ApiProperty({ type: String, description: 'Business identifier for employee' })
   @IsNotEmpty()
   @IsString()
-  employeeId: string;
+  employeeId!: string;
 
   @ApiPropertyOptional({ type: Number , default: 0 })
   @IsOptional()

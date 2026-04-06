@@ -26,6 +26,8 @@ import { ActivityService } from '../activity/activity.service';
 import { RouteSessionService } from '../route-session/route-session.service';
 import { CreateActivityDto } from '../activity/dto/create-activity.dto';
 import { CreateRouteSessionDto } from '../route-session/dto/create-route-session.dto';
+import { ActivityStatus } from 'src/shared/enums/activity.enums';
+import { RouteSessionStatus } from 'src/shared/enums/route-session.enums';
 
 @Injectable()
 export class WorkSessionService extends MongoRepository<WorkSession> {
@@ -329,7 +331,81 @@ export class WorkSessionService extends MongoRepository<WorkSession> {
     }
   }
 
-  async getTodayActiveWorkSession() {
+  async complete() {
+    try {
+      return await this.withTransaction(async (session) => {
+        const ctx = RequestContextStore.getStore();
+
+        /* ===== TODAY START ===== */
+        const startOfDay = new Date();
+        startOfDay.setHours(0, 0, 0, 0);
+
+        console.log(
+          startOfDay,
+          '==================start of day===============',
+        );
+
+        /* ===== 1. FIND ACTIVE WORK SESSION ===== */
+        const workSession = await this.findOne({
+          userId: ctx?.userId,
+          createdAt: { $gte: startOfDay },
+          status: WorkSessionStatus.ACTIVE,
+        });
+
+        if (!workSession) {
+          throw new NotFoundException(WORK_SESSION.NOT_FOUND);
+        }
+
+        const { workSessionId } = workSession;
+
+        /* ===== 2. COMPLETE WORK SESSION ===== */
+        workSession.dayEndTime = new Date();
+        workSession.status = WorkSessionStatus.COMPLETED;
+
+        await workSession.save({ session });
+
+        /* ===== 3. FIND ACTIVE ACTIVITY ===== */
+        await this.activityService.updateOne(
+          {
+            workSessionId,
+            status: ActivityStatus.ACTIVE,
+          },
+          {
+            endTime: new Date(),
+            status: ActivityStatus.COMPLETED,
+          },
+          {
+            session,
+          },
+        );
+
+        await /* ===== 3. FIND ACTIVE ACTIVITY ===== */
+        await this.routeSessionService.updateOne(
+          {
+            workSessionId,
+            status: RouteSessionStatus.ACTIVE,
+          },
+          {
+            endTime: new Date(),
+            status: RouteSessionStatus.COMPLETED,
+          },
+          {
+            session,
+          },
+        );
+
+        return {
+          statusCode: HttpStatus.OK,
+          message: WORK_SESSION.UPDATED,
+          data: workSession,
+        };
+      });
+    } catch (error) {
+      this.handleDuplicateError(error);
+    }
+  }
+
+  async todayActivity() {
     const ctx = RequestContextStore.getStore();
 
     const todayStart = new Date();
@@ -338,11 +414,121 @@ export class WorkSessionService extends MongoRepository<WorkSession> {
     const todayEnd = new Date();
     todayEnd.setHours(23, 59, 59, 999);
 
+    // const pipeline: any[] = [
+    //   {
+    //     $match: {
+    //       userId: ctx?.userId,
+    //       status: WorkSessionStatus.ACTIVE,
+    //       createdAt: {
+    //         $gte: todayStart,
+    //         $lte: todayEnd,
+    //       },
+    //     },
+    //   },
+
+    //   /**
+    //    * ✅ Get ALL activities
+    //    */
+    //   {
+    //     $lookup: {
+    //       from: 'activities',
+    //       let: { wsId: '$workSessionId' },
+    //       pipeline: [
+    //         {
+    //           $match: {
+    //             $expr: {
+    //               $eq: ['$workSessionId', '$$wsId'],
+    //             },
+    //           },
+    //         },
+    //         {
+    //           $sort: { createdAt: -1 },
+    //         },
+    //       ],
+    //       as: 'activities',
+    //     },
+    //   },
+
+    //   /**
+    //    * ✅ Selected route
+    //    */
+    //   {
+    //     $lookup: {
+    //       from: 'route_sessions',
+    //       let: { wsId: '$workSessionId' },
+    //       pipeline: [
+    //         {
+    //           $match: {
+    //             $expr: {
+    //               $and: [
+    //                 { $eq: ['$workSessionId', '$$wsId'] },
+    //                 { $eq: ['$status', WorkSessionStatus.ACTIVE] },
+    //               ],
+    //             },
+    //           },
+    //         },
+    //       ],
+    //       as: 'selectedRoute',
+    //     },
+    //   },
+    //   {
+    //     $unwind: {
+    //       path: '$selectedRoute',
+    //       preserveNullAndEmptyArrays: true,
+    //     },
+    //   },
+
+    //   /**
+    //    * ✅ Extract ACTIVE activity object
+    //    */
+    //   {
+    //     $addFields: {
+    //       activeActivity: {
+    //         $ifNull: [
+    //           {
+    //             $first: {
+    //               $filter: {
+    //                 input: '$activities',
+    //                 as: 'act',
+    //                 cond: {
+    //                   $eq: ['$$act.status', WorkSessionStatus.ACTIVE],
+    //                 },
+    //               },
+    //             },
+    //           },
+    //           {},
+    //         ],
+    //       },
+    //     },
+    //   },
+
+    //   /**
+    //    * ✅ Final response
+    //    */
+    //   {
+    //     $project: {
+    //       _id: 0,
+    //       workSessionId: 1,
+    //       userId: 1,
+    //       activityName: 1,
+    //       status: 1,
+    //       routeId: 1,
+    //       totalShops: 1,
+    //       activeActivity: 1,
+    //       activities: 1,
+    //       selectedRoute: 1,
+    //     },
+    //   },
+
+    //   { $sort: { createdAt: -1 } },
+    //   { $limit: 1 },
+    // ];
+
     const pipeline: any[] = [
+      /* ===== 1. MATCH ALL TODAY SESSIONS ===== */
       {
         $match: {
           userId: ctx?.userId,
-          status: WorkSessionStatus.ACTIVE,
           createdAt: {
             $gte: todayStart,
             $lte: todayEnd,
@@ -350,9 +536,21 @@ export class WorkSessionService extends MongoRepository<WorkSession> {
         },
       },
 
-      /**
-       * ✅ Get ALL activities
-       */
+      /* ===== 2. PRIORITIZE ACTIVE SESSION ===== */
+      {
+        $addFields: {
+          isActive: {
+            $cond: [{ $eq: ['$status', WorkSessionStatus.ACTIVE] }, 1, 0],
+          },
+        },
+      },
+
+      { $sort: { isActive: -1, createdAt: -1 } },
+
+      /* ===== 3. PICK ONE SESSION ===== */
+      { $limit: 1 },
+
+      /* ===== 4. GET ACTIVITIES OF THIS SESSION ===== */
       {
         $lookup: {
           from: 'activities',
@@ -360,22 +558,54 @@ export class WorkSessionService extends MongoRepository<WorkSession> {
           pipeline: [
             {
               $match: {
-                $expr: {
-                  $eq: ['$workSessionId', '$$wsId'],
-                },
+                $expr: { $eq: ['$workSessionId', '$$wsId'] },
               },
             },
-            {
-              $sort: { createdAt: -1 },
-            },
+            { $sort: { createdAt: -1 } },
           ],
           as: 'activities',
         },
       },
 
-      /**
-       * ✅ Selected route
-       */
+      /* ===== 5. GET ALL TODAY ACTIVITIES ===== */
+      {
+        $lookup: {
+          from: 'activities',
+          let: { userId: '$userId' },
+          pipeline: [
+            {
+              $match: {
+                $expr: { $eq: ['$userId', '$$userId'] },
+                createdAt: {
+                  $gte: todayStart,
+                  $lte: todayEnd,
+                },
+              },
+            },
+            { $sort: { createdAt: -1 } },
+          ],
+          as: 'todayAllActivities',
+        },
+      },
+
+      /* ===== 6. SELECT ACTIVE ACTIVITY ===== */
+      {
+        $addFields: {
+          activeActivity: {
+            $first: {
+              $filter: {
+                input: '$activities',
+                as: 'act',
+                cond: {
+                  $eq: ['$$act.status', WorkSessionStatus.ACTIVE],
+                },
+              },
+            },
+          },
+        },
+      },
+
+      /* ===== 7. ROUTE (UNCHANGED) ===== */
       {
         $lookup: {
           from: 'route_sessions',
@@ -402,52 +632,20 @@ export class WorkSessionService extends MongoRepository<WorkSession> {
         },
       },
 
-      /**
-       * ✅ Extract ACTIVE activity object
-       */
-      {
-        $addFields: {
-          activeActivity: {
-            $ifNull: [
-              {
-                $first: {
-                  $filter: {
-                    input: '$activities',
-                    as: 'act',
-                    cond: {
-                      $eq: ['$$act.status', WorkSessionStatus.ACTIVE],
-                    },
-                  },
-                },
-              },
-              {},
-            ],
-          },
-        },
-      },
-
-      /**
-       * ✅ Final response
-       */
+      /* ===== 8. FINAL RESPONSE ===== */
       {
         $project: {
           _id: 0,
           workSessionId: 1,
           userId: 1,
-          activityName: 1,
           status: 1,
-          routeId: 1,
-          totalShops: 1,
           activeActivity: 1,
-          activities: 1,
+          activities: 1, // session activities
+          todayActivities: '$todayAllActivities', // all today activities
           selectedRoute: 1,
         },
       },
-
-      { $sort: { createdAt: -1 } },
-      { $limit: 1 },
     ];
-
     const result = await this.model.aggregate(pipeline);
     const doc = result?.[0];
 

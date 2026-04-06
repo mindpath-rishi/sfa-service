@@ -26,7 +26,7 @@ export class ProductCreateDto {
   @ApiProperty({ example: 'PID-001', required: true })
   @IsNotEmpty()
   @IsString()
-  productId: string;
+  productId!: string;
 
   /**
    * Product Name
@@ -34,10 +34,10 @@ export class ProductCreateDto {
    * Purpose : Display name of product
    * Example : Milk 1L
    */
-  @ApiProperty({ example: 'Milk 1L', required: true})
+  @ApiProperty({ example: 'Milk 1L', required: true })
   @IsNotEmpty()
   @IsString()
-  name: string;
+  name!: string;
 
   /**
    * Category ID
@@ -48,7 +48,7 @@ export class ProductCreateDto {
   @ApiProperty({ example: 'CAT-123', required: true })
   @IsNotEmpty()
   @IsString()
-  categoryId: string;
+  categoryId!: string;
 
   /**
    * System Code
@@ -59,7 +59,7 @@ export class ProductCreateDto {
   @ApiProperty({ example: 'SYS-0001', required: true })
   @IsNotEmpty()
   @IsString()
-  productSysCode: string;
+  productSysCode!: string;
 
   /**
    * Price
@@ -70,7 +70,7 @@ export class ProductCreateDto {
   @ApiProperty({ example: 50, minimum: 1, required: true })
   @IsNotEmpty()
   @IsNumber()
-  price: number;
+  price!: number;
 
   /**
    * Net Weight
@@ -81,7 +81,7 @@ export class ProductCreateDto {
   @ApiProperty({ example: 1, required: true })
   @IsNotEmpty()
   @IsNumber()
-  netWeight: number;
+  netWeight!: number;
 
   /**
    * Price Type
@@ -92,7 +92,7 @@ export class ProductCreateDto {
   @ApiProperty({ enum: PriceType, example: PriceType.STANDARD, required: true })
   @IsNotEmpty()
   @IsEnum(PriceType)
-  priceType: PriceType;
+  priceType!: PriceType;
 
   /**
    * Unit Type

@@ -18,7 +18,7 @@ export class CreateProvinceDto {
   @ApiProperty()
   @IsNotEmpty()
   @IsString()
-  countryId: string;
+  countryId!: string;
   /**
    * Name
    * ----
@@ -28,7 +28,7 @@ export class CreateProvinceDto {
   @ApiProperty()
   @IsNotEmpty()
   @IsString()
-  name: string;
+  name!: string;
   /**
    * Status
    * ------

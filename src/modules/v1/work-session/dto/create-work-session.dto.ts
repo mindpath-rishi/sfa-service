@@ -19,7 +19,7 @@ export class CreateWorkSessionDto {
   @ApiProperty({ type: String })
   @IsNotEmpty()
   @IsString()
-  activityName: string;
+  activityName!: string;
 
   /**
    * ✅ Required only if activityName = Retailing

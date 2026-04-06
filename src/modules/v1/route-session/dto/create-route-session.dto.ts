@@ -1,4 +1,3 @@
-
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsDate,
@@ -16,12 +15,12 @@ export class CreateRouteSessionDto {
   })
   @IsNotEmpty()
   @IsString()
-  workSessionId: string;
+  workSessionId!: string;
 
   @ApiProperty({ type: String, description: 'Business identifier for route' })
   @IsNotEmpty()
   @IsString()
-  routeId: string;
+  routeId!: string;
 
   @ApiPropertyOptional({ type: String })
   @IsOptional()

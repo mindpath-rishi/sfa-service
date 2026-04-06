@@ -4,11 +4,11 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsNotEmpty, IsString, IsOptional, IsEnum } from 'class-validator';
 
 export class CreateCountryDto {
-/**
- * Country Create DTO
- * ====================
- * Data Transfer Object for creating new Country records
- */
+  /**
+   * Country Create DTO
+   * ====================
+   * Data Transfer Object for creating new Country records
+   */
   /**
    * Name
    * ----
@@ -18,7 +18,7 @@ export class CreateCountryDto {
   @ApiProperty()
   @IsNotEmpty()
   @IsString()
-  name: string;
+  name!: string;
   /**
    * Status
    * ------
@@ -29,5 +29,4 @@ export class CreateCountryDto {
   @IsOptional()
   @IsEnum(CountryStatus)
   status?: CountryStatus;
-
 }

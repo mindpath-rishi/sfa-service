@@ -11,22 +11,22 @@ export class CreateStockSalesItemDto {
   @ApiProperty({ type: String, description: 'Business identifier for stockSales' })
   @IsNotEmpty()
   @IsString()
-  stockSalesId: string;
+  stockSalesId!: string;
 
   @ApiProperty({ type: String, description: 'Business identifier for product' })
   @IsNotEmpty()
   @IsString()
-  productId: string;
+  productId!: string;
 
   @ApiProperty({ type: Number })
   @IsNotEmpty()
   @IsNumber()
-  price: number;
+  price!: number;
 
   @ApiProperty({ type: Number })
   @IsNotEmpty()
   @IsNumber()
-  weight: number;
+  weight!: number;
 
   @ApiPropertyOptional({ type: Number , default: 0 })
   @IsOptional()

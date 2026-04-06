@@ -1,5 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { HydratedDocument } from 'mongoose';
+import { HydratedDocument, Query } from 'mongoose';
 import { PriceType, ProductStatus } from 'src/shared/enums/product.enums';
 
 export type ProductDocument = HydratedDocument<Product>;
@@ -9,41 +9,41 @@ export class Product {
   /* ================= IDENTITY ================= */
 
   @Prop({ required: true, trim: true, unique: true, type: String })
-  productId: string;
+  productId!: string;
 
   @Prop({ required: true, trim: true, type: String })
-  name: string;
+  name!: string;
 
   @Prop({ required: true, trim: true, unique: true, type: String })
-  productSysCode: string;
+  productSysCode!: string;
 
   /* ================= ASSOCIATIONS ================= */
 
   @Prop({ required: true, type: String, ref: 'ProductCategory' })
-  categoryId: string;
+  categoryId!: string;
 
   /* ================= PRICING ================= */
 
   @Prop({ required: true, type: Number })
-  casePrice: number;
+  casePrice!: number;
 
   @Prop({ required: true, type: Number })
-  piecePrice: number;
+  piecePrice!: number;
 
   /* ================= WEIGHT ================= */
 
   @Prop({ required: true })
-  caseWeight: number; // ✅ SOURCE OF TRUTH
+  caseWeight!: number; // ✅ SOURCE OF TRUTH
 
   @Prop({ required: true })
-  pieceWeight: number; // ⚠️ DERIVED (auto-calculated)
+  pieceWeight!: number; // ⚠️ DERIVED (auto-calculated)
 
   @Prop({
     type: String,
     enum: PriceType,
     default: PriceType.STANDARD,
   })
-  priceType: PriceType;
+  priceType!: PriceType;
 
   /* ================= UNIT ================= */
 
@@ -54,7 +54,7 @@ export class Product {
   unitSize?: string;
 
   @Prop({ required: true, type: Number })
-  unitQtyInCase: number;
+  unitQtyInCase!: number;
 
   /* ================= STATUS ================= */
 
@@ -63,39 +63,24 @@ export class Product {
     enum: ProductStatus,
     default: ProductStatus.ACTIVE,
   })
-  status: ProductStatus;
+  status!: ProductStatus;
 }
 
 export const ProductSchema = SchemaFactory.createForClass(Product);
 
-ProductSchema.pre('save', function (next: Function) {
-  const doc = this as any;
+/* ======================================================
+ * SAVE HOOK
+ * ====================================================== */
 
+ProductSchema.pre('save', function (next: any) {
+  const doc: any = this;
+
+  // Price calculation
   if (doc.casePrice && doc.unitQtyInCase) {
     doc.piecePrice = doc.casePrice / doc.unitQtyInCase;
   }
 
-  next();
-});
-
-ProductSchema.pre('findOneAndUpdate', async function (next: Function) {
-  const update: any = this.getUpdate();
-
-  const doc: any = await this.model.findOne(this.getQuery());
-
-  const casePrice = update.casePrice ?? doc?.casePrice;
-  const unitQtyInCase = update.unitQtyInCase ?? doc?.unitQtyInCase;
-
-  if (casePrice && unitQtyInCase) {
-    update.piecePrice = casePrice / unitQtyInCase;
-  }
-
-  next();
-});
-
-ProductSchema.pre('save', function (next: Function) {
-  const doc: any = this as any;
-
+  // Weight calculation
   if (doc.caseWeight && doc.unitQtyInCase) {
     doc.pieceWeight = Number((doc.caseWeight / doc.unitQtyInCase).toFixed(4));
   }
@@ -103,24 +88,46 @@ ProductSchema.pre('save', function (next: Function) {
   next();
 });
 
-ProductSchema.pre('findOneAndUpdate', async function (next: Function) {
-  const update: any = this.getUpdate();
-  const data = update.$set || update;
+/* ======================================================
+ * UPDATE HOOK
+ * ====================================================== */
 
-  const doc: any = await this.model.findOne(this.getQuery());
+ProductSchema.pre(
+  'findOneAndUpdate',
+  async function (this: Query<any, any>, next: any) {
+    const update: any = this.getUpdate() || {};
+    const data = update.$set || update;
 
-  const caseWeight = data.caseWeight ?? doc?.caseWeight;
-  const unitQtyInCase = data.unitQtyInCase ?? doc?.unitQtyInCase;
+    const doc: any = await this.model.findOne(this.getQuery());
 
-  if (caseWeight && unitQtyInCase) {
-    const pieceWeight = Number((caseWeight / unitQtyInCase).toFixed(4));
+    if (!doc) return next();
 
-    if (update.$set) {
-      update.$set.pieceWeight = pieceWeight;
-    } else {
-      update.pieceWeight = pieceWeight;
+    const casePrice = data.casePrice ?? doc.casePrice;
+    const caseWeight = data.caseWeight ?? doc.caseWeight;
+    const unitQtyInCase = data.unitQtyInCase ?? doc.unitQtyInCase;
+
+    // Price calculation
+    if (casePrice && unitQtyInCase) {
+      const piecePrice = casePrice / unitQtyInCase;
+
+      if (update.$set) {
+        update.$set.piecePrice = piecePrice;
+      } else {
+        update.piecePrice = piecePrice;
+      }
     }
-  }
 
-  next();
-});
+    // Weight calculation
+    if (caseWeight && unitQtyInCase) {
+      const pieceWeight = Number((caseWeight / unitQtyInCase).toFixed(4));
+
+      if (update.$set) {
+        update.$set.pieceWeight = pieceWeight;
+      } else {
+        update.pieceWeight = pieceWeight;
+      }
+    }
+
+    next();
+  },
+);

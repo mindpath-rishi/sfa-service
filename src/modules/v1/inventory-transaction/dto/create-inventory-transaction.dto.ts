@@ -23,12 +23,12 @@ export class CreateInventoryTransactionDto {
   @ApiProperty({ type: String, description: 'Business identifier for product' })
   @IsNotEmpty()
   @IsString()
-  productId: string;
+  productId!: string;
 
   @ApiProperty({ type: String, description: 'Business identifier for van' })
   @IsNotEmpty()
   @IsString()
-  vanId: string;
+  vanId!: string;
 
   @ApiProperty({
     type: String,
@@ -36,7 +36,7 @@ export class CreateInventoryTransactionDto {
   })
   @IsNotEmpty()
   @IsString()
-  employeeId: string;
+  employeeId!: string;
 
   @ApiPropertyOptional({ type: String })
   @IsOptional()
@@ -46,13 +46,13 @@ export class CreateInventoryTransactionDto {
   @ApiProperty({ enum: TransactionType })
   @IsNotEmpty()
   @IsEnum(TransactionType)
-  transactionType: TransactionType;
+  transactionType!: TransactionType;
 
   @ApiProperty({ type: Number })
   @IsNotEmpty()
   @IsNumber()
   @Min(0.0001)
-  quantity: number;
+  quantity!: number;
 
   @ApiPropertyOptional({ type: Number, default: 0 })
   @IsOptional()

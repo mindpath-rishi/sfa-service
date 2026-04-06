@@ -50,11 +50,11 @@ export class UploadMediaDto {
     example: MEDIA_OWNER_TYPE.PRODUCT,
   })
   @IsIn(Object.values(MEDIA_OWNER_TYPE))
-  ownerType: string;
+  ownerType!: string;
 
   @ApiProperty({ example: 'P001' })
   @IsString()
-  ownerId: string;
+  ownerId!: string;
 
   @ApiPropertyOptional({ example: 'V001' })
   @IsOptional()

@@ -10,17 +10,17 @@ export class CreateSaleItemDto {
   @ApiProperty({ type: String, description: 'Business identifier for sale' })
   @IsNotEmpty()
   @IsString()
-  saleId: string;
+  saleId!: string;
 
   @ApiProperty({ type: String, description: 'Business identifier for product' })
   @IsNotEmpty()
   @IsString()
-  productId: string;
+  productId!: string;
 
   @ApiProperty({ type: String })
   @IsNotEmpty()
   @IsString()
-  productName: string;
+  productName!: string;
 
   @ApiPropertyOptional({ type: Number, default: 0 })
   @IsOptional()
@@ -35,17 +35,17 @@ export class CreateSaleItemDto {
   @ApiProperty({ type: Number })
   @IsNotEmpty()
   @IsNumber()
-  quantity: number;
+  quantity!: number;
 
   @ApiProperty({ type: Number })
   @IsNotEmpty()
   @IsNumber()
-  casePrice: number;
+  casePrice!: number;
 
   @ApiProperty({ type: Number })
   @IsNotEmpty()
   @IsNumber()
-  caseNetWeight: number;
+  caseNetWeight!: number;
 
   @ApiPropertyOptional({ type: Number, default: 0 })
   @IsOptional()
@@ -70,5 +70,5 @@ export class CreateSaleItemDto {
   @ApiProperty({ type: Number })
   @IsNotEmpty()
   @IsNumber()
-  unitQtyInCase: number;
+  unitQtyInCase!: number;
 }

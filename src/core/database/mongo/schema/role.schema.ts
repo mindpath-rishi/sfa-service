@@ -28,7 +28,7 @@ export class Role extends Document {
    * ====================================================== */
 
   @Prop({ required: true, unique: true, index: true, type: String })
-  roleId: string;
+  roleId!: string;
 
   /* ======================================================
    * ROLE INFO
@@ -38,7 +38,7 @@ export class Role extends Document {
     type: String,
     required: true,
   })
-  name: string;
+  name!: string;
 
   @Prop({
     type: String,
@@ -46,7 +46,7 @@ export class Role extends Document {
     unique: true,
     index: true,
   })
-  displayName: string;
+  displayName!: string;
 
   @Prop({ type: String })
   description?: string;
@@ -60,7 +60,7 @@ export class Role extends Document {
     default: 0,
     min: -1,
   })
-  maxAssociatedVans: number;
+  maxAssociatedVans!: number;
   /**
    * -1 → unlimited
    *  0 → no vans
@@ -75,7 +75,7 @@ export class Role extends Document {
     type: [String],
     default: [],
   })
-  permissions: string[];
+  permissions!: string[];
 
   /* ======================================================
    * STATUS
@@ -87,10 +87,10 @@ export class Role extends Document {
     default: Status.ACTIVE,
     index: true,
   })
-  status: Status;
+  status!: Status;
 
   @Prop({ default: false, index: true, type: Boolean })
-  isSystemAdmin: boolean;
+  isSystemAdmin!: boolean;
 }
 
 export const RoleSchema = SchemaFactory.createForClass(Role);

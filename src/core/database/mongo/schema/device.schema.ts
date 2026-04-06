@@ -24,39 +24,39 @@ export class UserDevice {
 
   // Business user identifier (profileId)
   @Prop({ required: true, index: true, type: String })
-  userId: string;
+  userId!: string;
 
   // Server-generated session identifier
   @Prop({ required: true, type: String })
-  sessionId: string;
+  sessionId!: string;
 
   // Stable client device identifier
-  @Prop({ required: true, type: String})
-  deviceId: string;
+  @Prop({ required: true, type: String })
+  deviceId!: string;
 
   /* ======================================================
    * DEVICE DETAILS
    * ====================================================== */
 
   // Device platform (web / android / ios)
-  @Prop({ type: String})
-  deviceType: string;
+  @Prop({ type: String })
+  deviceType!: string;
 
   // Operating system name
-  @Prop({type: String})
-  os: string;
+  @Prop({ type: String })
+  os!: string;
 
   // Operating system version
-  @Prop({type: String})
-  osVersion: string;
+  @Prop({ type: String })
+  osVersion!: string;
 
   // Browser name/version (web clients)
-  @Prop({type: String})
-  browser: string;
+  @Prop({ type: String })
+  browser!: string;
 
   // Last known IP address
-  @Prop({type: String})
-  ipAddress: string;
+  @Prop({ type: String })
+  ipAddress!: string;
 
   /* ======================================================
    * SESSION STATE
@@ -64,11 +64,11 @@ export class UserDevice {
 
   // Indicates whether the session is currently active
   @Prop({ default: true, type: Boolean })
-  isActive: boolean;
+  isActive!: boolean;
 
   // Timestamp of last successful login from this device
-  @Prop({ type: Date})
-  lastLoginAt: Date;
+  @Prop({ type: Date })
+  lastLoginAt!: Date;
 
   // Push notification token (mobile clients)
   @Prop({ type: String})

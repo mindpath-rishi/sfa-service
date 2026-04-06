@@ -29,7 +29,7 @@ export class Employee {
 
   // Unique business identifier for the employee
   @Prop({ required: true, trim: true, type: String })
-  employeeId: string;
+  employeeId!: string;
 
   // Optional contact mobile number
   @Prop({
@@ -43,7 +43,7 @@ export class Employee {
 
   // Display name of the employee
   @Prop({ required: true, trim: true, type: String })
-  name: string;
+  name!: string;
 
   // Optional email address
   @Prop({
@@ -62,7 +62,7 @@ export class Employee {
 
   // Role reference used for RBAC
   @Prop({ required: true, type: String })
-  roleId: string;
+  roleId!: string;
 
   /* ======================================================
    * ASSOCIATIONS
@@ -73,7 +73,7 @@ export class Employee {
     type: [String],
     default: [],
   })
-  associatedVans: string[];
+  associatedVans!: string[];
 
   /* ======================================================
    * PERMISSION OVERRIDES
@@ -87,7 +87,7 @@ export class Employee {
     },
     default: { allow: [], deny: [] },
   })
-  permissionOverrides: {
+  permissionOverrides!: {
     allow: string[];
     deny: string[];
   };
@@ -102,7 +102,7 @@ export class Employee {
     enum: UserStatus,
     default: UserStatus.ACTIVE,
   })
-  status: UserStatus;
+  status!: UserStatus;
 }
 
 export const EmployeeSchema = SchemaFactory.createForClass(Employee);

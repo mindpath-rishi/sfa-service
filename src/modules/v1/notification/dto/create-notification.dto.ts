@@ -29,7 +29,7 @@ export class CreateNotificationDto {
   @ApiProperty({ example: 'USR-123' })
   @IsString()
   @IsNotEmpty()
-  recipientId: string;
+  recipientId!: string;
 
   /* ======================================================
    * CONTENT
@@ -39,13 +39,13 @@ export class CreateNotificationDto {
   @ApiProperty({ example: 'Order Created' })
   @IsString()
   @IsNotEmpty()
-  title: string;
+  title!: string;
 
   // Notification body/message
   @ApiProperty({ example: 'Your order has been placed' })
   @IsString()
   @IsNotEmpty()
-  body: string;
+  body!: string;
 
   // Custom payload (orderId, routeId, etc.)
   @ApiProperty({

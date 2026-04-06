@@ -19,22 +19,22 @@ export type StockCountItemDocument = HydratedDocument<StockCountItem>;
 @Schema({ timestamps: true, collection: 'stock_count_items' })
 export class StockCountItem {
   @Prop({ required: true, index: true, type: String })
-  stockCountId: string;
+  stockCountId!: string;
 
   @Prop({ required: true, index: true, type: String })
-  productId: string;
+  productId!: string;
 
   @Prop({ type: Number, required: true })
-  stock: number;
+  stock!: number;
 
   @Prop({ type: Number, required: true })
-  weight: number;
+  weight!: number;
 
   @Prop({ type: Number, required: true })
-  value: number;
+  value!: number;
 
   @Prop({ type: Number, required: true })
-  price: number;
+  price!: number;
 }
 
 export const StockCountItemSchema =
