@@ -52,7 +52,7 @@ import { UpdateStockCountItemDto } from './dto/update-stock-count-item.dto';
 import { StockCountItemQueryDto } from './dto/stock-count-item-query.dto';
 import { STOCK_COUNT_ITEM } from './stock-count-item.constants';
 
-@ApiTags('Stock Count Item')
+@ApiTags('Stock-count-item')
 @FeatureFlag(API_MODULE_ENABLE_KEYS.STOCK_COUNT_ITEM)
 @ApiUnauthorizedResponse()
 @ApiUnprocessableEntityResponse()

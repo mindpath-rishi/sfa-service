@@ -49,7 +49,10 @@ import { Permissions } from 'src/core/decorators/permission.decorator';
 import { ShopVisitService } from './shop-visit.service';
 import { CreateShopVisitDto } from './dto/create-shop-visit.dto';
 import { UpdateShopVisitDto } from './dto/update-shop-visit.dto';
-import { ShopVisitQueryDto, ShopVisitStatusQueryDto } from './dto/shop-visit-query.dto';
+import {
+  ShopVisitQueryDto,
+  ShopVisitStatusQueryDto,
+} from './dto/shop-visit-query.dto';
 import { SHOP_VISIT } from './shop-visit.constants';
 
 @ApiTags('Shop-visit')
@@ -92,8 +95,7 @@ export class ShopVisitController {
     return this.service.findAll(query);
   }
 
-
-    /**
+  /**
    * Get ShopVisits Status
    * --------------
    */
@@ -102,7 +104,6 @@ export class ShopVisitController {
   async status(@Query() query: ShopVisitStatusQueryDto) {
     return this.service.status(query);
   }
-
 
   /**
    * Get ShopVisit by ID

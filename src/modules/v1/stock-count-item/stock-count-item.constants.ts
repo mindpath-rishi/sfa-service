@@ -1,4 +1,3 @@
-
 export const STOCK_COUNT_ITEM = {
   CREATED: 'StockCountItem created successfully',
   FETCHED: 'StockCountItem fetched successfully',

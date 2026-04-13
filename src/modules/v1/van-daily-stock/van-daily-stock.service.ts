@@ -1,4 +1,3 @@
-
 import {
   Injectable,
   NotFoundException,
@@ -10,14 +9,16 @@ import { MongoService } from 'src/core/database/mongo/mongo.service';
 import { MongoRepository } from 'src/core/database/mongo/mongo.repository';
 import { FilterQuery } from 'src/core/database/mongo/mongo.interface';
 
-import { VanDailyStock, VanDailyStockSchema } from 'src/core/database/mongo/schema/van-daily-stock.schema';
+import {
+  VanDailyStock,
+  VanDailyStockSchema,
+} from 'src/core/database/mongo/schema/van-daily-stock.schema';
 
 import { VAN_DAILY_STOCK } from './van-daily-stock.constants';
 import { CreateVanDailyStockDto } from './dto/create-van-daily-stock.dto';
 import { UpdateVanDailyStockDto } from './dto/update-van-daily-stock.dto';
 import { VanDailyStockQueryDto } from './dto/van-daily-stock-query.dto';
 import { IdGenerator } from 'src/shared/utils/id-generator.utils';
-
 
 @Injectable()
 export class VanDailyStockService extends MongoRepository<VanDailyStock> {
@@ -28,11 +29,7 @@ export class VanDailyStockService extends MongoRepository<VanDailyStock> {
   async create(payload: CreateVanDailyStockDto) {
     try {
       return await this.withTransaction(async (session) => {
-        
-
         const filter: FilterQuery<VanDailyStock> = {};
-
-        
 
         const existing = await this.findOne(filter, {
           session,
@@ -122,13 +119,10 @@ export class VanDailyStockService extends MongoRepository<VanDailyStock> {
   async update(vanDailyStockId: string, dto: UpdateVanDailyStockDto) {
     try {
       return await this.withTransaction(async (session) => {
-        
-
-        const doc = await this.updateOne(
-          { vanDailyStockId },
-          dto,
-          { session, new: true },
-        );
+        const doc = await this.updateOne({ vanDailyStockId }, dto, {
+          session,
+          new: true,
+        });
 
         if (!doc) throw new NotFoundException(VAN_DAILY_STOCK.NOT_FOUND);
 
@@ -155,6 +149,260 @@ export class VanDailyStockService extends MongoRepository<VanDailyStock> {
       message: VAN_DAILY_STOCK.DELETED,
       data: existing,
     };
+  }
+
+  async getDayEndSummary(vanId: string, date?: Date) {
+    try {
+      const targetDate = new Date(date || new Date());
+      targetDate.setHours(0, 0, 0, 0);
+
+      const result = await this.model.aggregate([
+        {
+          $match: {
+            vanId,
+            date: targetDate,
+          },
+        },
+
+        /* ================= JOIN PRODUCT ================= */
+        {
+          $lookup: {
+            from: 'product_master',
+            localField: 'productId',
+            foreignField: 'productId',
+            as: 'product',
+          },
+        },
+        {
+          $unwind: {
+            path: '$product',
+            preserveNullAndEmptyArrays: true,
+          },
+        },
+
+        /* ================= CALCULATIONS ================= */
+        {
+          $addFields: {
+            productName: '$product.name',
+
+            /* ===== VALUE ===== */
+            totalValue: {
+              $multiply: ['$closingQty', '$piecePrice'],
+            },
+
+            // 🔥 NEW
+            saleValue: {
+              $multiply: ['$outQty', '$piecePrice'],
+            },
+
+            // 🔥 NEW
+            leftStockValue: {
+              $multiply: ['$closingQty', '$piecePrice'],
+            },
+
+            totalWeight: {
+              $multiply: ['$closingQty', '$pieceNetWeight'],
+            },
+
+            /* ===== CASE / PIECE ===== */
+            openingCases: {
+              $floor: { $divide: ['$openingQty', '$unitQtyInCase'] },
+            },
+            openingPieces: {
+              $mod: ['$openingQty', '$unitQtyInCase'],
+            },
+
+            inCases: {
+              $floor: { $divide: ['$inQty', '$unitQtyInCase'] },
+            },
+            inPieces: {
+              $mod: ['$inQty', '$unitQtyInCase'],
+            },
+
+            outCases: {
+              $floor: { $divide: ['$outQty', '$unitQtyInCase'] },
+            },
+            outPieces: {
+              $mod: ['$outQty', '$unitQtyInCase'],
+            },
+
+            closingCases: {
+              $floor: { $divide: ['$closingQty', '$unitQtyInCase'] },
+            },
+            closingPieces: {
+              $mod: ['$closingQty', '$unitQtyInCase'],
+            },
+          },
+        },
+
+        /* ================= GROUP ================= */
+        {
+          $group: {
+            _id: null,
+
+            totalProducts: { $sum: 1 },
+
+            openingQty: { $sum: '$openingQty' },
+            inQty: { $sum: '$inQty' },
+            outQty: { $sum: '$outQty' },
+            adjustmentQty: { $sum: '$adjustmentQty' },
+            closingQty: { $sum: '$closingQty' },
+
+            totalValue: { $sum: '$totalValue' },
+            totalWeight: { $sum: '$totalWeight' },
+
+            // 🔥 NEW
+            saleTotal: { $sum: '$saleValue' },
+            leftStockTotal: { $sum: '$leftStockValue' },
+
+            products: {
+              $push: {
+                productId: '$productId',
+                productName: '$productName',
+                unitQtyInCase: '$unitQtyInCase',
+
+                openingQty: '$openingQty',
+                openingCases: '$openingCases',
+                openingPieces: '$openingPieces',
+
+                inQty: '$inQty',
+                inCases: '$inCases',
+                inPieces: '$inPieces',
+
+                outQty: '$outQty',
+                outCases: '$outCases',
+                outPieces: '$outPieces',
+
+                closingQty: '$closingQty',
+                closingCases: '$closingCases',
+                closingPieces: '$closingPieces',
+
+                totalValue: '$totalValue',
+                totalWeight: '$totalWeight',
+
+                // 🔥 NEW
+                saleValue: '$saleValue',
+                leftStockValue: '$leftStockValue',
+              },
+            },
+          },
+        },
+      ]);
+
+      const data = result[0] || {};
+
+      /* ======================================================
+       * NORMALIZE SUMMARY CASE / PIECE
+       * ====================================================== */
+
+      let openingCases = 0,
+        openingPieces = 0;
+      let inCases = 0,
+        inPieces = 0;
+      let outCases = 0,
+        outPieces = 0;
+      let closingCases = 0,
+        closingPieces = 0;
+
+      for (const p of data.products || []) {
+        const unit = p.unitQtyInCase || 1;
+
+        // Opening
+        openingCases += p.openingCases;
+        openingPieces += p.openingPieces;
+        let extra = Math.floor(openingPieces / unit);
+        openingCases += extra;
+        openingPieces %= unit;
+
+        // In
+        inCases += p.inCases;
+        inPieces += p.inPieces;
+        extra = Math.floor(inPieces / unit);
+        inCases += extra;
+        inPieces %= unit;
+
+        // Out
+        outCases += p.outCases;
+        outPieces += p.outPieces;
+        extra = Math.floor(outPieces / unit);
+        outCases += extra;
+        outPieces %= unit;
+
+        // Closing
+        closingCases += p.closingCases;
+        closingPieces += p.closingPieces;
+        extra = Math.floor(closingPieces / unit);
+        closingCases += extra;
+        closingPieces %= unit;
+      }
+
+      /* ======================================================
+       * DERIVED METRICS
+       * ====================================================== */
+
+      const totalStockMoved = (data.inQty || 0) + (data.outQty || 0);
+
+      const expectedClosing =
+        (data.openingQty || 0) +
+        (data.inQty || 0) -
+        (data.outQty || 0) +
+        (data.adjustmentQty || 0);
+
+      const variance = (data.closingQty || 0) - expectedClosing;
+
+      /* ======================================================
+       * RESPONSE
+       * ====================================================== */
+
+      return {
+        statusCode: HttpStatus.OK,
+        message: 'Day end summary fetched successfully',
+        data: {
+          summary: {
+            totalProducts: data.totalProducts || 0,
+
+            stock: {
+              openingQty: data.openingQty || 0,
+              openingCases,
+              openingPieces,
+
+              inQty: data.inQty || 0,
+              inCases,
+              inPieces,
+
+              outQty: data.outQty || 0,
+              outCases,
+              outPieces,
+
+              adjustmentQty: data.adjustmentQty || 0,
+
+              closingQty: data.closingQty || 0,
+              closingCases,
+              closingPieces,
+            },
+
+            value: {
+              totalValue: data.totalValue || 0,
+              totalWeight: data.totalWeight || 0,
+
+              // 🔥 NEW
+              saleTotal: data.saleTotal || 0,
+              leftStockTotal: data.leftStockTotal || 0,
+            },
+
+            analytics: {
+              totalStockMoved,
+              expectedClosing,
+              variance,
+            },
+          },
+
+          products: data.products || [],
+        },
+      };
+    } catch (error) {
+      throw error;
+    }
   }
 
   private handleDuplicateError(error: any): never {

@@ -32,12 +32,15 @@ export class VanDailyStock {
   @Prop({ required: true, unique: true, index: true, type: String })
   vanDailyStockId!: string;
 
+  @Prop({ required: true, unique: true, index: true, type: String })
+  workSessionId!: string;
+
   /* ======================================================
    * DATE
    * ====================================================== */
 
   @Prop({ required: true, index: true, type: Date })
-  date!: Date; // ISO Date format with UTC
+  date!: Date;
 
   /* ======================================================
    * VAN, EMPLOYEE & PRODUCT REFERENCES
@@ -51,6 +54,15 @@ export class VanDailyStock {
 
   @Prop({ required: true, index: true, type: String })
   productId!: string;
+
+  @Prop({ type: Number, required: true })
+  unitQtyInCase!: number;
+
+  @Prop({ type: Number, required: true })
+  piecePrice!: number;
+
+  @Prop({ type: Number, required: true })
+  pieceNetWeight!: number;
 
   /* ======================================================
    * STOCK SNAPSHOT

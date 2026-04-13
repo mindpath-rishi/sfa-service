@@ -34,7 +34,7 @@ export class Route {
 
   // Optional optimization
   @Prop({ type: Number, default: 0 })
-  customerCount!: number;
+  outletCount!: number;
 
   /* ======================================================
    * STATUS

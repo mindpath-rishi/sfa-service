@@ -14,7 +14,7 @@ import { HydratedDocument } from 'mongoose';
 
 export type SaleItemDocument = HydratedDocument<SaleItem>;
 
-@Schema({ collection: 'customer_sale_items', timestamps: true })
+@Schema({ collection: 'sale_items', timestamps: true })
 export class SaleItem {
   /* ================= REFERENCES ================= */
 
@@ -72,7 +72,7 @@ export class SaleItem {
   /* ================= TOTALS ================= */
 
   @Prop({ type: Number, default: 0 })
-  totalWeight!: number;
+  totalNetWeight!: number;
 
   @Prop({ type: Number, default: 0 })
   totalValue!: number;

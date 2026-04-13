@@ -48,6 +48,7 @@ export class CreateVanInventoryTopupDto {
 
   @ApiProperty({ type: Date })
   @IsNotEmpty()
+  @Type(() => Date)
   @IsDate()
   date!: Date;
 
@@ -98,6 +99,11 @@ export class CreateVanInventoryTopupDto {
   @IsOptional()
   @IsEnum(VanInventoryTopupStatus)
   status?: VanInventoryTopupStatus;
+
+  @ApiProperty({ type: String, description: 'Business identifier for van' })
+  @IsNotEmpty()
+  @IsString()
+  workSessionId!: string;
 
   /**
    * Items

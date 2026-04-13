@@ -46,6 +46,7 @@ export class DeviceInfoDto {
   @ApiProperty({
     example: 'b9f7a2c2-1c9b-4e91',
     description: 'Unique device identifier (UUID or stable ID)',
+    default: 'b9f7a2c2-1c9b-4e91',
   })
   @IsString({ message: 'Device ID must be a string' })
   @IsNotEmpty({ message: 'Device ID is required' })
@@ -164,7 +165,7 @@ export class LoginDto {
    * - Customer code
    */
   @ApiProperty({
-    example: 'EMP00123',
+    example: '9999999999',
     description: 'Login ID / Username / Employee or Customer Code',
   })
   @IsString({ message: 'Login ID must be a string' })
@@ -183,7 +184,7 @@ export class LoginDto {
    * - Securely hashed internally
    */
   @ApiProperty({
-    example: 'Passw0rd@123',
+    example: '123456789',
     description: 'User password',
   })
   @IsString({ message: 'Password must be a string' })

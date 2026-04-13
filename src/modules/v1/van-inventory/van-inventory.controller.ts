@@ -106,6 +106,17 @@ export class VanInventoryController {
   }
 
   /**
+   * Get VanInventory by ID
+   * ----------------------
+   */
+  @Permissions('VAN_INVENTORY_VIEW')
+  @Get('van/:vanId')
+  @ApiParam({ name: 'anId', description: 'VanInventory inventoryId' })
+  async findByVanId(@Param('vanId') vanId: string) {
+    return this.service.findByVanId(vanId);
+  }
+
+  /**
    * Update VanInventory
    * --------------------
    */

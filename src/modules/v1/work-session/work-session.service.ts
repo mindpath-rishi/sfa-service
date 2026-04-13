@@ -28,6 +28,10 @@ import { CreateActivityDto } from '../activity/dto/create-activity.dto';
 import { CreateRouteSessionDto } from '../route-session/dto/create-route-session.dto';
 import { ActivityStatus } from 'src/shared/enums/activity.enums';
 import { RouteSessionStatus } from 'src/shared/enums/route-session.enums';
+import { VanDailyStockService } from '../van-daily-stock/van-daily-stock.service';
+import { StockCountService } from '../stock-count/stock-count.service';
+import { StockCountStatus } from 'src/shared/enums/stock-count.enums';
+import { StockCountItemService } from '../stock-count-item/stock-count-item.service';
 
 @Injectable()
 export class WorkSessionService extends MongoRepository<WorkSession> {
@@ -35,6 +39,9 @@ export class WorkSessionService extends MongoRepository<WorkSession> {
     mongo: MongoService,
     private readonly activityService: ActivityService,
     private readonly routeSessionService: RouteSessionService,
+    private readonly vanDailyStockService: VanDailyStockService,
+    private readonly stockCountService: StockCountService,
+    private readonly stockCountItemService: StockCountItemService,
   ) {
     super(mongo.getModel(WorkSession.name, WorkSessionSchema));
   }
@@ -58,6 +65,7 @@ export class WorkSessionService extends MongoRepository<WorkSession> {
           session,
           includeDeleted: true,
         });
+        console.log(existing, '================ex');
 
         if (existing && !existing.isDeleted) {
           throw new ConflictException(WORK_SESSION.DUPLICATE);
@@ -92,13 +100,16 @@ export class WorkSessionService extends MongoRepository<WorkSession> {
          * CREATE ACTIVITY (SAME TRANSACTION)
          * ====================================================== */
 
-        const activityPayload: CreateActivityDto = {
+        const activityPayload: CreateActivityDto & {
+          vanId: any;
+        } = {
           name: payload.activityName || 'Work Session',
           description: '',
           workSessionId: workSessionDoc.workSessionId,
           routeId: payload.routeId,
           totalShops: payload.totalShops,
           routeName: payload.routeName,
+          vanId: payload?.vanId,
         };
 
         await this.activityService.create(activityPayload, { session });
@@ -331,21 +342,175 @@ export class WorkSessionService extends MongoRepository<WorkSession> {
     }
   }
 
+  // async complete() {
+  //   try {
+  //     return await this.withTransaction(async (session) => {
+  //       const ctx = RequestContextStore.getStore();
+
+  //       /* ===== TODAY START ===== */
+  //       const startOfDay = new Date();
+  //       startOfDay.setHours(0, 0, 0, 0);
+
+  //       console.log(
+  //         startOfDay,
+  //         '==================start of day===============',
+  //       );
+
+  //       /* ===== 1. FIND ACTIVE WORK SESSION ===== */
+  //       const workSession = await this.findOne({
+  //         userId: ctx?.userId,
+  //         createdAt: { $gte: startOfDay },
+  //         status: WorkSessionStatus.ACTIVE,
+  //       });
+
+  //       if (!workSession) {
+  //         throw new NotFoundException(WORK_SESSION.NOT_FOUND);
+  //       }
+
+  //       const { workSessionId } = workSession;
+
+  //       /* ===== 2. COMPLETE WORK SESSION ===== */
+  //       workSession.dayEndTime = new Date();
+  //       workSession.status = WorkSessionStatus.COMPLETED;
+
+  //       await workSession.save({ session });
+
+  //       /* ===== 3. FIND ACTIVE ACTIVITY ===== */
+  //       await this.activityService.updateOne(
+  //         {
+  //           workSessionId,
+  //           status: ActivityStatus.ACTIVE,
+  //         },
+  //         {
+  //           endTime: new Date(),
+  //           status: ActivityStatus.COMPLETED,
+  //         },
+  //         {
+  //           session,
+  //         },
+  //       );
+
+  //       await /* ===== 3. FIND ACTIVE ACTIVITY ===== */
+  //       await this.routeSessionService.updateOne(
+  //         {
+  //           workSessionId,
+  //           status: RouteSessionStatus.ACTIVE,
+  //         },
+  //         {
+  //           endTime: new Date(),
+  //           status: RouteSessionStatus.COMPLETED,
+  //         },
+  //         {
+  //           session,
+  //         },
+  //       );
+
+  //       return {
+  //         statusCode: HttpStatus.OK,
+  //         message: WORK_SESSION.UPDATED,
+  //         data: workSession,
+  //       };
+  //     });
+  //   } catch (error) {
+  //     this.handleDuplicateError(error);
+  //   }
+  // }
+
+  // async getWorkSessionSummary(workSessionId: string) {
+  //   try {
+  //     /* ======================================================
+  //      * 1. ROUTE SESSION SUMMARY
+  //      * ====================================================== */
+
+  //     const routeSummary = await this.routeSessionService.model.aggregate([
+  //       {
+  //         $match: {
+  //           workSessionId,
+  //         },
+  //       },
+  //       {
+  //         $group: {
+  //           _id: null,
+  //           totalShops: { $sum: '$totalShops' },
+  //           visitedShops: { $sum: '$visitedShops' },
+  //         },
+  //       },
+  //     ]);
+
+  //     /* ======================================================
+  //      * 2. SALES SUMMARY
+  //      * ====================================================== */
+
+  //     const salesSummary = await this.salesService.model.aggregate([
+  //       {
+  //         $match: {
+  //           workSessionId,
+  //         },
+  //       },
+  //       {
+  //         $group: {
+  //           _id: null,
+  //           totalQty: { $sum: '$totalQty' },
+  //           totalValue: { $sum: '$grandTotal' },
+  //         },
+  //       },
+  //     ]);
+
+  //     /* ======================================================
+  //      * 3. CUSTOMER PAYMENT SUMMARY
+  //      * ====================================================== */
+
+  //     const paymentSummary = await this.customerPaymentService.model.aggregate([
+  //       {
+  //         $match: {
+  //           workSessionId,
+  //         },
+  //       },
+  //       {
+  //         $group: {
+  //           _id: null,
+  //           totalCollected: { $sum: '$amount' },
+  //         },
+  //       },
+  //     ]);
+
+  //     /* ======================================================
+  //      * 4. FORMAT RESPONSE
+  //      * ====================================================== */
+
+  //     return {
+  //       statusCode: HttpStatus.OK,
+  //       message: 'Work session summary fetched successfully',
+  //       data: {
+  //         route: {
+  //           totalShops: routeSummary[0]?.totalShops || 0,
+  //           visitedShops: routeSummary[0]?.visitedShops || 0,
+  //         },
+  //         sales: {
+  //           totalQty: salesSummary[0]?.totalQty || 0,
+  //           totalValue: salesSummary[0]?.totalValue || 0,
+  //         },
+  //         payments: {
+  //           totalCollected: paymentSummary[0]?.totalCollected || 0,
+  //         },
+  //       },
+  //     };
+  //   } catch (error) {
+  //     throw error;
+  //   }
+  // }
+
   async complete() {
     try {
       return await this.withTransaction(async (session) => {
         const ctx = RequestContextStore.getStore();
 
-        /* ===== TODAY START ===== */
         const startOfDay = new Date();
         startOfDay.setHours(0, 0, 0, 0);
 
-        console.log(
-          startOfDay,
-          '==================start of day===============',
-        );
-
-        /* ===== 1. FIND ACTIVE WORK SESSION ===== */
+        /* ======================================================
+         * 1. FIND ACTIVE WORK SESSION
+         * ====================================================== */
         const workSession = await this.findOne({
           userId: ctx?.userId,
           createdAt: { $gte: startOfDay },
@@ -357,42 +522,122 @@ export class WorkSessionService extends MongoRepository<WorkSession> {
         }
 
         const { workSessionId } = workSession;
+        const vanId: any = workSession?.vanId;
 
-        /* ===== 2. COMPLETE WORK SESSION ===== */
+        /* ======================================================
+         * 2. COMPLETE WORK SESSION
+         * ====================================================== */
         workSession.dayEndTime = new Date();
         workSession.status = WorkSessionStatus.COMPLETED;
 
         await workSession.save({ session });
 
-        /* ===== 3. FIND ACTIVE ACTIVITY ===== */
+        /* ======================================================
+         * 3. COMPLETE ACTIVITY + ROUTE
+         * ====================================================== */
+
         await this.activityService.updateOne(
-          {
-            workSessionId,
-            status: ActivityStatus.ACTIVE,
-          },
-          {
-            endTime: new Date(),
-            status: ActivityStatus.COMPLETED,
-          },
-          {
-            session,
-          },
+          { workSessionId, status: ActivityStatus.ACTIVE },
+          { endTime: new Date(), status: ActivityStatus.COMPLETED },
+          { session },
         );
 
-        await /* ===== 3. FIND ACTIVE ACTIVITY ===== */
         await this.routeSessionService.updateOne(
-          {
-            workSessionId,
-            status: RouteSessionStatus.ACTIVE,
-          },
-          {
-            endTime: new Date(),
-            status: RouteSessionStatus.COMPLETED,
-          },
-          {
-            session,
-          },
+          { workSessionId, status: RouteSessionStatus.ACTIVE },
+          { endTime: new Date(), status: RouteSessionStatus.COMPLETED },
+          { session },
         );
+
+        /* ======================================================
+         * 4. GET DAY END SUMMARY
+         * ====================================================== */
+
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        const summaryRes =
+          await this.vanDailyStockService.getDayEndSummary(vanId);
+
+        const summary = summaryRes?.data?.summary;
+        const products = summaryRes?.data?.products || [];
+
+        if (summary && products.length) {
+          /* ======================================================
+           * 5. CHECK EXISTING STOCK COUNT
+           * ====================================================== */
+          const existing = await this.stockCountService.findOne(
+            { vanId, date: today },
+            { session },
+          );
+
+          if (!existing) {
+            /* ======================================================
+             * 6. CREATE STOCK COUNT (HEADER)
+             * ====================================================== */
+
+            const stockCount = await this.stockCountService.save(
+              {
+                stockCountId: IdGenerator.generate('STOC', 8),
+                workSessionId,
+                vanId,
+                employeeId: ctx?.userId,
+                date: today,
+
+                /* ===== SYSTEM (FROM SUMMARY) ===== */
+                systemQty: summary.stock.closingQty,
+                systemCase: summary.stock.closingCases,
+                systemPiece: summary.stock.closingPieces,
+                systemWeight: summary.value.totalWeight,
+                systemValue: summary.value.totalValue,
+
+                /* INIT */
+                countedQty: 0,
+                varianceQty: 0,
+
+                status: StockCountStatus.DRAFT,
+              },
+              { session },
+            );
+
+            /* ======================================================
+             * 7. CREATE STOCK COUNT ITEMS
+             * ====================================================== */
+
+            const items = products.map((p) => ({
+              stockCountId: stockCount.stockCountId,
+              productId: p.productId,
+              productName: p.productName,
+              vanId,
+
+              /* ===== SYSTEM ===== */
+              systemQty: p.closingQty,
+              systemCases: p.closingCases,
+              systemPieces: p.closingPieces,
+
+              /* INIT COUNTED */
+              countedQty: 0,
+              countedCases: 0,
+              countedPieces: 0,
+
+              /* INIT VARIANCE */
+              varianceQty: 0,
+
+              /* PRICE */
+              piecePrice: p.totalValue / (p.closingQty || 1),
+              systemValue: p.totalValue,
+              countedValue: 0,
+              varianceValue: 0,
+
+              unitQtyInCase: p.unitQtyInCase,
+            }));
+
+            await this.stockCountItemService.bulkCreate(items, session);
+          }
+        }
+
+        /* ======================================================
+         * RESPONSE
+         * ====================================================== */
 
         return {
           statusCode: HttpStatus.OK,

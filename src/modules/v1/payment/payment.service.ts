@@ -30,34 +30,36 @@ export class PaymentService extends MongoRepository<Payment> {
   async create(payload: CreatePaymentDto, session?: ClientSession) {
     try {
       return await this.withTransaction(async (session) => {
-        const filter: FilterQuery<Payment> = {};
+        // const filter: FilterQuery<Payment> = {
+        //   paymentId
+        // };
 
-        const existing = await this.findOne(filter, {
-          session,
-          includeDeleted: true,
-        });
+        // const existing = await this.findOne(filter, {
+        //   session,
+        //   includeDeleted: true,
+        // });
 
-        if (existing && !existing.isDeleted) {
-          throw new ConflictException(PAYMENT.DUPLICATE);
-        }
+        // if (existing && !existing.isDeleted) {
+        //   throw new ConflictException(PAYMENT.DUPLICATE);
+        // }
 
-        if (existing?.isDeleted) {
-          await this.updateById(
-            existing._id.toString(),
-            {
-              ...payload,
-              status: 'ACTIVE',
-              isDeleted: false,
-            },
-            { session },
-          );
+        // if (existing?.isDeleted) {
+        //   await this.updateById(
+        //     existing._id.toString(),
+        //     {
+        //       ...payload,
+        //       status: 'ACTIVE',
+        //       isDeleted: false,
+        //     },
+        //     { session },
+        //   );
 
-          return {
-            statusCode: HttpStatus.OK,
-            message: PAYMENT.CREATED,
-            data: { paymentId: existing.paymentId },
-          };
-        }
+        //   return {
+        //     statusCode: HttpStatus.OK,
+        //     message: PAYMENT.CREATED,
+        //     data: { paymentId: existing.paymentId },
+        //   };
+        // }
 
         const doc = await this.save(
           {

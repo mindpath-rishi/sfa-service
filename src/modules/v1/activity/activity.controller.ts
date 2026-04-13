@@ -78,7 +78,7 @@ export class ActivityController {
     ACTIVITY.CREATED,
     HttpStatus.CREATED,
   )
-  async create(@Body() dto: CreateActivityDto) {
+  async create(@Body() dto: CreateActivityDto & { vanId: string }) {
     return this.service.create(dto);
   }
 

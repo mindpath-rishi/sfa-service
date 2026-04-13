@@ -9,14 +9,15 @@ import { MongoService } from 'src/core/database/mongo/mongo.service';
 import { MongoRepository } from 'src/core/database/mongo/mongo.repository';
 import { FilterQuery } from 'src/core/database/mongo/mongo.interface';
 
-
-
 import { IdGenerator } from 'src/shared/utils/id-generator.utils';
 import { CreateSaleItemDto } from './dto/create-sale-item.dto';
 import { SaleItemQueryDto } from './dto/sale-item-query.dto';
 import { UpdateSaleItemDto } from './dto/update-sale-item.dto';
 import { SALE_ITEM } from './sale-item.constants';
-import { SaleItem, SaleItemSchema } from 'src/core/database/mongo/schema/sale-item.schema';
+import {
+  SaleItem,
+  SaleItemSchema,
+} from 'src/core/database/mongo/schema/sale-item.schema';
 
 @Injectable()
 export class SaleItemService extends MongoRepository<SaleItem> {
@@ -24,7 +25,7 @@ export class SaleItemService extends MongoRepository<SaleItem> {
     super(mongo.getModel(SaleItem.name, SaleItemSchema));
   }
 
-  async create(payload: CreateSaleItemDto) {
+  async create(payload: CreateSaleItemDto & { saleId: string }) {
     try {
       return await this.withTransaction(async (session) => {
         const { productId, saleId } = payload;

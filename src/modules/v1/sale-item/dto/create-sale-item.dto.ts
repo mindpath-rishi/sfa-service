@@ -7,10 +7,10 @@ export class CreateSaleItemDto {
    * =================
    * Data Transfer Object for creating new SalesItem records
    */
-  @ApiProperty({ type: String, description: 'Business identifier for sale' })
-  @IsNotEmpty()
-  @IsString()
-  saleId!: string;
+  // @ApiProperty({ type: String, description: 'Business identifier for sale' })
+  // @IsNotEmpty()
+  // @IsString()
+  // saleId!: string;
 
   @ApiProperty({ type: String, description: 'Business identifier for product' })
   @IsNotEmpty()
@@ -45,12 +45,22 @@ export class CreateSaleItemDto {
   @ApiProperty({ type: Number })
   @IsNotEmpty()
   @IsNumber()
+  piecePrice!: number;
+
+  @ApiProperty({ type: Number })
+  @IsNotEmpty()
+  @IsNumber()
   caseNetWeight!: number;
+
+  @ApiProperty({ type: Number })
+  @IsNotEmpty()
+  @IsNumber()
+  pieceNetWeight!: number;
 
   @ApiPropertyOptional({ type: Number, default: 0 })
   @IsOptional()
   @IsNumber()
-  totalWeight?: number;
+  totalNetWeight?: number;
 
   /**
    * TotalValue

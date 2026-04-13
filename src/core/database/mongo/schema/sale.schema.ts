@@ -27,6 +27,9 @@ export class Sale {
   vanId!: string;
 
   @Prop({ type: String, required: true, index: true })
+  visitId!: string;
+
+  @Prop({ type: String, required: true, index: true })
   vanName!: string;
 
   @Prop({ type: String, required: true, index: true })
@@ -118,7 +121,7 @@ export class Sale {
   @Prop({
     type: String,
     enum: SaleStatus,
-    default: SaleStatus.DRAFT,
+    default: SaleStatus.COMPLETED,
     index: true,
   })
   status!: SaleStatus;

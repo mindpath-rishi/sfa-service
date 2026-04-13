@@ -1,4 +1,3 @@
-
 import {
   Injectable,
   NotFoundException,
@@ -10,14 +9,17 @@ import { MongoService } from 'src/core/database/mongo/mongo.service';
 import { MongoRepository } from 'src/core/database/mongo/mongo.repository';
 import { FilterQuery } from 'src/core/database/mongo/mongo.interface';
 
-import { StockCount, StockCountSchema } from 'src/core/database/mongo/schema/stock-count.schema';
+import {
+  StockCount,
+  StockCountSchema,
+} from 'src/core/database/mongo/schema/stock-count.schema';
 
 import { STOCK_COUNT } from './stock-count.constants';
 import { CreateStockCountDto } from './dto/create-stock-count.dto';
 import { UpdateStockCountDto } from './dto/update-stock-count.dto';
 import { StockCountQueryDto } from './dto/stock-count-query.dto';
 import { IdGenerator } from 'src/shared/utils/id-generator.utils';
-
+import { StockCountStatus } from 'src/shared/enums/stock-count.enums';
 
 @Injectable()
 export class StockCountService extends MongoRepository<StockCount> {
@@ -28,11 +30,11 @@ export class StockCountService extends MongoRepository<StockCount> {
   async create(payload: CreateStockCountDto) {
     try {
       return await this.withTransaction(async (session) => {
-        
-
-        const filter: FilterQuery<StockCount> = {};
-
-        
+        const { vanId, date } = payload;
+        const filter: FilterQuery<StockCount> = {
+          vanId,
+          date,
+        };
 
         const existing = await this.findOne(filter, {
           session,
@@ -48,7 +50,7 @@ export class StockCountService extends MongoRepository<StockCount> {
             existing._id.toString(),
             {
               ...payload,
-              status: 'ACTIVE',
+              status: StockCountStatus.DRAFT,
               isDeleted: false,
             },
             { session },
@@ -122,13 +124,10 @@ export class StockCountService extends MongoRepository<StockCount> {
   async update(stockCountId: string, dto: UpdateStockCountDto) {
     try {
       return await this.withTransaction(async (session) => {
-        
-
-        const doc = await this.updateOne(
-          { stockCountId },
-          dto,
-          { session, new: true },
-        );
+        const doc = await this.updateOne({ stockCountId }, dto, {
+          session,
+          new: true,
+        });
 
         if (!doc) throw new NotFoundException(STOCK_COUNT.NOT_FOUND);
 

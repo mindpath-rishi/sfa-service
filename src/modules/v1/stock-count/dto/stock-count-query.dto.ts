@@ -1,63 +1,152 @@
 import { StockCountStatus } from 'src/shared/enums/stock-count.enums';
 
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEnum, IsNumber, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import {
+  IsOptional,
+  IsString,
+  MinLength,
+  MaxLength,
+  IsDate,
+  IsNumber,
+  IsEnum,
+} from 'class-validator';
 import { PaginationDto } from 'src/shared/dto/pagination.dto';
 
 /**
  * StockCountQueryDto
  * =================
- * Data Transfer Object for querying StockCount records
- * 
- * All fields are optional - supports partial matching and range queries
- * Extends PaginationDto for pagination support
+ * DTO for querying StockCount
  */
 export class StockCountQueryDto extends PaginationDto {
-  @ApiPropertyOptional({ description: "Search by name, code, or identifier (supports partial matching)", example: "search term" })
+  @ApiPropertyOptional({ description: 'Search text', example: 'abc' })
   @IsOptional()
   @IsString()
   @MinLength(2)
   @MaxLength(100)
   searchText?: string;
 
-  @ApiPropertyOptional({ type: String, description: 'Business identifier for stockCount' })
+  @ApiPropertyOptional({ type: String })
   @IsOptional()
   @IsString()
-  stockCountId?: string;
+  workSessionId?: string;
 
-  @ApiPropertyOptional({ type: String , description: 'Filter by van ID' })
+  @ApiPropertyOptional({ type: String })
   @IsOptional()
   @IsString()
   vanId?: string;
 
-  @ApiPropertyOptional({ type: String , description: 'Filter by employee ID' })
+  @ApiPropertyOptional({ type: String })
   @IsOptional()
   @IsString()
   employeeId?: string;
 
-  @ApiPropertyOptional({ type: Number , description: "Supports operators: gt, gte, lt, lte", example: 10 })
+  @ApiPropertyOptional({ type: Date })
+  @IsOptional()
+  @IsDate()
+  date?: Date;
+
+  @ApiPropertyOptional({ type: Number })
   @IsOptional()
   @IsNumber()
-  totalQuantity?: number;
+  systemQty?: number;
 
-  @ApiPropertyOptional({ type: Number , description: "Supports operators: gt, gte, lt, lte", example: 10 })
+  @ApiPropertyOptional({ type: Number })
   @IsOptional()
   @IsNumber()
-  totalWeight?: number;
+  systemCase?: number;
 
-  @ApiPropertyOptional({ type: Number , description: "Supports operators: gt, gte, lt, lte", example: 10 })
+  @ApiPropertyOptional({ type: Number })
   @IsOptional()
   @IsNumber()
-  totalValue?: number;
+  systemPiece?: number;
 
-  @ApiPropertyOptional({ type: String , description: 'Filter by updatedBy ID' })
+  @ApiPropertyOptional({ type: Number })
+  @IsOptional()
+  @IsNumber()
+  systemWeight?: number;
+
+  @ApiPropertyOptional({ type: Number })
+  @IsOptional()
+  @IsNumber()
+  systemValue?: number;
+
+  @ApiPropertyOptional({ type: Number })
+  @IsOptional()
+  @IsNumber()
+  countedQty?: number;
+
+  @ApiPropertyOptional({ type: Number })
+  @IsOptional()
+  @IsNumber()
+  countedCase?: number;
+
+  @ApiPropertyOptional({ type: Number })
+  @IsOptional()
+  @IsNumber()
+  countedPiece?: number;
+
+  @ApiPropertyOptional({ type: Number })
+  @IsOptional()
+  @IsNumber()
+  countedWeight?: number;
+
+  @ApiPropertyOptional({ type: Number })
+  @IsOptional()
+  @IsNumber()
+  countedValue?: number;
+
+  @ApiPropertyOptional({ type: Number })
+  @IsOptional()
+  @IsNumber()
+  varianceQty?: number;
+
+  @ApiPropertyOptional({ type: Number })
+  @IsOptional()
+  @IsNumber()
+  varianceCase?: number;
+
+  @ApiPropertyOptional({ type: Number })
+  @IsOptional()
+  @IsNumber()
+  variancePiece?: number;
+
+  @ApiPropertyOptional({ type: Number })
+  @IsOptional()
+  @IsNumber()
+  varianceWeight?: number;
+
+  @ApiPropertyOptional({ type: Number })
+  @IsOptional()
+  @IsNumber()
+  varianceValue?: number;
+
+  @ApiPropertyOptional({ type: String })
+  @IsOptional()
+  @IsString()
+  remark?: string;
+
+  @ApiPropertyOptional({ type: String })
+  @IsOptional()
+  @IsString()
+  createdById?: string;
+
+  @ApiPropertyOptional({ type: String })
   @IsOptional()
   @IsString()
   updatedById?: string;
 
-  @ApiPropertyOptional({ enum: StockCountStatus, description: 'Filter by status', default: StockCountStatus.DRAFT })
+  @ApiPropertyOptional({ type: String })
+  @IsOptional()
+  @IsString()
+  approvedById?: string;
+
+  @ApiPropertyOptional({ type: Date })
+  @IsOptional()
+  @IsDate()
+  approvedAt?: Date;
+
+  @ApiPropertyOptional({ enum: StockCountStatus })
   @IsOptional()
   @IsEnum(StockCountStatus)
   status?: StockCountStatus;
-
 }

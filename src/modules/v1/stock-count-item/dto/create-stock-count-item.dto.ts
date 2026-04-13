@@ -1,41 +1,120 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsNotEmpty, IsNumber, IsOptional, IsString } from 'class-validator';
-
+import {
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  IsNumber,
+  IsDate,
+} from 'class-validator';
 
 export class CreateStockCountItemDto {
-/**
- * CreateStockCountItemDto
- * =================
- * Data Transfer Object for creating new StockCountItem records
- */
-  @ApiProperty({ type: String, description: 'Business identifier for stockCount' })
+  /**
+   * CreateStockCountItemDto
+   * =================
+   * DTO for creating StockCountItem
+   */
+  @ApiProperty({ type: String })
   @IsNotEmpty()
   @IsString()
   stockCountId!: string;
 
-  @ApiProperty({ type: String, description: 'Business identifier for product' })
+  @ApiProperty({ type: String })
   @IsNotEmpty()
   @IsString()
   productId!: string;
 
-  @ApiProperty({ type: Number })
-  @IsNotEmpty()
-  @IsNumber()
-  stock!: number;
+  @ApiPropertyOptional({ type: String })
+  @IsOptional()
+  @IsString()
+  productName?: string;
+
+  @ApiPropertyOptional({ type: String })
+  @IsOptional()
+  @IsString()
+  vanId?: string;
 
   @ApiProperty({ type: Number })
   @IsNotEmpty()
   @IsNumber()
-  weight!: number;
+  systemQty!: number;
+
+  @ApiPropertyOptional({ type: Number })
+  @IsOptional()
+  @IsNumber()
+  systemCases?: number;
+
+  @ApiPropertyOptional({ type: Number })
+  @IsOptional()
+  @IsNumber()
+  systemPieces?: number;
 
   @ApiProperty({ type: Number })
   @IsNotEmpty()
   @IsNumber()
-  value!: number;
+  countedQty!: number;
+
+  @ApiPropertyOptional({ type: Number })
+  @IsOptional()
+  @IsNumber()
+  countedCases?: number;
+
+  @ApiPropertyOptional({ type: Number })
+  @IsOptional()
+  @IsNumber()
+  countedPieces?: number;
 
   @ApiProperty({ type: Number })
   @IsNotEmpty()
   @IsNumber()
-  price!: number;
+  varianceQty!: number;
 
+  @ApiPropertyOptional({ type: Number })
+  @IsOptional()
+  @IsNumber()
+  varianceCases?: number;
+
+  @ApiPropertyOptional({ type: Number })
+  @IsOptional()
+  @IsNumber()
+  variancePieces?: number;
+
+  @ApiProperty({ type: Number })
+  @IsNotEmpty()
+  @IsNumber()
+  piecePrice!: number;
+
+  @ApiProperty({ type: Number })
+  @IsNotEmpty()
+  @IsNumber()
+  systemValue!: number;
+
+  @ApiProperty({ type: Number })
+  @IsNotEmpty()
+  @IsNumber()
+  countedValue!: number;
+
+  @ApiProperty({ type: Number })
+  @IsNotEmpty()
+  @IsNumber()
+  varianceValue!: number;
+
+  @ApiProperty({ type: Number })
+  @IsNotEmpty()
+  @IsNumber()
+  unitQtyInCase!: number;
+
+  @ApiPropertyOptional({ type: String })
+  @IsOptional()
+  @IsString()
+  remark?: string;
+
+  @ApiPropertyOptional({ type: String })
+  @IsOptional()
+  @IsString()
+  countedBy?: string;
+
+  @ApiPropertyOptional({ type: Date })
+  @IsOptional()
+  @IsDate()
+  countedAt?: Date;
 }

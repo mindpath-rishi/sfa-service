@@ -11,7 +11,6 @@ export type InventoryTransactionDocument =
   HydratedDocument<InventoryTransaction>;
 
 @Schema({
-  timestamps: true,
   collection: 'inventory_transactions',
 })
 export class InventoryTransaction {

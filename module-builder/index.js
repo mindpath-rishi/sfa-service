@@ -38,11 +38,7 @@ if (!entity || entity === true) {
 console.log(`🚀 Generating module for entity: ${entity}`);
 
 // Validate schema exists
-const schemaPath = path.join(
-  ROOT,
-  'src/core/database/mongo/schema',
-  `${entity}.schema.ts`,
-);
+const schemaPath = path.join(ROOT, 'src/core/database/mongo/schema', `${entity}.schema.ts`);
 if (!fs.existsSync(schemaPath)) {
   console.error(`Error: Schema file not found: ${schemaPath}`);
   process.exit(1);
@@ -74,7 +70,7 @@ const toTitleCase = (value) =>
 let titleCase = toTitleCase(entity);
 
 // Generate core module files
-writeFileSafe(`${meta.moduleDir}/${entity}.controller.ts`, controllerTpl({...meta, titleCase}));
+writeFileSafe(`${meta.moduleDir}/${entity}.controller.ts`, controllerTpl({ ...meta, titleCase }));
 writeFileSafe(`${meta.moduleDir}/${entity}.service.ts`, serviceTpl(meta));
 writeFileSafe(`${meta.moduleDir}/${entity}.module.ts`, moduleTpl(meta));
 writeFileSafe(`${meta.moduleDir}/${entity}.constants.ts`, constantsTpl(meta));
@@ -85,9 +81,9 @@ writeFileSafe(`${meta.dtoDir}/update-${entity}.dto.ts`, updateDtoTpl(meta));
 writeFileSafe(`${meta.dtoDir}/${entity}-query.dto.ts`, queryDtoTpl(meta));
 
 // Generate enums only if not existing
-if (!fs.existsSync(`${meta.enumDir}/${entity}.enums.ts`)) {
-  writeFileSafe(`${meta.enumDir}/${entity}.enums.ts`, enumTpl(meta));
-}
+// if (!fs.existsSync(`${meta.enumDir}/${entity}.enums.ts`)) {
+//   writeFileSafe(`shared/enums/${entity}.enums.ts`, enumTpl(meta));
+// }
 
 // Update .env with module flag
 const envPath = path.join(ROOT, '.env.example');

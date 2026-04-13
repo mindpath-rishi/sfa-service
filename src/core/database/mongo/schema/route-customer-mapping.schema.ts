@@ -9,7 +9,7 @@ import {
 export type RouteCustomerMappingDocument =
   HydratedDocument<RouteCustomerMapping>;
 
-@Schema({ timestamps: true, collection: 'route_customer_mappings' })
+@Schema({ collection: 'route_customer_mappings' })
 export class RouteCustomerMapping {
   /* ======================================================
    * IDENTITY

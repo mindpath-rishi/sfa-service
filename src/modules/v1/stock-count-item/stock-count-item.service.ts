@@ -81,7 +81,7 @@ export class StockCountItemService extends MongoRepository<StockCountItem> {
 
     const filter: FilterQuery<StockCountItem> = {};
 
-    if (status) filter.status = status;
+    // if (status) filter.status = status;
 
     if (searchText) {
       const regex = new RegExp(searchText, 'i');

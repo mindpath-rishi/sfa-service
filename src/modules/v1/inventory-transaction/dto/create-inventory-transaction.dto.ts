@@ -1,6 +1,7 @@
 import {
   InventoryTransactionStatus,
   TransactionType,
+  Direction,
 } from 'src/shared/enums/inventory-transaction.enums';
 
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -13,13 +14,19 @@ import {
   IsString,
   Min,
 } from 'class-validator';
+import { Type } from 'class-transformer';
 
 export class CreateInventoryTransactionDto {
   /**
    * CreateInventoryTransactionDto
    * =================
-   * Data Transfer Object for creating new InventoryTransaction records
+   * DTO for creating Inventory Transactions
    */
+
+  /* ======================================================
+   * REFERENCES
+   * ====================================================== */
+
   @ApiProperty({ type: String, description: 'Business identifier for product' })
   @IsNotEmpty()
   @IsString()
@@ -43,10 +50,20 @@ export class CreateInventoryTransactionDto {
   @IsString()
   warehouseId?: string;
 
+  /* ======================================================
+   * TRANSACTION DETAILS
+   * ====================================================== */
+
   @ApiProperty({ enum: TransactionType })
   @IsNotEmpty()
   @IsEnum(TransactionType)
   transactionType!: TransactionType;
+
+  // ✅ NEW FIELD (MISSING EARLIER)
+  @ApiProperty({ enum: Direction, description: 'IN or OUT' })
+  @IsNotEmpty()
+  @IsEnum(Direction)
+  direction!: Direction;
 
   @ApiProperty({ type: Number })
   @IsNotEmpty()
@@ -64,6 +81,10 @@ export class CreateInventoryTransactionDto {
   @IsNumber()
   pieces?: number;
 
+  /* ======================================================
+   * BUSINESS META
+   * ====================================================== */
+
   @ApiPropertyOptional({ type: String })
   @IsOptional()
   @IsString()
@@ -74,10 +95,18 @@ export class CreateInventoryTransactionDto {
   @IsString()
   remark?: string;
 
-  @ApiPropertyOptional({ type: Date, default: Date.now })
+  @ApiPropertyOptional({
+    type: Date,
+    default: Date.now,
+  })
   @IsOptional()
+  @Type(() => Date) // ✅ important for transformation
   @IsDate()
   transactionDate?: Date;
+
+  /* ======================================================
+   * STATUS
+   * ====================================================== */
 
   @ApiPropertyOptional({
     enum: InventoryTransactionStatus,

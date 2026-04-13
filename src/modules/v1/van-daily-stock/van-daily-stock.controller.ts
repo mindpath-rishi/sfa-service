@@ -92,13 +92,22 @@ export class VanDailyStockController {
     return this.service.findAll(query);
   }
 
+  @Get('summary')
+  @Permissions('VAN_DAILY_STOCK_VIEW')
+  async summary(@Query() query: { vanId: string }) {
+    return this.service.getDayEndSummary(query?.vanId);
+  }
+
   /**
    * Get VanDailyStock by ID
    * -----------------------
    */
   @Permissions('VAN_DAILY_STOCK_VIEW')
   @Get(':vanDailyStockId')
-  @ApiParam({ name: 'vanDailyStockId', description: 'VanDailyStock vanDailyStockId' })
+  @ApiParam({
+    name: 'vanDailyStockId',
+    description: 'VanDailyStock vanDailyStockId',
+  })
   async findOne(@Param('vanDailyStockId') vanDailyStockId: string) {
     return this.service.findByVanDailyStockId(vanDailyStockId);
   }
@@ -109,7 +118,10 @@ export class VanDailyStockController {
    */
   @Permissions('VAN_DAILY_STOCK_UPDATE')
   @Patch(':vanDailyStockId')
-  @ApiParam({ name: 'vanDailyStockId', description: 'VanDailyStock vanDailyStockId' })
+  @ApiParam({
+    name: 'vanDailyStockId',
+    description: 'VanDailyStock vanDailyStockId',
+  })
   async update(
     @Param('vanDailyStockId') vanDailyStockId: string,
     @Body() dto: UpdateVanDailyStockDto,
@@ -123,7 +135,10 @@ export class VanDailyStockController {
    */
   @Permissions('VAN_DAILY_STOCK_DELETE')
   @Delete(':vanDailyStockId')
-  @ApiParam({ name: 'vanDailyStockId', description: 'VanDailyStock vanDailyStockId' })
+  @ApiParam({
+    name: 'vanDailyStockId',
+    description: 'VanDailyStock vanDailyStockId',
+  })
   async delete(@Param('vanDailyStockId') vanDailyStockId: string) {
     return this.service.delete(vanDailyStockId);
   }

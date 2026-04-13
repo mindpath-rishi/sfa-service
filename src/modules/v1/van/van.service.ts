@@ -433,6 +433,7 @@ export class VanService extends MongoRepository<Van> {
             day: '$route.day',
             status: '$route.status',
             associatedUsers: '$associatedUsers',
+            outletCount: '$route.outletCount',
           },
         },
       },

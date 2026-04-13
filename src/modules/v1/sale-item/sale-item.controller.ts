@@ -77,7 +77,7 @@ export class SaleItemController {
     SALE_ITEM.CREATED,
     HttpStatus.CREATED,
   )
-  async create(@Body() dto: CreateSaleItemDto) {
+  async create(@Body() dto: CreateSaleItemDto & { saleId: string }) {
     return this.service.create(dto);
   }
 

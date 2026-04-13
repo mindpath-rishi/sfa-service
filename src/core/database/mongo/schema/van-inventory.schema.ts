@@ -23,7 +23,7 @@ export type VanInventoryDocument = HydratedDocument<VanInventory>;
  * INVENTORY SCHEMA
  * ====================================================== */
 
-@Schema({ timestamps: true, collection: 'inventories' })
+@Schema({ collection: 'inventories' })
 export class VanInventory {
   /* ======================================================
    * IDENTITY

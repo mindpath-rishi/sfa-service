@@ -1,51 +1,129 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsNumber, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import {
+  IsOptional,
+  IsString,
+  MinLength,
+  MaxLength,
+  IsNumber,
+  IsDate,
+} from 'class-validator';
 import { PaginationDto } from 'src/shared/dto/pagination.dto';
 
 /**
  * StockCountItemQueryDto
  * =================
- * Data Transfer Object for querying StockCountItem records
- * 
- * All fields are optional - supports partial matching and range queries
- * Extends PaginationDto for pagination support
+ * DTO for querying StockCountItem
  */
 export class StockCountItemQueryDto extends PaginationDto {
-  @ApiPropertyOptional({ description: "Search by name, code, or identifier (supports partial matching)", example: "search term" })
+  @ApiPropertyOptional({ description: 'Search text', example: 'abc' })
   @IsOptional()
   @IsString()
   @MinLength(2)
   @MaxLength(100)
   searchText?: string;
 
-  @ApiPropertyOptional({ type: String , description: 'Filter by stockCount ID' })
+  @ApiPropertyOptional({ type: String })
   @IsOptional()
   @IsString()
   stockCountId?: string;
 
-  @ApiPropertyOptional({ type: String , description: 'Filter by product ID' })
+  @ApiPropertyOptional({ type: String })
   @IsOptional()
   @IsString()
   productId?: string;
 
-  @ApiPropertyOptional({ type: Number , description: "Supports operators: gt, gte, lt, lte", example: 10 })
+  @ApiPropertyOptional({ type: String })
+  @IsOptional()
+  @IsString()
+  productName?: string;
+
+  @ApiPropertyOptional({ type: String })
+  @IsOptional()
+  @IsString()
+  vanId?: string;
+
+  @ApiPropertyOptional({ type: Number })
   @IsOptional()
   @IsNumber()
-  stock?: number;
+  systemQty?: number;
 
-  @ApiPropertyOptional({ type: Number , description: "Supports operators: gt, gte, lt, lte", example: 10 })
+  @ApiPropertyOptional({ type: Number })
   @IsOptional()
   @IsNumber()
-  weight?: number;
+  systemCases?: number;
 
-  @ApiPropertyOptional({ type: Number , description: "Supports operators: gt, gte, lt, lte", example: 10 })
+  @ApiPropertyOptional({ type: Number })
   @IsOptional()
   @IsNumber()
-  value?: number;
+  systemPieces?: number;
 
-  @ApiPropertyOptional({ type: Number , description: "Supports operators: gt, gte, lt, lte", example: 10 })
+  @ApiPropertyOptional({ type: Number })
   @IsOptional()
   @IsNumber()
-  price?: number;
+  countedQty?: number;
 
+  @ApiPropertyOptional({ type: Number })
+  @IsOptional()
+  @IsNumber()
+  countedCases?: number;
+
+  @ApiPropertyOptional({ type: Number })
+  @IsOptional()
+  @IsNumber()
+  countedPieces?: number;
+
+  @ApiPropertyOptional({ type: Number })
+  @IsOptional()
+  @IsNumber()
+  varianceQty?: number;
+
+  @ApiPropertyOptional({ type: Number })
+  @IsOptional()
+  @IsNumber()
+  varianceCases?: number;
+
+  @ApiPropertyOptional({ type: Number })
+  @IsOptional()
+  @IsNumber()
+  variancePieces?: number;
+
+  @ApiPropertyOptional({ type: Number })
+  @IsOptional()
+  @IsNumber()
+  piecePrice?: number;
+
+  @ApiPropertyOptional({ type: Number })
+  @IsOptional()
+  @IsNumber()
+  systemValue?: number;
+
+  @ApiPropertyOptional({ type: Number })
+  @IsOptional()
+  @IsNumber()
+  countedValue?: number;
+
+  @ApiPropertyOptional({ type: Number })
+  @IsOptional()
+  @IsNumber()
+  varianceValue?: number;
+
+  @ApiPropertyOptional({ type: Number })
+  @IsOptional()
+  @IsNumber()
+  unitQtyInCase?: number;
+
+  @ApiPropertyOptional({ type: String })
+  @IsOptional()
+  @IsString()
+  remark?: string;
+
+  @ApiPropertyOptional({ type: String })
+  @IsOptional()
+  @IsString()
+  countedBy?: string;
+
+  @ApiPropertyOptional({ type: Date })
+  @IsOptional()
+  @IsDate()
+  countedAt?: Date;
 }

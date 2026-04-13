@@ -130,8 +130,8 @@ export class UpdateSaleDto {
    */
   @ApiPropertyOptional({
     enum: SaleStatus,
-    example: SaleStatus.DRAFT,
-    default: SaleStatus.DRAFT,
+    example: SaleStatus.COMPLETED,
+    default: SaleStatus.COMPLETED,
     description: 'Amount received',
   })
   @IsOptional()

@@ -51,7 +51,7 @@ export const GeoTagSchema = SchemaFactory.createForClass(GeoTag);
  * CUSTOMER SCHEMA
  * ====================================================== */
 
-@Schema({ timestamps: true, collection: 'customer_master' })
+@Schema({ collection: 'customer_master' })
 export class Customer {
   /* ======================================================
    * IDENTITY
@@ -134,10 +134,13 @@ export class Customer {
     line2?: string;
   };
 
-  @Prop({ type: Number })
+  @Prop({ type: Number, default: 0 })
   creditLimit!: number;
 
-  @Prop({ type: Number })
+  @Prop({ type: Number, default: 0 })
+  creditDays!: number;
+
+  @Prop({ type: Number, default: 0 })
   outstanding!: number;
   /* ======================================================
    * LOCATION

@@ -113,7 +113,7 @@ export class ProductService extends MongoRepository<Product> {
           categoryId: payload.categoryId,
           productSysCode: payload.productSysCode,
           casePrice: payload.price,
-          caseWeight: payload.netWeight,
+          pieceNetWeight: payload.netWeight,
           priceType: payload.priceType,
           unitType: payload.unitType,
           unitSize: payload.unitSize,

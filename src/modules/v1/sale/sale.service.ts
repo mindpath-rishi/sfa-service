@@ -22,6 +22,15 @@ import { PaymentStatus } from 'src/shared/enums/payment.enums';
 import { SaleQueryDto } from './dto/sale.query.dto';
 import { UpdateSaleDto } from './dto/update-sale.dto';
 import { SALE } from './sale.constants';
+import { VanInventoryStatus } from 'src/shared/enums/van-inventory.enums';
+import { VanInventoryService } from '../van-inventory/van-inventory.service';
+import {
+  Direction,
+  TransactionType,
+} from 'src/shared/enums/inventory-transaction.enums';
+import { InventoryTransactionService } from '../inventory-transaction/inventory-transaction.service';
+import { CustomerService } from '../customer/customer.service';
+import { VanDailyStockService } from '../van-daily-stock/van-daily-stock.service';
 
 @Injectable()
 export class SaleService extends MongoRepository<Sale> {
@@ -30,6 +39,10 @@ export class SaleService extends MongoRepository<Sale> {
     private readonly productService: ProductService,
     private readonly saleItemService: SaleItemService,
     private readonly paymentService: PaymentService,
+    private readonly inventoryService: VanInventoryService,
+    private readonly inventoryTxnService: InventoryTransactionService,
+    private readonly customerService: CustomerService,
+    private readonly vanDailyStockService: VanDailyStockService,
   ) {
     super(mongo.getModel(Sale.name, SaleSchema));
   }
@@ -54,7 +67,15 @@ export class SaleService extends MongoRepository<Sale> {
         }
 
         /* ======================================================
-         * CALCULATE TOTALS
+         * HELPERS
+         * ====================================================== */
+
+        const toFixed4 = (val: number) => Number((val || 0).toFixed(4));
+
+        const isEqual = (a: number, b: number) => Math.abs(a - b) < 0.0001;
+
+        /* ======================================================
+         * CALCULATE TOTALS (BACKEND SOURCE OF TRUTH)
          * ====================================================== */
 
         let totalCases = 0;
@@ -69,9 +90,6 @@ export class SaleService extends MongoRepository<Sale> {
           const caseQty = item.caseQty || 0;
           const pieceQty = item.pieceQty || 0;
 
-          /**
-           * Fetch product
-           */
           const response = await this.productService.findByProductId(
             item.productId,
           );
@@ -83,31 +101,41 @@ export class SaleService extends MongoRepository<Sale> {
             );
           }
 
-          const unitQtyInCase = product.unitQtyInCase || 1;
-          const casePrice = product.casePrice || 0;
+          /* ================= PRICE (FROM BACKEND ONLY) ================= */
 
-          /* ================= CALCULATIONS ================= */
+          const unitQtyInCase = product.unitQtyInCase || 1;
+          const casePrice = Number(product.casePrice || 0);
+
+          // ✅ Use backend stored piece price OR derive safely
+          const piecePrice = Number(
+            product.piecePrice ?? casePrice / unitQtyInCase,
+          );
+
+          /* ================= QUANTITY ================= */
 
           const quantity = caseQty * unitQtyInCase + pieceQty;
 
-          const piecePrice = casePrice / unitQtyInCase;
+          /* ================= VALUE ================= */
 
-          const itemValue = caseQty * casePrice + pieceQty * piecePrice;
+          const itemValueRaw = caseQty * casePrice + pieceQty * piecePrice;
 
-          const pieceNetWeight = product.pieceWeight || 0;
-          const caseNetWeight = product.caseWeight || 0;
+          const itemValue = toFixed4(itemValueRaw);
 
-          const itemWeight = quantity * pieceNetWeight;
+          /* ================= WEIGHT ================= */
 
-          /* ================= ACCUMULATE ================= */
+          const pieceNetWeight = Number(product.pieceNetWeight || 0);
+          const caseNetWeight = Number(product.caseNetWeight || 0);
+
+          const itemWeightRaw = quantity * pieceNetWeight;
+          const itemWeight = toFixed4(itemWeightRaw);
+
+          /* ================= TOTALS ================= */
 
           totalCases += caseQty;
           totalPieces += pieceQty;
           totalQty += quantity;
           totalWeight += itemWeight;
           totalValue += itemValue;
-
-          /* ================= PUSH ITEM ================= */
 
           processedItems.push({
             saleId: '',
@@ -118,28 +146,37 @@ export class SaleService extends MongoRepository<Sale> {
             pieceQty,
             quantity,
 
-            casePrice,
-            piecePrice,
+            casePrice: toFixed4(casePrice),
+            piecePrice: toFixed4(piecePrice),
 
             unitQtyInCase,
 
             pieceNetWeight,
             caseNetWeight,
 
-            totalWeight: itemWeight,
+            totalNetWeight: itemWeight,
             totalValue: itemValue,
           });
         }
 
+        /* ================= FINAL ROUNDING ================= */
+
+        totalWeight = toFixed4(totalWeight);
+        totalValue = toFixed4(totalValue);
+
+        console.log('BACKEND TOTAL:', totalValue);
+
+        console.log('Other  Total', totalCases, totalPieces, totalQty);
+
         /* ======================================================
-         * VALIDATE FRONTEND DATA (ANTI-TAMPER)
+         * VALIDATE FRONTEND DATA (SAFE COMPARISON)
          * ====================================================== */
 
         if (
-          (payload.totalCases ?? 0) !== totalCases ||
-          (payload.totalPieces ?? 0) !== totalPieces ||
-          (payload.totalQty ?? 0) !== totalQty ||
-          (payload.totalValue ?? 0) !== totalValue
+          !isEqual(payload.totalCases ?? 0, totalCases) ||
+          !isEqual(payload.totalPieces ?? 0, totalPieces) ||
+          !isEqual(payload.totalQty ?? 0, totalQty) ||
+          !isEqual(payload.totalValue ?? 0, totalValue)
         ) {
           throw new BadRequestException({
             message: 'Sales data mismatch. Please refresh and try again.',
@@ -162,7 +199,7 @@ export class SaleService extends MongoRepository<Sale> {
          * PAYMENT CALCULATION
          * ====================================================== */
 
-        const pendingAmount = totalValue - (paidAmount || 0);
+        const pendingAmount = toFixed4(totalValue - (paidAmount || 0));
 
         let paymentStatus = SalePaymentStatus.UNPAID;
 
@@ -205,12 +242,87 @@ export class SaleService extends MongoRepository<Sale> {
           saleId,
         }));
 
-        await this.saleItemService.insertMany(itemsToInsert, {
-          session,
-        });
+        await this.saleItemService.insertMany(itemsToInsert, session);
 
         /* ======================================================
-         * CREATE PAYMENT (IF PAID)
+         * INVENTORY DEDUCTION + TRANSACTION LOG
+         * ====================================================== */
+
+        for (const item of processedItems) {
+          const { productId, quantity, caseQty, pieceQty } = item;
+
+          const inventory = await this.inventoryService.findOne(
+            {
+              productId,
+              vanId: doc.vanId,
+              status: VanInventoryStatus.ACTIVE,
+            },
+            { session },
+          );
+
+          if (!inventory) {
+            throw new BadRequestException(
+              `Inventory not found for product: ${productId}`,
+            );
+          }
+
+          if (inventory.quantity < quantity) {
+            throw new BadRequestException(
+              `Insufficient stock for product ${productId}. Available: ${inventory.quantity}, Required: ${quantity}`,
+            );
+          }
+
+          await this.inventoryService.updateOne(
+            { inventoryId: inventory.inventoryId },
+            {
+              $inc: {
+                quantity: -quantity,
+              },
+            },
+            { session },
+          );
+
+          await this.vanDailyStockService.updateOne(
+            {
+              productId: inventory?.productId,
+              vanId: inventory?.vanId,
+              date: new Date().setHours(0, 0, 0, 0) as any,
+            },
+            {
+              $inc: {
+                outQty: quantity,
+                closingQty: -quantity,
+              },
+            },
+            {
+              session,
+            },
+          );
+
+          await this.inventoryTxnService.create(
+            {
+              productId,
+              vanId: doc.vanId,
+              employeeId: doc.employeeId,
+
+              transactionType: TransactionType.SALE,
+              direction: Direction.OUT,
+
+              quantity,
+              cases: caseQty,
+              pieces: pieceQty,
+
+              referenceNo: saleId,
+              remark: 'Stock deducted from sale',
+
+              transactionDate: doc.date,
+            },
+            session,
+          );
+        }
+
+        /* ======================================================
+         * CREATE PAYMENT
          * ====================================================== */
 
         if (paidAmount > 0) {
@@ -236,6 +348,23 @@ export class SaleService extends MongoRepository<Sale> {
         }
 
         /* ======================================================
+         * CUSTOMER OUTSTANDING UPDATE (CREDIT SALE)
+         * ====================================================== */
+
+        console.log(type, pendingAmount);
+        if (type === SaleType.CREDIT && pendingAmount > 0) {
+          await this.customerService.updateOne(
+            { customerId: doc.customerId },
+            {
+              $inc: {
+                outstanding: pendingAmount,
+              },
+            },
+            { session },
+          );
+        }
+
+        /* ======================================================
          * RESPONSE
          * ====================================================== */
 
@@ -253,34 +382,104 @@ export class SaleService extends MongoRepository<Sale> {
   }
 
   async findAll(query: SaleQueryDto) {
-    const { searchText, status, page = 1, limit = 20 } = query;
+    const {
+      searchText,
+      salesId,
+      vanId,
+      vanName,
+      customerId,
+      customerName,
+      employeeId,
+      employeeName,
+      status,
+      type,
+      paymentStatus,
+      page = 1,
+      limit = 20,
+    } = query;
 
-    const filter: FilterQuery<Sale> = {};
+    const match: Record<string, any> = {
+      isDeleted: false,
+    };
+    const toSafeRegex = (value: string) =>
+      new RegExp(value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
 
-    if (status) filter.status = status;
+    if (status) match.status = status;
+    if (salesId) match.saleId = salesId;
+    if (vanId) match.vanId = vanId;
+    if (customerId) match.customerId = customerId;
+    if (employeeId) match.employeeId = employeeId;
+    if (employeeName) match.employeeName = employeeName;
+    if (type) match.type = type;
+    if (paymentStatus) match.paymentStatus = paymentStatus;
 
-    if (searchText) {
-      const regex = new RegExp(searchText, 'i');
-      filter.$or = [{ salesId: regex }];
+    if (vanName) {
+      match.vanName = toSafeRegex(vanName);
     }
 
-    const result = await this.paginate(filter, {
-      page,
-      limit,
-      sort: { createdAt: -1 },
-      lean: true,
-    });
+    if (customerName) {
+      match.customerName = toSafeRegex(customerName);
+    }
+
+    if (searchText) {
+      const regex = toSafeRegex(searchText);
+      match.$or = [{ customerName: regex }, { vanName: regex }];
+    }
+
+    const skip = (page - 1) * limit;
+
+    const pipeline: any[] = [
+      { $match: match },
+      { $sort: { createdAt: -1 } },
+      {
+        $lookup: {
+          from: 'sale_items',
+          localField: 'saleId',
+          foreignField: 'saleId',
+          as: 'items',
+        },
+      },
+      {
+        $facet: {
+          items: [{ $skip: skip }, { $limit: limit }],
+          meta: [{ $count: 'total' }],
+        },
+      },
+    ];
+
+    const [result] = await this.model.aggregate(pipeline);
+    const total = result?.meta?.[0]?.total ?? 0;
 
     return {
       statusCode: HttpStatus.OK,
       message: SALE.FETCHED,
-      data: result.items,
-      meta: result.meta,
+      data: result?.items ?? [],
+      meta: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      },
     };
   }
 
-  async findBySalesId(salesId: string) {
-    const doc = await this.findOne({ salesId }, { lean: true });
+  async findBySaleId(saleId: string) {
+    const [doc] = await this.model.aggregate([
+      {
+        $match: {
+          saleId,
+          isDeleted: false,
+        },
+      },
+      {
+        $lookup: {
+          from: 'sale_items',
+          localField: 'saleId',
+          foreignField: 'saleId',
+          as: 'items',
+        },
+      },
+    ]);
 
     if (!doc) throw new NotFoundException(SALE.NOT_FOUND);
 
@@ -289,6 +488,10 @@ export class SaleService extends MongoRepository<Sale> {
       message: SALE.FETCHED,
       data: doc,
     };
+  }
+
+  async findBySalesId(salesId: string) {
+    return this.findBySaleId(salesId);
   }
 
   async update(salesId: string, dto: UpdateSaleDto) {

@@ -19,6 +19,7 @@ import { CreateInventoryTransactionDto } from './dto/create-inventory-transactio
 import { UpdateInventoryTransactionDto } from './dto/update-inventory-transaction.dto';
 import { InventoryTransactionQueryDto } from './dto/inventory-transaction-query.dto';
 import { IdGenerator } from 'src/shared/utils/id-generator.utils';
+import { ClientSession } from 'mongoose';
 
 @Injectable()
 export class InventoryTransactionService extends MongoRepository<InventoryTransaction> {
@@ -28,11 +29,18 @@ export class InventoryTransactionService extends MongoRepository<InventoryTransa
     );
   }
 
-  async create(payload: CreateInventoryTransactionDto) {
+  async create(
+    payload: CreateInventoryTransactionDto,
+    session?: ClientSession,
+  ) {
     try {
       return await this.withTransaction(async (session) => {
-        
-        const filter: FilterQuery<InventoryTransaction> = {};
+        const { productId, vanId, referenceNo } = payload;
+        const filter: FilterQuery<InventoryTransaction> = {
+          productId,
+          vanId,
+          referenceNo,
+        };
 
         const existing = await this.findOne(filter, {
           session,
@@ -74,7 +82,7 @@ export class InventoryTransactionService extends MongoRepository<InventoryTransa
           message: INVENTORY_TRANSACTION.CREATED,
           data: doc,
         };
-      });
+      }, session);
     } catch (error) {
       this.handleDuplicateError(error);
     }

@@ -13,10 +13,10 @@
 
 export enum SaleStatus {
   // Sale created but not finalized
-  DRAFT = 'DRAFT',
+  COMPLETED = 'COMPLETED',
 
   // Sale confirmed, inventory deducted
-  CONFIRMED = 'CONFIRMED',
+  RETURNED = 'RETURNED',
 
   // Sale cancelled before confirmation
   CANCELLED = 'CANCELLED',
@@ -35,5 +35,5 @@ export enum SalePaymentStatus {
   PAID = 'PAID',
   UNPAID = 'UNPAID',
   OVERDUE = 'OVERDUE',
-  PARTIAL = 'PARTIAL'
+  PARTIAL = 'PARTIAL',
 }

@@ -31,39 +31,38 @@ export class VanInventoryTopupItemService extends MongoRepository<VanInventoryTo
   async create(payload: CreateVanInventoryTopupItemDto) {
     try {
       return await this.withTransaction(async (session) => {
-        const { vanInventoryTopupId, productId } = payload;
+        const { productId } = payload;
 
-        const filter: FilterQuery<VanInventoryTopupItem> = {
-          vanInventoryTopupId,
-          productId,
-        };
+        // const filter: FilterQuery<VanInventoryTopupItem> = {
+        //   productId,
+        // };
 
-        const existing = await this.findOne(filter, {
-          session,
-          includeDeleted: true,
-        });
+        // const existing = await this.findOne(filter, {
+        //   session,
+        //   includeDeleted: true,
+        // });
 
-        if (existing && !existing.isDeleted) {
-          throw new ConflictException(VAN_INVENTORY_TOPUP_ITEM.DUPLICATE);
-        }
+        // if (existing && !existing.isDeleted) {
+        //   throw new ConflictException(VAN_INVENTORY_TOPUP_ITEM.DUPLICATE);
+        // }
 
-        if (existing?.isDeleted) {
-          await this.updateById(
-            existing._id.toString(),
-            {
-              ...payload,
-              status: 'ACTIVE',
-              isDeleted: false,
-            },
-            { session },
-          );
+        // if (existing?.isDeleted) {
+        //   await this.updateById(
+        //     existing._id.toString(),
+        //     {
+        //       ...payload,
+        //       status: 'ACTIVE',
+        //       isDeleted: false,
+        //     },
+        //     { session },
+        //   );
 
-          return {
-            statusCode: HttpStatus.OK,
-            message: VAN_INVENTORY_TOPUP_ITEM.CREATED,
-            data: { vanInventoryTopupId: existing.vanInventoryTopupId },
-          };
-        }
+        //   return {
+        //     statusCode: HttpStatus.OK,
+        //     message: VAN_INVENTORY_TOPUP_ITEM.CREATED,
+        //     data: { vanInventoryTopupId: existing.vanInventoryTopupId },
+        //   };
+        // }
 
         const doc = await this.save(
           {

@@ -3,6 +3,7 @@ import { RouteStatus } from 'src/shared/enums/route.enums';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsEnum,
+  IsNotEmpty,
   IsNumber,
   IsOptional,
   IsString,
@@ -95,6 +96,14 @@ export class RouteCustomerQueryDto extends PaginationDto {
   @MinLength(2)
   @MaxLength(100)
   searchText?: string;
+
+  @ApiPropertyOptional({
+    description: 'Route session id',
+    example: 'ROUID98989898',
+  })
+  @IsNotEmpty()
+  @IsString()
+  routeSessionId?: string;
 
   @ApiPropertyOptional({
     description: 'Filter by customer status',

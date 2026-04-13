@@ -1,19 +1,28 @@
-
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 
-import { WorkSession, WorkSessionSchema } from 'src/core/database/mongo/schema/work-session.schema';
+import {
+  WorkSession,
+  WorkSessionSchema,
+} from 'src/core/database/mongo/schema/work-session.schema';
 import { WorkSessionController } from './work-session.controller';
 import { WorkSessionService } from './work-session.service';
 import { ActivityModule } from '../activity/activity.module';
 import { RouteSessionModule } from '../route-session/route-session.module';
-
+import { StockCountModule } from '../stock-count/stock-count.module';
+import { StockCountItemModule } from '../stock-count-item/stock-count-item.module';
+import { VanDailyStockModule } from '../van-daily-stock/van-daily-stock.module';
 
 @Module({
   imports: [
-    MongooseModule.forFeature([{ name: WorkSession.name, schema: WorkSessionSchema }]),
+    MongooseModule.forFeature([
+      { name: WorkSession.name, schema: WorkSessionSchema },
+    ]),
     ActivityModule,
-    RouteSessionModule
+    RouteSessionModule,
+    StockCountModule,
+    StockCountItemModule,
+    VanDailyStockModule,
   ],
   controllers: [WorkSessionController],
   providers: [WorkSessionService],

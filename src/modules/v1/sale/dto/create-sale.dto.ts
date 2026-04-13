@@ -39,6 +39,14 @@ export class CreateSaleDto {
   @IsString()
   customerId!: string;
 
+  @ApiProperty({
+    type: String,
+    description: 'Visit Id',
+  })
+  @IsNotEmpty()
+  @IsString()
+  visitId!: string;
+
   @ApiProperty({ type: String })
   @IsNotEmpty()
   @IsString()
@@ -59,6 +67,7 @@ export class CreateSaleDto {
 
   @ApiProperty({ type: Date })
   @IsNotEmpty()
+  @Type(() => Date)
   @IsDate()
   date!: Date;
 
@@ -80,7 +89,7 @@ export class CreateSaleDto {
   @ApiPropertyOptional({ type: Number, default: 0 })
   @IsNotEmpty()
   @IsNumber()
-  totalWeight!: number;
+  totalNetWeight!: number;
 
   @ApiPropertyOptional({ type: Number, default: 0 })
   @IsNotEmpty()
@@ -118,8 +127,8 @@ export class CreateSaleDto {
 
   @ApiPropertyOptional({
     enum: SaleStatus,
-    example: SaleStatus.DRAFT,
-    default: SaleStatus.DRAFT,
+    example: SaleStatus.COMPLETED,
+    default: SaleStatus.COMPLETED,
     description: 'Amount received',
   })
   @IsOptional()

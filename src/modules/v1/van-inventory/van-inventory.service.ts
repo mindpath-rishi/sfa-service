@@ -83,9 +83,13 @@ export class VanInventoryService extends MongoRepository<VanInventory> {
   }
 
   async findAll(query: VanInventoryQueryDto) {
-    const { searchText, status, page = 1, limit = 20 } = query;
+    const { searchText, status, page = 1, limit = 20, vanId } = query;
 
     const filter: FilterQuery<VanInventory> = {};
+
+    if (vanId) {
+      filter.vanId = vanId;
+    }
 
     if (status) filter.status = status;
 
@@ -118,6 +122,127 @@ export class VanInventoryService extends MongoRepository<VanInventory> {
       statusCode: HttpStatus.OK,
       message: VAN_INVENTORY.FETCHED,
       data: doc,
+    };
+  }
+
+  async findByVanId(vanId: string) {
+    const result = await this.model.aggregate([
+      {
+        $match: { vanId },
+      },
+      {
+        $lookup: {
+          from: 'product_master',
+          localField: 'productId',
+          foreignField: 'productId',
+          as: 'product',
+        },
+      },
+      {
+        $unwind: {
+          path: '$product',
+          preserveNullAndEmptyArrays: false,
+        },
+      },
+      {
+        $addFields: {
+          cases: {
+            $cond: [
+              { $gt: ['$product.unitQtyInCase', 0] },
+              {
+                $floor: {
+                  $divide: ['$quantity', '$product.unitQtyInCase'],
+                },
+              },
+              0,
+            ],
+          },
+          pieces: {
+            $mod: ['$quantity', '$product.unitQtyInCase'],
+          },
+          totalValue: {
+            $multiply: ['$quantity', { $ifNull: ['$product.piecePrice', 0] }],
+          },
+          totalNetWeight: {
+            $multiply: [
+              '$quantity',
+              { $ifNull: ['$product.pieceNetWeight', 0] },
+            ],
+          },
+        },
+      },
+
+      // ✅ STEP 1: GROUP BY PRODUCT
+      {
+        $group: {
+          _id: {
+            vanId: '$vanId',
+            productId: '$product.productId',
+          },
+
+          name: { $first: '$product.name' },
+          productSysCode: { $first: '$product.productSysCode' },
+
+          quantity: { $sum: '$quantity' },
+          cases: { $sum: '$cases' },
+          pieces: { $sum: '$pieces' },
+          totalValue: { $sum: '$totalValue' },
+          totalNetWeight: { $sum: '$totalNetWeight' },
+          pieceNetWeight: { $first: '$product.pieceNetWeight' },
+          piecePrice: { $first: '$product.piecePrice' },
+          unitQtyInCase: { $first: '$product.unitQtyInCase' },
+        },
+      },
+
+      // ✅ STEP 2: GROUP BY VAN
+      {
+        $group: {
+          _id: '$_id.vanId',
+
+          products: {
+            $push: {
+              productId: '$_id.productId',
+              name: '$name',
+              productSysCode: '$productSysCode',
+              quantity: '$quantity',
+              cases: '$cases',
+              pieces: '$pieces',
+              totalValue: '$totalValue',
+              totalNetWeight: '$totalNetWeight',
+              pieceNetWeight: '$pieceNetWeight',
+              piecePrice: '$piecePrice',
+              unitQtyInCase: '$unitQtyInCase',
+            },
+          },
+
+          totalCases: { $sum: '$cases' },
+          totalPieces: { $sum: '$pieces' },
+          totalValue: { $sum: '$totalValue' },
+          totalNetWeight: { $sum: '$totalNetWeight' },
+        },
+      },
+
+      {
+        $project: {
+          _id: 0,
+          vanId: '$_id',
+          products: 1,
+          totalCases: 1,
+          totalPieces: 1,
+          totalValue: 1,
+          totalNetWeight: 1,
+        },
+      },
+    ]);
+
+    if (!result || result.length === 0) {
+      throw new NotFoundException(VAN_INVENTORY.NOT_FOUND);
+    }
+
+    return {
+      statusCode: HttpStatus.OK,
+      message: VAN_INVENTORY.FETCHED,
+      data: result[0],
     };
   }
 

@@ -65,7 +65,6 @@ export class ${Entity}Service extends MongoRepository<${Entity}> {
         }`
             : ''
         }
-
         const filter: FilterQuery<${Entity}> = {};
 
         ${

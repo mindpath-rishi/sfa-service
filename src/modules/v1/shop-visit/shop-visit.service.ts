@@ -98,7 +98,7 @@ export class ShopVisitService extends MongoRepository<ShopVisit> {
         });
 
         /** Updated Count of visited outlets */
-        if ((existing?.[ShopVisitStatus.COMPLETED]) || !existing) {
+        if (existing?.[ShopVisitStatus.COMPLETED] || !existing) {
           this.routeSessionService.update(routeSessionId, {
             $inc: { visitedShops: 1, remainingShops: -1 },
           } as any);

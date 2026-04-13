@@ -33,10 +33,10 @@ export class Product {
   /* ================= WEIGHT ================= */
 
   @Prop({ required: true })
-  caseWeight!: number; // ✅ SOURCE OF TRUTH
+  caseNetWeight!: number; // ✅ SOURCE OF TRUTH
 
   @Prop({ required: true })
-  pieceWeight!: number; // ⚠️ DERIVED (auto-calculated)
+  pieceNetWeight!: number; // ⚠️ DERIVED (auto-calculated)
 
   @Prop({
     type: String,

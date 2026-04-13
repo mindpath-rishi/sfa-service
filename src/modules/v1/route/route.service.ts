@@ -27,6 +27,7 @@ import { RouteCustomerMappingStatus } from 'src/shared/enums/route-customer-mapp
 import { CustomerService } from '../customer/customer.service';
 import { CustomerQueryDto } from '../customer/dto/customer-query.dto';
 import { CustomerStatus } from 'src/shared/enums/customer.enums';
+import { ShopVisitService } from '../shop-visit/shop-visit.service';
 
 @Injectable()
 export class RouteService extends MongoRepository<Route> {
@@ -34,6 +35,7 @@ export class RouteService extends MongoRepository<Route> {
     mongo: MongoService,
     private readonly routeCustomerMappingService: RouteCustomerMappingService,
     private readonly customerService: CustomerService,
+    private readonly shopVisitService: ShopVisitService,
   ) {
     super(mongo.getModel(Route.name, RouteSchema));
   }
@@ -123,11 +125,174 @@ export class RouteService extends MongoRepository<Route> {
     };
   }
 
-  async getRouteCustomers(routeId: string, query: RouteCustomerQueryDto) {
-    const { searchText, page = 1, limit = 20, status } = query;
+  // async getRouteCustomers(
+  //   routeId: string,
+  //   query: RouteCustomerQueryDto & {
+  //     routeSessionId?: string;
+  //     visitStatus?: 'VISITED' | 'NOT_VISITED';
+  //   },
+  // ) {
+  //   const {
+  //     searchText,
+  //     page = 1,
+  //     limit = 20,
+  //     status,
+  //     routeSessionId,
+  //     visitStatus,
+  //   } = query;
 
-    // 1️⃣ Validate route
-    const route = await this.findOne({ routeId });
+  //   /* ======================================================
+  //    * 1️⃣ VALIDATE ROUTE
+  //    * ====================================================== */
+  //   const route = await this.findOne({ routeId });
+  //   if (!route) {
+  //     return {
+  //       statusCode: HttpStatus.NOT_FOUND,
+  //       message: ROUTE.NOT_FOUND,
+  //       data: [],
+  //     };
+  //   }
+
+  //   /* ======================================================
+  //    * 2️⃣ GET ACTIVE MAPPINGS
+  //    * ====================================================== */
+  //   const mappingResult = await this.routeCustomerMappingService.findAll({
+  //     routeId,
+  //     status: RouteCustomerMappingStatus.ACTIVE,
+  //   });
+
+  //   const mappings: any[] = mappingResult?.data || [];
+
+  //   if (!mappings.length) {
+  //     return {
+  //       statusCode: HttpStatus.OK,
+  //       message: ROUTE.FETCHED,
+  //       data: [],
+  //       meta: { page, limit, total: 0 },
+  //     };
+  //   }
+
+  //   /* ======================================================
+  //    * 3️⃣ EXTRACT CUSTOMER IDS
+  //    * ====================================================== */
+  //   const customerIds = mappings.map((m) => String(m.customerId));
+
+  //   /* ======================================================
+  //    * 4️⃣ FETCH CUSTOMERS
+  //    * ====================================================== */
+  //   const customerQuery: CustomerQueryDto = {
+  //     searchText,
+  //     page,
+  //     limit,
+  //     customerIds,
+  //     status: status as CustomerStatus | undefined,
+  //   };
+
+  //   const result: any = await this.customerService.findAll(customerQuery);
+  //   const customers = result?.data || [];
+
+  //   /* ======================================================
+  //    * 5️⃣ SEQUENCE MAP
+  //    * ====================================================== */
+  //   const sequenceMap = new Map(
+  //     mappings.map((m) => [String(m.customerId), m.sequence]),
+  //   );
+
+  //   /* ======================================================
+  //    * 6️⃣ FETCH SHOP VISITS (IF routeSessionId PROVIDED)
+  //    * ====================================================== */
+  //   let visitMap = new Map();
+
+  //   if (routeSessionId) {
+  //     const visitsResult: any = await this.shopVisitService.findAll({
+  //       routeSessionId,
+  //       page: 1,
+  //       limit: 1000,
+  //     });
+
+  //     const visits = visitsResult?.data || [];
+
+  //     // 👉 Keep latest visit per customer
+  //     visits.forEach((v: any) => {
+  //       const key = String(v.outletId);
+  //       const existing = visitMap.get(key);
+
+  //       if (!existing || new Date(v.visitedAt) > new Date(existing.visitedAt)) {
+  //         visitMap.set(key, v);
+  //       }
+  //     });
+  //   }
+
+  //   /* ======================================================
+  //    * 7️⃣ MERGE CUSTOMER + SEQUENCE + VISIT
+  //    * ====================================================== */
+  //   let data = (customers || []).map((c) => {
+  //     const customer = c?._doc || c;
+
+  //     const visit = visitMap.get(String(customer.customerId));
+
+  //     return {
+  //       ...customer,
+  //       sequence: sequenceMap.get(String(customer.customerId)) ?? null,
+
+  //       // ✅ Visit Info
+  //       isVisited: !!visit,
+  //       visitedAt: visit?.visitedAt || null,
+  //       visitStatus: visit ? visit.status : 'NOT_VISITED',
+  //     };
+  //   });
+
+  //   /* ======================================================
+  //    * 8️⃣ FILTER BY VISIT STATUS (OPTIONAL)
+  //    * ====================================================== */
+  //   if (visitStatus === 'VISITED') {
+  //     data = data.filter((c) => c.isVisited);
+  //   }
+
+  //   if (visitStatus === 'NOT_VISITED') {
+  //     data = data.filter((c) => !c.isVisited);
+  //   }
+
+  //   /* ======================================================
+  //    * 9️⃣ SORT BY SEQUENCE
+  //    * ====================================================== */
+  //   data.sort((a, b) => (a.sequence ?? 9999) - (b.sequence ?? 9999));
+
+  //   /* ======================================================
+  //    * 🔟 RESPONSE
+  //    * ====================================================== */
+  //   return {
+  //     statusCode: HttpStatus.OK,
+  //     message: ROUTE.FETCHED,
+  //     data,
+  //     meta: result?.meta || {
+  //       page,
+  //       limit,
+  //       total: data.length,
+  //     },
+  //   };
+  // }
+
+  async getRouteCustomers(
+    routeId: string,
+    query: RouteCustomerQueryDto & {
+      routeSessionId?: string;
+      visitStatus?: 'VISITED' | 'NOT_VISITED';
+    },
+  ) {
+    const {
+      searchText,
+      page = 1,
+      limit = 20,
+      status,
+      routeSessionId,
+      visitStatus,
+    } = query;
+
+    /* ======================================================
+     * 1️⃣ VALIDATE ROUTE
+     * ====================================================== */
+    const route = await this.model.findOne({ routeId });
     if (!route) {
       return {
         statusCode: HttpStatus.NOT_FOUND,
@@ -136,71 +301,230 @@ export class RouteService extends MongoRepository<Route> {
       };
     }
 
-    // 2️⃣ Get active mappings
-    const mappingResult = await this.routeCustomerMappingService.findAll({
-      routeId,
-      status: RouteCustomerMappingStatus.ACTIVE,
-    });
+    /* ======================================================
+     * 2️⃣ PIPELINE
+     * ====================================================== */
+    const pipeline: any[] = [
+      { $match: { routeId } },
 
+      /* ---------------- MAPPINGS ---------------- */
+      {
+        $lookup: {
+          from: 'route_customer_mappings',
+          let: { routeId: '$routeId' },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $eq: ['$routeId', '$$routeId'] },
+                    { $eq: ['$status', 'ACTIVE'] },
+                  ],
+                },
+              },
+            },
+          ],
+          as: 'mappings',
+        },
+      },
+      { $unwind: '$mappings' },
 
-    const mappings: any[] = mappingResult?.data || [];
+      /* ---------------- CUSTOMER ---------------- */
+      {
+        $lookup: {
+          from: 'customer_master',
+          localField: 'mappings.customerId',
+          foreignField: 'customerId',
+          as: 'customer',
+        },
+      },
+      { $unwind: '$customer' },
 
-    console.log(mappings, "==============mappings==================")
+      /* ---------------- FILTER ---------------- */
+      {
+        $match: {
+          ...(status ? { 'customer.status': status } : {}),
+          ...(searchText
+            ? {
+                $or: [
+                  { 'customer.name': { $regex: searchText, $options: 'i' } },
+                  { 'customer.mobile': { $regex: searchText, $options: 'i' } },
+                ],
+              }
+            : {}),
+        },
+      },
 
-    if (!mappings.length) {
-      return {
-        statusCode: HttpStatus.OK,
-        message: ROUTE.FETCHED,
-        data: [],
-        meta: { page, limit, total: 0 },
-      };
-    }
+      /* ---------------- VISIT (LATEST) ---------------- */
+      {
+        $lookup: {
+          from: 'shop_visits',
+          let: { customerId: '$customer.customerId' },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $eq: ['$outletId', '$$customerId'] },
+                    ...(routeSessionId
+                      ? [{ $eq: ['$routeSessionId', routeSessionId] }]
+                      : []),
+                  ],
+                },
+              },
+            },
+            { $sort: { visitedAt: -1 } },
+            { $limit: 1 },
+          ],
+          as: 'visit',
+        },
+      },
+      {
+        $unwind: {
+          path: '$visit',
+          preserveNullAndEmptyArrays: true,
+        },
+      },
 
-    // 3️⃣ Extract customerIds
-    const customerIds = mappings.map((m) => String(m.customerId));
+      /* ---------------- SALE (BY visitId) ---------------- */
+      {
+        $lookup: {
+          from: 'sales',
+          let: { visitId: '$visit.visitId' },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $eq: ['$visitId', '$$visitId'],
+                },
+              },
+            },
+            { $sort: { createdAt: -1 } },
+            { $limit: 1 },
+          ],
+          as: 'sale',
+        },
+      },
+      {
+        $unwind: {
+          path: '$sale',
+          preserveNullAndEmptyArrays: true,
+        },
+      },
 
-    // 4️⃣ Prepare customer query
-    const customerQuery: CustomerQueryDto = {
-      searchText,
-      page,
-      limit,
-      customerIds,
-      status: status as CustomerStatus | undefined
-    };
+      /* ---------------- NON-SALE (BY visitId) ---------------- */
+      {
+        $lookup: {
+          from: 'non_sale',
+          let: { visitId: '$visit.visitId' },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $eq: ['$visitId', '$$visitId'],
+                },
+              },
+            },
+            { $sort: { createdAt: -1 } },
+            { $limit: 1 },
+          ],
+          as: 'nonSale',
+        },
+      },
+      {
+        $unwind: {
+          path: '$nonSale',
+          preserveNullAndEmptyArrays: true,
+        },
+      },
 
-    // 5️⃣ Fetch customers
-    const result: any = await this.customerService.findAll(customerQuery);
-    const customers = result?.data || [];
-    console.log(customers, "======================Customers=====================")
-    // 6️⃣ Create sequence map (type-safe)
-    const sequenceMap = new Map(
-      mappings.map((m) => [String(m.customerId), m.sequence]),
-    );
+      /* ---------------- COMPUTED ---------------- */
+      {
+        $addFields: {
+          sequence: '$mappings.sequence',
 
-    // 7️⃣ Attach sequence safely (handle mongoose docs)
-    let data = (customers || []).map((c) => {
-      const customer = c?._doc || c; // ✅ FIX
+          isVisited: { $gt: ['$visit', null] },
+          visitedAt: '$visit.visitedAt',
+          visitStatus: {
+            $ifNull: ['$visit.status', 'NOT_VISITED'],
+          },
 
-      return {
-        ...customer,
-        sequence: sequenceMap.get(String(customer.customerId)) ?? null,
-      };
-    });
+          hasSale: { $gt: ['$sale', null] },
+          hasNonSale: { $gt: ['$nonSale', null] },
 
-    // 8️⃣ Sort by sequence (important for route order)
-    data.sort((a, b) => (a.sequence ?? 9999) - (b.sequence ?? 9999));
+          isNonSale: {
+            $and: [{ $gt: ['$visit', null] }, { $gt: ['$nonSale', null] }],
+          },
 
-    // 9️⃣ Optional: filter only mapped customers
-    // data = data.filter((c) => c.sequence !== null);
+          nonSaleReason: '$nonSale.reason',
+        },
+      },
 
+      /* ---------------- VISIT FILTER ---------------- */
+      ...(visitStatus === 'VISITED'
+        ? [{ $match: { isVisited: true } }]
+        : visitStatus === 'NOT_VISITED'
+          ? [{ $match: { isVisited: false } }]
+          : []),
+
+      /* ---------------- FINAL SHAPE ---------------- */
+      {
+        $replaceRoot: {
+          newRoot: {
+            $mergeObjects: [
+              '$customer',
+              {
+                sequence: '$sequence',
+
+                isVisited: '$isVisited',
+                visitedAt: '$visitedAt',
+                visitStatus: '$visitStatus',
+                visit: '$visit',
+
+                hasSale: '$hasSale',
+                sale: '$sale',
+
+                hasNonSale: '$hasNonSale',
+                isNonSale: '$isNonSale',
+                nonSaleReason: '$nonSaleReason',
+                nonSale: '$nonSale',
+              },
+            ],
+          },
+        },
+      },
+
+      /* ---------------- SORT ---------------- */
+      { $sort: { sequence: 1 } },
+
+      /* ---------------- PAGINATION ---------------- */
+      {
+        $facet: {
+          data: [{ $skip: (page - 1) * limit }, { $limit: limit }],
+          meta: [{ $count: 'total' }],
+        },
+      },
+    ];
+
+    /* ======================================================
+     * 3️⃣ EXECUTE
+     * ====================================================== */
+    const result = await this.model.aggregate(pipeline);
+
+    const data = result?.[0]?.data || [];
+    const total = result?.[0]?.meta?.[0]?.total || 0;
+
+    /* ======================================================
+     * 4️⃣ RESPONSE
+     * ====================================================== */
     return {
       statusCode: HttpStatus.OK,
       message: ROUTE.FETCHED,
       data,
-      meta: result?.meta || {
+      meta: {
         page,
         limit,
-        total: data.length,
+        total,
       },
     };
   }
