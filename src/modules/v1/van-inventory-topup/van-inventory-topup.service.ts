@@ -280,6 +280,8 @@ export class VanInventoryTopupService extends MongoRepository<VanInventoryTopup>
         let totalApprovedQty = 0;
         let totalApprovedWeight = 0;
         let totalApprovedValue = 0;
+        let totalApprovedCases = 0;
+        let totalApprovedPieces = 0;
 
         const processedItems: any[] = [];
 
@@ -312,6 +314,8 @@ export class VanInventoryTopupService extends MongoRepository<VanInventoryTopup>
           totalApprovedQty += requestedQty;
           totalApprovedWeight += requestedWeight;
           totalApprovedValue += requestedValue;
+          totalApprovedCases += item.requestedCaseQty || 0;
+          totalApprovedPieces += item.requestedPieceQty || 0;
 
           processedItems.push({
             vanInventoryTopupId: '',
@@ -352,14 +356,14 @@ export class VanInventoryTopupService extends MongoRepository<VanInventoryTopup>
           { session, includeDeleted: true },
         );
 
-        if (existing && !existing.isDeleted) {
-          throw new ConflictException(VAN_INVENTORY_TOPUP.DUPLICATE);
-        }
+        // if (existing && !existing.isDeleted) {
+        //   throw new ConflictException(VAN_INVENTORY_TOPUP.DUPLICATE);
+        // }
 
         /* ======================================================
          * 4. CREATE HEADER
          * ====================================================== */
-        const vanInventoryTopupId = IdGenerator.generate('VAN', 8);
+        const vanInventoryTopupId = IdGenerator.generate('INVTOP', 8);
 
         const doc = await this.save(
           {
@@ -371,6 +375,8 @@ export class VanInventoryTopupService extends MongoRepository<VanInventoryTopup>
             totalApprovedQty,
             totalApprovedWeight,
             totalApprovedValue,
+            totalApprovedCases,
+            totalApprovedPieces,
             status: VanInventoryTopupStatus.APPROVED,
           },
           { session },
@@ -403,6 +409,7 @@ export class VanInventoryTopupService extends MongoRepository<VanInventoryTopup>
               $setOnInsert: {
                 vanId: payload.vanId,
                 productId: item.productId,
+                inventoryId: IdGenerator.generate('INV', 8),
               },
             },
             { upsert: true, session },
@@ -483,7 +490,7 @@ export class VanInventoryTopupService extends MongoRepository<VanInventoryTopup>
               },
             },
           })),
-          { session },
+          { session, upsert: true },
         );
 
         /* ======================================================
@@ -528,14 +535,27 @@ export class VanInventoryTopupService extends MongoRepository<VanInventoryTopup>
   }
 
   async findByVanInventoryTopupId(vanInventoryTopupId: string) {
-    const doc = await this.findOne({ vanInventoryTopupId }, { lean: true });
+    const result = await this.model.aggregate([
+      { $match: { vanInventoryTopupId } },
+      {
+        $lookup: {
+          from: 'van_inventory_topup_items',
+          localField: 'vanInventoryTopupId',
+          foreignField: 'vanInventoryTopupId',
+          as: 'items',
+        },
+      },
+      { $limit: 1 },
+    ]);
 
-    if (!doc) throw new NotFoundException(VAN_INVENTORY_TOPUP.NOT_FOUND);
+    if (!result.length) {
+      throw new NotFoundException(VAN_INVENTORY_TOPUP.NOT_FOUND);
+    }
 
     return {
       statusCode: HttpStatus.OK,
       message: VAN_INVENTORY_TOPUP.FETCHED,
-      data: doc,
+      data: result[0],
     };
   }
 

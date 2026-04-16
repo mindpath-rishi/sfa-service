@@ -40,12 +40,23 @@ import { UpdateEmployeeDto } from './dto/update-employee.dto';
 import { EmployeeQueryDto } from './dto/employee.query.dto';
 import { EMPLOYEE } from './employee.constants';
 import { IdGenerator } from 'src/shared/utils/id-generator.utils';
+import { InjectModel } from '@nestjs/mongoose';
+import { Sale } from 'src/core/database/mongo/schema/sale.schema';
+import { Payment } from 'src/core/database/mongo/schema/payment.schema';
+import { Model } from 'mongoose';
+import { ShopVisit } from 'src/core/database/mongo/schema/shop-visit.schema';
 
 @Injectable()
 export class EmployeeService extends MongoRepository<Employee> {
   constructor(
     mongo: MongoService,
     private readonly userService: UserService,
+    @InjectModel(Sale.name)
+    private readonly saleModal: Model<Sale>,
+    @InjectModel(Payment.name)
+    private readonly paymentModel: Model<Payment>,
+    @InjectModel(ShopVisit.name)
+    private readonly shopVisitModel: Model<ShopVisit>,
   ) {
     super(mongo.getModel(Employee.name, EmployeeSchema));
   }
@@ -296,6 +307,77 @@ export class EmployeeService extends MongoRepository<Employee> {
       statusCode: HttpStatus.OK,
       message: EMPLOYEE.DELETED,
       data: deletedEmployee,
+    };
+  }
+
+  async getEmployeeStats(employeeId: string) {
+    // 📅 Get start & end of today
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+
+    const endOfDay = new Date();
+    endOfDay.setHours(23, 59, 59, 999);
+
+    const dateFilter = {
+      createdAt: {
+        $gte: startOfDay,
+        $lte: endOfDay,
+      },
+    };
+
+    const [visitData, salesData, collectionData] = await Promise.all([
+      // 🏪 Shop Visits (Today)
+      this.shopVisitModel.aggregate([
+        { $match: { employeeId, ...dateFilter } },
+        {
+          $group: {
+            _id: null,
+            totalVisits: { $sum: 1 },
+          },
+        },
+      ]),
+
+      // 🧾 Sales Orders (Today)
+      this.saleModal.aggregate([
+        { $match: { employeeId, ...dateFilter } },
+        {
+          $group: {
+            _id: null,
+            totalOrders: { $sum: 1 },
+            totalOrderValue: { $sum: '$totalValue' },
+          },
+        },
+      ]),
+
+      // 💰 Payment Collections (Today)
+      this.paymentModel.aggregate([
+        { $match: { employeeId, ...dateFilter } },
+        {
+          $group: {
+            _id: null,
+            totalCollections: { $sum: 1 },
+            totalCollectionValue: { $sum: '$amount' },
+          },
+        },
+      ]),
+    ]);
+
+    return {
+      statusCode: 200,
+      message: 'Today employee stats fetched successfully',
+      data: {
+        visits: visitData[0]?.totalVisits || 0,
+
+        orders: {
+          count: salesData[0]?.totalOrders || 0,
+          value: salesData[0]?.totalOrderValue || 0,
+        },
+
+        collections: {
+          count: collectionData[0]?.totalCollections || 0,
+          value: collectionData[0]?.totalCollectionValue || 0,
+        },
+      },
     };
   }
 }

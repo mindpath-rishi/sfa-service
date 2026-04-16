@@ -125,11 +125,23 @@ export class VanInventoryService extends MongoRepository<VanInventory> {
     };
   }
 
-  async findByVanId(vanId: string) {
-    const result = await this.model.aggregate([
-      {
-        $match: { vanId },
-      },
+  async findByVanId(
+    vanId: string,
+    query: { page?: number; limit?: number; searchText?: string },
+  ) {
+    const { page = 1, limit = 20, searchText } = query;
+
+    const skip = (Number(page) - 1) * Number(limit);
+
+    const match: any = {
+      vanId,
+      quantity: { $gt: 0 },
+    };
+
+    const pipeline: any[] = [
+      { $match: match },
+
+      // 🔹 JOIN PRODUCT
       {
         $lookup: {
           from: 'product_master',
@@ -144,6 +156,23 @@ export class VanInventoryService extends MongoRepository<VanInventory> {
           preserveNullAndEmptyArrays: false,
         },
       },
+
+      // 🔹 SEARCH FILTER (AFTER JOIN)
+      ...(searchText
+        ? [
+            {
+              $match: {
+                $or: [
+                  { 'product.name': new RegExp(searchText, 'i') },
+                  { 'product.productSysCode': new RegExp(searchText, 'i') },
+                  { productId: new RegExp(searchText, 'i') },
+                ],
+              },
+            },
+          ]
+        : []),
+
+      // 🔹 CALCULATIONS
       {
         $addFields: {
           cases: {
@@ -158,7 +187,13 @@ export class VanInventoryService extends MongoRepository<VanInventory> {
             ],
           },
           pieces: {
-            $mod: ['$quantity', '$product.unitQtyInCase'],
+            $cond: [
+              { $gt: ['$product.unitQtyInCase', 0] },
+              {
+                $mod: ['$quantity', '$product.unitQtyInCase'],
+              },
+              '$quantity',
+            ],
           },
           totalValue: {
             $multiply: ['$quantity', { $ifNull: ['$product.piecePrice', 0] }],
@@ -172,14 +207,13 @@ export class VanInventoryService extends MongoRepository<VanInventory> {
         },
       },
 
-      // ✅ STEP 1: GROUP BY PRODUCT
+      // 🔹 GROUP BY PRODUCT
       {
         $group: {
           _id: {
             vanId: '$vanId',
             productId: '$product.productId',
           },
-
           name: { $first: '$product.name' },
           productSysCode: { $first: '$product.productSysCode' },
 
@@ -188,61 +222,61 @@ export class VanInventoryService extends MongoRepository<VanInventory> {
           pieces: { $sum: '$pieces' },
           totalValue: { $sum: '$totalValue' },
           totalNetWeight: { $sum: '$totalNetWeight' },
+
           pieceNetWeight: { $first: '$product.pieceNetWeight' },
           piecePrice: { $first: '$product.piecePrice' },
           unitQtyInCase: { $first: '$product.unitQtyInCase' },
         },
       },
 
-      // ✅ STEP 2: GROUP BY VAN
-      {
-        $group: {
-          _id: '$_id.vanId',
+      // 🔹 SORT PRODUCTS
+      { $sort: { name: 1 } },
 
-          products: {
-            $push: {
-              productId: '$_id.productId',
-              name: '$name',
-              productSysCode: '$productSysCode',
-              quantity: '$quantity',
-              cases: '$cases',
-              pieces: '$pieces',
-              totalValue: '$totalValue',
-              totalNetWeight: '$totalNetWeight',
-              pieceNetWeight: '$pieceNetWeight',
-              piecePrice: '$piecePrice',
-              unitQtyInCase: '$unitQtyInCase',
+      // 🔹 PAGINATION + TOTAL COUNT
+      {
+        $facet: {
+          products: [{ $skip: skip }, { $limit: Number(limit) }],
+          totalCount: [{ $count: 'count' }],
+          totals: [
+            {
+              $group: {
+                _id: null,
+                totalCases: { $sum: '$cases' },
+                totalPieces: { $sum: '$pieces' },
+                totalValue: { $sum: '$totalValue' },
+                totalNetWeight: { $sum: '$totalNetWeight' },
+              },
             },
-          },
-
-          totalCases: { $sum: '$cases' },
-          totalPieces: { $sum: '$pieces' },
-          totalValue: { $sum: '$totalValue' },
-          totalNetWeight: { $sum: '$totalNetWeight' },
+          ],
         },
       },
+    ];
 
-      {
-        $project: {
-          _id: 0,
-          vanId: '$_id',
-          products: 1,
-          totalCases: 1,
-          totalPieces: 1,
-          totalValue: 1,
-          totalNetWeight: 1,
-        },
-      },
-    ]);
+    const result = await this.model.aggregate(pipeline);
 
-    if (!result || result.length === 0) {
-      throw new NotFoundException(VAN_INVENTORY.NOT_FOUND);
-    }
+    const products = result[0]?.products || [];
+    const total = result[0]?.totalCount?.[0]?.count || 0;
+    const totals = result[0]?.totals?.[0] || {
+      totalCases: 0,
+      totalPieces: 0,
+      totalValue: 0,
+      totalNetWeight: 0,
+    };
 
     return {
       statusCode: HttpStatus.OK,
       message: VAN_INVENTORY.FETCHED,
-      data: result[0],
+      data: {
+        vanId,
+        products,
+        ...totals,
+      },
+      meta: {
+        total,
+        page: Number(page),
+        limit: Number(limit),
+        totalPages: Math.ceil(total / limit),
+      },
     };
   }
 

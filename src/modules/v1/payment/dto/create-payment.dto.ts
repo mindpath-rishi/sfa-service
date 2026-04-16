@@ -75,6 +75,7 @@ export class CreatePaymentDto {
 
   @ApiProperty({ type: Date })
   @IsNotEmpty()
+  @Type(() => Date)
   @IsDate()
   date!: Date;
 

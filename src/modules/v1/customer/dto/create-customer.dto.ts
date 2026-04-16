@@ -75,6 +75,11 @@ export class CreateCustomerDto {
   @IsString()
   provinceId!: string;
 
+  @ApiProperty({ type: String, description: 'Reference ID' })
+  @IsNotEmpty()
+  @IsString()
+  segmentation!: string;
+
   @ApiProperty({ type: String })
   @IsNotEmpty()
   @IsString()
@@ -103,7 +108,7 @@ export class CreateCustomerDto {
   @ApiProperty({ type: Number })
   @IsNotEmpty()
   @IsNumber()
-  outstanding!: number;
+  creditDays!: number;
 
   @ApiPropertyOptional({
     type: () => GeoTagDto,
@@ -118,7 +123,12 @@ export class CreateCustomerDto {
    * ------
    * Reference of customer category
    */
-  @ApiPropertyOptional({ enum: CustomerStatus, example: CustomerStatus.ACTIVE })
-  @IsEnum(CustomerStatus)
-  status?: CustomerStatus;
+  // @ApiPropertyOptional({ enum: CustomerStatus, example: CustomerStatus.ACTIVE })
+  // @IsEnum(CustomerStatus)
+  // status?: CustomerStatus;
+
+  @ApiProperty({ type: String, description: 'Reference ID' })
+  @IsNotEmpty()
+  @IsString()
+  routeId!: string;
 }

@@ -52,6 +52,7 @@ import { UpdateVanInventoryDto } from './dto/update-van-inventory.dto';
 import { VanInventoryQueryDto } from './dto/van-inventory-query.dto';
 import { VAN_INVENTORY } from './van-inventory.constants';
 import { Public } from 'src/core/decorators/public.decorator';
+import { PaginationDto } from 'src/shared/dto/pagination.dto';
 
 @ApiTags('Van-inventory')
 @FeatureFlag(API_MODULE_ENABLE_KEYS.VAN_INVENTORY)
@@ -106,16 +107,18 @@ export class VanInventoryController {
   }
 
   /**
-   * Get VanInventory by ID
-   * ----------------------
+   * Get VanInventory by VanId
+   * ------------------------
    */
   @Permissions('VAN_INVENTORY_VIEW')
   @Get('van/:vanId')
-  @ApiParam({ name: 'anId', description: 'VanInventory inventoryId' })
-  async findByVanId(@Param('vanId') vanId: string) {
-    return this.service.findByVanId(vanId);
+  @ApiParam({ name: 'vanId', description: 'Van ID' })
+  async findByVanId(
+    @Param('vanId') vanId: string,
+    @Query() query: PaginationDto & { searchText: string },
+  ) {
+    return this.service.findByVanId(vanId, query);
   }
-
   /**
    * Update VanInventory
    * --------------------

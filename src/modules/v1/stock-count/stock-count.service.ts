@@ -85,27 +85,78 @@ export class StockCountService extends MongoRepository<StockCount> {
   async findAll(query: StockCountQueryDto) {
     const { searchText, status, page = 1, limit = 20 } = query;
 
-    const filter: FilterQuery<StockCount> = {};
+    const match: any = {};
 
-    if (status) filter.status = status;
+    if (status) match.status = status;
 
     if (searchText) {
       const regex = new RegExp(searchText, 'i');
-      filter.$or = [{ stockCountId: regex }];
+      match.$or = [{ stockCountId: regex }];
     }
 
-    const result = await this.paginate(filter, {
-      page,
-      limit,
-      sort: { createdAt: -1 },
-      lean: true,
-    });
+    const skip = (page - 1) * limit;
+
+    const pipeline: any[] = [
+      { $match: match },
+
+      // 🔹 Join Vans
+      {
+        $lookup: {
+          from: 'vans',
+          localField: 'vanId',
+          foreignField: 'vanId',
+          as: 'van',
+        },
+      },
+      { $unwind: { path: '$van', preserveNullAndEmptyArrays: true } },
+
+      // 🔹 Join Employees
+      {
+        $lookup: {
+          from: 'employees', // or 'employees' based on your collection
+          localField: 'employeeId',
+          foreignField: 'employeeId',
+          as: 'employee',
+        },
+      },
+      { $unwind: { path: '$employee', preserveNullAndEmptyArrays: true } },
+
+      // 🔹 Add Required Fields
+      {
+        $addFields: {
+          vanName: '$van.name',
+          vanNumber: '$van.vanNumber',
+          employeeName: '$employee.name',
+        },
+      },
+
+      // 🔹 Sort
+      { $sort: { createdAt: -1 } },
+
+      // 🔹 Pagination
+      {
+        $facet: {
+          items: [{ $skip: skip }, { $limit: limit }],
+          total: [{ $count: 'count' }],
+        },
+      },
+    ];
+
+    const result = await this.model.aggregate(pipeline);
+
+    const items = result[0]?.items || [];
+    const total = result[0]?.total[0]?.count || 0;
 
     return {
       statusCode: HttpStatus.OK,
       message: STOCK_COUNT.FETCHED,
-      data: result.items,
-      meta: result.meta,
+      data: items,
+      meta: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      },
     };
   }
 

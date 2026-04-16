@@ -153,7 +153,10 @@ export class ActivityService extends MongoRepository<Activity> {
         try {
           setImmediate(async () => {
             try {
-              const response = await this.inventoryService.findByVanId(vanId);
+              const response = await this.inventoryService.findByVanId(vanId, {
+                page: 1,
+                limit: 10000,
+              });
               const inventories = response?.data?.products?.filter(
                 (item) => item.quantity > 0,
               );

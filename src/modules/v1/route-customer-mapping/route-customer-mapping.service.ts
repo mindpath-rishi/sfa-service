@@ -20,6 +20,7 @@ import { UpdateRouteCustomerMappingDto } from './dto/update-route-customer-mappi
 import { RouteCustomerMappingQueryDto } from './dto/route-customer-mapping-query.dto';
 import { IdGenerator } from 'src/shared/utils/id-generator.utils';
 import { RouteCustomerMappingStatus } from 'src/shared/enums/route-customer-mapping.enums';
+import { ClientSession } from 'mongoose';
 
 @Injectable()
 export class RouteCustomerMappingService extends MongoRepository<RouteCustomerMapping> {
@@ -29,7 +30,10 @@ export class RouteCustomerMappingService extends MongoRepository<RouteCustomerMa
     );
   }
 
-  async create(payload: CreateRouteCustomerMappingDto) {
+  async create(
+    payload: CreateRouteCustomerMappingDto,
+    session?: ClientSession,
+  ) {
     try {
       return await this.withTransaction(async (session) => {
         const { routeId, customerId, day } = payload;
@@ -59,7 +63,7 @@ export class RouteCustomerMappingService extends MongoRepository<RouteCustomerMa
           message: ROUTE_CUSTOMER_MAPPING.CREATED,
           data: doc,
         };
-      });
+      }, session);
     } catch (error) {
       this.handleDuplicateError(error);
     }
@@ -77,7 +81,7 @@ export class RouteCustomerMappingService extends MongoRepository<RouteCustomerMa
       filter.$or = [{ mappingId: regex }];
     }
 
-    if(routeId) filter.routeId = routeId;
+    if (routeId) filter.routeId = routeId;
 
     const result = await this.paginate(filter, {
       page,

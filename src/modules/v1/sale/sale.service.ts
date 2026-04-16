@@ -325,7 +325,7 @@ export class SaleService extends MongoRepository<Sale> {
          * CREATE PAYMENT
          * ====================================================== */
 
-        if (paidAmount > 0) {
+        if (paidAmount > 0 && payload?.paymentMode !== 'CREDIT') {
           await this.paymentService.create(
             {
               customerId: doc.customerId,
@@ -344,6 +344,7 @@ export class SaleService extends MongoRepository<Sale> {
               remark: `Payment received by ${payload?.paymentMode}`,
             },
             session,
+            true,
           );
         }
 

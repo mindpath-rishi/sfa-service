@@ -13,6 +13,7 @@ import {
 } from 'class-validator';
 import { PaginationDto } from 'src/shared/dto/pagination.dto';
 import { string } from 'joi';
+import { Type } from 'class-transformer';
 
 /**
  * PaymentQueryDto
@@ -86,6 +87,7 @@ export class PaymentQueryDto extends PaginationDto {
 
   @ApiPropertyOptional({ type: Date })
   @IsOptional()
+  @Type(() => Date)
   @IsDate()
   date?: Date;
 

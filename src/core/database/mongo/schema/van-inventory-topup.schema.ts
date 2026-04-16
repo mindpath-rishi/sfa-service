@@ -82,6 +82,19 @@ export class VanInventoryTopup {
   @Prop({ type: Number, required: true })
   totalRequestedValue!: number;
 
+  @Prop({ type: Number, required: true })
+  totalRequestedCases!: number;
+
+  @Prop({ type: Number, required: true })
+  totalRequestedPieces!: number;
+
+  // NEW ✅
+  @Prop({ type: Number, default: 0 })
+  totalApprovedCases!: number;
+
+  @Prop({ type: Number, default: 0 })
+  totalApprovedPieces!: number;
+
   /* ======================================================
    * APPROVED TOTALS (Derived from van_inventory_topup_items)
    * ====================================================== */

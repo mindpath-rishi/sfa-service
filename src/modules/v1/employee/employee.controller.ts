@@ -156,6 +156,23 @@ export class EmployeeController {
     return this.employeeService.findByEmployeeId(employeeId);
   }
 
+  @Get(':employeeId/stats')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Get employee by employeeId' })
+  @ApiParam({ name: 'employeeId', example: 'EID-1A2B3C4D' })
+  @ApiSuccessResponse(
+    {
+      employeeId: 'EID-1A2B3C4D',
+      name: 'John Doe',
+      mobile: '9876543210',
+    },
+    EMPLOYEE.FETCHED,
+  )
+  @ApiNotFoundResponse()
+  async getEmployeeStats(@Param('employeeId') employeeId: string) {
+    return this.employeeService.getEmployeeStats(employeeId);
+  }
+
   /**
    * Update Employee
    * ---------------

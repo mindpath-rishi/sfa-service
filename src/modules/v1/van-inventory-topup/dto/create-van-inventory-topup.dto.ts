@@ -60,6 +60,16 @@ export class CreateVanInventoryTopupDto {
   @ApiPropertyOptional({ type: Number, default: 0 })
   @IsOptional()
   @IsNumber()
+  totalRequestedCases?: number;
+
+  @ApiPropertyOptional({ type: Number, default: 0 })
+  @IsOptional()
+  @IsNumber()
+  totalRequestedPieces?: number;
+
+  @ApiPropertyOptional({ type: Number, default: 0 })
+  @IsOptional()
+  @IsNumber()
   totalRequestedWeight?: number;
 
   @ApiPropertyOptional({ type: Number, default: 0 })
@@ -71,6 +81,16 @@ export class CreateVanInventoryTopupDto {
   @IsOptional()
   @IsNumber()
   totalApprovedQty?: number;
+
+  @ApiPropertyOptional({ type: Number, default: 0 })
+  @IsOptional()
+  @IsNumber()
+  totalApprovedCases?: number;
+
+  @ApiPropertyOptional({ type: Number, default: 0 })
+  @IsOptional()
+  @IsNumber()
+  totalApprovedPieces?: number;
 
   @ApiPropertyOptional({ type: Number, default: 0 })
   @IsOptional()

@@ -19,27 +19,92 @@ import { CreateCustomerDto } from './dto/create-customer.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
 import { CustomerQueryDto } from './dto/customer-query.dto';
 import { IdGenerator } from 'src/shared/utils/id-generator.utils';
+import { RouteCustomerMappingService } from '../route-customer-mapping/route-customer-mapping.service';
+import {
+  Days,
+  RouteCustomerMappingStatus,
+} from 'src/shared/enums/route-customer-mapping.enums';
 
 @Injectable()
 export class CustomerService extends MongoRepository<Customer> {
-  constructor(mongo: MongoService) {
+  constructor(
+    mongo: MongoService,
+    private readonly routeCustomerMappingService: RouteCustomerMappingService,
+  ) {
     super(mongo.getModel(Customer.name, CustomerSchema));
   }
+
+  // async create(payload: CreateCustomerDto) {
+  //   try {
+  //     return await this.withTransaction(async (session) => {
+  //       const filter: FilterQuery<Customer> = {};
+
+  //       const existing = await this.findOne(filter, {
+  //         session,
+  //         includeDeleted: true,
+  //       });
+
+  //       if (existing && !existing.isDeleted) {
+  //         throw new ConflictException(CUSTOMER.DUPLICATE);
+  //       }
+
+  //       if (existing?.isDeleted) {
+  //         await this.updateById(
+  //           existing._id.toString(),
+  //           {
+  //             ...payload,
+  //             status: 'ACTIVE',
+  //             isDeleted: false,
+  //           },
+  //           { session },
+  //         );
+
+  //         return {
+  //           statusCode: HttpStatus.OK,
+  //           message: CUSTOMER.CREATED,
+  //           data: { customerId: existing.customerId },
+  //         };
+  //       }
+
+  //       const doc = await this.save(
+  //         {
+  //           customerId: IdGenerator.generate('CUST', 8),
+  //           ...payload,
+  //         },
+  //         { session },
+  //       );
+
+  //       return {
+  //         statusCode: HttpStatus.CREATED,
+  //         message: CUSTOMER.CREATED,
+  //         data: doc,
+  //       };
+  //     });
+  //   } catch (error) {
+  //     this.handleDuplicateError(error);
+  //   }
+  // }
 
   async create(payload: CreateCustomerDto) {
     try {
       return await this.withTransaction(async (session) => {
-        const filter: FilterQuery<Customer> = {};
+        const filter: FilterQuery<Customer> = {
+          mobile: payload.phoneNumber, // or any unique field
+        };
 
         const existing = await this.findOne(filter, {
           session,
           includeDeleted: true,
         });
 
+        let customerId: string;
+
+        // ✅ CASE 1: Already exists (active)
         if (existing && !existing.isDeleted) {
           throw new ConflictException(CUSTOMER.DUPLICATE);
         }
 
+        // ✅ CASE 2: Restore deleted customer
         if (existing?.isDeleted) {
           await this.updateById(
             existing._id.toString(),
@@ -51,25 +116,52 @@ export class CustomerService extends MongoRepository<Customer> {
             { session },
           );
 
-          return {
-            statusCode: HttpStatus.OK,
-            message: CUSTOMER.CREATED,
-            data: { customerId: existing.customerId },
-          };
+          customerId = existing.customerId;
+        } else {
+          // ✅ CASE 3: Create new customer
+          const doc = await this.save(
+            {
+              customerId: IdGenerator.generate('CUST', 8),
+              ...payload,
+            },
+            { session },
+          );
+
+          customerId = doc.customerId;
         }
 
-        const doc = await this.save(
-          {
-            customerId: IdGenerator.generate('CUST', 8),
-            ...payload,
-          },
-          { session },
-        );
+        // =====================================================
+        // ✅ CREATE ROUTE CUSTOMER MAPPING
+        // =====================================================
+
+        if (payload.routeId) {
+          // Optional: get next sequence automatically
+          const lastMapping = await this.routeCustomerMappingService.findOne(
+            { routeId: payload.routeId },
+            { session },
+          );
+
+          const nextSequence = lastMapping ? lastMapping.sequence + 1 : 1;
+
+          await this.routeCustomerMappingService.create(
+            {
+              routeId: payload.routeId,
+              customerId,
+              sequence: nextSequence,
+              day: Days.MON,
+            },
+            session,
+          );
+        }
+
+        // =====================================================
+        // ✅ RESPONSE
+        // =====================================================
 
         return {
           statusCode: HttpStatus.CREATED,
           message: CUSTOMER.CREATED,
-          data: doc,
+          data: { customerId },
         };
       });
     } catch (error) {

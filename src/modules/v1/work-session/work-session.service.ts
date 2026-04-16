@@ -558,7 +558,7 @@ export class WorkSessionService extends MongoRepository<WorkSession> {
         const summaryRes =
           await this.vanDailyStockService.getDayEndSummary(vanId);
 
-        const summary = summaryRes?.data?.summary;
+        const summary:any = summaryRes?.data?.summary;
         const products = summaryRes?.data?.products || [];
 
         if (summary && products.length) {

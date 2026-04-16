@@ -9,6 +9,7 @@ export enum PaymentMode {
   BANK = 'BANK',
   CHEQUE = 'CHEQUE',
   CREDIT = 'CREDIT',
+  WALLET = 'WALLET'
 }
 
 export enum PaymentStatus {
