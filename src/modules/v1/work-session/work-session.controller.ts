@@ -89,10 +89,10 @@ export class WorkSessionController {
   @Permissions('WORK_SESSION_END')
   @Post('complete')
   // @ApiParam({ name: 'workSessionId', description: 'WorkSession workSessionId' })
-  async complete() {
+  async complete(@Body() payload: { carryForwardStock: any}) {
     // @Param('workSessionId') workSessionId: string,
     // @Body() dto: UpdateWorkSessionDto,
-    return this.service.complete();
+    return this.service.complete(payload);
   }
   /**
    * Get Today Active Work Session

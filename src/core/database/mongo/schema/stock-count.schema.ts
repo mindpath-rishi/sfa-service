@@ -107,6 +107,9 @@ export class StockCount {
   @Prop({ type: Date })
   approvedAt?: Date;
 
+  @Prop({ type: Boolean })
+  carryForwardStock?: boolean;
+
   /* ======================================================
    * STATUS
    * ====================================================== */

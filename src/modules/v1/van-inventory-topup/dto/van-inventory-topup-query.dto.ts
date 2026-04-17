@@ -28,7 +28,7 @@ export class VanInventoryTopupQueryDto extends PaginationDto {
   })
   @IsOptional()
   @IsString()
-  @MinLength(2)
+  // @MinLength(2)
   @MaxLength(100)
   searchText?: string;
 

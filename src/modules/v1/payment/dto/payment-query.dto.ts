@@ -69,21 +69,23 @@ export class PaymentQueryDto extends PaginationDto {
 
   @ApiPropertyOptional({
     enum: PaymentMode,
-    description: 'Filter by paymentMode',
+    isArray: true,
+    description: 'Filter by multiple payment modes',
   })
   @IsOptional()
-  @IsEnum(PaymentMode)
-  paymentMode?: PaymentMode;
+  @IsArray()
+  @IsEnum(PaymentMode, { each: true })
+  paymentMode?: PaymentMode[];
 
   @ApiPropertyOptional({
     enum: PaymentStatus,
-    description: 'Filter by status',
-    example: PaymentStatus.SUCCESS,
-    default: PaymentStatus.SUCCESS,
+    isArray: true,
+    description: 'Filter by multiple statuses',
   })
   @IsOptional()
-  @IsEnum(PaymentStatus)
-  status?: PaymentStatus;
+  @IsArray()
+  @IsEnum(PaymentStatus, { each: true })
+  status?: PaymentStatus[];
 
   @ApiPropertyOptional({ type: Date })
   @IsOptional()

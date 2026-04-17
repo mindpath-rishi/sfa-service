@@ -134,6 +134,6 @@ export const VanDailyStockSchema = SchemaFactory.createForClass(VanDailyStock);
  * One record per Van + Product + Day
  */
 VanDailyStockSchema.index(
-  { date: 1, vanId: 1, productId: 1 },
+  { date: 1, vanId: 1, productId: 1, workSessionId: 1 },
   { unique: true, name: 'unique_van_daily_stock' },
 );

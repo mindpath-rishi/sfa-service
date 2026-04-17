@@ -503,6 +503,7 @@ export class VanInventoryTopupService extends MongoRepository<VanInventoryTopup>
         };
       });
     } catch (error) {
+      console.log(error)
       this.handleDuplicateError(error);
     }
   }
@@ -516,7 +517,7 @@ export class VanInventoryTopupService extends MongoRepository<VanInventoryTopup>
 
     if (searchText) {
       const regex = new RegExp(searchText, 'i');
-      filter.$or = [{ vanInventoryTopupId: regex }];
+      filter.$or = [{ vanName: regex }];
     }
 
     const result = await this.paginate(filter, {

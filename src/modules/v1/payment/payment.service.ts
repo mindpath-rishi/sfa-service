@@ -179,100 +179,113 @@ export class PaymentService extends MongoRepository<Payment> {
     };
   }
 
-  async findAll(query: PaymentQueryDto) {
-    const {
-      searchText,
-      status,
-      page = 1,
-      limit = 20,
-      vanId,
-      employeeId,
-      customerId,
-    } = query;
+async findAll(query: PaymentQueryDto) {
+  const {
+    searchText,
+    status,
+    paymentMode,
+    page = 1,
+    limit = 20,
+    vanId,
+    employeeId,
+    customerId,
+  } = query;
 
-    const match: any = {};
+  const match: any = {};
 
-    if (status) match.status = status;
-    if (vanId) match.vanId = vanId;
-    if (employeeId) match.employeeId = employeeId;
-    if (customerId) match.customerId = customerId;
-
-    const pipeline: any[] = [
-      { $match: match },
-
-      // 🔗 Customer Lookup
-      {
-        $lookup: {
-          from: 'customer_master',
-          localField: 'customerId',
-          foreignField: 'customerId',
-          as: 'customer',
-        },
-      },
-      {
-        $unwind: {
-          path: '$customer',
-          preserveNullAndEmptyArrays: true,
-        },
-      },
-      {
-        $lookup: {
-          from: 'vans',
-          localField: 'vanId',
-          foreignField: 'vanId',
-          as: 'van',
-        },
-      },
-      {
-        $unwind: {
-          path: '$van',
-          preserveNullAndEmptyArrays: true,
-        },
-      },
-      {
-        $addFields: {
-          customerName: '$customer.name',
-          vanName: '$van.name',
-        },
-      },
-    ];
-
-    // 🔍 Apply search AFTER lookup
-    if (searchText) {
-      const regex = new RegExp(searchText, 'i');
-
-      pipeline.push({
-        $match: {
-          $or: [
-            { paymentId: regex },
-            { customerName: regex },
-            { vanName: regex }, // ✅ NEW
-          ],
-        },
-      });
-    }
-
-    // Sorting
-    pipeline.push({ $sort: { createdAt: -1 } });
-
-    const skip = (page - 1) * limit;
-
-    const [data, total] = await Promise.all([
-      this.model.aggregate([...pipeline, { $skip: skip }, { $limit: limit }]),
-      this.model.aggregate([...pipeline, { $count: 'count' }]),
-    ]);
-
-    return {
-      statusCode: HttpStatus.OK,
-      message: PAYMENT.FETCHED,
-      data,
-      meta: {
-        total: total[0]?.count || 0,
-        page,
-        limit,
-      },
-    };
+  // ✅ Multi-filter support
+  if (status?.length) {
+    match.status = { $in: status };
   }
+
+  if (paymentMode?.length) {
+    match.paymentMode = { $in: paymentMode };
+  }
+
+  if (vanId) match.vanId = vanId;
+  if (employeeId) match.employeeId = employeeId;
+  if (customerId) match.customerId = customerId;
+
+  const pipeline: any[] = [
+    { $match: match },
+
+    // 🔗 Customer Lookup
+    {
+      $lookup: {
+        from: 'customer_master',
+        localField: 'customerId',
+        foreignField: 'customerId',
+        as: 'customer',
+      },
+    },
+    {
+      $unwind: {
+        path: '$customer',
+        preserveNullAndEmptyArrays: true,
+      },
+    },
+
+    // 🔗 Van Lookup
+    {
+      $lookup: {
+        from: 'vans',
+        localField: 'vanId',
+        foreignField: 'vanId',
+        as: 'van',
+      },
+    },
+    {
+      $unwind: {
+        path: '$van',
+        preserveNullAndEmptyArrays: true,
+      },
+    },
+
+    // 🧠 Derived fields
+    {
+      $addFields: {
+        customerName: '$customer.name',
+        vanName: '$van.name',
+      },
+    },
+  ];
+
+  // 🔍 Search AFTER lookup
+  if (searchText) {
+    const regex = new RegExp(searchText, 'i');
+
+    pipeline.push({
+      $match: {
+        $or: [
+          { paymentId: regex },
+          { customerName: regex },
+          { vanName: regex },
+        ],
+      },
+    });
+  }
+
+  // 📊 Sorting
+  pipeline.push({ $sort: { createdAt: -1 } });
+
+  const skip = (page - 1) * limit;
+
+  const [data, total] = await Promise.all([
+    this.model.aggregate([...pipeline, { $skip: skip }, { $limit: limit }]),
+    this.model.aggregate([...pipeline, { $count: 'count' }]),
+  ]);
+
+  return {
+    statusCode: HttpStatus.OK,
+    message: PAYMENT.FETCHED,
+    data,
+    meta: {
+      total: total[0]?.count || 0,
+      page,
+      limit,
+    },
+  };
+}
 
   async findByPaymentId(paymentId: string) {
     const doc = await this.findOne({ paymentId }, { lean: true });
