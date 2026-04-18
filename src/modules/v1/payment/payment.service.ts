@@ -63,7 +63,7 @@ export class PaymentService extends MongoRepository<Payment> {
             { customerId: payload.customerId },
             {
               $inc: {
-                outstanding: payload?.amount,
+                outstanding: -payload?.amount,
               },
             },
             { session },

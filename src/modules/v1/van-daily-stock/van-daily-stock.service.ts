@@ -405,7 +405,229 @@ export class VanDailyStockService extends MongoRepository<VanDailyStock> {
   //   }
   // }
 
-  async getDayEndSummary(vanId: string, date?: Date) {
+  //   async getDayEndSummary(vanId: string, date?: Date) {
+  //   try {
+  //     const targetDate = new Date(date || new Date());
+  //     targetDate.setHours(0, 0, 0, 0);
+
+  //     const result = await this.model.aggregate([
+  //       {
+  //         $match: {
+  //           vanId,
+  //           date: targetDate,
+  //         },
+  //       },
+
+  //       /* ================= JOIN PRODUCT ================= */
+  //       {
+  //         $lookup: {
+  //           from: 'product_master',
+  //           localField: 'productId',
+  //           foreignField: 'productId',
+  //           as: 'product',
+  //         },
+  //       },
+  //       {
+  //         $unwind: {
+  //           path: '$product',
+  //           preserveNullAndEmptyArrays: true,
+  //         },
+  //       },
+
+  //       /* ================= CALCULATIONS ================= */
+  //       {
+  //         $addFields: {
+  //           productName: '$product.name',
+
+  //           /* ===== VALUE ===== */
+  //           openingValue: { $multiply: ['$openingQty', '$piecePrice'] },
+  //           receivedValue: { $multiply: ['$inQty', '$piecePrice'] },
+  //           soldValue: { $multiply: ['$outQty', '$piecePrice'] },
+  //           closingValue: { $multiply: ['$closingQty', '$piecePrice'] },
+
+  //           /* ===== WEIGHT ===== */
+  //           openingWeight: { $multiply: ['$openingQty', '$pieceNetWeight'] },
+  //           receivedWeight: { $multiply: ['$inQty', '$pieceNetWeight'] },
+  //           soldWeight: { $multiply: ['$outQty', '$pieceNetWeight'] },
+  //           closingWeight: { $multiply: ['$closingQty', '$pieceNetWeight'] },
+
+  //           /* ===== CASE / PIECE ===== */
+  //           openingCases: { $floor: { $divide: ['$openingQty', '$unitQtyInCase'] } },
+  //           openingPieces: { $mod: ['$openingQty', '$unitQtyInCase'] },
+
+  //           inCases: { $floor: { $divide: ['$inQty', '$unitQtyInCase'] } },
+  //           inPieces: { $mod: ['$inQty', '$unitQtyInCase'] },
+
+  //           outCases: { $floor: { $divide: ['$outQty', '$unitQtyInCase'] } },
+  //           outPieces: { $mod: ['$outQty', '$unitQtyInCase'] },
+
+  //           closingCases: { $floor: { $divide: ['$closingQty', '$unitQtyInCase'] } },
+  //           closingPieces: { $mod: ['$closingQty', '$unitQtyInCase'] },
+  //         },
+  //       },
+
+  //       /* ================= GROUP ================= */
+  //       {
+  //         $group: {
+  //           _id: null,
+
+  //           /* ===== TOTAL QTY ===== */
+  //           openingQty: { $sum: '$openingQty' },
+  //           inQty: { $sum: '$inQty' },
+  //           outQty: { $sum: '$outQty' },
+  //           closingQty: { $sum: '$closingQty' },
+
+  //           /* ===== VALUE ===== */
+  //           openingValue: { $sum: '$openingValue' },
+  //           receivedValue: { $sum: '$receivedValue' },
+  //           soldValue: { $sum: '$soldValue' },
+  //           closingValue: { $sum: '$closingValue' },
+
+  //           /* ===== WEIGHT ===== */
+  //           openingWeight: { $sum: '$openingWeight' },
+  //           receivedWeight: { $sum: '$receivedWeight' },
+  //           soldWeight: { $sum: '$soldWeight' },
+  //           closingWeight: { $sum: '$closingWeight' },
+
+  //           products: {
+  //             $push: {
+  //               productId: '$productId',
+  //               productName: '$productName',
+  //               unitQtyInCase: '$unitQtyInCase',
+
+  //               openingQty: '$openingQty',
+  //               openingCases: '$openingCases',
+  //               openingPieces: '$openingPieces',
+  //               openingValue: '$openingValue',
+  //               openingWeight: '$openingWeight',
+
+  //               inQty: '$inQty',
+  //               inCases: '$inCases',
+  //               inPieces: '$inPieces',
+  //               receivedValue: '$receivedValue',
+  //               receivedWeight: '$receivedWeight',
+
+  //               outQty: '$outQty',
+  //               outCases: '$outCases',
+  //               outPieces: '$outPieces',
+  //               soldValue: '$soldValue',
+  //               soldWeight: '$soldWeight',
+
+  //               closingQty: '$closingQty',
+  //               closingCases: '$closingCases',
+  //               closingPieces: '$closingPieces',
+  //               closingValue: '$closingValue',
+  //               closingWeight: '$closingWeight',
+  //             },
+  //           },
+  //         },
+  //       },
+  //     ]);
+
+  //     const data = result[0] || {};
+
+  //     /* ================= NORMALIZATION ================= */
+
+  //     let openingCases = 0, openingPieces = 0;
+  //     let inCases = 0, inPieces = 0;
+  //     let outCases = 0, outPieces = 0;
+  //     let closingCases = 0, closingPieces = 0;
+
+  //     for (const p of data.products || []) {
+  //       const unit = p.unitQtyInCase || 1;
+
+  //       // Opening
+  //       openingCases += p.openingCases;
+  //       openingPieces += p.openingPieces;
+  //       let extra = Math.floor(openingPieces / unit);
+  //       openingCases += extra;
+  //       openingPieces %= unit;
+
+  //       // In
+  //       inCases += p.inCases;
+  //       inPieces += p.inPieces;
+  //       extra = Math.floor(inPieces / unit);
+  //       inCases += extra;
+  //       inPieces %= unit;
+
+  //       // Out
+  //       outCases += p.outCases;
+  //       outPieces += p.outPieces;
+  //       extra = Math.floor(outPieces / unit);
+  //       outCases += extra;
+  //       outPieces %= unit;
+
+  //       // Closing
+  //       closingCases += p.closingCases;
+  //       closingPieces += p.closingPieces;
+  //       extra = Math.floor(closingPieces / unit);
+  //       closingCases += extra;
+  //       closingPieces %= unit;
+
+  //       /* ===== PRODUCT ITEMS ===== */
+  //       p.openingItems = p.openingCases + p.openingPieces;
+  //       p.receivedItems = p.inCases + p.inPieces;
+  //       p.soldItems = p.outCases + p.outPieces;
+  //       p.closingItems = p.closingCases + p.closingPieces;
+  //     }
+
+  //     /* ================= SUMMARY ITEMS ================= */
+
+  //     const openingItems = openingCases + openingPieces;
+  //     const receivedItems = inCases + inPieces;
+  //     const soldItems = outCases + outPieces;
+  //     const closingItems = closingCases + closingPieces;
+
+  //     /* ================= RESPONSE ================= */
+
+  //     return {
+  //       statusCode: HttpStatus.OK,
+  //       message: 'Day end summary fetched successfully',
+  //       data: {
+  //         summary: {
+  //           opening: {
+  //             qty: data.openingQty || 0,
+  //             cases: openingCases,
+  //             pieces: openingPieces,
+  //             items: openingItems,
+  //             value: data.openingValue || 0,
+  //             weight: data.openingWeight || 0,
+  //           },
+  //           received: {
+  //             qty: data.inQty || 0,
+  //             cases: inCases,
+  //             pieces: inPieces,
+  //             items: receivedItems,
+  //             value: data.receivedValue || 0,
+  //             weight: data.receivedWeight || 0,
+  //           },
+  //           sold: {
+  //             qty: data.outQty || 0,
+  //             cases: outCases,
+  //             pieces: outPieces,
+  //             items: soldItems,
+  //             value: data.soldValue || 0,
+  //             weight: data.soldWeight || 0,
+  //           },
+  //           closing: {
+  //             qty: data.closingQty || 0,
+  //             cases: closingCases,
+  //             pieces: closingPieces,
+  //             items: closingItems,
+  //             value: data.closingValue || 0,
+  //             weight: data.closingWeight || 0,
+  //           },
+  //         },
+
+  //         products: data.products || [],
+  //       },
+  //     };
+  //   } catch (error) {
+  //     throw error;
+  //   }
+  // }
+
+async getDayEndSummary(vanId: string, date?: Date) {
   try {
     const targetDate = new Date(date || new Date());
     targetDate.setHours(0, 0, 0, 0);
@@ -417,8 +639,6 @@ export class VanDailyStockService extends MongoRepository<VanDailyStock> {
           date: targetDate,
         },
       },
-
-      /* ================= JOIN PRODUCT ================= */
       {
         $lookup: {
           from: 'product_master',
@@ -433,26 +653,23 @@ export class VanDailyStockService extends MongoRepository<VanDailyStock> {
           preserveNullAndEmptyArrays: true,
         },
       },
-
-      /* ================= CALCULATIONS ================= */
       {
         $addFields: {
           productName: '$product.name',
 
-          /* ===== VALUE ===== */
           openingValue: { $multiply: ['$openingQty', '$piecePrice'] },
           receivedValue: { $multiply: ['$inQty', '$piecePrice'] },
           soldValue: { $multiply: ['$outQty', '$piecePrice'] },
           closingValue: { $multiply: ['$closingQty', '$piecePrice'] },
 
-          /* ===== WEIGHT ===== */
           openingWeight: { $multiply: ['$openingQty', '$pieceNetWeight'] },
           receivedWeight: { $multiply: ['$inQty', '$pieceNetWeight'] },
           soldWeight: { $multiply: ['$outQty', '$pieceNetWeight'] },
           closingWeight: { $multiply: ['$closingQty', '$pieceNetWeight'] },
 
-          /* ===== CASE / PIECE ===== */
-          openingCases: { $floor: { $divide: ['$openingQty', '$unitQtyInCase'] } },
+          openingCases: {
+            $floor: { $divide: ['$openingQty', '$unitQtyInCase'] },
+          },
           openingPieces: { $mod: ['$openingQty', '$unitQtyInCase'] },
 
           inCases: { $floor: { $divide: ['$inQty', '$unitQtyInCase'] } },
@@ -461,29 +678,25 @@ export class VanDailyStockService extends MongoRepository<VanDailyStock> {
           outCases: { $floor: { $divide: ['$outQty', '$unitQtyInCase'] } },
           outPieces: { $mod: ['$outQty', '$unitQtyInCase'] },
 
-          closingCases: { $floor: { $divide: ['$closingQty', '$unitQtyInCase'] } },
+          closingCases: {
+            $floor: { $divide: ['$closingQty', '$unitQtyInCase'] },
+          },
           closingPieces: { $mod: ['$closingQty', '$unitQtyInCase'] },
         },
       },
-
-      /* ================= GROUP ================= */
       {
         $group: {
           _id: null,
-
-          /* ===== TOTAL QTY ===== */
           openingQty: { $sum: '$openingQty' },
           inQty: { $sum: '$inQty' },
           outQty: { $sum: '$outQty' },
           closingQty: { $sum: '$closingQty' },
 
-          /* ===== VALUE ===== */
           openingValue: { $sum: '$openingValue' },
           receivedValue: { $sum: '$receivedValue' },
           soldValue: { $sum: '$soldValue' },
           closingValue: { $sum: '$closingValue' },
 
-          /* ===== WEIGHT ===== */
           openingWeight: { $sum: '$openingWeight' },
           receivedWeight: { $sum: '$receivedWeight' },
           soldWeight: { $sum: '$soldWeight' },
@@ -526,52 +739,36 @@ export class VanDailyStockService extends MongoRepository<VanDailyStock> {
 
     const data = result[0] || {};
 
-    /* ================= NORMALIZATION ================= */
+    /* ================= FIXED SUMMARY CALC ================= */
 
-    let openingCases = 0, openingPieces = 0;
-    let inCases = 0, inPieces = 0;
-    let outCases = 0, outPieces = 0;
-    let closingCases = 0, closingPieces = 0;
+    let openingCases = 0;
+    let openingPieces = 0;
+    let inCases = 0;
+    let inPieces = 0;
+    let outCases = 0;
+    let outPieces = 0;
+    let closingCases = 0;
+    let closingPieces = 0;
 
     for (const p of data.products || []) {
-      const unit = p.unitQtyInCase || 1;
+      openingCases += p.openingCases || 0;
+      openingPieces += p.openingPieces || 0;
 
-      // Opening
-      openingCases += p.openingCases;
-      openingPieces += p.openingPieces;
-      let extra = Math.floor(openingPieces / unit);
-      openingCases += extra;
-      openingPieces %= unit;
+      inCases += p.inCases || 0;
+      inPieces += p.inPieces || 0;
 
-      // In
-      inCases += p.inCases;
-      inPieces += p.inPieces;
-      extra = Math.floor(inPieces / unit);
-      inCases += extra;
-      inPieces %= unit;
+      outCases += p.outCases || 0;
+      outPieces += p.outPieces || 0;
 
-      // Out
-      outCases += p.outCases;
-      outPieces += p.outPieces;
-      extra = Math.floor(outPieces / unit);
-      outCases += extra;
-      outPieces %= unit;
+      closingCases += p.closingCases || 0;
+      closingPieces += p.closingPieces || 0;
 
-      // Closing
-      closingCases += p.closingCases;
-      closingPieces += p.closingPieces;
-      extra = Math.floor(closingPieces / unit);
-      closingCases += extra;
-      closingPieces %= unit;
-
-      /* ===== PRODUCT ITEMS ===== */
-      p.openingItems = p.openingCases + p.openingPieces;
-      p.receivedItems = p.inCases + p.inPieces;
-      p.soldItems = p.outCases + p.outPieces;
-      p.closingItems = p.closingCases + p.closingPieces;
+      // per product items
+      p.openingItems = (p.openingCases || 0) + (p.openingPieces || 0);
+      p.receivedItems = (p.inCases || 0) + (p.inPieces || 0);
+      p.soldItems = (p.outCases || 0) + (p.outPieces || 0);
+      p.closingItems = (p.closingCases || 0) + (p.closingPieces || 0);
     }
-
-    /* ================= SUMMARY ITEMS ================= */
 
     const openingItems = openingCases + openingPieces;
     const receivedItems = inCases + inPieces;
@@ -581,7 +778,7 @@ export class VanDailyStockService extends MongoRepository<VanDailyStock> {
     /* ================= RESPONSE ================= */
 
     return {
-      statusCode: HttpStatus.OK,
+      statusCode: 200,
       message: 'Day end summary fetched successfully',
       data: {
         summary: {
@@ -618,7 +815,6 @@ export class VanDailyStockService extends MongoRepository<VanDailyStock> {
             weight: data.closingWeight || 0,
           },
         },
-
         products: data.products || [],
       },
     };
