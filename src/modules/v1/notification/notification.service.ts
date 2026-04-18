@@ -2,24 +2,10 @@
  * Notification Service
  * --------------------
  * Purpose : Handles business logic for notification lifecycle management
- * Used by : NotificationController
- *
- * Responsibilities:
- * - Create notifications and trigger push delivery
- * - Fetch notification inbox with filters and pagination
- * - Retrieve single notification details
- * - Mark notifications as read
- * - Soft-delete notifications
- *
- * Notes:
- * - Database acts as source of truth for inbox
- * - Push delivery status is tracked per notification
- * - Soft deletes preserve audit history
  */
 
 import { Injectable, NotFoundException, HttpStatus } from '@nestjs/common';
-import { HydratedDocument, Model } from 'mongoose';
-import { ObjectId } from 'mongodb';
+import { HydratedDocument, Model, Types } from 'mongoose';
 
 import { MongoService } from 'src/core/database/mongo/mongo.service';
 import { MongoRepository } from 'src/core/database/mongo/mongo.repository';
@@ -38,8 +24,6 @@ import {
   UserDeviceSchema,
 } from 'src/core/database/mongo/schema/device.schema';
 import { NotificationsService } from 'src/shared/notifications/notifications.service';
-import { AppLogger } from 'src/core/logger/app-logger';
-import { response } from 'express';
 
 @Injectable()
 export class NotificationService extends MongoRepository<Notification> {
@@ -51,21 +35,9 @@ export class NotificationService extends MongoRepository<Notification> {
   ) {
     super(mongo.getModel(Notification.name, NotificationSchema));
 
-    // Device model for push token lookup
     this.deviceModel = mongo.getModel(UserDevice.name, UserDeviceSchema);
   }
 
-  /**
-   * Create Notification
-   * -------------------
-   * Purpose : Persist notification and trigger push delivery
-   *
-   * Flow:
-   * - Save notification (pending)
-   * - Fetch active device tokens
-   * - Send push to all devices
-   * - Update delivery status
-   */
   async create(payload: CreateNotificationDto) {
     const notification = await this.save({
       recipientId: payload.recipientId,
@@ -77,15 +49,12 @@ export class NotificationService extends MongoRepository<Notification> {
       deliveryStatus: NotificationDeliveryStatus.PENDING,
     });
 
-
     try {
-      // Fetch active devices with push tokens
       const devices = await this.deviceModel.find({
         userId: payload.recipientId,
         isActive: true,
         fcmToken: { $exists: true, $ne: null },
       });
-
       const tokens: string[] = devices
         .map((d) => d.fcmToken)
         .filter((token): token is string => Boolean(token));
@@ -103,7 +72,7 @@ export class NotificationService extends MongoRepository<Notification> {
         deliveryStatus: NotificationDeliveryStatus.SENT,
         sentAt: new Date(),
       });
-    } catch (error) {
+    } catch (error: any) {
       await this.updateById(notification._id.toString(), {
         deliveryStatus: NotificationDeliveryStatus.FAILED,
         deliveryError: error.message,
@@ -117,11 +86,6 @@ export class NotificationService extends MongoRepository<Notification> {
     };
   }
 
-  /**
-   * Get Notifications (Inbox)
-   * -------------------------
-   * Purpose : Retrieve notifications with filtering and pagination
-   */
   async findAll(query: NotificationQueryDto) {
     const { deliveryStatus, isRead, platform, page = 1, limit = 20 } = query;
 
@@ -147,11 +111,6 @@ export class NotificationService extends MongoRepository<Notification> {
     };
   }
 
-  /**
-   * Get Notification by ID
-   * ----------------------
-   * Purpose : Retrieve a single notification
-   */
   async findNotificationById(_id: string) {
     const notification = await super.findById(_id);
 
@@ -166,11 +125,6 @@ export class NotificationService extends MongoRepository<Notification> {
     };
   }
 
-  /**
-   * Mark Notification as Read
-   * ------------------------
-   * Purpose : Update inbox read state
-   */
   async markAsRead(notificationId: string) {
     const updated = await this.updateById(notificationId, {
       isRead: true,
@@ -187,14 +141,15 @@ export class NotificationService extends MongoRepository<Notification> {
     };
   }
 
-  /**
-   * Delete Notification (Soft Delete)
-   * --------------------------------
-   * Purpose : Soft delete notification from inbox
-   */
   async delete(notificationId: string) {
+    // ✅ Validate ObjectId before using
+    if (!Types.ObjectId.isValid(notificationId)) {
+      throw new NotFoundException('Invalid notification ID');
+    }
+
     const deleted = await this.softDelete({
-      _id: new ObjectId(notificationId),
+      // ✅ Correct ObjectId usage
+      _id: new Types.ObjectId(notificationId),
     });
 
     if (!deleted) {
