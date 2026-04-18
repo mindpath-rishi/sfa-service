@@ -109,46 +109,46 @@ export class ActivityService extends MongoRepository<Activity> {
 
         const vanId: string = payload.vanId;
 
-        // try {
-        //   const response = await this.inventoryService.findByVanId(vanId);
-        //   const inventories = response?.data?.products?.filter(
-        //     (item) => item.quantity > 0,
-        //   );
+        try {
+          const response = await this.inventoryService.findByVanId(vanId, {});
+          const inventories = response?.data?.products?.filter(
+            (item) => item.quantity > 0,
+          );
 
-        //   if (inventories?.length) {
-        //     const today = new Date();
-        //     today.setHours(0, 0, 0, 0);
+          if (inventories?.length) {
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
 
-        //     const dailyStocks = inventories.map((inv) => ({
-        //       vanDailyStockId: IdGenerator.generate('VDS', 8),
+            const dailyStocks = inventories.map((inv) => ({
+              vanDailyStockId: IdGenerator.generate('VDS', 8),
 
-        //       date: today,
-        //       vanId: vanId, // ✅ FIXED
-        //       employeeId: ctx?.userId,
+              date: today,
+              vanId: vanId, // ✅ FIXED
+              employeeId: ctx?.userId,
 
-        //       productId: inv.productId,
-        //       unitQtyInCase: inv.unitQtyInCase || 1,
+              productId: inv.productId,
+              unitQtyInCase: inv.unitQtyInCase || 1,
 
-        //       openingQty: inv.quantity || 0,
-        //       inQty: 0,
-        //       outQty: 0,
-        //       adjustmentQty: 0,
-        //       closingQty: 0,
-        //       pieceNetWeight: inv.pieceNetWeight,
-        //       piecePrice: inv.piecePrice,
-        //       workSessionId: payload.workSessionId,
-        //       status: VanDailyStockStatus.DRAFT,
-        //     }));
+              openingQty: inv.quantity || 0,
+              inQty: 0,
+              outQty: 0,
+              adjustmentQty: 0,
+              closingQty: 0,
+              pieceNetWeight: inv.pieceNetWeight,
+              piecePrice: inv.piecePrice,
+              workSessionId: payload.workSessionId,
+              status: VanDailyStockStatus.DRAFT,
+            }));
 
-        //     console.log(dailyStocks, '==================stock');
-        //     await this.vanDailyStockService.bulkCreate(dailyStocks, {
-        //       session,
-        //     }); // ✅ FIXED
-        //   }
-        // } catch (error) {
-        //   console.error('Van daily stock error:', error);
-        //   // throw error;
-        // }
+            console.log(dailyStocks, '==================stock');
+            await this.vanDailyStockService.bulkCreate(dailyStocks, {
+              session,
+            }); // ✅ FIXED
+          }
+        } catch (error) {
+          console.error('Van daily stock error:', error);
+          // throw error;
+        }
 
         try {
           setImmediate(async () => {
