@@ -1,4 +1,3 @@
-
 export const ROUTE_SESSION = {
   CREATED: 'RouteSession created successfully',
   FETCHED: 'RouteSession fetched successfully',
@@ -6,4 +5,5 @@ export const ROUTE_SESSION = {
   DELETED: 'RouteSession deleted successfully',
   NOT_FOUND: 'RouteSession not found',
   DUPLICATE: 'RouteSession already exists',
+  REOPEN: 'RouteSession reopened successfully',
 };

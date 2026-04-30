@@ -35,6 +35,7 @@ import { VanQueryDto } from './dto/van-query.dto';
 import { VAN } from './van.constants';
 import { RequestContextStore } from 'src/core/context/request-context';
 import { VanStatus } from 'src/shared/enums/van.enums';
+import { ChangeVanDto } from './van.controller';
 
 @Injectable()
 export class VanService extends MongoRepository<Van> {
@@ -123,8 +124,12 @@ export class VanService extends MongoRepository<Van> {
     const { searchText, status, page = 1, limit = 20 } = query;
 
     const filter: Record<string, any> = {
-      associatedUsers: { $in: [userId] },
+      // associatedUsers: { $in: [userId] },
     };
+
+    if(query.userId){
+      filter.associatedUsers = { $in: [userId]}
+    }
 
     if (status) {
       filter.status = status;
@@ -487,5 +492,62 @@ export class VanService extends MongoRepository<Van> {
       message: VAN.FETCHED,
       data: result[0],
     };
+  }
+
+  async changeVan(dto: ChangeVanDto) {
+    return this.withTransaction(async (session) => {
+      const { oldVanId, vanId, employeeId } = dto;
+
+      /* ============================================
+       * 1. VALIDATION
+       * ============================================ */
+      if (oldVanId === vanId) {
+        throw new Error('Old and new van cannot be same');
+      }
+
+      const oldVan = await this.model.findOne({ vanId: oldVanId }, null, {
+        session,
+      });
+      const newVan = await this.model.findOne({ vanId }, null, { session });
+
+      if (!oldVan || !newVan) {
+        throw new Error('Van not found');
+      }
+
+      /* ============================================
+       * 2. REMOVE FROM OLD VAN
+       * ============================================ */
+      await this.model.updateOne(
+        { vanId: oldVanId },
+        {
+          $pull: { associatedUsers: employeeId },
+        },
+        { session },
+      );
+
+      /* ============================================
+       * 3. ADD TO NEW VAN
+       * ============================================ */
+      await this.model.updateOne(
+        { vanId },
+        {
+          $addToSet: { associatedUsers: employeeId },
+        },
+        { session },
+      );
+
+      /* ============================================
+       * 4. RESPONSE
+       * ============================================ */
+      return {
+        statusCode: 200,
+        message: 'Van changed successfully',
+        data: {
+          oldVanId,
+          newVanId: vanId,
+          employeeId,
+        },
+      };
+    });
   }
 }

@@ -136,8 +136,6 @@ export class RouteController {
     @Param('routeId') routeId: string,
     @Query() query: RouteCustomerQueryDto,
   ) {
-    console.log("==============139===========")
     return this.service.getRouteCustomers(routeId, query);
   }
 }
-  

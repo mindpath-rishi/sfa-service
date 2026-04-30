@@ -54,6 +54,12 @@ import { VanQueryDto } from './dto/van-query.dto';
 import { VAN } from './van.constants';
 import { Public } from 'src/core/decorators/public.decorator';
 
+export class ChangeVanDto {
+  oldVanId!: any;
+  vanId!: any; // new van
+  employeeId!: any;
+}
+
 @ApiTags('Van')
 @FeatureFlag(API_MODULE_ENABLE_KEYS.VAN)
 @ApiUnauthorizedResponse()
@@ -88,6 +94,13 @@ export class VanController {
   )
   async create(@Body() dto: CreateVanDto) {
     return this.vanService.create(dto);
+  }
+
+  @Post('change-van')
+  @Permissions('VAN_CHANGE')
+  @ApiOperation({ summary: 'Assign van to employee' })
+  async changeVan(@Body() dto: ChangeVanDto) {
+    return this.vanService.changeVan(dto);
   }
 
   /**

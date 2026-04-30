@@ -216,6 +216,7 @@ export class VanInventoryService extends MongoRepository<VanInventory> {
           },
           name: { $first: '$product.name' },
           productSysCode: { $first: '$product.productSysCode' },
+          productId: { $first: '$product.productId' },
 
           quantity: { $sum: '$quantity' },
           cases: { $sum: '$cases' },

@@ -124,6 +124,7 @@ export class ShopVisitService extends MongoRepository<ShopVisit> {
       workSessionId,
       routeSessionId,
       outletId,
+      vanId,
     } = query;
 
     const filter: FilterQuery<ShopVisit> = {};
@@ -145,6 +146,10 @@ export class ShopVisitService extends MongoRepository<ShopVisit> {
 
     if (outletId) {
       filter.outletId = outletId;
+    }
+
+    if (vanId) {
+      filter.vanId = vanId;
     }
 
     const result = await this.paginate(filter, {

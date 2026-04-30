@@ -41,10 +41,20 @@ export class RouteSessionService extends MongoRepository<RouteSession> {
          * FILTER (FIXED)
          * ====================================================== */
 
+        const startOfDay = new Date();
+        startOfDay.setHours(0, 0, 0, 0);
+
+        const endOfDay = new Date();
+        endOfDay.setHours(23, 59, 59, 999);
+
         const filter: FilterQuery<RouteSession> = {
           userId: ctx?.userId,
           vanId: ctx?.vanId,
-          status: RouteSessionStatus.ACTIVE,
+          routeId: payload.routeId,
+          sessionDate: {
+            $gte: startOfDay,
+            $lte: endOfDay,
+          } as any,
         };
 
         const existing = await this.findOne(filter, {
@@ -53,39 +63,47 @@ export class RouteSessionService extends MongoRepository<RouteSession> {
         });
 
         /* ======================================================
-         * DUPLICATE CHECK
+         * DUPLICATE CHECK - Active session exists
          * ====================================================== */
 
-        if (existing && !existing.isDeleted) {
-          throw new ConflictException(ROUTE_SESSION.DUPLICATE);
-        }
+        console.log(existing, '================ex');
+        // if (existing && !existing.isDeleted) {
+        //   throw new ConflictException(ROUTE_SESSION.DUPLICATE);
+        // }
 
         /* ======================================================
-         * RESTORE SOFT DELETED
+         * RESTORE SOFT DELETED - Update status to ACTIVE
          * ====================================================== */
 
-        // if (existing?.isDeleted) {
-        //   await this.updateById(
-        //     existing._id.toString(),
-        //     {
-        //       ...payload,
-        //       userId: ctx?.userId,
-        //       userName: ctx?.name,
-        //       vanId: ctx?.vanId,
-        //       vanName: ctx?.vanName,
-        //       status: 'ACTIVE',
-        //       isDeleted: false,
-        //       startTime: new Date(),
-        //     },
-        //     { session },
-        //   );
+        if (existing?.isDeleted) {
+          // Update the existing soft-deleted record
+          const updatedDoc = await this.updateById(
+            existing._id.toString(),
+            {
+              ...payload,
+              userId: ctx?.userId,
+              userName: ctx?.name,
+              vanId: ctx?.vanId,
+              vanName: ctx?.vanName,
+              status: 'ACTIVE',
+              isDeleted: false,
+              startTime: new Date(),
+              // Reset end time if it exists
+              endTime: null,
+              // Update session date to today
+              sessionDate: new Date(),
+              // Generate new session ID or keep existing? Keeping existing for consistency
+              // routeSessionId: existing.routeSessionId, // Keep existing
+            },
+            { session },
+          );
 
-        //   return {
-        //     statusCode: HttpStatus.OK,
-        //     message: ROUTE_SESSION.CREATED,
-        //     data: { routeSessionId: existing.routeSessionId },
-        //   };
-        // }
+          return {
+            statusCode: HttpStatus.OK,
+            message: ROUTE_SESSION.REOPEN, // Make sure to add this message constant
+            data: updatedDoc,
+          };
+        }
 
         /* ======================================================
          * CREATE NEW
@@ -99,6 +117,8 @@ export class RouteSessionService extends MongoRepository<RouteSession> {
             vanId: ctx?.vanId,
             vanName: ctx?.vanName,
             startTime: new Date(),
+            status: RouteSessionStatus.ACTIVE,
+            sessionDate: new Date(),
             ...payload,
           },
           { session },

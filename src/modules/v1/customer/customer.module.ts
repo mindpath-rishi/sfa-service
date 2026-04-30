@@ -8,11 +8,18 @@ import {
 import { RouteCustomerMappingModule } from '../route-customer-mapping/route-customer-mapping.module';
 import { CustomerController } from './customer.controller';
 import { CustomerService } from './customer.service';
+import {
+  ShopVisit,
+  ShopVisitSchema,
+} from 'src/core/database/mongo/schema/shop-visit.schema';
+import { Sale, SaleSchema } from 'src/core/database/mongo/schema/sale.schema';
 
 @Module({
   imports: [
     MongooseModule.forFeature([
       { name: Customer.name, schema: CustomerSchema },
+      { name: ShopVisit.name, schema: ShopVisitSchema },
+      { name: Sale.name, schema: SaleSchema },
     ]),
     RouteCustomerMappingModule,
   ],

@@ -16,6 +16,11 @@ export class VanQueryDto extends PaginationDto {
   @IsString()
   searchText?: string;
 
+  @ApiPropertyOptional({ example: 'delivery' })
+  @IsOptional()
+  @IsString()
+  userId?: string;
+
   @ApiPropertyOptional({ example: VanStatus.ACTIVE, enum: VanStatus })
   @IsOptional()
   @IsString()

@@ -54,6 +54,7 @@ import { VAN_INVENTORY } from './van-inventory.constants';
 import { Public } from 'src/core/decorators/public.decorator';
 import { PaginationDto } from 'src/shared/dto/pagination.dto';
 
+
 @ApiTags('Van-inventory')
 @FeatureFlag(API_MODULE_ENABLE_KEYS.VAN_INVENTORY)
 @ApiUnauthorizedResponse()

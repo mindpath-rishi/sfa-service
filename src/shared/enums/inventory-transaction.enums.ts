@@ -21,7 +21,8 @@ export enum TransactionType {
   SALE = 'SALE',         // Van → Customer
   RETURN = 'RETURN',     // Customer → Van
   DAMAGE = 'DAMAGE',     // Van loss
-  SETTLEMENT = 'SETTLEMENT' // Physical adjustment
+  SETTLEMENT = 'SETTLEMENT', // Physical adjustment
+  UNLOAD = 'UNLOAD'      // Van → Warehouse
 }
 
 /* ======================================================

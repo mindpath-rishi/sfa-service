@@ -113,6 +113,14 @@ export class ProductQueryDto extends PaginationDto {
   @IsString()
   inStockOnly?: string;
 
+  @ApiPropertyOptional({
+    description: 'Show only products in stock',
+    example: 'true',
+  })
+  @IsOptional()
+  @IsString()
+  isFocusedPack?: string;
+
   /**
    * Has Discount
    * ------------

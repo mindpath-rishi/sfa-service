@@ -53,6 +53,9 @@ export class Product {
   @Prop({ type: String })
   unitSize?: string;
 
+  @Prop({ type: String })
+  isFocusedPack?: string;
+
   @Prop({ required: true, type: Number })
   unitQtyInCase!: number;
 

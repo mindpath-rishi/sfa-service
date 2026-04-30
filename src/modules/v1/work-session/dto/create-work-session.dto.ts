@@ -25,10 +25,14 @@ export class CreateWorkSessionDto {
    * ✅ Required only if activityName = Retailing
    */
   @ApiPropertyOptional({ type: String })
-  @ValidateIf((o) => o.activityName === 'Retailing')
-  @IsNotEmpty({ message: 'routeId is required for Retailing activity' })
-  @IsString()
+  // @ValidateIf((o) => o.activityName === 'Retailing')
+  // @IsNotEmpty({ message: 'routeId is required for Retailing activity' })
+  @IsOptional()
   routeId?: string;
+
+  @ApiPropertyOptional({ type: String })
+  @IsOptional()
+  requestedVanId?: string;
 
   @ApiPropertyOptional({ type: String })
   @ValidateIf((o) => o.activityName === 'Retailing')
@@ -50,8 +54,8 @@ export class CreateWorkSessionDto {
    * ✅ Required only if activityName = Retailing
    */
   @ApiPropertyOptional({ type: Number })
-  @ValidateIf((o) => o.activityName === 'Retailing')
-  @IsNotEmpty({ message: 'totalShops is required for Retailing activity' })
-  @IsNumber({}, { message: 'totalShops must be a number' })
+  // @ValidateIf((o) => o.activityName === 'Retailing')
+  // @IsNotEmpty({ message: 'totalShops is required for Retailing activity' })
+  @IsOptional()
   totalShops?: number;
 }

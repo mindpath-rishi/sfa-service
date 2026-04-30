@@ -627,7 +627,7 @@ export class VanDailyStockService extends MongoRepository<VanDailyStock> {
   //   }
   // }
 
-async getDayEndSummary(vanId: string, date?: Date) {
+async getDayEndSummary(vanId: string, workSessionId?: string, date?: Date) {
   try {
     const targetDate = new Date(date || new Date());
     targetDate.setHours(0, 0, 0, 0);
@@ -636,6 +636,7 @@ async getDayEndSummary(vanId: string, date?: Date) {
       {
         $match: {
           vanId,
+          workSessionId,
           date: targetDate,
         },
       },

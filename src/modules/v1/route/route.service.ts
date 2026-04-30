@@ -355,7 +355,7 @@ export class RouteService extends MongoRepository<Route> {
         },
       },
 
-      /* ---------------- VISIT (LATEST) ---------------- */
+      /* ---------------- VISIT ---------------- */
       {
         $lookup: {
           from: 'shop_visits',
@@ -386,7 +386,7 @@ export class RouteService extends MongoRepository<Route> {
         },
       },
 
-      /* ---------------- SALE (BY visitId) ---------------- */
+      /* ---------------- SALE ---------------- */
       {
         $lookup: {
           from: 'sales',
@@ -412,7 +412,25 @@ export class RouteService extends MongoRepository<Route> {
         },
       },
 
-      /* ---------------- NON-SALE (BY visitId) ---------------- */
+      /* 🔥 NEW: SALE ITEMS LOOKUP */
+      {
+        $lookup: {
+          from: 'sale_items',
+          let: { saleId: '$sale.saleId' },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $eq: ['$saleId', '$$saleId'],
+                },
+              },
+            },
+          ],
+          as: 'saleItems',
+        },
+      },
+
+      /* ---------------- NON-SALE ---------------- */
       {
         $lookup: {
           from: 'non_sale',
@@ -479,15 +497,14 @@ export class RouteService extends MongoRepository<Route> {
                 isVisited: '$isVisited',
                 visitedAt: '$visitedAt',
                 visitStatus: '$visitStatus',
-                visit: '$visit',
 
                 hasSale: '$hasSale',
                 sale: '$sale',
+                saleItems: '$saleItems',
 
                 hasNonSale: '$hasNonSale',
                 isNonSale: '$isNonSale',
                 nonSaleReason: '$nonSaleReason',
-                nonSale: '$nonSale',
               },
             ],
           },
@@ -497,11 +514,93 @@ export class RouteService extends MongoRepository<Route> {
       /* ---------------- SORT ---------------- */
       { $sort: { sequence: 1 } },
 
-      /* ---------------- PAGINATION ---------------- */
+      /* ---------------- FACET ---------------- */
       {
         $facet: {
           data: [{ $skip: (page - 1) * limit }, { $limit: limit }],
+
           meta: [{ $count: 'total' }],
+
+          summary: [
+            {
+              $group: {
+                _id: null,
+
+                /* ✅ ORDER VALUE FROM ITEMS */
+                totalOrderValue: {
+                  $sum: {
+                    $sum: {
+                      $map: {
+                        input: { $ifNull: ['$saleItems', []] },
+                        as: 'item',
+                        in: { $ifNull: ['$$item.totalValue', 0] },
+                      },
+                    },
+                  },
+                },
+
+                /* ✅ CORRECT CASE CALCULATION */
+                totalCases: {
+                  $sum: {
+                    $sum: {
+                      $map: {
+                        input: { $ifNull: ['$saleItems', []] },
+                        as: 'item',
+                        in: {
+                          $add: [
+                            { $ifNull: ['$$item.caseQty', 0] },
+                            {
+                              $cond: [
+                                { $gt: ['$$item.unitQtyInCase', 0] },
+                                {
+                                  $divide: [
+                                    { $ifNull: ['$$item.pieceQty', 0] },
+                                    '$$item.unitQtyInCase',
+                                  ],
+                                },
+                                0,
+                              ],
+                            },
+                          ],
+                        },
+                      },
+                    },
+                  },
+                },
+
+                totalVisitedShop: {
+                  $sum: {
+                    $cond: [{ $eq: ['$isVisited', true] }, 1, 0],
+                  },
+                },
+
+                totalProductiveCall: {
+                  $sum: {
+                    $cond: [{ $and: ['$isVisited', '$hasSale'] }, 1, 0],
+                  },
+                },
+              },
+            },
+
+            {
+              $addFields: {
+                LPSC: {
+                  $cond: [
+                    { $gt: ['$totalVisitedShop', 0] },
+                    {
+                      $round: [
+                        {
+                          $divide: ['$totalCases', '$totalVisitedShop'],
+                        },
+                        2,
+                      ],
+                    },
+                    0,
+                  ],
+                },
+              },
+            },
+          ],
         },
       },
     ];
@@ -514,13 +613,24 @@ export class RouteService extends MongoRepository<Route> {
     const data = result?.[0]?.data || [];
     const total = result?.[0]?.meta?.[0]?.total || 0;
 
+    const summary = result?.[0]?.summary?.[0] || {
+      totalOrderValue: 0,
+      totalCases: 0,
+      totalVisitedShop: 0,
+      totalProductiveCall: 0,
+      LPSC: 0,
+    };
+
     /* ======================================================
      * 4️⃣ RESPONSE
      * ====================================================== */
     return {
       statusCode: HttpStatus.OK,
       message: ROUTE.FETCHED,
-      data,
+      data: {
+        data,
+        summary,
+      },
       meta: {
         page,
         limit,

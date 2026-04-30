@@ -94,8 +94,8 @@ export class VanDailyStockController {
 
   @Get('summary')
   @Permissions('VAN_DAILY_STOCK_VIEW')
-  async summary(@Query() query: { vanId: string }) {
-    return this.service.getDayEndSummary(query?.vanId);
+  async summary(@Query() query: { vanId: string, workSessionId?: string }) {
+    return this.service.getDayEndSummary(query?.vanId, query?.workSessionId);
   }
 
   /**

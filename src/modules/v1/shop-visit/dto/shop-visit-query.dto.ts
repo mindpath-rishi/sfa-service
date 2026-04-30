@@ -43,6 +43,14 @@ export class ShopVisitQueryDto extends PaginationDto {
 
   @ApiPropertyOptional({
     type: String,
+    description: 'Business identifier for visit',
+  })
+  @IsOptional()
+  @IsString()
+  customerId?: string;
+
+  @ApiPropertyOptional({
+    type: String,
     description: 'Filter by routeSession ID',
   })
   @IsOptional()
@@ -116,7 +124,7 @@ export class ShopVisitQueryDto extends PaginationDto {
   status?: ShopVisitStatus;
 }
 
-export class ShopVisitStatusQueryDto{
+export class ShopVisitStatusQueryDto {
   @ApiPropertyOptional({
     type: String,
     description: 'Filter by routeSession ID',
@@ -137,4 +145,8 @@ export class ShopVisitStatusQueryDto{
   @IsNotEmpty()
   @IsString()
   vanId?: string;
+
+  @ApiPropertyOptional({ type: String, description: 'Filter by van ID' })
+  @IsOptional()
+  outletId?: string;
 }

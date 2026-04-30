@@ -24,11 +24,19 @@ import {
   Days,
   RouteCustomerMappingStatus,
 } from 'src/shared/enums/route-customer-mapping.enums';
+import { InjectModel } from '@nestjs/mongoose';
+import { ShopVisit } from 'src/core/database/mongo/schema/shop-visit.schema';
+import { Sale } from 'src/core/database/mongo/schema/sale.schema';
+import { Model } from 'mongoose';
 
 @Injectable()
 export class CustomerService extends MongoRepository<Customer> {
   constructor(
     mongo: MongoService,
+    @InjectModel(ShopVisit.name)
+    private readonly shopVisitModel: Model<ShopVisit>,
+    @InjectModel(Sale.name)
+    private readonly saleModel: Model<Sale>,
     private readonly routeCustomerMappingService: RouteCustomerMappingService,
   ) {
     super(mongo.getModel(Customer.name, CustomerSchema));
@@ -90,6 +98,11 @@ export class CustomerService extends MongoRepository<Customer> {
       return await this.withTransaction(async (session) => {
         const filter: FilterQuery<Customer> = {
           mobile: payload.phoneNumber, // or any unique field
+        };
+
+        payload.geoTag = {
+          lat: 21.867313, // default latitude
+          lng: 77.8164907, // default longitude
         };
 
         const existing = await this.findOne(filter, {
@@ -200,15 +213,137 @@ export class CustomerService extends MongoRepository<Customer> {
     };
   }
 
+  // async findByCustomerId(customerId: string) {
+  //   const doc = await this.findOne({ customerId }, { lean: true });
+
+  //   if (!doc) throw new NotFoundException(CUSTOMER.NOT_FOUND);
+
+  //   return {
+  //     statusCode: HttpStatus.OK,
+  //     message: CUSTOMER.FETCHED,
+  //     data: doc,
+  //   };
+  // }
+
   async findByCustomerId(customerId: string) {
     const doc = await this.findOne({ customerId }, { lean: true });
 
     if (!doc) throw new NotFoundException(CUSTOMER.NOT_FOUND);
 
+    // Get current date range for MTD (Month to Date)
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const endOfMonth = new Date(
+      now.getFullYear(),
+      now.getMonth() + 1,
+      0,
+      23,
+      59,
+      59,
+      999,
+    );
+
+    // Get last 5 completed orders
+    const last5Orders: any = await this.saleModel
+      .find({
+        customerId,
+        status: 'COMPLETED',
+        isDeleted: false,
+      })
+      .sort({ createdAt: -1 })
+      .limit(5)
+      .lean();
+
+    // Calculate MTD order value and quantity
+    const mtdOrders: any = await this.saleModel.aggregate([
+      {
+        $match: {
+          customerId,
+          status: 'COMPLETED',
+          isDeleted: false,
+          date: {
+            $gte: startOfMonth,
+            $lte: endOfMonth,
+          },
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          mtdOrderValue: { $sum: '$totalValue' },
+          mtdTotalCases: { $sum: '$totalCases' },
+          mtdOrderCount: { $sum: 1 },
+        },
+      },
+    ]);
+
+    // Calculate last 5 orders statistics
+    let avgOrderValue = 0;
+    let avgOrderQty = 0;
+    let avgLPC = 0;
+
+    if (last5Orders.length > 0) {
+      const totalValue = last5Orders.reduce(
+        (sum, order: any) => sum + (order.totalValue || 0),
+        0,
+      );
+      const totalQty = last5Orders.reduce(
+        (sum, order) => sum + (order.totalCases || 0),
+        0,
+      );
+      const totalLPC = last5Orders.reduce(
+        (sum, order) => sum + (order.totalLpc || order.totalLPC || 0),
+        0,
+      );
+
+      avgOrderValue = totalValue / last5Orders.length;
+      avgOrderQty = totalQty / last5Orders.length;
+      avgLPC = totalLPC / last5Orders.length;
+    }
+
+    // Get last order date
+    const lastOrder = await this.saleModel
+      .findOne({ customerId, status: 'COMPLETED', isDeleted: false })
+      .sort({ date: -1 })
+      .lean();
+
+    // Get last visit date from visits collection (assuming you have a visit model)
+    const lastVisit = await this.shopVisitModel
+      .findOne({ customerId, status: 'COMPLETED' })
+      .sort({ checkInTime: -1 })
+      .lean();
+
+    // Prepare summary data
+    const summary = {
+      mtd: {
+        orderValue: mtdOrders[0]?.mtdOrderValue || 0,
+        orderQuantity: mtdOrders[0]?.mtdTotalCases || 0,
+        orderCount: mtdOrders[0]?.mtdOrderCount || 0,
+      },
+      last5Orders: {
+        avgOrderValue: parseFloat(avgOrderValue.toFixed(2)),
+        avgOrderQuantity: parseFloat(avgOrderQty.toFixed(2)),
+        avgLPC: parseFloat(avgLPC.toFixed(2)),
+        orders: last5Orders.map((order) => ({
+          saleId: order.saleId,
+          date: order.date,
+          totalValue: order.totalValue,
+          totalCases: order.totalCases,
+          totalPieces: order.totalPieces,
+          totalLPC: order.totalLpc || order.totalLPC || 0,
+        })),
+      },
+      lastOrderDate: lastOrder?.date || null,
+      lastVisitDate: lastVisit?.checkInTime || null,
+    };
+
     return {
       statusCode: HttpStatus.OK,
       message: CUSTOMER.FETCHED,
-      data: doc,
+      data: {
+        ...doc,
+        summary,
+      },
     };
   }
 

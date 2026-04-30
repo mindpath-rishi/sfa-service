@@ -12,6 +12,9 @@ import { RouteSessionModule } from '../route-session/route-session.module';
 import { StockCountModule } from '../stock-count/stock-count.module';
 import { StockCountItemModule } from '../stock-count-item/stock-count-item.module';
 import { VanDailyStockModule } from '../van-daily-stock/van-daily-stock.module';
+import { InventoryTransactionModule } from '../inventory-transaction/inventory-transaction.module';
+import { VanInventoryModule } from '../van-inventory/van-inventory.module';
+import { VanModule } from '../van/van.module';
 
 @Module({
   imports: [
@@ -23,6 +26,9 @@ import { VanDailyStockModule } from '../van-daily-stock/van-daily-stock.module';
     StockCountModule,
     StockCountItemModule,
     VanDailyStockModule,
+    InventoryTransactionModule,
+    VanInventoryModule,
+    VanModule
   ],
   controllers: [WorkSessionController],
   providers: [WorkSessionService],

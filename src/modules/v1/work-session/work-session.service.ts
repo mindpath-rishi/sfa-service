@@ -32,6 +32,11 @@ import { VanDailyStockService } from '../van-daily-stock/van-daily-stock.service
 import { StockCountService } from '../stock-count/stock-count.service';
 import { StockCountStatus } from 'src/shared/enums/stock-count.enums';
 import { StockCountItemService } from '../stock-count-item/stock-count-item.service';
+import { Van } from 'src/core/database/mongo/schema/van.schema';
+import { VanInventoryService } from '../van-inventory/van-inventory.service';
+import { InventoryTransaction } from 'src/core/database/mongo/schema/inventory-transaction.schema';
+import { InventoryTransactionService } from '../inventory-transaction/inventory-transaction.service';
+import { VanService } from '../van/van.service';
 
 @Injectable()
 export class WorkSessionService extends MongoRepository<WorkSession> {
@@ -42,6 +47,9 @@ export class WorkSessionService extends MongoRepository<WorkSession> {
     private readonly vanDailyStockService: VanDailyStockService,
     private readonly stockCountService: StockCountService,
     private readonly stockCountItemService: StockCountItemService,
+    private readonly inventoryService: VanInventoryService,
+    private readonly inventoryTransactionService: InventoryTransactionService,
+    private readonly vanService: VanService
   ) {
     super(mongo.getModel(WorkSession.name, WorkSessionSchema));
   }
@@ -49,6 +57,7 @@ export class WorkSessionService extends MongoRepository<WorkSession> {
   async create(payload: CreateWorkSessionDto) {
     try {
       return await this.withTransaction(async (session) => {
+        const requestedVanId = payload.requestedVanId;
         const ctx = RequestContextStore.getStore();
 
         /* ======================================================
@@ -65,7 +74,6 @@ export class WorkSessionService extends MongoRepository<WorkSession> {
           session,
           includeDeleted: true,
         });
-        console.log(existing, '================ex');
 
         if (existing && !existing.isDeleted) {
           throw new ConflictException(WORK_SESSION.DUPLICATE);
@@ -78,11 +86,19 @@ export class WorkSessionService extends MongoRepository<WorkSession> {
         const newWork: Partial<WorkSession> = {
           userId: ctx?.userId,
           userName: ctx?.name,
-          vanId: ctx?.vanId,
+          vanId: requestedVanId ||ctx?.vanId,
           vanName: ctx?.vanName,
           dayStartTime: new Date(),
           status: WorkSessionStatus.ACTIVE,
         };
+
+        if(requestedVanId){
+           this.vanService.changeVan({
+            oldVanId: payload?.vanId,
+            employeeId: ctx?.userId,
+            vanId: payload?.requestedVanId
+           })
+        }
 
         // if (payl.routeId) {
         //   payload['routeId'] = reqBody.routeId;
@@ -500,158 +516,217 @@ export class WorkSessionService extends MongoRepository<WorkSession> {
   //   }
   // }
 
- async complete(payload: any) {
-  try {
-    return await this.withTransaction(async (session) => {
-      const ctx = RequestContextStore.getStore();
+  async complete(payload: any) {
+    try {
+      return await this.withTransaction(async (session) => {
+        const ctx = RequestContextStore.getStore();
 
-      const startOfDay = new Date();
-      startOfDay.setHours(0, 0, 0, 0);
+        const startOfDay = new Date();
+        startOfDay.setHours(0, 0, 0, 0);
 
-      /* ======================================================
-       * 1. FIND ACTIVE WORK SESSION
-       * ====================================================== */
-      const workSession = await this.findOne({
-        userId: ctx?.userId,
-        createdAt: { $gte: startOfDay },
-        status: WorkSessionStatus.ACTIVE,
-      });
-
-      if (!workSession) {
-        throw new NotFoundException(WORK_SESSION.NOT_FOUND);
-      }
-
-      const { workSessionId } = workSession;
-      const vanId: any = workSession?.vanId;
-
-      /* ======================================================
-       * 2. COMPLETE WORK SESSION
-       * ====================================================== */
-      workSession.dayEndTime = new Date();
-      workSession.status = WorkSessionStatus.COMPLETED;
-
-      await workSession.save({ session });
-
-      /* ======================================================
-       * 3. COMPLETE ACTIVITY + ROUTE
-       * ====================================================== */
-      await this.activityService.updateOne(
-        { workSessionId, status: ActivityStatus.ACTIVE },
-        { endTime: new Date(), status: ActivityStatus.COMPLETED },
-        { session },
-      );
-
-      await this.routeSessionService.updateOne(
-        { workSessionId, status: RouteSessionStatus.ACTIVE },
-        { endTime: new Date(), status: RouteSessionStatus.COMPLETED },
-        { session },
-      );
-
-      /* ======================================================
-       * 4. GET DAY END SUMMARY
-       * ====================================================== */
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-
-      const summaryRes =
-        await this.vanDailyStockService.getDayEndSummary(vanId);
-
-      const summary: any = summaryRes?.data?.summary;
-      const products = summaryRes?.data?.products || [];
-
-      if (summary && products.length) {
         /* ======================================================
-         * 5. CHECK EXISTING STOCK COUNT
+         * 1. FIND ACTIVE WORK SESSION
          * ====================================================== */
-        const existing = await this.stockCountService.findOne(
-          { vanId, date: today },
+        const workSession = await this.findOne({
+          userId: ctx?.userId,
+          createdAt: { $gte: startOfDay },
+          status: WorkSessionStatus.ACTIVE,
+        });
+
+        if (!workSession) {
+          throw new NotFoundException(WORK_SESSION.NOT_FOUND);
+        }
+
+        const { workSessionId } = workSession;
+        const vanId: any = workSession?.vanId;
+
+        /* ======================================================
+         * 2. COMPLETE WORK SESSION
+         * ====================================================== */
+        workSession.dayEndTime = new Date();
+        workSession.status = WorkSessionStatus.COMPLETED;
+
+        await workSession.save({ session });
+
+        /* ======================================================
+         * 3. COMPLETE ACTIVITY + ROUTE
+         * ====================================================== */
+        await this.activityService.updateOne(
+          { workSessionId, status: ActivityStatus.ACTIVE },
+          { endTime: new Date(), status: ActivityStatus.COMPLETED },
           { session },
         );
 
-        if (!existing) {
+        await this.routeSessionService.updateOne(
+          { workSessionId, status: RouteSessionStatus.ACTIVE },
+          { endTime: new Date(), status: RouteSessionStatus.COMPLETED },
+          { session },
+        );
+
+        /* ======================================================
+         * 4. GET DAY END SUMMARY
+         * ====================================================== */
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        const summaryRes =
+          await this.vanDailyStockService.getDayEndSummary(vanId, workSessionId);
+
+        const summary: any = summaryRes?.data?.summary;
+        const products = summaryRes?.data?.products || [];
+
+        if (summary && products.length) {
           /* ======================================================
-           * 6. CREATE STOCK COUNT (HEADER)
+           * 5. CHECK EXISTING STOCK COUNT
            * ====================================================== */
-          const stockCount = await this.stockCountService.save(
-            {
-              carryForwardStock: payload?.carryForwardStock || false,
-              stockCountId: IdGenerator.generate('STOC', 8),
-              workSessionId,
-              vanId,
-              employeeId: ctx?.userId,
-              date: today,
-
-              /* ===== SYSTEM (FROM NEW SUMMARY STRUCTURE) ===== */
-              systemQty: summary?.closing?.qty || 0,
-              systemCase: summary?.closing?.cases || 0,
-              systemPiece: summary?.closing?.pieces || 0,
-              systemWeight: summary?.closing?.weight || 0,
-              systemValue: summary?.closing?.value || 0,
-
-              /* INIT */
-              countedQty: 0,
-              varianceQty: 0,
-
-              status: StockCountStatus.DRAFT,
-            },
+          const existing = await this.stockCountService.findOne(
+            { vanId, date: today },
             { session },
           );
 
-          /* ======================================================
-           * 7. CREATE STOCK COUNT ITEMS
-           * ====================================================== */
-          const items = products.map((p) => {
-            const closingQty = p.closingQty || 0;
-            const closingValue = p.closingValue || 0;
+          if (!existing) {
+            /* ======================================================
+             * 6. CREATE STOCK COUNT (HEADER)
+             * ====================================================== */
+            const stockCount = await this.stockCountService.save(
+              {
+                carryForwardStock: payload?.carryForwardStock || false,
+                stockCountId: IdGenerator.generate('STOC', 8),
+                workSessionId,
+                vanId,
+                employeeId: ctx?.userId,
+                date: today,
 
-            return {
-              stockCountId: stockCount.stockCountId,
-              productId: p.productId,
-              productName: p.productName,
-              vanId,
+                /* ===== SYSTEM (FROM NEW SUMMARY STRUCTURE) ===== */
+                systemQty: summary?.closing?.qty || 0,
+                systemCase: summary?.closing?.cases || 0,
+                systemPiece: summary?.closing?.pieces || 0,
+                systemWeight: summary?.closing?.weight || 0,
+                systemValue: summary?.closing?.value || 0,
 
-              /* ===== SYSTEM ===== */
-              systemQty: closingQty,
-              systemCases: p.closingCases || 0,
-              systemPieces: p.closingPieces || 0,
+                /* INIT */
+                countedQty: 0,
+                varianceQty: 0,
 
-              /* INIT COUNTED */
-              countedQty: 0,
-              countedCases: 0,
-              countedPieces: 0,
+                status: StockCountStatus.DRAFT,
+              },
+              { session },
+            );
 
-              /* INIT VARIANCE */
-              varianceQty: 0,
+            /* ======================================================
+             * 7. CREATE STOCK COUNT ITEMS
+             * ====================================================== */
+            const items = products.map((p) => {
+              const closingQty = p.closingQty || 0;
+              const closingValue = p.closingValue || 0;
 
-              /* PRICE */
-              piecePrice:
-                closingQty > 0 ? closingValue / closingQty : 0,
+              return {
+                stockCountId: stockCount.stockCountId,
+                productId: p.productId,
+                productName: p.productName,
+                vanId,
 
-              systemValue: closingValue,
-              countedValue: 0,
-              varianceValue: 0,
+                /* ===== SYSTEM ===== */
+                systemQty: closingQty,
+                systemCases: p.closingCases || 0,
+                systemPieces: p.closingPieces || 0,
 
-              unitQtyInCase: p.unitQtyInCase,
-            };
-          });
+                /* INIT COUNTED */
+                countedQty: 0,
+                countedCases: 0,
+                countedPieces: 0,
 
-          await this.stockCountItemService.bulkCreate(items, session);
+                /* INIT VARIANCE */
+                varianceQty: 0,
+
+                /* PRICE */
+                piecePrice: closingQty > 0 ? closingValue / closingQty : 0,
+
+                systemValue: closingValue,
+                countedValue: 0,
+                varianceValue: 0,
+
+                unitQtyInCase: p.unitQtyInCase,
+              };
+            });
+
+            await this.stockCountItemService.bulkCreate(items, session);
+          }
+          const carryForward = payload?.carryForwardStock === true;
+
+          console.log('Carry Forward Stock:', carryForward);
+
+          if (!carryForward) {
+            /* ============================================
+             * 1. GET CURRENT INVENTORY BEFORE RESET
+             * ============================================ */
+            const inventories = await this.inventoryService.find(
+              { vanId },
+            );
+
+            /* ============================================
+             * 2. CREATE TRANSACTIONS (OUT)
+             * ============================================ */
+            const transactions = inventories
+              .filter((inv) => inv.quantity > 0)
+              .map((inv) => ({
+                transactionId: IdGenerator.generate('TRX', 12),
+                productId: inv.productId,
+                vanId: inv.vanId,
+                employeeId: ctx?.userId,
+                warehouseId: payload?.warehouseId || 'WH-001',
+
+                transactionType: 'UNLOAD',
+                direction: 'OUT',
+
+                quantity: inv.quantity,
+                cases: 0, // or calculate if needed
+                pieces: 0, // or calculate if needed
+
+                referenceNo: workSessionId,
+                remark: 'Day end stock reset (No Carry Forward)',
+
+                transactionDate: new Date(),
+                status: 'POSTED',
+              }));
+
+            if (transactions.length) {
+              await this.inventoryTransactionService.bulkCreate(
+                transactions as any,
+                session,
+              );
+            }
+
+            /* ============================================
+             * 3. RESET INVENTORY
+             * ============================================ */
+            await this.inventoryService.updateMany(
+              { vanId },
+              {
+                $set: {
+                  quantity: 0,
+                  reservedQuantity: 0,
+                  updatedAt: new Date(),
+                },
+              },
+              { session },
+            );
+          }
         }
-      }
 
-      /* ======================================================
-       * RESPONSE
-       * ====================================================== */
-      return {
-        statusCode: HttpStatus.OK,
-        message: WORK_SESSION.UPDATED,
-        data: workSession,
-      };
-    });
-  } catch (error) {
-    this.handleDuplicateError(error);
+        /* ======================================================
+         * RESPONSE
+         * ====================================================== */
+        return {
+          statusCode: HttpStatus.OK,
+          message: WORK_SESSION.UPDATED,
+          data: workSession,
+        };
+      });
+    } catch (error) {
+      this.handleDuplicateError(error);
+    }
   }
-}
 
   async todayActivity() {
     const ctx = RequestContextStore.getStore();

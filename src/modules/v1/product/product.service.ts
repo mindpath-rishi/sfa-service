@@ -148,6 +148,7 @@ export class ProductService extends MongoRepository<Product> {
       hasDiscount,
       page = 1,
       limit = 20,
+      isFocusedPack
     } = query;
 
     /**
@@ -175,6 +176,10 @@ export class ProductService extends MongoRepository<Product> {
       match.price = {};
       if (minPrice) match.price.$gte = Number(minPrice);
       if (maxPrice) match.price.$lte = Number(maxPrice);
+    }
+
+    if(isFocusedPack){
+      match.isFocusedPack = isFocusedPack;
     }
 
     if (hasDiscount === 'true') {

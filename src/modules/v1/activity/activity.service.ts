@@ -90,9 +90,6 @@ export class ActivityService extends MongoRepository<Activity> {
 
       //   await this.routeSessionService.create(newRouteSession, { session });
       // }
-
-      console.log(payload, '=================================94');
-
       if (payload.routeId) {
         const newRouteSession: CreateRouteSessionDto = {
           workSessionId: payload.workSessionId,
@@ -115,6 +112,7 @@ export class ActivityService extends MongoRepository<Activity> {
             (item) => item.quantity > 0,
           );
 
+          console.log('Inventories for van daily stock:', response.data);
           if (inventories?.length) {
             const today = new Date();
             today.setHours(0, 0, 0, 0);
@@ -123,7 +121,7 @@ export class ActivityService extends MongoRepository<Activity> {
               vanDailyStockId: IdGenerator.generate('VDS', 8),
 
               date: today,
-              vanId: vanId, // ✅ FIXED
+              vanId: vanId,
               employeeId: ctx?.userId,
 
               productId: inv.productId,
@@ -133,17 +131,18 @@ export class ActivityService extends MongoRepository<Activity> {
               inQty: 0,
               outQty: 0,
               adjustmentQty: 0,
-              closingQty: 0,
+              closingQty: inv.quantity || 0,
               pieceNetWeight: inv.pieceNetWeight,
               piecePrice: inv.piecePrice,
               workSessionId: payload.workSessionId,
               status: VanDailyStockStatus.DRAFT,
             }));
 
-            console.log(dailyStocks, '==================stock');
-            await this.vanDailyStockService.bulkCreate(dailyStocks, {
+            const result = await this.vanDailyStockService.bulkCreate(dailyStocks, {
               session,
-            }); // ✅ FIXED
+            }); 
+
+            console.log('Van daily stock created:', result);
           }
         } catch (error) {
           console.error('Van daily stock error:', error);
