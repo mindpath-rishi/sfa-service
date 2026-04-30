@@ -49,7 +49,7 @@ export class WorkSessionService extends MongoRepository<WorkSession> {
     private readonly stockCountItemService: StockCountItemService,
     private readonly inventoryService: VanInventoryService,
     private readonly inventoryTransactionService: InventoryTransactionService,
-    private readonly vanService: VanService
+    private readonly vanService: VanService,
   ) {
     super(mongo.getModel(WorkSession.name, WorkSessionSchema));
   }
@@ -86,18 +86,18 @@ export class WorkSessionService extends MongoRepository<WorkSession> {
         const newWork: Partial<WorkSession> = {
           userId: ctx?.userId,
           userName: ctx?.name,
-          vanId: requestedVanId ||ctx?.vanId,
+          vanId: requestedVanId || payload.vanId,
           vanName: ctx?.vanName,
           dayStartTime: new Date(),
           status: WorkSessionStatus.ACTIVE,
         };
 
-        if(requestedVanId){
-           this.vanService.changeVan({
+        if (requestedVanId) {
+          this.vanService.changeVan({
             oldVanId: payload?.vanId,
             employeeId: ctx?.userId,
-            vanId: payload?.requestedVanId
-           })
+            vanId: payload?.requestedVanId,
+          });
         }
 
         // if (payl.routeId) {
@@ -569,8 +569,15 @@ export class WorkSessionService extends MongoRepository<WorkSession> {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
 
-        const summaryRes =
-          await this.vanDailyStockService.getDayEndSummary(vanId, workSessionId);
+        const summaryRes = await this.vanDailyStockService.getDayEndSummary(
+          vanId,
+          workSessionId,
+        );
+
+        console.log(
+          summaryRes,
+          '=================day end summary=================',
+        );
 
         const summary: any = summaryRes?.data?.summary;
         const products = summaryRes?.data?.products || [];
@@ -660,8 +667,11 @@ export class WorkSessionService extends MongoRepository<WorkSession> {
             /* ============================================
              * 1. GET CURRENT INVENTORY BEFORE RESET
              * ============================================ */
-            const inventories = await this.inventoryService.find(
-              { vanId },
+            const inventories = await this.inventoryService.find({ vanId });
+
+            console.log(
+              inventories,
+              '==================current inventories=================',
             );
 
             /* ============================================
