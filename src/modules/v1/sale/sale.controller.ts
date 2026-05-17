@@ -51,8 +51,6 @@ import { SALE } from './sale.constants';
 import { SaleQueryDto } from './dto/sale.query.dto';
 import { UpdateSaleDto } from './dto/update-sale.dto';
 
-
-
 @ApiTags('Sales')
 @FeatureFlag(API_MODULE_ENABLE_KEYS.SALES)
 @ApiUnauthorizedResponse()
@@ -74,11 +72,7 @@ export class SalesController {
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Create sales' })
   @ApiBody({ type: CreateSaleDto })
-  @ApiSuccessResponse(
-    { salesId: 'SALE-001' },
-    SALE.CREATED,
-    HttpStatus.CREATED,
-  )
+  @ApiSuccessResponse({ salesId: 'SALE-001' }, SALE.CREATED, HttpStatus.CREATED)
   async create(@Body() dto: CreateSaleDto) {
     return this.service.create(dto);
   }
@@ -91,6 +85,25 @@ export class SalesController {
   @Permissions('SALES_VIEW')
   async findAll(@Query() query: SaleQueryDto) {
     return this.service.findAll(query);
+  }
+
+  /**
+   * Get Last 6 Month Category Wise Sales
+   * ------------------------------------
+   */
+  @Permissions('SALES_VIEW')
+  @Get('category-wise')
+  @ApiOperation({
+    summary: 'Get last 6 month category wise sales',
+  })
+  async getLastSixMonthCategoryWiseSale(
+    @Query('vanId') vanId?: string,
+    @Query('outletId') outletId?: string,
+  ) {
+    return this.service.getLastSixMonthCategoryWiseSale({
+      vanId,
+      outletId,
+    });
   }
 
   /**
@@ -111,10 +124,7 @@ export class SalesController {
   @Permissions('SALES_UPDATE')
   @Patch(':salesId')
   @ApiParam({ name: 'salesId', description: 'Sales salesId' })
-  async update(
-    @Param('salesId') salesId: string,
-    @Body() dto: UpdateSaleDto,
-  ) {
+  async update(@Param('salesId') salesId: string, @Body() dto: UpdateSaleDto) {
     return this.service.update(salesId, dto);
   }
 

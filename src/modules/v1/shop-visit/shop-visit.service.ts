@@ -169,19 +169,26 @@ export class ShopVisitService extends MongoRepository<ShopVisit> {
 
   async status(query: ShopVisitStatusQueryDto) {
     console.log(query, '==================query=================');
+
+    const match = Object.fromEntries(
+      Object.entries({
+        ...query,
+        status: ShopVisitStatus.ACTIVE,
+      }).filter(
+        ([_, value]) => value !== undefined && value !== null && value !== '',
+      ),
+    );
+
     const pipeline: any[] = [
       {
-        $match: {
-          ...query,
-          status: ShopVisitStatus.ACTIVE,
-        },
+        $match: match,
       },
 
       // 🔥 Join with customer_master
       {
         $lookup: {
-          from: 'customer_master', // collection name
-          localField: 'customerId',
+          from: 'customer_master',
+          localField: 'outletId',
           foreignField: 'outletId',
           as: 'outlet',
         },
@@ -205,6 +212,7 @@ export class ShopVisitService extends MongoRepository<ShopVisit> {
           checkOutTime: 1,
           routeSessionId: 1,
           status: 1,
+          visitType: 1,
 
           // joined outlet data
           'outlet.customerId': 1,
@@ -218,6 +226,7 @@ export class ShopVisitService extends MongoRepository<ShopVisit> {
     ];
 
     const result = await this.model.aggregate(pipeline);
+
     console.log(result[0], '=====================195=============');
 
     return {

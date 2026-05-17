@@ -1,5 +1,7 @@
 import { RouteStatus } from 'src/shared/enums/route.enums';
+
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+
 import {
   IsEnum,
   IsNotEmpty,
@@ -7,10 +9,10 @@ import {
   IsOptional,
   IsString,
   ValidateNested,
-  ArrayNotEmpty,
   IsArray,
   Min,
 } from 'class-validator';
+
 import { Type } from 'class-transformer';
 
 /**
@@ -39,9 +41,12 @@ export class RouteCustomerDto {
   @IsString()
   customerId!: string;
 
-  @ApiProperty({ type: Number, description: 'Visit sequence order' })
+  @ApiProperty({
+    type: Number,
+    description: 'Visit sequence order',
+  })
   @IsNotEmpty()
-  @Type(() => Number) // ✅ FIX string → number
+  @Type(() => Number)
   @IsNumber()
   @Min(1)
   sequence!: number;
@@ -52,7 +57,9 @@ export class RouteCustomerDto {
  * ====================================================== */
 
 export class CreateRouteDto {
-  @ApiProperty({ type: String })
+  @ApiProperty({
+    type: String,
+  })
   @IsNotEmpty()
   @IsString()
   name!: string;
@@ -64,6 +71,38 @@ export class CreateRouteDto {
   @IsNotEmpty()
   @IsString()
   beatId!: string;
+
+  @ApiPropertyOptional({
+    type: String,
+    description: 'Beat ERP identifier',
+  })
+  @IsOptional()
+  @IsString()
+  beatErpId?: string;
+
+  @ApiPropertyOptional({
+    type: String,
+    description: 'Business identifier for country',
+  })
+  @IsOptional()
+  @IsString()
+  countryId?: string;
+
+  @ApiPropertyOptional({
+    type: String,
+    description: 'Business identifier for province',
+  })
+  @IsOptional()
+  @IsString()
+  provinceId?: string;
+
+  @ApiPropertyOptional({
+    type: String,
+    description: 'Business identifier for market',
+  })
+  @IsOptional()
+  @IsString()
+  marketId?: string;
 
   /**
    * ✅ Customers Array

@@ -1,6 +1,10 @@
-import { ShopVisitStatus } from 'src/shared/enums/shop-visit.enums';
+import {
+  ShopVisitStatus,
+  ShopVisitType,
+} from 'src/shared/enums/shop-visit.enums';
 
 import { ApiPropertyOptional } from '@nestjs/swagger';
+
 import {
   IsDate,
   IsEnum,
@@ -11,6 +15,7 @@ import {
   MaxLength,
   MinLength,
 } from 'class-validator';
+
 import { PaginationDto } from 'src/shared/dto/pagination.dto';
 
 /**
@@ -43,7 +48,7 @@ export class ShopVisitQueryDto extends PaginationDto {
 
   @ApiPropertyOptional({
     type: String,
-    description: 'Business identifier for visit',
+    description: 'Business identifier for customer',
   })
   @IsOptional()
   @IsString()
@@ -65,35 +70,58 @@ export class ShopVisitQueryDto extends PaginationDto {
   @IsString()
   workSessionId?: string;
 
-  @ApiPropertyOptional({ type: String, description: 'Filter by employee ID' })
+  @ApiPropertyOptional({
+    type: String,
+    description: 'Filter by employee ID',
+  })
   @IsOptional()
   @IsString()
   employeeId?: string;
 
-  @ApiPropertyOptional({ type: String })
+  @ApiPropertyOptional({
+    type: String,
+  })
   @IsOptional()
   @IsString()
   employeeName?: string;
 
-  @ApiPropertyOptional({ type: String, description: 'Filter by van ID' })
+  @ApiPropertyOptional({
+    type: String,
+    description: 'Filter by van ID',
+  })
   @IsOptional()
   @IsString()
   vanId?: string;
 
-  @ApiPropertyOptional({ type: String })
+  @ApiPropertyOptional({
+    type: String,
+  })
   @IsOptional()
   @IsString()
   vanName?: string;
 
-  @ApiPropertyOptional({ type: String, description: 'Filter by outlet ID' })
+  @ApiPropertyOptional({
+    type: String,
+    description: 'Filter by outlet ID',
+  })
   @IsOptional()
   @IsString()
   outletId?: string;
 
-  @ApiPropertyOptional({ type: String })
+  @ApiPropertyOptional({
+    type: String,
+  })
   @IsOptional()
   @IsString()
   outletName?: string;
+
+  @ApiPropertyOptional({
+    enum: ShopVisitType,
+    description: 'Filter by visit type (ON_SITE / OFF_SITE)',
+  })
+  @IsOptional()
+  @IsEnum(ShopVisitType)
+  visitType?: ShopVisitType;
 
   @ApiPropertyOptional({
     type: Number,
@@ -104,12 +132,16 @@ export class ShopVisitQueryDto extends PaginationDto {
   @IsNumber()
   sequence?: number;
 
-  @ApiPropertyOptional({ type: Date })
+  @ApiPropertyOptional({
+    type: Date,
+  })
   @IsOptional()
   @IsDate()
   checkInTime?: Date;
 
-  @ApiPropertyOptional({ type: Date })
+  @ApiPropertyOptional({
+    type: Date,
+  })
   @IsOptional()
   @IsDate()
   checkOutTime?: Date;
@@ -141,12 +173,27 @@ export class ShopVisitStatusQueryDto {
   @IsString()
   workSessionId?: string;
 
-  @ApiPropertyOptional({ type: String, description: 'Filter by van ID' })
+  @ApiPropertyOptional({
+    type: String,
+    description: 'Filter by van ID',
+  })
   @IsNotEmpty()
   @IsString()
   vanId?: string;
 
-  @ApiPropertyOptional({ type: String, description: 'Filter by van ID' })
+  @ApiPropertyOptional({
+    type: String,
+    description: 'Filter by outlet ID',
+  })
   @IsOptional()
+  @IsString()
   outletId?: string;
+
+  @ApiPropertyOptional({
+    enum: ShopVisitType,
+    description: 'Filter by visit type (ON_SITE / OFF_SITE)',
+  })
+  @IsOptional()
+  @IsEnum(ShopVisitType)
+  visitType?: ShopVisitType;
 }

@@ -273,6 +273,372 @@ export class RouteService extends MongoRepository<Route> {
   //   };
   // }
 
+  // async getRouteCustomers(
+  //   routeId: string,
+  //   query: RouteCustomerQueryDto & {
+  //     routeSessionId?: string;
+  //     visitStatus?: 'VISITED' | 'NOT_VISITED';
+  //   },
+  // ) {
+  //   const {
+  //     searchText,
+  //     page = 1,
+  //     limit = 20,
+  //     status,
+  //     routeSessionId,
+  //     visitStatus,
+  //   } = query;
+
+  //   /* ======================================================
+  //    * 1️⃣ VALIDATE ROUTE
+  //    * ====================================================== */
+  //   const route = await this.model.findOne({ routeId });
+  //   if (!route) {
+  //     return {
+  //       statusCode: HttpStatus.NOT_FOUND,
+  //       message: ROUTE.NOT_FOUND,
+  //       data: [],
+  //     };
+  //   }
+
+  //   /* ======================================================
+  //    * 2️⃣ PIPELINE
+  //    * ====================================================== */
+  //   const pipeline: any[] = [
+  //     { $match: { routeId } },
+
+  //     /* ---------------- MAPPINGS ---------------- */
+  //     {
+  //       $lookup: {
+  //         from: 'route_customer_mappings',
+  //         let: { routeId: '$routeId' },
+  //         pipeline: [
+  //           {
+  //             $match: {
+  //               $expr: {
+  //                 $and: [
+  //                   { $eq: ['$routeId', '$$routeId'] },
+  //                   { $eq: ['$status', 'ACTIVE'] },
+  //                 ],
+  //               },
+  //             },
+  //           },
+  //         ],
+  //         as: 'mappings',
+  //       },
+  //     },
+  //     { $unwind: '$mappings' },
+
+  //     /* ---------------- CUSTOMER ---------------- */
+  //     {
+  //       $lookup: {
+  //         from: 'customer_master',
+  //         localField: 'mappings.customerId',
+  //         foreignField: 'customerId',
+  //         as: 'customer',
+  //       },
+  //     },
+  //     { $unwind: '$customer' },
+
+  //     /* ---------------- FILTER ---------------- */
+  //     {
+  //       $match: {
+  //         ...(status ? { 'customer.status': status } : {}),
+  //         ...(searchText
+  //           ? {
+  //               $or: [
+  //                 { 'customer.name': { $regex: searchText, $options: 'i' } },
+  //                 { 'customer.mobile': { $regex: searchText, $options: 'i' } },
+  //               ],
+  //             }
+  //           : {}),
+  //       },
+  //     },
+
+  //     /* ---------------- VISIT ---------------- */
+  //     {
+  //       $lookup: {
+  //         from: 'shop_visits',
+  //         let: { customerId: '$customer.customerId' },
+  //         pipeline: [
+  //           {
+  //             $match: {
+  //               $expr: {
+  //                 $and: [
+  //                   { $eq: ['$outletId', '$$customerId'] },
+  //                   ...(routeSessionId
+  //                     ? [{ $eq: ['$routeSessionId', routeSessionId] }]
+  //                     : []),
+  //                 ],
+  //               },
+  //             },
+  //           },
+  //           { $sort: { visitedAt: -1 } },
+  //           { $limit: 1 },
+  //         ],
+  //         as: 'visit',
+  //       },
+  //     },
+  //     {
+  //       $unwind: {
+  //         path: '$visit',
+  //         preserveNullAndEmptyArrays: true,
+  //       },
+  //     },
+
+  //     /* ---------------- SALE ---------------- */
+  //     {
+  //       $lookup: {
+  //         from: 'sales',
+  //         let: { visitId: '$visit.visitId' },
+  //         pipeline: [
+  //           {
+  //             $match: {
+  //               $expr: {
+  //                 $eq: ['$visitId', '$$visitId'],
+  //               },
+  //             },
+  //           },
+  //           { $sort: { createdAt: -1 } },
+  //           { $limit: 1 },
+  //         ],
+  //         as: 'sale',
+  //       },
+  //     },
+  //     {
+  //       $unwind: {
+  //         path: '$sale',
+  //         preserveNullAndEmptyArrays: true,
+  //       },
+  //     },
+
+  //     /* 🔥 NEW: SALE ITEMS LOOKUP */
+  //     {
+  //       $lookup: {
+  //         from: 'sale_items',
+  //         let: { saleId: '$sale.saleId' },
+  //         pipeline: [
+  //           {
+  //             $match: {
+  //               $expr: {
+  //                 $eq: ['$saleId', '$$saleId'],
+  //               },
+  //             },
+  //           },
+  //         ],
+  //         as: 'saleItems',
+  //       },
+  //     },
+
+  //     /* ---------------- NON-SALE ---------------- */
+  //     {
+  //       $lookup: {
+  //         from: 'non_sale',
+  //         let: { visitId: '$visit.visitId' },
+  //         pipeline: [
+  //           {
+  //             $match: {
+  //               $expr: {
+  //                 $eq: ['$visitId', '$$visitId'],
+  //               },
+  //             },
+  //           },
+  //           { $sort: { createdAt: -1 } },
+  //           { $limit: 1 },
+  //         ],
+  //         as: 'nonSale',
+  //       },
+  //     },
+  //     {
+  //       $unwind: {
+  //         path: '$nonSale',
+  //         preserveNullAndEmptyArrays: true,
+  //       },
+  //     },
+
+  //     /* ---------------- COMPUTED ---------------- */
+  //     {
+  //       $addFields: {
+  //         sequence: '$mappings.sequence',
+
+  //         isVisited: { $gt: ['$visit', null] },
+  //         visitedAt: '$visit.visitedAt',
+  //         visitStatus: {
+  //           $ifNull: ['$visit.status', 'NOT_VISITED'],
+  //         },
+
+  //         hasSale: { $gt: ['$sale', null] },
+  //         hasNonSale: { $gt: ['$nonSale', null] },
+
+  //         isNonSale: {
+  //           $and: [{ $gt: ['$visit', null] }, { $gt: ['$nonSale', null] }],
+  //         },
+
+  //         nonSaleReason: '$nonSale.reason',
+  //       },
+  //     },
+
+  //     /* ---------------- VISIT FILTER ---------------- */
+  //     ...(visitStatus === 'VISITED'
+  //       ? [{ $match: { isVisited: true } }]
+  //       : visitStatus === 'NOT_VISITED'
+  //         ? [{ $match: { isVisited: false } }]
+  //         : []),
+
+  //     /* ---------------- FINAL SHAPE ---------------- */
+  //     {
+  //       $replaceRoot: {
+  //         newRoot: {
+  //           $mergeObjects: [
+  //             '$customer',
+  //             {
+  //               sequence: '$sequence',
+
+  //               isVisited: '$isVisited',
+  //               visitedAt: '$visitedAt',
+  //               visitStatus: '$visitStatus',
+
+  //               hasSale: '$hasSale',
+  //               sale: '$sale',
+  //               saleItems: '$saleItems',
+
+  //               hasNonSale: '$hasNonSale',
+  //               isNonSale: '$isNonSale',
+  //               nonSaleReason: '$nonSaleReason',
+  //             },
+  //           ],
+  //         },
+  //       },
+  //     },
+
+  //     /* ---------------- SORT ---------------- */
+  //     { $sort: { sequence: 1 } },
+
+  //     /* ---------------- FACET ---------------- */
+  //     {
+  //       $facet: {
+  //         data: [{ $skip: (page - 1) * limit }, { $limit: limit }],
+
+  //         meta: [{ $count: 'total' }],
+
+  //         summary: [
+  //           {
+  //             $group: {
+  //               _id: null,
+
+  //               /* ✅ ORDER VALUE FROM ITEMS */
+  //               totalOrderValue: {
+  //                 $sum: {
+  //                   $sum: {
+  //                     $map: {
+  //                       input: { $ifNull: ['$saleItems', []] },
+  //                       as: 'item',
+  //                       in: { $ifNull: ['$$item.totalValue', 0] },
+  //                     },
+  //                   },
+  //                 },
+  //               },
+
+  //               /* ✅ CORRECT CASE CALCULATION */
+  //               totalCases: {
+  //                 $sum: {
+  //                   $sum: {
+  //                     $map: {
+  //                       input: { $ifNull: ['$saleItems', []] },
+  //                       as: 'item',
+  //                       in: {
+  //                         $add: [
+  //                           { $ifNull: ['$$item.caseQty', 0] },
+  //                           {
+  //                             $cond: [
+  //                               { $gt: ['$$item.unitQtyInCase', 0] },
+  //                               {
+  //                                 $divide: [
+  //                                   { $ifNull: ['$$item.pieceQty', 0] },
+  //                                   '$$item.unitQtyInCase',
+  //                                 ],
+  //                               },
+  //                               0,
+  //                             ],
+  //                           },
+  //                         ],
+  //                       },
+  //                     },
+  //                   },
+  //                 },
+  //               },
+
+  //               totalVisitedShop: {
+  //                 $sum: {
+  //                   $cond: [{ $eq: ['$isVisited', true] }, 1, 0],
+  //                 },
+  //               },
+
+  //               totalProductiveCall: {
+  //                 $sum: {
+  //                   $cond: [{ $and: ['$isVisited', '$hasSale'] }, 1, 0],
+  //                 },
+  //               },
+  //             },
+  //           },
+
+  //           {
+  //             $addFields: {
+  //               LPSC: {
+  //                 $cond: [
+  //                   { $gt: ['$totalVisitedShop', 0] },
+  //                   {
+  //                     $round: [
+  //                       {
+  //                         $divide: ['$totalCases', '$totalVisitedShop'],
+  //                       },
+  //                       2,
+  //                     ],
+  //                   },
+  //                   0,
+  //                 ],
+  //               },
+  //             },
+  //           },
+  //         ],
+  //       },
+  //     },
+  //   ];
+
+  //   /* ======================================================
+  //    * 3️⃣ EXECUTE
+  //    * ====================================================== */
+  //   const result = await this.model.aggregate(pipeline);
+
+  //   const data = result?.[0]?.data || [];
+  //   const total = result?.[0]?.meta?.[0]?.total || 0;
+
+  //   const summary = result?.[0]?.summary?.[0] || {
+  //     totalOrderValue: 0,
+  //     totalCases: 0,
+  //     totalVisitedShop: 0,
+  //     totalProductiveCall: 0,
+  //     LPSC: 0,
+  //   };
+
+  //   /* ======================================================
+  //    * 4️⃣ RESPONSE
+  //    * ====================================================== */
+  //   return {
+  //     statusCode: HttpStatus.OK,
+  //     message: ROUTE.FETCHED,
+  //     data: {
+  //       data,
+  //       summary,
+  //     },
+  //     meta: {
+  //       page,
+  //       limit,
+  //       total,
+  //     },
+  //   };
+  // }
+
   async getRouteCustomers(
     routeId: string,
     query: RouteCustomerQueryDto & {
@@ -293,6 +659,7 @@ export class RouteService extends MongoRepository<Route> {
      * 1️⃣ VALIDATE ROUTE
      * ====================================================== */
     const route = await this.model.findOne({ routeId });
+
     if (!route) {
       return {
         statusCode: HttpStatus.NOT_FOUND,
@@ -305,29 +672,41 @@ export class RouteService extends MongoRepository<Route> {
      * 2️⃣ PIPELINE
      * ====================================================== */
     const pipeline: any[] = [
-      { $match: { routeId } },
+      {
+        $match: { routeId },
+      },
 
       /* ---------------- MAPPINGS ---------------- */
       {
         $lookup: {
           from: 'route_customer_mappings',
           let: { routeId: '$routeId' },
+
           pipeline: [
             {
               $match: {
                 $expr: {
                   $and: [
-                    { $eq: ['$routeId', '$$routeId'] },
-                    { $eq: ['$status', 'ACTIVE'] },
+                    {
+                      $eq: ['$routeId', '$$routeId'],
+                    },
+
+                    {
+                      $eq: ['$status', 'ACTIVE'],
+                    },
                   ],
                 },
               },
             },
           ],
+
           as: 'mappings',
         },
       },
-      { $unwind: '$mappings' },
+
+      {
+        $unwind: '$mappings',
+      },
 
       /* ---------------- CUSTOMER ---------------- */
       {
@@ -338,17 +717,36 @@ export class RouteService extends MongoRepository<Route> {
           as: 'customer',
         },
       },
-      { $unwind: '$customer' },
+
+      {
+        $unwind: '$customer',
+      },
 
       /* ---------------- FILTER ---------------- */
       {
         $match: {
-          ...(status ? { 'customer.status': status } : {}),
+          ...(status
+            ? {
+                'customer.status': status,
+              }
+            : {}),
+
           ...(searchText
             ? {
                 $or: [
-                  { 'customer.name': { $regex: searchText, $options: 'i' } },
-                  { 'customer.mobile': { $regex: searchText, $options: 'i' } },
+                  {
+                    'customer.name': {
+                      $regex: searchText,
+                      $options: 'i',
+                    },
+                  },
+
+                  {
+                    'customer.mobile': {
+                      $regex: searchText,
+                      $options: 'i',
+                    },
+                  },
                 ],
               }
             : {}),
@@ -359,26 +757,62 @@ export class RouteService extends MongoRepository<Route> {
       {
         $lookup: {
           from: 'shop_visits',
-          let: { customerId: '$customer.customerId' },
+
+          let: {
+            customerId: '$customer.customerId',
+            routeSessionId: routeSessionId || null,
+          },
+
           pipeline: [
             {
               $match: {
                 $expr: {
                   $and: [
-                    { $eq: ['$outletId', '$$customerId'] },
-                    ...(routeSessionId
-                      ? [{ $eq: ['$routeSessionId', routeSessionId] }]
-                      : []),
+                    {
+                      $eq: ['$outletId', '$$customerId'],
+                    },
+
+                    {
+                      $cond: [
+                        {
+                          $or: [
+                            {
+                              $eq: ['$$routeSessionId', null],
+                            },
+
+                            {
+                              $eq: ['$$routeSessionId', ''],
+                            },
+                          ],
+                        },
+
+                        true,
+
+                        {
+                          $eq: ['$routeSessionId', '$$routeSessionId'],
+                        },
+                      ],
+                    },
                   ],
                 },
               },
             },
-            { $sort: { visitedAt: -1 } },
-            { $limit: 1 },
+
+            {
+              $sort: {
+                createdAt: -1,
+              },
+            },
+
+            {
+              $limit: 1,
+            },
           ],
+
           as: 'visit',
         },
       },
+
       {
         $unwind: {
           path: '$visit',
@@ -390,7 +824,11 @@ export class RouteService extends MongoRepository<Route> {
       {
         $lookup: {
           from: 'sales',
-          let: { visitId: '$visit.visitId' },
+
+          let: {
+            visitId: '$visit.visitId',
+          },
+
           pipeline: [
             {
               $match: {
@@ -399,12 +837,22 @@ export class RouteService extends MongoRepository<Route> {
                 },
               },
             },
-            { $sort: { createdAt: -1 } },
-            { $limit: 1 },
+
+            {
+              $sort: {
+                createdAt: -1,
+              },
+            },
+
+            {
+              $limit: 1,
+            },
           ],
+
           as: 'sale',
         },
       },
+
       {
         $unwind: {
           path: '$sale',
@@ -412,11 +860,15 @@ export class RouteService extends MongoRepository<Route> {
         },
       },
 
-      /* 🔥 NEW: SALE ITEMS LOOKUP */
+      /* 🔥 SALE ITEMS */
       {
         $lookup: {
           from: 'sale_items',
-          let: { saleId: '$sale.saleId' },
+
+          let: {
+            saleId: '$sale.saleId',
+          },
+
           pipeline: [
             {
               $match: {
@@ -426,6 +878,7 @@ export class RouteService extends MongoRepository<Route> {
               },
             },
           ],
+
           as: 'saleItems',
         },
       },
@@ -434,7 +887,11 @@ export class RouteService extends MongoRepository<Route> {
       {
         $lookup: {
           from: 'non_sale',
-          let: { visitId: '$visit.visitId' },
+
+          let: {
+            visitId: '$visit.visitId',
+          },
+
           pipeline: [
             {
               $match: {
@@ -443,12 +900,22 @@ export class RouteService extends MongoRepository<Route> {
                 },
               },
             },
-            { $sort: { createdAt: -1 } },
-            { $limit: 1 },
+
+            {
+              $sort: {
+                createdAt: -1,
+              },
+            },
+
+            {
+              $limit: 1,
+            },
           ],
+
           as: 'nonSale',
         },
       },
+
       {
         $unwind: {
           path: '$nonSale',
@@ -461,17 +928,34 @@ export class RouteService extends MongoRepository<Route> {
         $addFields: {
           sequence: '$mappings.sequence',
 
-          isVisited: { $gt: ['$visit', null] },
+          isVisited: {
+            $gt: ['$visit', null],
+          },
+
           visitedAt: '$visit.visitedAt',
+
           visitStatus: {
             $ifNull: ['$visit.status', 'NOT_VISITED'],
           },
 
-          hasSale: { $gt: ['$sale', null] },
-          hasNonSale: { $gt: ['$nonSale', null] },
+          hasSale: {
+            $gt: ['$sale', null],
+          },
+
+          hasNonSale: {
+            $gt: ['$nonSale', null],
+          },
 
           isNonSale: {
-            $and: [{ $gt: ['$visit', null] }, { $gt: ['$nonSale', null] }],
+            $and: [
+              {
+                $gt: ['$visit', null],
+              },
+
+              {
+                $gt: ['$nonSale', null],
+              },
+            ],
           },
 
           nonSaleReason: '$nonSale.reason',
@@ -480,9 +964,21 @@ export class RouteService extends MongoRepository<Route> {
 
       /* ---------------- VISIT FILTER ---------------- */
       ...(visitStatus === 'VISITED'
-        ? [{ $match: { isVisited: true } }]
+        ? [
+            {
+              $match: {
+                isVisited: true,
+              },
+            },
+          ]
         : visitStatus === 'NOT_VISITED'
-          ? [{ $match: { isVisited: false } }]
+          ? [
+              {
+                $match: {
+                  isVisited: false,
+                },
+              },
+            ]
           : []),
 
       /* ---------------- FINAL SHAPE ---------------- */
@@ -491,6 +987,7 @@ export class RouteService extends MongoRepository<Route> {
           newRoot: {
             $mergeObjects: [
               '$customer',
+
               {
                 sequence: '$sequence',
 
@@ -512,52 +1009,86 @@ export class RouteService extends MongoRepository<Route> {
       },
 
       /* ---------------- SORT ---------------- */
-      { $sort: { sequence: 1 } },
+      {
+        $sort: {
+          sequence: 1,
+        },
+      },
 
       /* ---------------- FACET ---------------- */
       {
         $facet: {
-          data: [{ $skip: (page - 1) * limit }, { $limit: limit }],
+          data: [
+            {
+              $skip: (page - 1) * limit,
+            },
 
-          meta: [{ $count: 'total' }],
+            {
+              $limit: limit,
+            },
+          ],
+
+          meta: [
+            {
+              $count: 'total',
+            },
+          ],
 
           summary: [
             {
               $group: {
                 _id: null,
 
-                /* ✅ ORDER VALUE FROM ITEMS */
                 totalOrderValue: {
                   $sum: {
                     $sum: {
                       $map: {
-                        input: { $ifNull: ['$saleItems', []] },
+                        input: {
+                          $ifNull: ['$saleItems', []],
+                        },
+
                         as: 'item',
-                        in: { $ifNull: ['$$item.totalValue', 0] },
+
+                        in: {
+                          $ifNull: ['$$item.totalValue', 0],
+                        },
                       },
                     },
                   },
                 },
 
-                /* ✅ CORRECT CASE CALCULATION */
                 totalCases: {
                   $sum: {
                     $sum: {
                       $map: {
-                        input: { $ifNull: ['$saleItems', []] },
+                        input: {
+                          $ifNull: ['$saleItems', []],
+                        },
+
                         as: 'item',
+
                         in: {
                           $add: [
-                            { $ifNull: ['$$item.caseQty', 0] },
+                            {
+                              $ifNull: ['$$item.caseQty', 0],
+                            },
+
                             {
                               $cond: [
-                                { $gt: ['$$item.unitQtyInCase', 0] },
+                                {
+                                  $gt: ['$$item.unitQtyInCase', 0],
+                                },
+
                                 {
                                   $divide: [
-                                    { $ifNull: ['$$item.pieceQty', 0] },
+                                    {
+                                      $ifNull: ['$$item.pieceQty', 0],
+                                    },
+
                                     '$$item.unitQtyInCase',
                                   ],
                                 },
+
                                 0,
                               ],
                             },
@@ -570,13 +1101,25 @@ export class RouteService extends MongoRepository<Route> {
 
                 totalVisitedShop: {
                   $sum: {
-                    $cond: [{ $eq: ['$isVisited', true] }, 1, 0],
+                    $cond: [
+                      {
+                        $eq: ['$isVisited', true],
+                      },
+                      1,
+                      0,
+                    ],
                   },
                 },
 
                 totalProductiveCall: {
                   $sum: {
-                    $cond: [{ $and: ['$isVisited', '$hasSale'] }, 1, 0],
+                    $cond: [
+                      {
+                        $and: ['$isVisited', '$hasSale'],
+                      },
+                      1,
+                      0,
+                    ],
                   },
                 },
               },
@@ -586,7 +1129,10 @@ export class RouteService extends MongoRepository<Route> {
               $addFields: {
                 LPSC: {
                   $cond: [
-                    { $gt: ['$totalVisitedShop', 0] },
+                    {
+                      $gt: ['$totalVisitedShop', 0],
+                    },
+
                     {
                       $round: [
                         {
@@ -595,6 +1141,7 @@ export class RouteService extends MongoRepository<Route> {
                         2,
                       ],
                     },
+
                     0,
                   ],
                 },
@@ -611,6 +1158,7 @@ export class RouteService extends MongoRepository<Route> {
     const result = await this.model.aggregate(pipeline);
 
     const data = result?.[0]?.data || [];
+
     const total = result?.[0]?.meta?.[0]?.total || 0;
 
     const summary = result?.[0]?.summary?.[0] || {
@@ -627,10 +1175,12 @@ export class RouteService extends MongoRepository<Route> {
     return {
       statusCode: HttpStatus.OK,
       message: ROUTE.FETCHED,
+
       data: {
         data,
         summary,
       },
+
       meta: {
         page,
         limit,

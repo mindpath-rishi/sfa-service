@@ -1,18 +1,24 @@
 import { ShopVisitStatus } from 'src/shared/enums/shop-visit.enums';
 
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsDate, IsEnum, IsNumber, IsOptional, IsString } from 'class-validator';
-
+import {
+  IsDate,
+  IsEnum,
+  IsNumber,
+  IsOptional,
+  IsString,
+} from 'class-validator';
+import { Type } from 'class-transformer';
 
 export class UpdateShopVisitDto {
-/**
- * UpdateShopVisitDto
- * =================
- * Data Transfer Object for updating ShopVisit records
- * 
- * All fields are optional for partial updates
- * Supports partial updates - omitted fields will retain their existing values
- */
+  /**
+   * UpdateShopVisitDto
+   * =================
+   * Data Transfer Object for updating ShopVisit records
+   *
+   * All fields are optional for partial updates
+   * Supports partial updates - omitted fields will retain their existing values
+   */
   @ApiPropertyOptional({ type: String })
   @IsOptional()
   @IsString()
@@ -60,17 +66,21 @@ export class UpdateShopVisitDto {
 
   @ApiPropertyOptional({ type: Date })
   @IsOptional()
-  @IsDate()
-  checkInTime?: Date;
-
-  @ApiPropertyOptional({ type: Date })
-  @IsOptional()
+  @Type(() => Date)
   @IsDate()
   checkOutTime?: Date;
 
-  @ApiPropertyOptional({ enum: ShopVisitStatus, default: ShopVisitStatus.ACTIVE })
+  @ApiPropertyOptional({ type: Date })
+  @IsOptional()
+  @Type(() => Date)
+  @IsDate()
+  checkInTime?: Date;
+
+  @ApiPropertyOptional({
+    enum: ShopVisitStatus,
+    default: ShopVisitStatus.ACTIVE,
+  })
   @IsOptional()
   @IsEnum(ShopVisitStatus)
   status?: ShopVisitStatus;
-
 }

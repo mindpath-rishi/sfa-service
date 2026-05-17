@@ -92,26 +92,25 @@ export class RouteSession {
   isActive!: boolean;
 }
 
-export const RouteSessionSchema =
-  SchemaFactory.createForClass(RouteSession);
+export const RouteSessionSchema = SchemaFactory.createForClass(RouteSession);
 
 /* ======================================================
  * INDEXES (IMPORTANT 🚀)
  * ====================================================== */
 
 // One active route per user
-RouteSessionSchema.index(
-  { userId: 1, isActive: 1 },
-  { unique: true, partialFilterExpression: { isActive: true } }
-);
+// RouteSessionSchema.index(
+//   { userId: 1, isActive: 1 },
+//   { unique: true, partialFilterExpression: { isActive: true } }
+// );
 
-// MIS queries
-RouteSessionSchema.index({
-  userId: 1,
-  sessionDate: -1,
-});
+// // MIS queries
+// RouteSessionSchema.index({
+//   userId: 1,
+//   sessionDate: -1,
+// });
 
-RouteSessionSchema.index({
-  routeId: 1,
-  sessionDate: -1,
-});
+// RouteSessionSchema.index({
+//   routeId: 1,
+//   sessionDate: -1,
+// });

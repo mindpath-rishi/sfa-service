@@ -29,107 +29,250 @@ export class RouteSessionService extends MongoRepository<RouteSession> {
     super(mongo.getModel(RouteSession.name, RouteSessionSchema));
   }
 
+  // async create(
+  //   payload: CreateRouteSessionDto,
+  //   options?: { session?: ClientSession },
+  // ) {
+  //   try {
+  //     return await this.withTransaction(async (session) => {
+  //       const ctx = RequestContextStore.getStore();
+
+  //       /* ======================================================
+  //        * FILTER (FIXED)
+  //        * ====================================================== */
+
+  //       const startOfDay = new Date();
+  //       startOfDay.setHours(0, 0, 0, 0);
+
+  //       const endOfDay = new Date();
+  //       endOfDay.setHours(23, 59, 59, 999);
+
+  //       const filter: FilterQuery<RouteSession> = {
+  //         userId: ctx?.userId,
+  //         vanId: ctx?.vanId,
+  //         routeId: payload.routeId,
+  //         sessionDate: {
+  //           $gte: startOfDay,
+  //           $lte: endOfDay,
+  //         } as any,
+  //       };
+
+  //       const existing = await this.findOne(filter, {
+  //         session,
+  //         includeDeleted: true,
+  //       });
+
+  //       /* ======================================================
+  //        * DUPLICATE CHECK - Active session exists
+  //        * ====================================================== */
+
+  //       console.log(existing, '================ex');
+  //       // if (existing && !existing.isDeleted) {
+  //       //   throw new ConflictException(ROUTE_SESSION.DUPLICATE);
+  //       // }
+
+  //       /* ======================================================
+  //        * RESTORE SOFT DELETED - Update status to ACTIVE
+  //        * ====================================================== */
+
+  //       if (existing?.isDeleted) {
+  //         // Update the existing soft-deleted record
+  //         const updatedDoc = await this.updateById(
+  //           existing._id.toString(),
+  //           {
+  //             ...payload,
+  //             userId: ctx?.userId,
+  //             userName: ctx?.name,
+  //             vanId: ctx?.vanId,
+  //             vanName: ctx?.vanName,
+  //             status: 'ACTIVE',
+  //             isDeleted: false,
+  //             startTime: new Date(),
+  //             // Reset end time if it exists
+  //             endTime: null,
+  //             // Update session date to today
+  //             sessionDate: new Date(),
+  //             // Generate new session ID or keep existing? Keeping existing for consistency
+  //             // routeSessionId: existing.routeSessionId, // Keep existing
+  //           },
+  //           { session },
+  //         );
+
+  //         return {
+  //           statusCode: HttpStatus.OK,
+  //           message: ROUTE_SESSION.REOPEN, // Make sure to add this message constant
+  //           data: updatedDoc,
+  //         };
+  //       }
+
+  //       /* ======================================================
+  //        * CREATE NEW
+  //        * ====================================================== */
+
+  //       const doc = await this.save(
+  //         {
+  //           routeSessionId: IdGenerator.generate('ROUT', 8),
+  //           userId: ctx?.userId,
+  //           userName: ctx?.name,
+  //           vanId: ctx?.vanId,
+  //           vanName: ctx?.vanName,
+  //           startTime: new Date(),
+  //           status: RouteSessionStatus.ACTIVE,
+  //           sessionDate: new Date(),
+  //           ...payload,
+  //         },
+  //         { session },
+  //       );
+
+  //       return {
+  //         statusCode: HttpStatus.CREATED,
+  //         message: ROUTE_SESSION.CREATED,
+  //         data: doc,
+  //       };
+  //     }, options?.session);
+  //   } catch (error) {
+  //     this.handleDuplicateError(error);
+  //   }
+  // }
+
   async create(
     payload: CreateRouteSessionDto,
     options?: { session?: ClientSession },
   ) {
     try {
-      return await this.withTransaction(async (session) => {
-        const ctx = RequestContextStore.getStore();
+      return await this.withTransaction(
+        async (session) => {
+          const ctx = RequestContextStore.getStore();
 
-        /* ======================================================
-         * FILTER (FIXED)
-         * ====================================================== */
+          /* ======================================================
+           * COMPLETE OTHER ACTIVE SESSIONS
+           * ====================================================== */
 
-        const startOfDay = new Date();
-        startOfDay.setHours(0, 0, 0, 0);
-
-        const endOfDay = new Date();
-        endOfDay.setHours(23, 59, 59, 999);
-
-        const filter: FilterQuery<RouteSession> = {
-          userId: ctx?.userId,
-          vanId: ctx?.vanId,
-          routeId: payload.routeId,
-          sessionDate: {
-            $gte: startOfDay,
-            $lte: endOfDay,
-          } as any,
-        };
-
-        const existing = await this.findOne(filter, {
-          session,
-          includeDeleted: true,
-        });
-
-        /* ======================================================
-         * DUPLICATE CHECK - Active session exists
-         * ====================================================== */
-
-        console.log(existing, '================ex');
-        // if (existing && !existing.isDeleted) {
-        //   throw new ConflictException(ROUTE_SESSION.DUPLICATE);
-        // }
-
-        /* ======================================================
-         * RESTORE SOFT DELETED - Update status to ACTIVE
-         * ====================================================== */
-
-        if (existing?.isDeleted) {
-          // Update the existing soft-deleted record
-          const updatedDoc = await this.updateById(
-            existing._id.toString(),
+          await this.updateMany(
             {
-              ...payload,
+              userId: ctx?.userId,
+              vanId: ctx?.vanId,
+              status: RouteSessionStatus.ACTIVE,
+            },
+
+            {
+              $set: {
+                status: RouteSessionStatus.COMPLETED,
+                endTime: new Date(),
+              },
+            },
+
+            { session },
+          );
+
+          /* ======================================================
+           * FILTER
+           * ====================================================== */
+
+          const startOfDay = new Date();
+
+          startOfDay.setHours(0, 0, 0, 0);
+
+          const endOfDay = new Date();
+
+          endOfDay.setHours(23, 59, 59, 999);
+
+          const filter: FilterQuery<RouteSession> = {
+            userId: ctx?.userId,
+
+            vanId: ctx?.vanId,
+
+            routeId: payload.routeId,
+
+            sessionDate: {
+              $gte: startOfDay,
+            } as any,
+          };
+
+          const existing = await this.findOne(filter, {
+            session,
+            includeDeleted: true,
+          });
+
+          console.log(existing, '================ex');
+
+          /* ======================================================
+           * IF SESSION EXISTS -> REOPEN / ACTIVATE
+           * ====================================================== */
+
+          if (existing) {
+            const updatedDoc = await this.updateById(
+              existing._id.toString(),
+
+              {
+                ...payload,
+
+                userId: ctx?.userId,
+                userName: ctx?.name,
+
+                vanId: ctx?.vanId,
+                vanName: ctx?.vanName,
+
+                status: RouteSessionStatus.ACTIVE,
+
+                isDeleted: false,
+
+                startTime: new Date(),
+
+                endTime: null,
+
+                sessionDate: new Date(),
+              },
+
+              { session },
+            );
+
+            return {
+              statusCode: HttpStatus.OK,
+
+              message: ROUTE_SESSION.REOPEN,
+
+              data: existing,
+            };
+          }
+
+          /* ======================================================
+           * CREATE NEW SESSION
+           * ====================================================== */
+
+          const doc = await this.save(
+            {
+              routeSessionId: IdGenerator.generate('ROUT', 8),
+
               userId: ctx?.userId,
               userName: ctx?.name,
+
               vanId: ctx?.vanId,
               vanName: ctx?.vanName,
-              status: 'ACTIVE',
-              isDeleted: false,
+
               startTime: new Date(),
-              // Reset end time if it exists
-              endTime: null,
-              // Update session date to today
+
+              status: RouteSessionStatus.ACTIVE,
+
               sessionDate: new Date(),
-              // Generate new session ID or keep existing? Keeping existing for consistency
-              // routeSessionId: existing.routeSessionId, // Keep existing
+
+              ...payload,
             },
+
             { session },
           );
 
           return {
-            statusCode: HttpStatus.OK,
-            message: ROUTE_SESSION.REOPEN, // Make sure to add this message constant
-            data: updatedDoc,
+            statusCode: HttpStatus.CREATED,
+
+            message: ROUTE_SESSION.CREATED,
+
+            data: doc,
           };
-        }
+        },
 
-        /* ======================================================
-         * CREATE NEW
-         * ====================================================== */
-
-        const doc = await this.save(
-          {
-            routeSessionId: IdGenerator.generate('ROUT', 8),
-            userId: ctx?.userId,
-            userName: ctx?.name,
-            vanId: ctx?.vanId,
-            vanName: ctx?.vanName,
-            startTime: new Date(),
-            status: RouteSessionStatus.ACTIVE,
-            sessionDate: new Date(),
-            ...payload,
-          },
-          { session },
-        );
-
-        return {
-          statusCode: HttpStatus.CREATED,
-          message: ROUTE_SESSION.CREATED,
-          data: doc,
-        };
-      }, options?.session);
+        options?.session,
+      );
     } catch (error) {
       this.handleDuplicateError(error);
     }

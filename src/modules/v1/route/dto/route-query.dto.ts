@@ -101,7 +101,7 @@ export class RouteCustomerQueryDto extends PaginationDto {
     description: 'Route session id',
     example: 'ROUID98989898',
   })
-  @IsNotEmpty()
+  @IsOptional()
   @IsString()
   routeSessionId?: string;
 
