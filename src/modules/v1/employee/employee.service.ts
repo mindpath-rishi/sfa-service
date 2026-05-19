@@ -45,6 +45,7 @@ import { Sale } from 'src/core/database/mongo/schema/sale.schema';
 import { Payment } from 'src/core/database/mongo/schema/payment.schema';
 import { Model } from 'mongoose';
 import { ShopVisit } from 'src/core/database/mongo/schema/shop-visit.schema';
+import { ShopVisitStatus } from 'src/shared/enums/shop-visit.enums';
 
 @Injectable()
 export class EmployeeService extends MongoRepository<Employee> {
@@ -328,7 +329,13 @@ export class EmployeeService extends MongoRepository<Employee> {
     const [visitData, salesData, collectionData] = await Promise.all([
       // 🏪 Shop Visits (Today)
       this.shopVisitModel.aggregate([
-        { $match: { employeeId, ...dateFilter } },
+        {
+          $match: {
+            employeeId,
+            ...dateFilter,
+            status: ShopVisitStatus.COMPLETED,
+          },
+        },
         {
           $group: {
             _id: null,

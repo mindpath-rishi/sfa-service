@@ -26,6 +26,7 @@ import { PermissionsSeeder } from './core/seeds/permission.seeds';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { join } from 'path';
 import { SeederRunner } from './core/seeds/seed.runner';
+import { CustomerService } from './modules/v1/customer/customer.service';
 
 // ⚠️ guaranteed cookie-parser fix
 const cookieParser = require('cookie-parser');
@@ -124,6 +125,20 @@ async function bootstrap() {
   if (process.env.SEED_PERMISSIONS === 'true') {
     const seederRunner = app.get(SeederRunner);
     await seederRunner.run();
+  }
+
+  /* ---------------- IMPORT EXCEL ---------------- */
+
+  if (process.env.IMPORT_CUSTOMERS === 'true') {
+    try {
+      const customerService = app.get(CustomerService);
+
+      await customerService.importFromExcel('./uploads/Outlet Master.xlsx');
+
+      console.log('✅ CUSTOMER IMPORT COMPLETED');
+    } catch (error) {
+      console.error('❌ CUSTOMER IMPORT FAILED', error);
+    }
   }
 }
 bootstrap();

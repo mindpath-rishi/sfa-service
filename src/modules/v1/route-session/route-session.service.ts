@@ -406,7 +406,16 @@ export class RouteSessionService extends MongoRepository<RouteSession> {
                       {
                         sequence: '$$mapping.sequence',
                         isVisited: {
-                          $cond: [{ $ifNull: ['$$visit', false] }, true, false],
+                          $cond: [
+                            {
+                              $and: [
+                                { $ifNull: ['$$visit', false] },
+                                { $eq: ['$$visit.status', 'COMPLETED'] },
+                              ],
+                            },
+                            true,
+                            false,
+                          ],
                         },
                         visitStatus: '$$visit.status',
                         visitedAt: '$$visit.visitedAt',

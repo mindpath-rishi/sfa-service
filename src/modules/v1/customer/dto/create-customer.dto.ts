@@ -63,6 +63,11 @@ export class CreateCustomerDto {
   @ApiProperty({ type: String, description: 'Reference ID' })
   @IsNotEmpty()
   @IsString()
+  countryId!: string;
+
+  @ApiProperty({ type: String, description: 'Reference ID' })
+  @IsNotEmpty()
+  @IsString()
   customerTypeId!: string;
 
   @ApiProperty({ type: String, description: 'Reference ID' })

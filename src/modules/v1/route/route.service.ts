@@ -928,10 +928,21 @@ export class RouteService extends MongoRepository<Route> {
         $addFields: {
           sequence: '$mappings.sequence',
 
+          // isVisited: {
+          //   $gt: ['$visit', null],
+          // },
           isVisited: {
-            $gt: ['$visit', null],
+            $cond: [
+              {
+                $and: [
+                  { $gt: ['$visit', null] },
+                  { $eq: ['$visit.status', 'COMPLETED'] },
+                ],
+              },
+              true,
+              false,
+            ],
           },
-
           visitedAt: '$visit.visitedAt',
 
           visitStatus: {

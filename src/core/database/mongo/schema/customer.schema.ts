@@ -95,6 +95,9 @@ export class Customer {
   @Prop({ required: true, ref: 'province_master', index: true, type: String })
   provinceId!: string;
 
+  @Prop({ required: true, ref: 'country_master', index: true, type: String })
+  countryId!: string;
+
   /* ======================================================
    * BASIC DETAILS
    * ====================================================== */

@@ -127,8 +127,8 @@ export class VanService extends MongoRepository<Van> {
       // associatedUsers: { $in: [userId] },
     };
 
-    if(query.userId){
-      filter.associatedUsers = { $in: [userId]}
+    if (query.userId) {
+      filter.associatedUsers = { $in: [userId] };
     }
 
     if (status) {
@@ -439,6 +439,9 @@ export class VanService extends MongoRepository<Van> {
             status: '$route.status',
             associatedUsers: '$associatedUsers',
             outletCount: '$route.outletCount',
+            provinceId: '$route.provinceId',
+            marketId: '$route.marketId',
+            countryId: '$route.countryId',
           },
         },
       },
