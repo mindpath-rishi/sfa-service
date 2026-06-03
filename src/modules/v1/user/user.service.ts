@@ -138,6 +138,11 @@ export class UserService extends MongoRepository<User> {
     //   throw new BadRequestException(USER.AGENT_MISSED);
     // }
 
+    console.log(
+      deviceInfo,
+      '============================Device Info============================',
+    );
+
     if (!deviceInfo) {
       throw new BadRequestException('Device info missing');
     }

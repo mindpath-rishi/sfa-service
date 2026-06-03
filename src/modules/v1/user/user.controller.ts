@@ -199,8 +199,7 @@ export class UserController {
     }
 
     const refreshToken =
-      req.cookies?.refresh_token ||
-      (req.headers['x-refresh-token'] as string);
+      req.cookies?.refresh_token || (req.headers['x-refresh-token'] as string);
 
     if (!refreshToken) {
       throw new BadRequestException('Refresh token missing');
@@ -238,10 +237,7 @@ export class UserController {
     required: true,
   })
   @ApiSuccessResponse(null, 'Logout successful')
-  async logout(
-    @Req() req: Request,
-    @Res({ passthrough: true }) res: Response,
-  ) {
+  async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
     const deviceId = req.headers['x-device-id'] as string;
     if (!deviceId) {
       throw new BadRequestException('Device ID missing');
