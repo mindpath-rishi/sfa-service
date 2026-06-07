@@ -15,6 +15,7 @@ import { VanDailyStockModule } from '../van-daily-stock/van-daily-stock.module';
 import { InventoryTransactionModule } from '../inventory-transaction/inventory-transaction.module';
 import { VanInventoryModule } from '../van-inventory/van-inventory.module';
 import { VanModule } from '../van/van.module';
+import { LeaveModule } from '../leave/leave.module';
 
 @Module({
   imports: [
@@ -28,7 +29,8 @@ import { VanModule } from '../van/van.module';
     VanDailyStockModule,
     InventoryTransactionModule,
     VanInventoryModule,
-    VanModule
+    VanModule,
+    LeaveModule,
   ],
   controllers: [WorkSessionController],
   providers: [WorkSessionService],

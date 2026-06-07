@@ -140,14 +140,16 @@ export class CreateEmployeeDto {
    * - Must include uppercase, lowercase, number, and special character
    */
   @ApiProperty({
-    description: 'Strong password (min 8 chars, uppercase, lowercase, number, special character)',
+    description:
+      'Strong password (min 8 chars, uppercase, lowercase, number, special character)',
     example: 'Passw0rd@123',
   })
   @IsString({ message: 'Password must be a string' })
   @IsNotEmpty({ message: 'Password is required' })
   @MinLength(8, { message: 'Password must be at least 8 characters long' })
   @Matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])/, {
-    message: 'Password must include uppercase, lowercase, number, and special character',
+    message:
+      'Password must include uppercase, lowercase, number, and special character',
   })
   password!: string;
 

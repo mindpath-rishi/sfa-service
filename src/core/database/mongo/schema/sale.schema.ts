@@ -55,6 +55,9 @@ export class Sale {
   totalCases!: number;
 
   @Prop({ type: Number, default: 0 })
+  netCases!: number;
+
+  @Prop({ type: Number, default: 0 })
   totalPieces!: number;
 
   @Prop({ type: Number, required: true })

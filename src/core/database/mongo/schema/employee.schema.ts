@@ -7,6 +7,7 @@
  * Contains:
  * - Employee identity and contact details
  * - Role reference for RBAC
+ * - Employee reporting hierarchy
  * - Assigned vans and permission overrides
  * - Account status
  *
@@ -16,7 +17,7 @@
  */
 
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Document, HydratedDocument } from 'mongoose';
+import { HydratedDocument } from 'mongoose';
 import { UserStatus } from 'src/modules/v1/user/user.enum';
 
 export type EmployeeDocument = HydratedDocument<Employee>;
@@ -28,7 +29,13 @@ export class Employee {
    * ====================================================== */
 
   // Unique business identifier for the employee
-  @Prop({ required: true, trim: true, type: String })
+  @Prop({
+    required: true,
+    trim: true,
+    unique: true,
+    index: true,
+    type: String,
+  })
   employeeId!: string;
 
   // Optional contact mobile number
@@ -42,7 +49,11 @@ export class Employee {
   mobile?: string;
 
   // Display name of the employee
-  @Prop({ required: true, trim: true, type: String })
+  @Prop({
+    required: true,
+    trim: true,
+    type: String,
+  })
   name!: string;
 
   // Optional email address
@@ -61,8 +72,38 @@ export class Employee {
    * ====================================================== */
 
   // Role reference used for RBAC
-  @Prop({ required: true, type: String })
+  @Prop({
+    required: true,
+    index: true,
+    type: String,
+  })
   roleId!: string;
+
+  /* ======================================================
+   * HIERARCHY
+   * ====================================================== */
+
+  // Direct reporting manager
+  // Example:
+  // Salesman -> Team Leader
+  // Team Leader -> Manager
+  // Manager -> Category Manager
+  @Prop({
+    required: false,
+    index: true,
+    type: String,
+  })
+  reportsTo?: string;
+
+  // Complete reporting chain
+  // Example for Salesman:
+  // ["CM001", "MGR001", "TL001"]
+  @Prop({
+    type: [String],
+    default: [],
+    index: true,
+  })
+  hierarchyPath!: string[];
 
   /* ======================================================
    * ASSOCIATIONS
@@ -82,10 +123,19 @@ export class Employee {
   // Fine-grained permission overrides applied over role permissions
   @Prop({
     type: {
-      allow: { type: [String], default: [] },
-      deny: { type: [String], default: [] },
+      allow: {
+        type: [String],
+        default: [],
+      },
+      deny: {
+        type: [String],
+        default: [],
+      },
     },
-    default: { allow: [], deny: [] },
+    default: {
+      allow: [],
+      deny: [],
+    },
   })
   permissionOverrides!: {
     allow: string[];
@@ -106,3 +156,9 @@ export class Employee {
 }
 
 export const EmployeeSchema = SchemaFactory.createForClass(Employee);
+
+// Useful indexes
+EmployeeSchema.index({ employeeId: 1 }, { unique: true });
+EmployeeSchema.index({ roleId: 1 });
+EmployeeSchema.index({ reportsTo: 1 });
+EmployeeSchema.index({ hierarchyPath: 1 });

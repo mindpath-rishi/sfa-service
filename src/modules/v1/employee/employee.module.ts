@@ -13,7 +13,43 @@ import {
   PaymentSchema,
 } from 'src/core/database/mongo/schema/payment.schema';
 import { Sale, SaleSchema } from 'src/core/database/mongo/schema/sale.schema';
-import { ShopVisit, ShopVisitSchema } from 'src/core/database/mongo/schema/shop-visit.schema';
+import {
+  ShopVisit,
+  ShopVisitSchema,
+} from 'src/core/database/mongo/schema/shop-visit.schema';
+import {
+  Activity,
+  ActivitySchema,
+} from 'src/core/database/mongo/schema/activity.schema';
+import {
+  Leave,
+  LeaveSchema,
+} from 'src/core/database/mongo/schema/leave.schema';
+import {
+  Target,
+  TargetSchema,
+} from 'src/core/database/mongo/schema/target.schema';
+import {
+  RouteCustomerMappingSchema,
+  RouteCustomerMapping,
+} from 'src/core/database/mongo/schema/route-customer-mapping.schema';
+import {
+  Route,
+  RouteSchema,
+} from 'src/core/database/mongo/schema/route.schema';
+import {
+  Customer,
+  CustomerSchema,
+} from 'src/core/database/mongo/schema/customer.schema';
+import { Van, VanSchema } from 'src/core/database/mongo/schema/van.schema';
+import {
+  NonSale,
+  NonSaleSchema,
+} from 'src/core/database/mongo/schema/non-sale.schema';
+import {
+  SaleItem,
+  SaleItemSchema,
+} from 'src/core/database/mongo/schema/sale-item.schema';
 
 @Module({
   imports: [
@@ -22,6 +58,15 @@ import { ShopVisit, ShopVisitSchema } from 'src/core/database/mongo/schema/shop-
       { name: Payment.name, schema: PaymentSchema },
       { name: Sale.name, schema: SaleSchema },
       { name: ShopVisit.name, schema: ShopVisitSchema },
+      { name: Activity.name, schema: ActivitySchema },
+      { name: Leave.name, schema: LeaveSchema },
+      { name: Target.name, schema: TargetSchema },
+      { name: RouteCustomerMapping.name, schema: RouteCustomerMappingSchema },
+      { name: Route.name, schema: RouteSchema },
+      { name: Customer.name, schema: CustomerSchema },
+      { name: Van.name, schema: VanSchema },
+      { name: NonSale.name, schema: NonSaleSchema },
+      { name: SaleItem.name, schema: SaleItemSchema },
     ]),
     UserModule,
   ],

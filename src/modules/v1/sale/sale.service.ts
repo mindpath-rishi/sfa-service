@@ -83,6 +83,7 @@ export class SaleService extends MongoRepository<Sale> {
         let totalQty = 0;
         let totalWeight = 0;
         let totalValue = 0;
+        let netCases = 0;
 
         const processedItems: any[] = [];
 
@@ -136,6 +137,7 @@ export class SaleService extends MongoRepository<Sale> {
           totalQty += quantity;
           totalWeight += itemWeight;
           totalValue += itemValue;
+          netCases += quantity / unitQtyInCase;
 
           processedItems.push({
             saleId: '',
@@ -229,6 +231,7 @@ export class SaleService extends MongoRepository<Sale> {
             paidAmount,
             pendingAmount,
             paymentStatus,
+            netCases,
           },
           { session },
         );

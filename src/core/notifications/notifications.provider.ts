@@ -5,6 +5,14 @@ import * as path from 'path';
 export const NotificationProvider: Provider = {
   provide: 'NOTIFICATION_CLIENT',
   useFactory: () => {
+    const existingApp = admin.apps.find(
+      (app): app is admin.app.App => app?.name === '[DEFAULT]',
+    );
+
+    if (existingApp) {
+      return existingApp;
+    }
+
     const serviceAccount = require(
       path.join(__dirname, '../../../firebase-admin.json'),
     );

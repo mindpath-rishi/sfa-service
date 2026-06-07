@@ -62,7 +62,7 @@ import { Public } from 'src/core/decorators/public.decorator';
   path: API_MODULE.EMPLOYEE,
   version: V1,
 })
-@Public()
+// @Public()
 export class EmployeeController {
   constructor(private readonly employeeService: EmployeeService) {}
 
@@ -92,6 +92,222 @@ export class EmployeeController {
   )
   async create(@Body() dto: CreateEmployeeDto) {
     return this.employeeService.create(dto);
+  }
+
+  @Get('/manager/stats')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Get manager stats' })
+  @ApiSuccessResponse(
+    {
+      items: [
+        {
+          employeeId: 'EID-1A2B3C4D',
+          name: 'John Doe',
+          mobile: '9876543210',
+        },
+      ],
+      meta: {
+        total: 50,
+        page: 1,
+        limit: 20,
+        totalPages: 3,
+      },
+    },
+    EMPLOYEE.FETCHED,
+  )
+  async getManagerStats(@Query() query: { date: any }) {
+    return this.employeeService.getManagerStats(query);
+  }
+
+  @Get('/manager/target')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Get manager stats' })
+  @ApiSuccessResponse(
+    {
+      items: [
+        {
+          employeeId: 'EID-1A2B3C4D',
+          name: 'John Doe',
+          mobile: '9876543210',
+        },
+      ],
+      meta: {
+        total: 50,
+        page: 1,
+        limit: 20,
+        totalPages: 3,
+      },
+    },
+    EMPLOYEE.FETCHED,
+  )
+  async getPrimaryCategoryTargetSummary(@Query() query: { date?: string }) {
+    return this.employeeService.getPrimaryCategoryTargetSummary(query?.date);
+  }
+
+  @Get('/manager/user-wise-target')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Get manager stats' })
+  @ApiSuccessResponse(
+    {
+      items: [
+        {
+          employeeId: 'EID-1A2B3C4D',
+          name: 'John Doe',
+          mobile: '9876543210',
+        },
+      ],
+      meta: {
+        total: 50,
+        page: 1,
+        limit: 20,
+        totalPages: 3,
+      },
+    },
+    EMPLOYEE.FETCHED,
+  )
+  async getUserWiseTargetSummary(@Query() query: { date?: string }) {
+    return this.employeeService.getUserWiseTargetSummary(query?.date);
+  }
+
+  @Get('/manager/order-summary')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Get manager stats' })
+  @ApiSuccessResponse(
+    {
+      items: [
+        {
+          employeeId: 'EID-1A2B3C4D',
+          name: 'John Doe',
+          mobile: '9876543210',
+        },
+      ],
+      meta: {
+        total: 50,
+        page: 1,
+        limit: 20,
+        totalPages: 3,
+      },
+    },
+    EMPLOYEE.FETCHED,
+  )
+  async getManagerOrderSummary(@Query() query: { date?: string }) {
+    return this.employeeService.getManagerOrderSummary(query?.date);
+  }
+
+  @Get('/manager/team-coverage')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Get team coverage' })
+  @ApiSuccessResponse(
+    {
+      items: [
+        {
+          employeeId: 'EID-1A2B3C4D',
+          name: 'John Doe',
+          mobile: '9876543210',
+        },
+      ],
+      meta: {
+        total: 50,
+        page: 1,
+        limit: 20,
+        totalPages: 3,
+      },
+    },
+    EMPLOYEE.FETCHED,
+  )
+  async getTeamCoverage() {
+    return this.employeeService.getTeamCoverage();
+  }
+
+  @Get('/manager/get-beat-o-meter')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Get team coverage' })
+  @ApiSuccessResponse(
+    {
+      items: [
+        {
+          employeeId: 'EID-1A2B3C4D',
+          name: 'John Doe',
+          mobile: '9876543210',
+        },
+      ],
+      meta: {
+        total: 50,
+        page: 1,
+        limit: 20,
+        totalPages: 3,
+      },
+    },
+    EMPLOYEE.FETCHED,
+  )
+  async getBeatOMeter() {
+    return this.employeeService.getBeatOMeter();
+  }
+
+  @Get('/manager/field-user')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Get team coverage' })
+  @ApiSuccessResponse(
+    {
+      items: [
+        {
+          employeeId: 'EID-1A2B3C4D',
+          name: 'John Doe',
+          mobile: '9876543210',
+        },
+      ],
+      meta: {
+        total: 50,
+        page: 1,
+        limit: 20,
+        totalPages: 3,
+      },
+    },
+    EMPLOYEE.FETCHED,
+  )
+  async getFieldUsersSummary(@Query() query: { date?: string }) {
+    return this.employeeService.getFieldUsersSummary(query?.date);
+  }
+
+  @Get('/salesman/my-pocket-target')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Get salesman pocket and target' })
+  @ApiSuccessResponse(
+    {
+      target: {
+        targetCases: 100,
+        achievedCases: 60,
+        remainingCases: 40,
+        achievementPercentage: 60,
+      },
+      pocket: {
+        tc: 20,
+        avgTc: 5,
+        pc: 10,
+        avgPc: 2.5,
+        upc: 8,
+        utc: 18,
+        totalLinesSold: 35,
+        lpc: 3.5,
+      },
+    },
+    EMPLOYEE.FETCHED,
+  )
+  async getSalesmanPocketAndTarget(
+    @Query()
+    query: {
+      date?: string;
+      startDate?: string;
+      endDate?: string;
+      metric?: 'cases' | 'tonnage' | 'value';
+    },
+  ) {
+    return this.employeeService.getSalesmanPocketAndTarget(
+      query?.date,
+      query?.metric,
+      query?.startDate,
+      query?.endDate,
+    );
   }
 
   /**

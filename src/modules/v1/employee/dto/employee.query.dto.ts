@@ -6,18 +6,14 @@
  *
  * Supports:
  * - Status-based filtering
+ * - Role-based filtering
+ * - Reporting manager filtering
  * - Free-text search
  * - Pagination (via PaginationDto)
  */
 
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import {
-  IsEnum,
-  IsOptional,
-  IsString,
-  MaxLength,
-} from 'class-validator';
-import { Type } from 'class-transformer';
+import { IsEnum, IsOptional, IsString, MaxLength } from 'class-validator';
 import { Status } from 'src/shared/enums/app.enums';
 import { PaginationDto } from 'src/shared/dto/pagination.dto';
 
@@ -35,6 +31,32 @@ export class EmployeeQueryDto extends PaginationDto {
   @IsOptional()
   @IsEnum(Status)
   status?: Status;
+
+  /**
+   * Role ID
+   * -------
+   * Purpose : Filter employees by assigned role
+   */
+  @ApiPropertyOptional({
+    example: 'ROLE_MANAGER',
+    description: 'Filter employees by role ID',
+  })
+  @IsOptional()
+  @IsString()
+  roleId?: string;
+
+  /**
+   * Reports To
+   * ----------
+   * Purpose : Filter employees by direct reporting manager
+   */
+  @ApiPropertyOptional({
+    example: 'EMP00001',
+    description: 'Filter employees by reporting manager employee ID',
+  })
+  @IsOptional()
+  @IsString()
+  reportsTo?: string;
 
   /**
    * Search Text

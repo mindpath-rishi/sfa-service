@@ -1,0 +1,19 @@
+import { Module } from '@nestjs/common';
+import { MongooseModule } from '@nestjs/mongoose';
+
+import {
+  Target,
+  TargetSchema,
+} from 'src/core/database/mongo/schema/target.schema';
+import { TargetController } from './target.controller';
+import { TargetService } from './target.service';
+
+@Module({
+  imports: [
+    MongooseModule.forFeature([{ name: Target.name, schema: TargetSchema }]),
+  ],
+  controllers: [TargetController],
+  providers: [TargetService],
+  exports: [TargetService],
+})
+export class TargetModule {}

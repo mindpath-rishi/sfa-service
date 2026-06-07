@@ -209,3 +209,21 @@ export class LoginDto {
   @Type(() => DeviceInfoDto)
   deviceInfo!: DeviceInfoDto;
 }
+
+export class UpdatePushTokenDto {
+  @ApiProperty({
+    example: 'b9f7a2c2-1c9b-4e91',
+    description: 'Unique device identifier',
+  })
+  @IsString()
+  @IsNotEmpty()
+  deviceId!: string;
+
+  @ApiProperty({
+    example: 'fcm-registration-token',
+    description: 'Firebase Cloud Messaging registration token',
+  })
+  @IsString()
+  @IsNotEmpty()
+  fcmToken!: string;
+}

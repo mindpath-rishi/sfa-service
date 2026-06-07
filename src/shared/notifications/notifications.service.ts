@@ -13,6 +13,22 @@ interface PushResult {
   }[];
 }
 
+const toMessagingData = (data?: Record<string, unknown>) => {
+  if (!data) return undefined;
+
+  return Object.entries(data).reduce<Record<string, string>>(
+    (result, [key, value]) => {
+      if (value === undefined || value === null) return result;
+
+      result[key] =
+        typeof value === 'string' ? value : JSON.stringify(value);
+
+      return result;
+    },
+    {},
+  );
+};
+
 @Injectable()
 export class NotificationsService {
   constructor(
@@ -32,13 +48,13 @@ export class NotificationsService {
     token: string,
     title: string,
     body: string,
-    data?: Record<string, string>,
+    data?: Record<string, unknown>,
   ): Promise<PushResult> {
     try {
       const message: admin.messaging.Message = {
         token,
         notification: { title, body },
-        data,
+        data: toMessagingData(data),
       };
 
       await this.messaging().send(message);
@@ -48,7 +64,7 @@ export class NotificationsService {
         success: 1,
         failed: 0,
       };
-    } catch (err) {
+    } catch (err: any) {
       AppLogger.error('Push failed (single)', err);
 
       return {
@@ -74,7 +90,7 @@ export class NotificationsService {
     tokens: string[],
     title: string,
     body: string,
-    data?: Record<string, string>,
+    data?: Record<string, unknown>,
   ): Promise<PushResult> {
     if (!tokens.length) {
       return { total: 0, success: 0, failed: 0 };
@@ -83,7 +99,7 @@ export class NotificationsService {
     const message: admin.messaging.MulticastMessage = {
       tokens,
       notification: { title, body },
-      data,
+      data: toMessagingData(data),
     };
 
     const response = await this.messaging().sendEachForMulticast(message);
@@ -117,13 +133,13 @@ export class NotificationsService {
     topic: string,
     title: string,
     body: string,
-    data?: Record<string, string>,
+    data?: Record<string, unknown>,
   ): Promise<PushResult> {
     try {
       await this.messaging().send({
         topic,
         notification: { title, body },
-        data,
+        data: toMessagingData(data),
       });
 
       return {
@@ -131,7 +147,7 @@ export class NotificationsService {
         success: 1,
         failed: 0,
       };
-    } catch (err) {
+    } catch (err: any) {
       AppLogger.error('Push failed (topic)', err);
 
       return {

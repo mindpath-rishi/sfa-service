@@ -53,6 +53,8 @@ import { NonSaleModule } from './modules/v1/non-sale/non-sale.module';
 import { PaymentModule } from './modules/v1/payment/payment.module';
 import { SaleModule } from './modules/v1/sale/sale.module';
 import { SaleItemModule } from './modules/v1/sale-item/sale-item.module';
+import { LeaveModule } from './modules/v1/leave/leave.module';
+import { TargetModule } from './modules/v1/target/target.module';
 
 @Global()
 @Module({
@@ -119,7 +121,8 @@ import { SaleItemModule } from './modules/v1/sale-item/sale-item.module';
     PaymentModule,
     SaleModule,
     SaleItemModule,
-  ],
+    LeaveModule,
+    TargetModule,],
   providers: [
     AppControlService,
     MongoService,

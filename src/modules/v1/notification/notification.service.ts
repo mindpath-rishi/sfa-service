@@ -24,6 +24,7 @@ import {
   UserDeviceSchema,
 } from 'src/core/database/mongo/schema/device.schema';
 import { NotificationsService } from 'src/shared/notifications/notifications.service';
+import { RequestContextStore } from 'src/core/context/request-context';
 
 @Injectable()
 export class NotificationService extends MongoRepository<Notification> {
@@ -59,13 +60,45 @@ export class NotificationService extends MongoRepository<Notification> {
         .map((d) => d.fcmToken)
         .filter((token): token is string => Boolean(token));
 
-      if (tokens.length) {
-        const response: any = await this.pushService.sendToMultiple(
-          tokens,
-          payload.title,
-          payload.body,
-        );
-        console.log('Push notification response:', response);
+      if (!tokens.length) {
+        await this.updateById(notification._id.toString(), {
+          deliveryStatus: NotificationDeliveryStatus.FAILED,
+          deliveryError: 'No active device push tokens found',
+        });
+
+        return {
+          statusCode: HttpStatus.CREATED,
+          message: NOTIFICATION.CREATED,
+          data: notification,
+        };
+      }
+
+      const response = await this.pushService.sendToMultiple(
+        tokens,
+        payload.title,
+        payload.body,
+        {
+          ...payload.data,
+          notificationId: notification._id.toString(),
+          route: payload.data?.route ?? '/notifications',
+        },
+      );
+
+      if (response.failed > 0 && response.success === 0) {
+        await this.updateById(notification._id.toString(), {
+          deliveryStatus: NotificationDeliveryStatus.FAILED,
+          deliveryError: response.results
+            ?.filter((result) => !result.success)
+            .map((result) => result.error)
+            .filter(Boolean)
+            .join('; '),
+        });
+
+        return {
+          statusCode: HttpStatus.CREATED,
+          message: NOTIFICATION.CREATED,
+          data: notification,
+        };
       }
 
       await this.updateById(notification._id.toString(), {
@@ -88,11 +121,13 @@ export class NotificationService extends MongoRepository<Notification> {
 
   async findAll(query: NotificationQueryDto) {
     const { deliveryStatus, isRead, platform, page = 1, limit = 20 } = query;
+    const userId = RequestContextStore.getStore()?.userId;
 
     const filter: Record<string, any> = {
       isDeleted: false,
     };
 
+    if (userId) filter.recipientId = userId;
     if (deliveryStatus) filter.deliveryStatus = deliveryStatus;
     if (isRead !== undefined) filter.isRead = isRead;
     if (platform) filter.platform = platform;

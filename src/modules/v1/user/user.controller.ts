@@ -18,6 +18,7 @@
 import {
   Controller,
   Post,
+  Patch,
   Body,
   Res,
   Req,
@@ -35,7 +36,7 @@ import {
 import type { Request, Response } from 'express';
 
 import { UserService } from './user.service';
-import { LoginDto } from './dto/login.dto';
+import { LoginDto, UpdatePushTokenDto } from './dto/login.dto';
 
 import { ApiSuccessResponse } from 'src/core/swagger/api.response.swagger';
 import {
@@ -122,7 +123,7 @@ export class UserController {
     // }
 
     // Device ID is mandatory for device-scoped authentication
-    const deviceId = req.headers['x-device-id'] as string;
+    const deviceId = (req.headers['x-device-id'] as string) || dto.deviceInfo.deviceId;
     // if (!deviceId) {
     //   throw new BadRequestException('Device ID missing');
     // }
@@ -244,5 +245,14 @@ export class UserController {
     }
 
     return this.userService.logout(req, res, deviceId);
+  }
+
+  @Patch('device/push-token')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Update active device push token' })
+  @ApiBody({ type: UpdatePushTokenDto })
+  @ApiSuccessResponse({ updated: true }, 'Push token updated')
+  async updatePushToken(@Body() dto: UpdatePushTokenDto) {
+    return this.userService.updatePushToken(dto.deviceId, dto.fcmToken);
   }
 }

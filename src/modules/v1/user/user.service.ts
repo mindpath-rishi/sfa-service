@@ -362,6 +362,29 @@ export class UserService extends MongoRepository<User> {
     };
   }
 
+  async updatePushToken(deviceId: string, fcmToken: string) {
+    const updated = await this.userDeviceModel.findOneAndUpdate(
+      { deviceId, isActive: true },
+      {
+        $set: {
+          fcmToken,
+          lastLoginAt: new Date(),
+        },
+      },
+      { new: true },
+    );
+
+    if (!updated) {
+      throw new NotFoundException('Active device not found');
+    }
+
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'Push token updated',
+      data: { updated: true },
+    };
+  }
+
   /* ======================================================
    * DELETE / RESTORE HELPERS
    * ------------------------------------------------------
