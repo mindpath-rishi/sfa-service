@@ -52,8 +52,8 @@ export class ActivityService extends MongoRepository<Activity> {
       const newActivityPayload: Partial<Activity> = {
         userId: ctx?.userId,
         userName: ctx?.name,
-        vanId: ctx?.vanId,
-        vanName: ctx?.vanName,
+        vanId: payload.vanId || ctx?.vanId,
+        vanName: (payload as any).vanName || ctx?.vanName,
         name: payload.name,
         description: payload.description || '',
         startTime: new Date(),

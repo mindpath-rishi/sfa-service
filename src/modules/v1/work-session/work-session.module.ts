@@ -16,6 +16,7 @@ import { InventoryTransactionModule } from '../inventory-transaction/inventory-t
 import { VanInventoryModule } from '../van-inventory/van-inventory.module';
 import { VanModule } from '../van/van.module';
 import { LeaveModule } from '../leave/leave.module';
+import { NotificationModule } from '../notification/notification.module';
 
 @Module({
   imports: [
@@ -31,6 +32,7 @@ import { LeaveModule } from '../leave/leave.module';
     VanInventoryModule,
     VanModule,
     LeaveModule,
+    NotificationModule,
   ],
   controllers: [WorkSessionController],
   providers: [WorkSessionService],

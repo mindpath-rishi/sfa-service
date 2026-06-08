@@ -35,6 +35,16 @@ export class CreateWorkSessionDto {
   requestedVanId?: string;
 
   @ApiPropertyOptional({ type: String })
+  @IsOptional()
+  @IsString()
+  requestedVanName?: string;
+
+  @ApiPropertyOptional({ type: String })
+  @IsOptional()
+  @IsString()
+  vanChangeReason?: string;
+
+  @ApiPropertyOptional({ type: String })
   @ValidateIf((o) => o.activityName === 'Retailing')
   @IsNotEmpty({ message: 'routeId is required for Retailing activity' })
   @IsString()

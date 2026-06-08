@@ -44,6 +44,33 @@ export class WorkSession {
   @Prop({ type: String })
   vanName!: string;
 
+  @Prop({ type: String })
+  requestedVanId?: string;
+
+  @Prop({ type: String })
+  requestedVanName?: string;
+
+  @Prop({ type: String })
+  vanChangeReason?: string;
+
+  @Prop({
+    type: String,
+    enum: ['PENDING', 'APPROVED', 'REJECTED'],
+  })
+  vanChangeStatus?: 'PENDING' | 'APPROVED' | 'REJECTED';
+
+  @Prop({ type: String })
+  vanChangeApprovedBy?: string;
+
+  @Prop({ type: Date })
+  vanChangeApprovedAt?: Date;
+
+  @Prop({ type: String })
+  vanChangeRejectedBy?: string;
+
+  @Prop({ type: Date })
+  vanChangeRejectedAt?: Date;
+
   /* ======================================================
    * SESSION DETAILS
    * ====================================================== */
@@ -76,3 +103,4 @@ WorkSessionSchema.index({ userId: 1, isActive: 1 });
 
 // Fast queries for reports
 WorkSessionSchema.index({ userId: 1, dayStartTime: -1 });
+WorkSessionSchema.index({ vanChangeStatus: 1, requestedVanId: 1 });

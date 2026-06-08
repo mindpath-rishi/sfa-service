@@ -43,6 +43,16 @@ export class CreateActivityDto {
   @IsString()
   description?: string;
 
+  @ApiPropertyOptional({ type: String })
+  @IsOptional()
+  @IsString()
+  vanId?: string;
+
+  @ApiPropertyOptional({ type: String })
+  @IsOptional()
+  @IsString()
+  vanName?: string;
+
   /**
    * ✅ Required only if activityName = Retailing
    */
