@@ -52,6 +52,7 @@ import { EMPLOYEE } from './employee.constants';
 import { Permissions } from 'src/core/decorators/permission.decorator';
 import { EmployeeQueryDto } from './dto/employee.query.dto';
 import { Public } from 'src/core/decorators/public.decorator';
+import { UserPrimaryCategoryTargetQueryDto } from './dto/user-primary-category-target-query.dto';
 
 @ApiTags('Employee')
 @FeatureFlag(API_MODULE_ENABLE_KEYS.EMPLOYEE)
@@ -115,7 +116,9 @@ export class EmployeeController {
     },
     EMPLOYEE.FETCHED,
   )
-  async getManagerStats(@Query() query: { date: any }) {
+  async getManagerStats(
+    @Query() query: { date?: string; startDate?: string; endDate?: string },
+  ) {
     return this.employeeService.getManagerStats(query);
   }
 
@@ -169,6 +172,15 @@ export class EmployeeController {
     return this.employeeService.getUserWiseTargetSummary(query?.date);
   }
 
+  @Get('/manager/user-primary-category-target')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Get user primary category targets' })
+  async getUserPrimaryCategoryTarget(
+    @Query() query: UserPrimaryCategoryTargetQueryDto,
+  ) {
+    return this.employeeService.getUserPrimaryCategoryTarget(query);
+  }
+
   @Get('/manager/order-summary')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Get manager stats' })
@@ -190,8 +202,8 @@ export class EmployeeController {
     },
     EMPLOYEE.FETCHED,
   )
-  async getManagerOrderSummary(@Query() query: { date?: string }) {
-    return this.employeeService.getManagerOrderSummary(query?.date);
+  async getManagerOrderSummary() {
+    return this.employeeService.getManagerOrderSummary();
   }
 
   @Get('/manager/team-coverage')
@@ -267,6 +279,15 @@ export class EmployeeController {
   )
   async getFieldUsersSummary(@Query() query: { date?: string }) {
     return this.employeeService.getFieldUsersSummary(query?.date);
+  }
+
+  @Get('/manager/user-timeline')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Get manager field user daily timeline' })
+  async getManagerUserTimeline(
+    @Query() query: { employeeId: string; date?: string },
+  ) {
+    return this.employeeService.getManagerUserTimeline(query);
   }
 
   @Get('/salesman/my-pocket-target')

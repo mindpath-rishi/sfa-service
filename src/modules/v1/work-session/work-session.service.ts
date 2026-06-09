@@ -44,9 +44,7 @@ import {
   Employee,
   EmployeeSchema,
 } from 'src/core/database/mongo/schema/employee.schema';
-import {
-  NotificationPlatform,
-} from 'src/shared/enums/notification.enums';
+import { NotificationPlatform } from 'src/shared/enums/notification.enums';
 import { NotificationService } from '../notification/notification.service';
 
 @Injectable()
@@ -100,7 +98,10 @@ export class WorkSessionService extends MongoRepository<WorkSession> {
          * ====================================================== */
 
         const requestedVan = requestedVanId
-          ? await this.vanService.findOne({ vanId: requestedVanId }, { session })
+          ? await this.vanService.findOne(
+              { vanId: requestedVanId },
+              { session },
+            )
           : null;
 
         if (requestedVanId && !requestedVan) {
@@ -113,6 +114,8 @@ export class WorkSessionService extends MongoRepository<WorkSession> {
           vanId: payload.vanId || ctx?.vanId,
           vanName: ctx?.vanName,
           dayStartTime: new Date(),
+          dayStartImageMediaId: payload.dayStartImageMediaId,
+          dayStartImageUrl: payload.dayStartImageUrl,
           status: WorkSessionStatus.ACTIVE,
         };
 
@@ -1110,7 +1113,10 @@ export class WorkSessionService extends MongoRepository<WorkSession> {
     const workSession = await this.findOne({ workSessionId });
 
     if (!workSession) throw new NotFoundException(WORK_SESSION.NOT_FOUND);
-    if (workSession.vanChangeStatus !== 'PENDING' || !workSession.requestedVanId) {
+    if (
+      workSession.vanChangeStatus !== 'PENDING' ||
+      !workSession.requestedVanId
+    ) {
       throw new BadRequestException('No pending van change request found');
     }
 
@@ -1134,6 +1140,11 @@ export class WorkSessionService extends MongoRepository<WorkSession> {
 
     const updated = await this.findOne({ workSessionId });
 
+    await this.notificationService.markVanChangeRequestResolved(
+      workSessionId,
+      'APPROVED',
+    );
+
     await this.notificationService.create({
       recipientId: workSession.userId,
       title: 'Van Change Approved',
@@ -1145,6 +1156,8 @@ export class WorkSessionService extends MongoRepository<WorkSession> {
         action: 'APPROVED',
         workSessionId,
         vanId: workSession.requestedVanId,
+        reason: workSession.vanChangeReason,
+        vanChangeReason: workSession.vanChangeReason,
         route: '/(drawer)/(tabs)/home',
       },
     });
@@ -1161,7 +1174,10 @@ export class WorkSessionService extends MongoRepository<WorkSession> {
     const workSession = await this.findOne({ workSessionId });
 
     if (!workSession) throw new NotFoundException(WORK_SESSION.NOT_FOUND);
-    if (workSession.vanChangeStatus !== 'PENDING' || !workSession.requestedVanId) {
+    if (
+      workSession.vanChangeStatus !== 'PENDING' ||
+      !workSession.requestedVanId
+    ) {
       throw new BadRequestException('No pending van change request found');
     }
 
@@ -1177,6 +1193,11 @@ export class WorkSessionService extends MongoRepository<WorkSession> {
 
     const updated = await this.findOne({ workSessionId });
 
+    await this.notificationService.markVanChangeRequestResolved(
+      workSessionId,
+      'REJECTED',
+    );
+
     await this.notificationService.create({
       recipientId: workSession.userId,
       title: 'Van Change Rejected',
@@ -1187,6 +1208,8 @@ export class WorkSessionService extends MongoRepository<WorkSession> {
         category: 'van_change',
         action: 'REJECTED',
         workSessionId,
+        reason: workSession.vanChangeReason,
+        vanChangeReason: workSession.vanChangeReason,
         route: '/(drawer)/(tabs)/home',
       },
     });
@@ -1221,10 +1244,15 @@ export class WorkSessionService extends MongoRepository<WorkSession> {
         workSessionId: workSession.workSessionId,
         salesmanId: workSession.userId,
         salesmanName: workSession.userName,
+        currentVanId: workSession.vanId,
+        currentVan: workSession.vanName,
         oldVanId: workSession.vanId,
         oldVanName: workSession.vanName,
         requestedVanId: workSession.requestedVanId,
+        requestedVan: workSession.requestedVanName,
         requestedVanName: workSession.requestedVanName,
+        reason: workSession.vanChangeReason,
+        vanChangeReason: workSession.vanChangeReason,
         route: '/notifications',
       },
     });

@@ -176,6 +176,28 @@ export class NotificationService extends MongoRepository<Notification> {
     };
   }
 
+  async markVanChangeRequestResolved(
+    workSessionId: string,
+    status: 'APPROVED' | 'REJECTED',
+  ) {
+    await this.updateOne(
+      {
+        category: 'van_change',
+        'data.workSessionId': workSessionId,
+        'data.action': 'APPROVAL_REQUIRED',
+      } as any,
+      {
+        $set: {
+          isRead: true,
+          readAt: new Date(),
+          'data.vanChangeStatus': status,
+          'data.status': status,
+          'data.resolvedAt': new Date(),
+        },
+      } as any,
+    );
+  }
+
   async delete(notificationId: string) {
     // ✅ Validate ObjectId before using
     if (!Types.ObjectId.isValid(notificationId)) {

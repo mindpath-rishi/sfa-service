@@ -83,6 +83,12 @@ export class WorkSession {
   @Prop({ type: String })
   dayEndTime!: Date;
 
+  @Prop({ type: String })
+  dayStartImageMediaId?: string;
+
+  @Prop({ type: String })
+  dayStartImageUrl?: string;
+
   // Activity status
   @Prop({
     type: String,

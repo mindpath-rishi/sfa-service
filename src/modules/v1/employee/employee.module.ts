@@ -50,6 +50,10 @@ import {
   SaleItem,
   SaleItemSchema,
 } from 'src/core/database/mongo/schema/sale-item.schema';
+import {
+  WorkSession,
+  WorkSessionSchema,
+} from 'src/core/database/mongo/schema/work-session.schema';
 
 @Module({
   imports: [
@@ -67,6 +71,7 @@ import {
       { name: Van.name, schema: VanSchema },
       { name: NonSale.name, schema: NonSaleSchema },
       { name: SaleItem.name, schema: SaleItemSchema },
+      { name: WorkSession.name, schema: WorkSessionSchema },
     ]),
     UserModule,
   ],

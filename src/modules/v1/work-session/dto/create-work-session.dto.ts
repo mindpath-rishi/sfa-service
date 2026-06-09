@@ -68,4 +68,14 @@ export class CreateWorkSessionDto {
   // @IsNotEmpty({ message: 'totalShops is required for Retailing activity' })
   @IsOptional()
   totalShops?: number;
+
+  @ApiPropertyOptional({ type: String })
+  @IsOptional()
+  @IsString()
+  dayStartImageMediaId?: string;
+
+  @ApiPropertyOptional({ type: String })
+  @IsOptional()
+  @IsString()
+  dayStartImageUrl?: string;
 }
