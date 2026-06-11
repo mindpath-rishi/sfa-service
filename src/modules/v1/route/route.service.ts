@@ -28,6 +28,7 @@ import { CustomerService } from '../customer/customer.service';
 import { CustomerQueryDto } from '../customer/dto/customer-query.dto';
 import { CustomerStatus } from 'src/shared/enums/customer.enums';
 import { ShopVisitService } from '../shop-visit/shop-visit.service';
+import { ShopVisitStatus } from 'src/shared/enums/shop-visit.enums';
 
 @Injectable()
 export class RouteService extends MongoRepository<Route> {
@@ -668,6 +669,11 @@ export class RouteService extends MongoRepository<Route> {
       };
     }
 
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const todayEnd = new Date();
+    todayEnd.setHours(23, 59, 59, 999);
+
     /* ======================================================
      * 2️⃣ PIPELINE
      * ====================================================== */
@@ -761,6 +767,8 @@ export class RouteService extends MongoRepository<Route> {
           let: {
             customerId: '$customer.customerId',
             routeSessionId: routeSessionId || null,
+            todayStart,
+            todayEnd,
           },
 
           pipeline: [
@@ -770,6 +778,27 @@ export class RouteService extends MongoRepository<Route> {
                   $and: [
                     {
                       $eq: ['$outletId', '$$customerId'],
+                    },
+
+                    {
+                      $eq: ['$status', ShopVisitStatus.COMPLETED],
+                    },
+
+                    {
+                      $or: [
+                        {
+                          $and: [
+                            { $gte: ['$checkOutTime', '$$todayStart'] },
+                            { $lte: ['$checkOutTime', '$$todayEnd'] },
+                          ],
+                        },
+                        {
+                          $and: [
+                            { $gte: ['$checkInTime', '$$todayStart'] },
+                            { $lte: ['$checkInTime', '$$todayEnd'] },
+                          ],
+                        },
+                      ],
                     },
 
                     {
@@ -932,18 +961,11 @@ export class RouteService extends MongoRepository<Route> {
           //   $gt: ['$visit', null],
           // },
           isVisited: {
-            $cond: [
-              {
-                $and: [
-                  { $gt: ['$visit', null] },
-                  { $eq: ['$visit.status', 'COMPLETED'] },
-                ],
-              },
-              true,
-              false,
-            ],
+            $gt: ['$visit', null],
           },
-          visitedAt: '$visit.visitedAt',
+          visitedAt: {
+            $ifNull: ['$visit.checkOutTime', '$visit.checkInTime'],
+          },
 
           visitStatus: {
             $ifNull: ['$visit.status', 'NOT_VISITED'],

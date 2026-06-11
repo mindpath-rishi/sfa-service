@@ -66,6 +66,26 @@ import { NonSale } from 'src/core/database/mongo/schema/non-sale.schema';
 import { SaleItem } from 'src/core/database/mongo/schema/sale-item.schema';
 import { WorkSession } from 'src/core/database/mongo/schema/work-session.schema';
 
+const REPORT_TIMEZONE = process.env.APP_TIMEZONE || process.env.TZ || 'Asia/Kolkata';
+
+const parseCalendarDate = (value?: string) => {
+  if (!value) return new Date();
+
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return new Date(value);
+
+  const [, year, month, day] = match;
+  return new Date(Number(year), Number(month) - 1, Number(day));
+};
+
+const formatCalendarDate = (date: Date) => {
+  const year = date.getFullYear();
+  const month = `${date.getMonth() + 1}`.padStart(2, '0');
+  const day = `${date.getDate()}`.padStart(2, '0');
+
+  return `${year}-${month}-${day}`;
+};
+
 @Injectable()
 export class EmployeeService extends MongoRepository<Employee> {
   constructor(
@@ -581,18 +601,18 @@ export class EmployeeService extends MongoRepository<Employee> {
   }) {
     const managerId = RequestContextStore.getStore()?.userId;
 
-    const selectedDate = query?.date ? new Date(query.date) : new Date();
+    const selectedDate = query?.date ? parseCalendarDate(query.date) : new Date();
     const startOfDay = query?.startDate
-      ? new Date(query.startDate)
+      ? parseCalendarDate(query.startDate)
       : query?.date
-        ? new Date(query.date)
+        ? parseCalendarDate(query.date)
         : new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1);
     startOfDay.setHours(0, 0, 0, 0);
 
     const endOfDay = query?.endDate
-      ? new Date(query.endDate)
+      ? parseCalendarDate(query.endDate)
       : query?.date
-        ? new Date(query.date)
+        ? parseCalendarDate(query.date)
         : new Date();
     endOfDay.setHours(23, 59, 59, 999);
 
@@ -904,21 +924,26 @@ export class EmployeeService extends MongoRepository<Employee> {
     }
 
     const now = endDateParam
-      ? new Date(endDateParam)
+      ? parseCalendarDate(endDateParam)
       : date
-        ? new Date(date)
+        ? parseCalendarDate(date)
         : new Date();
     const hasDateRange = Boolean(startDateParam || endDateParam);
 
     const startDate = startDateParam
-      ? new Date(startDateParam)
+      ? parseCalendarDate(startDateParam)
       : new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
     startDate.setHours(0, 0, 0, 0);
 
     const endDate = hasDateRange
-      ? new Date(endDateParam || startDateParam!)
+      ? parseCalendarDate(endDateParam || startDateParam!)
       : now;
     endDate.setHours(23, 59, 59, 999);
+    const todayEnd = new Date();
+    todayEnd.setHours(23, 59, 59, 999);
+    if (endDate > todayEnd) {
+      endDate.setTime(todayEnd.getTime());
+    }
 
     const monthEndDate = new Date(
       now.getFullYear(),
@@ -1087,6 +1112,7 @@ export class EmployeeService extends MongoRepository<Employee> {
               $dateToString: {
                 format: '%Y-%m-%d',
                 date: '$startTime',
+                timezone: REPORT_TIMEZONE,
               },
             },
           },
@@ -1131,6 +1157,8 @@ export class EmployeeService extends MongoRepository<Employee> {
           },
         })
       : 0;
+    const openActivityEnd =
+      endDate.getTime() > Date.now() ? new Date() : endDate;
 
     const [
       activityDaySummary,
@@ -1157,6 +1185,7 @@ export class EmployeeService extends MongoRepository<Employee> {
               $dateToString: {
                 format: '%Y-%m-%d',
                 date: '$startTime',
+                timezone: REPORT_TIMEZONE,
               },
             },
             retailing: {
@@ -1170,6 +1199,28 @@ export class EmployeeService extends MongoRepository<Employee> {
               },
             },
             totalActivities: { $sum: 1 },
+            retailingDurationMs: {
+              $sum: {
+                $cond: [
+                  { $eq: ['$name', 'Retailing'] },
+                  {
+                    $subtract: [
+                      { $ifNull: ['$endTime', openActivityEnd] },
+                      '$startTime',
+                    ],
+                  },
+                  0,
+                ],
+              },
+            },
+            totalDurationMs: {
+              $sum: {
+                $subtract: [
+                  { $ifNull: ['$endTime', openActivityEnd] },
+                  '$startTime',
+                ],
+              },
+            },
           },
         },
       ]),
@@ -1190,6 +1241,7 @@ export class EmployeeService extends MongoRepository<Employee> {
               $dateToString: {
                 format: '%Y-%m-%d',
                 date: '$checkInTime',
+                timezone: REPORT_TIMEZONE,
               },
             },
             tc: { $sum: 1 },
@@ -1214,6 +1266,7 @@ export class EmployeeService extends MongoRepository<Employee> {
               $dateToString: {
                 format: '%Y-%m-%d',
                 date: '$date',
+                timezone: REPORT_TIMEZONE,
               },
             },
             pc: { $sum: 1 },
@@ -1241,6 +1294,7 @@ export class EmployeeService extends MongoRepository<Employee> {
               $dateToString: {
                 format: '%Y-%m-%d',
                 date: '$createdAt',
+                timezone: REPORT_TIMEZONE,
               },
             },
             leave: { $sum: 1 },
@@ -1261,6 +1315,57 @@ export class EmployeeService extends MongoRepository<Employee> {
       });
     };
 
+    const formatAverageTime = (values: Array<Date | string | null | undefined>) => {
+      const minutes = values
+        .map((value) => {
+          if (!value) return null;
+
+          const parsedDate = new Date(value);
+          if (Number.isNaN(parsedDate.getTime())) return null;
+
+          return parsedDate.getHours() * 60 + parsedDate.getMinutes();
+        })
+        .filter((value): value is number => value !== null);
+
+      if (!minutes.length) return null;
+
+      const averageMinutes = Math.round(
+        minutes.reduce((sum, value) => sum + value, 0) / minutes.length,
+      );
+      const averageDate = new Date();
+      averageDate.setHours(Math.floor(averageMinutes / 60), averageMinutes % 60, 0, 0);
+
+      return formatTime(averageDate);
+    };
+
+    const formatDurationMinutes = (value: number) => {
+      if (!Number.isFinite(value) || value < 1) return '< 1 min';
+
+      const hours = Math.floor(value / 60);
+      const minutes = value % 60;
+
+      if (!hours) return `${minutes} min${minutes === 1 ? '' : 's'}`;
+      if (!minutes) return `${hours} hr${hours === 1 ? '' : 's'}`;
+
+      return `${hours} hr${hours === 1 ? '' : 's'} ${minutes} min${
+        minutes === 1 ? '' : 's'
+      }`;
+    };
+
+    const formatAverageDuration = (values: Array<number | null | undefined>) => {
+      const minutes = values
+        .map((value) => Math.max(Math.round(Number(value || 0) / 60000), 0))
+        .filter((value) => value > 0);
+
+      if (!minutes.length) return null;
+
+      const averageMinutes = Math.round(
+        minutes.reduce((sum, value) => sum + value, 0) / minutes.length,
+      );
+
+      return formatDurationMinutes(averageMinutes);
+    };
+
     const formatDayLabel = (value: Date) =>
       value.toLocaleDateString('en-IN', {
         weekday: 'short',
@@ -1279,26 +1384,62 @@ export class EmployeeService extends MongoRepository<Employee> {
     const visitDayMap = toMap(visitDaySummary);
     const salesDayMap = toMap(salesDaySummary);
     const leaveDayMap = toMap(leaveDaySummary);
+    const avgFirstCallTime = formatAverageTime(
+      visitDaySummary.map((item) => item.firstCallTime),
+    );
+    const avgFirstPcTime = formatAverageTime(
+      salesDaySummary.map((item) => item.firstPcTime),
+    );
+    const avgRetailingTime = formatAverageDuration(
+      activityDaySummary.map((item) => item.retailingDurationMs),
+    );
+    const avgTotalTime = formatAverageDuration(
+      activityDaySummary.map((item) => item.totalDurationMs),
+    );
     const dayWiseSummary: any[] = [];
     const dayCursor = new Date(startDate);
 
     while (dayCursor <= endDate) {
-      const dayKey = dayCursor.toISOString().split('T')[0];
+      const dayKey = formatCalendarDate(dayCursor);
       const activity = activityDayMap.get(dayKey) || {};
       const visits = visitDayMap.get(dayKey) || {};
       const daySales = salesDayMap.get(dayKey) || {};
       const leave = leaveDayMap.get(dayKey) || {};
+      const retailing = Number(activity.retailing || 0);
+      const officialWork = Number(activity.officialWork || 0);
+      const leaveCount = Number(leave.leave || 0);
+      const totalActivities = Number(activity.totalActivities || 0);
+      const tcCount = Number(visits.tc || 0);
+      const pcCount = Number(daySales.pc || 0);
+      const hasWorkRecord =
+        totalActivities > 0 || tcCount > 0 || pcCount > 0;
+      const absent = leaveCount > 0 || hasWorkRecord ? 0 : 1;
+      const dayStatus =
+        leaveCount > 0
+          ? 'Leave'
+          : retailing > 0 || tcCount > 0 || pcCount > 0
+            ? 'Retailing'
+            : officialWork > 0
+              ? 'Official Work'
+              : 'Absent';
 
       dayWiseSummary.push({
         date: dayKey,
         label: formatDayLabel(dayCursor),
-        retailing: Number(activity.retailing || 0),
-        officialWork: Number(activity.officialWork || 0),
-        leave: Number(leave.leave || 0),
-        absent: 0,
-        totalActivities: Number(activity.totalActivities || 0),
-        tc: Number(visits.tc || 0),
-        pc: Number(daySales.pc || 0),
+        dayStatus,
+        retailing,
+        officialWork,
+        leave: leaveCount,
+        absent,
+        totalActivities,
+        retailingDuration: formatDurationMinutes(
+          Math.max(Math.round(Number(activity.retailingDurationMs || 0) / 60000), 0),
+        ),
+        totalDuration: formatDurationMinutes(
+          Math.max(Math.round(Number(activity.totalDurationMs || 0) / 60000), 0),
+        ),
+        tc: tcCount,
+        pc: pcCount,
         upc: daySales.upc?.length || 0,
         netValue: Number((daySales.netValue || 0).toFixed(2)),
         cases: Number((daySales.cases || 0).toFixed(2)),
@@ -1376,6 +1517,8 @@ export class EmployeeService extends MongoRepository<Employee> {
         startDate,
         endDate,
         retailingDays: retailingDayCount,
+        avgRetailingTime,
+        avgTotalTime,
 
         target: {
           metric: normalizedMetric,
@@ -1431,7 +1574,276 @@ export class EmployeeService extends MongoRepository<Employee> {
           utc,
           totalLinesSold,
           lpc: pc > 0 ? Number((totalLinesSold / pc).toFixed(2)) : 0,
+          avgFirstCallTime,
+          avgFirstPcTime,
         },
+        dayWiseSummary,
+      },
+    };
+  }
+
+  async getSalesmanDayWiseSummary(
+    date?: string,
+    startDate?: string,
+    endDate?: string,
+  ) {
+    const pocketSummary = await this.getSalesmanPocketAndTarget(
+      date,
+      'cases',
+      startDate,
+      endDate,
+    );
+
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'Salesman day wise summary fetched successfully',
+      data: pocketSummary.data?.dayWiseSummary || [],
+    };
+  }
+
+  async getSalesmanProductSales(
+    date?: string,
+    startDateParam?: string,
+    endDateParam?: string,
+    groupBy: 'PRIMARYCATEGORY' | 'SECONDARYCATEGORY' | 'SKU' = 'PRIMARYCATEGORY',
+  ) {
+    const employeeId = RequestContextStore.getStore()?.userId;
+
+    if (!employeeId) {
+      throw new NotFoundException(EMPLOYEE.NOT_FOUND);
+    }
+
+    const now = endDateParam
+      ? parseCalendarDate(endDateParam)
+      : date
+        ? parseCalendarDate(date)
+        : new Date();
+    const hasDateRange = Boolean(startDateParam || endDateParam);
+
+    const startDate = startDateParam
+      ? parseCalendarDate(startDateParam)
+      : new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+    startDate.setHours(0, 0, 0, 0);
+
+    const endDate = hasDateRange
+      ? parseCalendarDate(endDateParam || startDateParam!)
+      : now;
+    endDate.setHours(23, 59, 59, 999);
+
+    const normalizedGroupBy = ['PRIMARYCATEGORY', 'SECONDARYCATEGORY', 'SKU'].includes(
+      groupBy,
+    )
+      ? groupBy
+      : 'PRIMARYCATEGORY';
+
+    const [salesSummary, tc] = await Promise.all([
+      this.saleModal.aggregate([
+        {
+          $match: {
+            employeeId,
+            status: SaleStatus.COMPLETED,
+            date: {
+              $gte: startDate,
+              $lte: endDate,
+            },
+          },
+        },
+        {
+          $group: {
+            _id: null,
+            totalOrders: { $sum: 1 },
+            totalValue: { $sum: '$totalValue' },
+            totalCases: { $sum: '$netCases' },
+            saleIds: { $addToSet: '$saleId' },
+          },
+        },
+      ]),
+      this.shopVisitModel.countDocuments({
+        employeeId,
+        status: ShopVisitStatus.COMPLETED,
+        checkInTime: {
+          $gte: startDate,
+          $lte: endDate,
+        },
+      }),
+    ]);
+
+    const sales = salesSummary[0] || {
+      totalOrders: 0,
+      totalValue: 0,
+      totalCases: 0,
+      saleIds: [],
+    };
+    const saleIds = sales.saleIds || [];
+
+    const groupIdExpression =
+      normalizedGroupBy === 'SKU'
+        ? { $ifNull: ['$product.productId', '$productId'] }
+        : normalizedGroupBy === 'SECONDARYCATEGORY'
+          ? {
+              $ifNull: [
+                '$product.unitType',
+                { $ifNull: ['$product.categoryId', 'UNKNOWN'] },
+              ],
+            }
+          : { $ifNull: ['$product.categoryId', 'UNKNOWN'] };
+
+    const groupNameExpression =
+      normalizedGroupBy === 'SKU'
+        ? { $ifNull: ['$product.name', '$productName'] }
+        : normalizedGroupBy === 'SECONDARYCATEGORY'
+          ? {
+              $ifNull: [
+                '$product.unitType',
+                { $ifNull: ['$category.name', 'Unknown'] },
+              ],
+            }
+          : { $ifNull: ['$category.name', 'Unknown'] };
+
+    const [itemSummary, productSales] = saleIds.length
+      ? await Promise.all([
+          this.saleItemModel.aggregate([
+            {
+              $match: {
+                saleId: { $in: saleIds },
+              },
+            },
+            {
+              $group: {
+                _id: null,
+                totalValue: { $sum: '$totalValue' },
+                totalPieces: { $sum: '$quantity' },
+                totalCases: {
+                  $sum: {
+                    $add: [
+                      { $ifNull: ['$caseQty', 0] },
+                      {
+                        $cond: [
+                          { $gt: ['$unitQtyInCase', 0] },
+                          {
+                            $divide: [
+                              { $ifNull: ['$pieceQty', 0] },
+                              '$unitQtyInCase',
+                            ],
+                          },
+                          0,
+                        ],
+                      },
+                    ],
+                  },
+                },
+                skuIds: { $addToSet: '$productId' },
+                lineCount: { $sum: 1 },
+              },
+            },
+          ]),
+          this.saleItemModel.aggregate([
+            {
+              $match: {
+                saleId: { $in: saleIds },
+              },
+            },
+            {
+              $lookup: {
+                from: 'product_master',
+                localField: 'productId',
+                foreignField: 'productId',
+                as: 'product',
+              },
+            },
+            {
+              $unwind: {
+                path: '$product',
+                preserveNullAndEmptyArrays: true,
+              },
+            },
+            {
+              $lookup: {
+                from: 'productcategories',
+                localField: 'product.categoryId',
+                foreignField: 'categoryId',
+                as: 'category',
+              },
+            },
+            {
+              $unwind: {
+                path: '$category',
+                preserveNullAndEmptyArrays: true,
+              },
+            },
+            {
+              $group: {
+                _id: groupIdExpression,
+                name: { $first: groupNameExpression },
+                value: { $sum: '$totalValue' },
+                pcs: { $sum: '$quantity' },
+                cases: {
+                  $sum: {
+                    $add: [
+                      { $ifNull: ['$caseQty', 0] },
+                      {
+                        $cond: [
+                          { $gt: ['$unitQtyInCase', 0] },
+                          {
+                            $divide: [
+                              { $ifNull: ['$pieceQty', 0] },
+                              '$unitQtyInCase',
+                            ],
+                          },
+                          0,
+                        ],
+                      },
+                    ],
+                  },
+                },
+              },
+            },
+            {
+              $sort: {
+                value: -1,
+              },
+            },
+          ]),
+        ])
+      : [[], []];
+
+    const itemTotals = itemSummary[0] || {
+      totalValue: 0,
+      totalPieces: 0,
+      totalCases: 0,
+      skuIds: [],
+      lineCount: 0,
+    };
+    const pc = Number(sales.totalOrders || 0);
+    const totalValue = Number(itemTotals.totalValue || sales.totalValue || 0);
+    const totalCases = Number(itemTotals.totalCases || sales.totalCases || 0);
+
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'Salesman product sales fetched successfully',
+      data: {
+        overview: {
+          sc: itemTotals.skuIds?.length || 0,
+          tc: Number(tc || 0),
+          pc,
+          netValue: Number(totalValue.toFixed(2)),
+          cases: Number(totalCases.toFixed(2)),
+          lpc:
+            pc > 0
+              ? Number((Number(itemTotals.lineCount || 0) / pc).toFixed(2))
+              : 0,
+        },
+        categories: productSales.map((item) => ({
+          id: item._id,
+          name: item.name || 'Unknown',
+          value: Number((item.value || 0).toFixed(2)),
+          pcs: Number((item.pcs || 0).toFixed(2)),
+          cases: Number((item.cases || 0).toFixed(2)),
+          growth:
+            totalValue > 0
+              ? Number(((Number(item.value || 0) / totalValue) * 100).toFixed(2))
+              : 0,
+        })),
       },
     };
   }
@@ -1442,7 +1854,7 @@ export class EmployeeService extends MongoRepository<Employee> {
     /* ==========================================
      * MTD DATE RANGE
      * ========================================== */
-    const now = date ? new Date(date) : new Date();
+    const now = date ? parseCalendarDate(date) : new Date();
 
     const startDate = new Date(
       now.getFullYear(),
@@ -1610,7 +2022,7 @@ export class EmployeeService extends MongoRepository<Employee> {
   async getUserWiseTargetSummary(date?: string) {
     const managerId = RequestContextStore.getStore()?.userId;
 
-    const now = date ? new Date(date) : new Date();
+    const now = date ? parseCalendarDate(date) : new Date();
 
     const startDate = new Date(
       now.getFullYear(),
@@ -1779,7 +2191,7 @@ export class EmployeeService extends MongoRepository<Employee> {
     employeeId: string;
     date?: string;
   }) {
-    const now = query?.date ? new Date(query.date) : new Date();
+    const now = query?.date ? parseCalendarDate(query.date) : new Date();
 
     const startDate = new Date(
       now.getFullYear(),
@@ -3159,10 +3571,10 @@ export class EmployeeService extends MongoRepository<Employee> {
   async getFieldUsersSummary(date?: string) {
     const managerId = RequestContextStore.getStore()?.userId;
 
-    const startOfDay = date ? new Date(date) : new Date();
+    const startOfDay = date ? parseCalendarDate(date) : new Date();
     startOfDay.setHours(0, 0, 0, 0);
 
-    const endOfDay = new Date();
+    const endOfDay = date ? parseCalendarDate(date) : new Date();
     endOfDay.setHours(23, 59, 59, 999);
 
     /* ==========================================
@@ -3365,7 +3777,7 @@ export class EmployeeService extends MongoRepository<Employee> {
 
   async getManagerUserTimeline(query: { employeeId: string; date?: string }) {
     const managerId = RequestContextStore.getStore()?.userId;
-    const selectedDate = query?.date ? new Date(query.date) : new Date();
+    const selectedDate = query?.date ? parseCalendarDate(query.date) : new Date();
     const startOfDay = new Date(selectedDate);
     startOfDay.setHours(0, 0, 0, 0);
     const endOfDay = new Date(selectedDate);

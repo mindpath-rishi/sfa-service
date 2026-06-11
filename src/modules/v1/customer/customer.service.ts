@@ -258,15 +258,7 @@ export class CustomerService extends MongoRepository<Customer> {
     // Get current date range for MTD (Month to Date)
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const endOfMonth = new Date(
-      now.getFullYear(),
-      now.getMonth() + 1,
-      0,
-      23,
-      59,
-      59,
-      999,
-    );
+    const monthToDateEnd = now;
 
     // Get last 5 completed orders
     const last5Orders: any = await this.saleModel
@@ -288,7 +280,7 @@ export class CustomerService extends MongoRepository<Customer> {
           isDeleted: false,
           date: {
             $gte: startOfMonth,
-            $lte: endOfMonth,
+            $lte: monthToDateEnd,
           },
         },
       },
@@ -296,7 +288,11 @@ export class CustomerService extends MongoRepository<Customer> {
         $group: {
           _id: null,
           mtdOrderValue: { $sum: '$totalValue' },
-          mtdTotalCases: { $sum: '$totalCases' },
+          mtdTotalCases: {
+            $sum: {
+              $ifNull: ['$netCases', 0],
+            },
+          },
           mtdOrderCount: { $sum: 1 },
         },
       },
@@ -308,22 +304,19 @@ export class CustomerService extends MongoRepository<Customer> {
     let avgLPC = 0;
 
     if (last5Orders.length > 0) {
+      const pc = last5Orders.length;
       const totalValue = last5Orders.reduce(
         (sum, order: any) => sum + (order.totalValue || 0),
         0,
       );
-      const totalQty = last5Orders.reduce(
-        (sum, order) => sum + (order.totalCases || 0),
-        0,
-      );
-      const totalLPC = last5Orders.reduce(
-        (sum, order) => sum + (order.totalLpc || order.totalLPC || 0),
+      const totalCasesSold = last5Orders.reduce(
+        (sum, order) => sum + (order.totalCases || order.netCases || 0),
         0,
       );
 
-      avgOrderValue = totalValue / last5Orders.length;
-      avgOrderQty = totalQty / last5Orders.length;
-      avgLPC = totalLPC / last5Orders.length;
+      avgOrderValue = totalValue / pc;
+      avgOrderQty = totalCasesSold / pc;
+      avgLPC = totalCasesSold / pc;
     }
 
     // Get last order date

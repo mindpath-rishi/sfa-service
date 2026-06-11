@@ -36,7 +36,7 @@ import {
 import type { Request, Response } from 'express';
 
 import { UserService } from './user.service';
-import { LoginDto, UpdatePushTokenDto } from './dto/login.dto';
+import { ChangePasswordDto, LoginDto, UpdatePushTokenDto } from './dto/login.dto';
 
 import { ApiSuccessResponse } from 'src/core/swagger/api.response.swagger';
 import {
@@ -254,5 +254,26 @@ export class UserController {
   @ApiSuccessResponse({ updated: true }, 'Push token updated')
   async updatePushToken(@Body() dto: UpdatePushTokenDto) {
     return this.userService.updatePushToken(dto.deviceId, dto.fcmToken);
+  }
+
+  @Patch('password')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Change current user password' })
+  @ApiBody({ type: ChangePasswordDto })
+  @ApiSuccessResponse({ updated: true }, 'Password changed successfully')
+  async changePassword(@Req() req: Request, @Body() dto: ChangePasswordDto) {
+    const sessionId = (req as any).sessionId;
+    const authHeader = req.headers.authorization;
+    const accessToken =
+      typeof authHeader === 'string' && authHeader.startsWith('Bearer ')
+        ? authHeader.slice(7)
+        : req.cookies?.access_token;
+
+    return this.userService.changePassword(
+      sessionId,
+      dto.currentPassword,
+      dto.newPassword,
+      accessToken,
+    );
   }
 }

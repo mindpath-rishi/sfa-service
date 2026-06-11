@@ -24,6 +24,7 @@ import {
   ValidateNested,
   IsOptional,
   IsIn,
+  ValidateIf,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
@@ -222,8 +223,30 @@ export class UpdatePushTokenDto {
   @ApiProperty({
     example: 'fcm-registration-token',
     description: 'Firebase Cloud Messaging registration token',
+    required: false,
+    nullable: true,
+  })
+  @ValidateIf((_, value) => value !== null)
+  @IsOptional()
+  @IsString()
+  fcmToken?: string | null;
+}
+
+export class ChangePasswordDto {
+  @ApiProperty({
+    example: 'old-password',
+    description: 'Current password',
   })
   @IsString()
   @IsNotEmpty()
-  fcmToken!: string;
+  currentPassword!: string;
+
+  @ApiProperty({
+    example: 'new-password',
+    description: 'New password',
+  })
+  @IsString()
+  @IsNotEmpty()
+  @MinLength(6, { message: 'New password must be at least 6 characters' })
+  newPassword!: string;
 }

@@ -331,6 +331,90 @@ export class EmployeeController {
     );
   }
 
+  @Get('/salesman/day-wise-summary')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Get salesman day wise summary' })
+  @ApiSuccessResponse(
+    [
+      {
+        date: '2026-06-10',
+        label: 'Wed, 10 Jun 2026',
+        retailing: 1,
+        officialWork: 0,
+        leave: 0,
+        absent: 0,
+        totalActivities: 1,
+        retailingDuration: '8 hrs',
+        totalDuration: '8 hrs',
+        tc: 10,
+        pc: 5,
+        upc: 4,
+        netValue: 1200,
+        cases: 20,
+        firstCallTime: '09:30 AM',
+        firstPcTime: '10:15 AM',
+      },
+    ],
+    EMPLOYEE.FETCHED,
+  )
+  async getSalesmanDayWiseSummary(
+    @Query()
+    query: {
+      date?: string;
+      startDate?: string;
+      endDate?: string;
+    },
+  ) {
+    return this.employeeService.getSalesmanDayWiseSummary(
+      query?.date,
+      query?.startDate,
+      query?.endDate,
+    );
+  }
+
+  @Get('/salesman/product-sales')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Get salesman product sales' })
+  @ApiSuccessResponse(
+    {
+      overview: {
+        sc: 12,
+        tc: 24,
+        pc: 18,
+        netValue: 12500,
+        cases: 84.5,
+        lpc: 2.4,
+      },
+      categories: [
+        {
+          id: 'CAT-123',
+          name: 'Beverages',
+          value: 4200,
+          pcs: 180,
+          cases: 15,
+          growth: 34,
+        },
+      ],
+    },
+    EMPLOYEE.FETCHED,
+  )
+  async getSalesmanProductSales(
+    @Query()
+    query: {
+      date?: string;
+      startDate?: string;
+      endDate?: string;
+      groupBy?: 'PRIMARYCATEGORY' | 'SECONDARYCATEGORY' | 'SKU';
+    },
+  ) {
+    return this.employeeService.getSalesmanProductSales(
+      query?.date,
+      query?.startDate,
+      query?.endDate,
+      query?.groupBy,
+    );
+  }
+
   /**
    * Get Employees
    * -------------

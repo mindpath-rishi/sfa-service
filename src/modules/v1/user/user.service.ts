@@ -362,15 +362,24 @@ export class UserService extends MongoRepository<User> {
     };
   }
 
-  async updatePushToken(deviceId: string, fcmToken: string) {
+  async updatePushToken(deviceId: string, fcmToken?: string | null) {
     const updated = await this.userDeviceModel.findOneAndUpdate(
       { deviceId, isActive: true },
-      {
-        $set: {
-          fcmToken,
-          lastLoginAt: new Date(),
-        },
-      },
+      fcmToken
+        ? {
+            $set: {
+              fcmToken,
+              lastLoginAt: new Date(),
+            },
+          }
+        : {
+            $unset: {
+              fcmToken: '',
+            },
+            $set: {
+              lastLoginAt: new Date(),
+            },
+          },
       { new: true },
     );
 
@@ -381,6 +390,58 @@ export class UserService extends MongoRepository<User> {
     return {
       statusCode: HttpStatus.OK,
       message: 'Push token updated',
+      data: { updated: true },
+    };
+  }
+
+  async changePassword(
+    sessionId: string | undefined,
+    currentPassword: string,
+    newPassword: string,
+    accessToken?: string,
+  ) {
+    const session = sessionId ? await this.redis.getJson<any>(`session:${sessionId}`) : null;
+    let profileId = session?.type === 'USER' ? session.profileId : null;
+
+    if (!profileId && accessToken) {
+      try {
+        const payload: any = this.jwtService.verify(accessToken, {
+          issuer: jwtConfig.issuer,
+          audience: jwtConfig.audience,
+        });
+        profileId = payload?.sub;
+      } catch {
+        throw new UnauthorizedException(USER.SESSION_EXPIRED);
+      }
+    }
+
+    if (!profileId) {
+      throw new UnauthorizedException(USER.SESSION_EXPIRED);
+    }
+
+    const user: any = await this.findOneWithSelect({ profileId }, '+password');
+
+    if (!user || user.status !== UserStatus.ACTIVE) {
+      throw new UnauthorizedException(USER.INVALID_CREDENTIALS);
+    }
+
+    const valid = await bcrypt.compare(currentPassword, user.password);
+    if (!valid) {
+      throw new UnauthorizedException('Current password is incorrect');
+    }
+
+    const samePassword = await bcrypt.compare(newPassword, user.password);
+    if (samePassword) {
+      throw new BadRequestException('New password must be different from current password');
+    }
+
+    await this.updateById(user._id.toString(), {
+      password: await bcrypt.hash(newPassword, 10),
+    });
+
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'Password changed successfully',
       data: { updated: true },
     };
   }
