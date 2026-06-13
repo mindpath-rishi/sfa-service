@@ -65,8 +65,10 @@ import { NonSaleStatus } from 'src/shared/enums/non-sale.enums';
 import { NonSale } from 'src/core/database/mongo/schema/non-sale.schema';
 import { SaleItem } from 'src/core/database/mongo/schema/sale-item.schema';
 import { WorkSession } from 'src/core/database/mongo/schema/work-session.schema';
+import { RouteSession } from 'src/core/database/mongo/schema/route-session.schema';
 
-const REPORT_TIMEZONE = process.env.APP_TIMEZONE || process.env.TZ || 'Asia/Kolkata';
+const REPORT_TIMEZONE =
+  process.env.APP_TIMEZONE || process.env.TZ || 'Asia/Kolkata';
 
 const parseCalendarDate = (value?: string) => {
   if (!value) return new Date();
@@ -117,6 +119,8 @@ export class EmployeeService extends MongoRepository<Employee> {
     private readonly saleItemModel: Model<SaleItem>,
     @InjectModel(WorkSession.name)
     private readonly workSessionModel: Model<WorkSession>,
+    @InjectModel(RouteSession.name)
+    private readonly routeSessionModel: Model<RouteSession>,
   ) {
     super(mongo.getModel(Employee.name, EmployeeSchema));
   }
@@ -601,7 +605,9 @@ export class EmployeeService extends MongoRepository<Employee> {
   }) {
     const managerId = RequestContextStore.getStore()?.userId;
 
-    const selectedDate = query?.date ? parseCalendarDate(query.date) : new Date();
+    const selectedDate = query?.date
+      ? parseCalendarDate(query.date)
+      : new Date();
     const startOfDay = query?.startDate
       ? parseCalendarDate(query.startDate)
       : query?.date
@@ -654,22 +660,75 @@ export class EmployeeService extends MongoRepository<Employee> {
       };
     }
 
+    const vans = await this.vanModel.find(
+      {
+        associatedUsers: {
+          $in: employeeIds,
+        },
+        status: VanStatus.ACTIVE,
+      },
+      {
+        associatedRoutes: 1,
+      },
+    );
+
+    const routeIds = [
+      ...new Set(
+        vans.flatMap((van) =>
+          (van.associatedRoutes || [])
+            .filter((route) => {
+              const fromDate = route.fromDate ? new Date(route.fromDate) : null;
+              const toDate = route.toDate ? new Date(route.toDate) : null;
+
+              return (
+                route.routeId &&
+                (!fromDate || fromDate <= endOfDay) &&
+                (!toDate || toDate >= startOfDay)
+              );
+            })
+            .map((route) => route.routeId),
+        ),
+      ),
+    ];
+
+    const assignedCustomerIds = routeIds.length
+      ? await this.routeCustomerMappingModel.distinct('customerId', {
+          routeId: {
+            $in: routeIds,
+          },
+          status: RouteCustomerMappingStatus.ACTIVE,
+          effectiveFrom: {
+            $lte: endOfDay,
+          },
+          $or: [
+            { effectiveTo: null },
+            { effectiveTo: { $exists: false } },
+            { effectiveTo: { $gte: startOfDay } },
+          ],
+        })
+      : [];
+
+    const totalAssignedOutlets = assignedCustomerIds.length;
+
     const [
       retailingUsers,
       officeUsers,
       leaveUsers,
       sales,
       tc,
-      productiveCustomers,
+      visitedOutletIds,
+      productiveCalls,
     ] = await Promise.all([
       /* ========================================
        * RETAILING USERS
        * ======================================== */
       this.activityModel.distinct('userId', {
         userId: { $in: employeeIds },
-        status: ActivityStatus.ACTIVE,
+        status: {
+          $in: [ActivityStatus.ACTIVE, ActivityStatus.COMPLETED],
+        },
         name: 'Retailing',
-        createdAt: {
+        startTime: {
           $gte: startOfDay,
           $lte: endOfDay,
         },
@@ -680,9 +739,11 @@ export class EmployeeService extends MongoRepository<Employee> {
        * ======================================== */
       this.activityModel.distinct('userId', {
         userId: { $in: employeeIds },
-        status: ActivityStatus.ACTIVE,
-        name: 'Office Work',
-        createdAt: {
+        status: {
+          $in: [ActivityStatus.ACTIVE, ActivityStatus.COMPLETED],
+        },
+        name: { $in: ['Official Work', 'Office Work'] },
+        startTime: {
           $gte: startOfDay,
           $lte: endOfDay,
         },
@@ -723,6 +784,10 @@ export class EmployeeService extends MongoRepository<Employee> {
               $sum: '$totalValue',
             },
 
+            totalOrders: {
+              $sum: 1,
+            },
+
             // Qty Cases
             qtyCases: {
               $sum: '$netCases',
@@ -741,7 +806,19 @@ export class EmployeeService extends MongoRepository<Employee> {
        * ======================================== */
       this.shopVisitModel.countDocuments({
         employeeId: { $in: employeeIds },
-        createdAt: {
+        checkInTime: {
+          $gte: startOfDay,
+          $lte: endOfDay,
+        },
+        status: ShopVisitStatus.COMPLETED,
+      }),
+
+      /* ========================================
+       * VISITED OUTLETS (UTC)
+       * ======================================== */
+      this.shopVisitModel.distinct('outletId', {
+        employeeId: { $in: employeeIds },
+        checkInTime: {
           $gte: startOfDay,
           $lte: endOfDay,
         },
@@ -751,7 +828,7 @@ export class EmployeeService extends MongoRepository<Employee> {
       /* ========================================
        * PRODUCTIVE CALLS (PC)
        * ======================================== */
-      this.saleModal.distinct('customerId', {
+      this.saleModal.countDocuments({
         employeeId: { $in: employeeIds },
         date: {
           $gte: startOfDay,
@@ -778,16 +855,22 @@ export class EmployeeService extends MongoRepository<Employee> {
      * ===================================================== */
 
     // Productive Calls
-    const pc = productiveCustomers.length;
+    const pc = productiveCalls;
 
-    // Covered Outlets
-    const covered = pc;
+    // Covered % = distinct visited outlets / distinct total outlets.
+    const covered =
+      totalAssignedOutlets > 0
+        ? Number(
+            ((visitedOutletIds.length / totalAssignedOutlets) * 100).toFixed(0),
+          )
+        : 0;
 
     // Productivity %
     const productivity = tc > 0 ? Number(((pc / tc) * 100).toFixed(0)) : 0;
 
     const salesSummary = sales[0] || {
       sc: 0,
+      totalOrders: 0,
       qtyCases: 0,
       qtyTonnage: 0,
     };
@@ -814,8 +897,8 @@ export class EmployeeService extends MongoRepository<Employee> {
           // Total Calls
           tc,
 
-          // Sales Value
-          sc: salesSummary.sc,
+          // Sales Coverage %
+          sc: covered,
           qtyValue: salesSummary.sc,
 
           // Total Cases Sold
@@ -1315,7 +1398,9 @@ export class EmployeeService extends MongoRepository<Employee> {
       });
     };
 
-    const formatAverageTime = (values: Array<Date | string | null | undefined>) => {
+    const formatAverageTime = (
+      values: Array<Date | string | null | undefined>,
+    ) => {
       const minutes = values
         .map((value) => {
           if (!value) return null;
@@ -1333,7 +1418,12 @@ export class EmployeeService extends MongoRepository<Employee> {
         minutes.reduce((sum, value) => sum + value, 0) / minutes.length,
       );
       const averageDate = new Date();
-      averageDate.setHours(Math.floor(averageMinutes / 60), averageMinutes % 60, 0, 0);
+      averageDate.setHours(
+        Math.floor(averageMinutes / 60),
+        averageMinutes % 60,
+        0,
+        0,
+      );
 
       return formatTime(averageDate);
     };
@@ -1352,7 +1442,9 @@ export class EmployeeService extends MongoRepository<Employee> {
       }`;
     };
 
-    const formatAverageDuration = (values: Array<number | null | undefined>) => {
+    const formatAverageDuration = (
+      values: Array<number | null | undefined>,
+    ) => {
       const minutes = values
         .map((value) => Math.max(Math.round(Number(value || 0) / 60000), 0))
         .filter((value) => value > 0);
@@ -1411,8 +1503,7 @@ export class EmployeeService extends MongoRepository<Employee> {
       const totalActivities = Number(activity.totalActivities || 0);
       const tcCount = Number(visits.tc || 0);
       const pcCount = Number(daySales.pc || 0);
-      const hasWorkRecord =
-        totalActivities > 0 || tcCount > 0 || pcCount > 0;
+      const hasWorkRecord = totalActivities > 0 || tcCount > 0 || pcCount > 0;
       const absent = leaveCount > 0 || hasWorkRecord ? 0 : 1;
       const dayStatus =
         leaveCount > 0
@@ -1433,10 +1524,16 @@ export class EmployeeService extends MongoRepository<Employee> {
         absent,
         totalActivities,
         retailingDuration: formatDurationMinutes(
-          Math.max(Math.round(Number(activity.retailingDurationMs || 0) / 60000), 0),
+          Math.max(
+            Math.round(Number(activity.retailingDurationMs || 0) / 60000),
+            0,
+          ),
         ),
         totalDuration: formatDurationMinutes(
-          Math.max(Math.round(Number(activity.totalDurationMs || 0) / 60000), 0),
+          Math.max(
+            Math.round(Number(activity.totalDurationMs || 0) / 60000),
+            0,
+          ),
         ),
         tc: tcCount,
         pc: pcCount,
@@ -1605,7 +1702,10 @@ export class EmployeeService extends MongoRepository<Employee> {
     date?: string,
     startDateParam?: string,
     endDateParam?: string,
-    groupBy: 'PRIMARYCATEGORY' | 'SECONDARYCATEGORY' | 'SKU' = 'PRIMARYCATEGORY',
+    groupBy:
+      | 'PRIMARYCATEGORY'
+      | 'SECONDARYCATEGORY'
+      | 'SKU' = 'PRIMARYCATEGORY',
   ) {
     const employeeId = RequestContextStore.getStore()?.userId;
 
@@ -1630,9 +1730,11 @@ export class EmployeeService extends MongoRepository<Employee> {
       : now;
     endDate.setHours(23, 59, 59, 999);
 
-    const normalizedGroupBy = ['PRIMARYCATEGORY', 'SECONDARYCATEGORY', 'SKU'].includes(
-      groupBy,
-    )
+    const normalizedGroupBy = [
+      'PRIMARYCATEGORY',
+      'SECONDARYCATEGORY',
+      'SKU',
+    ].includes(groupBy)
       ? groupBy
       : 'PRIMARYCATEGORY';
 
@@ -1841,9 +1943,124 @@ export class EmployeeService extends MongoRepository<Employee> {
           cases: Number((item.cases || 0).toFixed(2)),
           growth:
             totalValue > 0
-              ? Number(((Number(item.value || 0) / totalValue) * 100).toFixed(2))
+              ? Number(
+                  ((Number(item.value || 0) / totalValue) * 100).toFixed(2),
+                )
               : 0,
         })),
+      },
+    };
+  }
+
+  async getSalesmanDispatchOrders(
+    date?: string,
+    startDateParam?: string,
+    endDateParam?: string,
+  ) {
+    const employeeId = RequestContextStore.getStore()?.userId;
+
+    if (!employeeId) {
+      throw new NotFoundException(EMPLOYEE.NOT_FOUND);
+    }
+
+    const now = endDateParam
+      ? parseCalendarDate(endDateParam)
+      : date
+        ? parseCalendarDate(date)
+        : new Date();
+    const hasDateRange = Boolean(startDateParam || endDateParam);
+
+    const startDate = startDateParam
+      ? parseCalendarDate(startDateParam)
+      : new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+    startDate.setHours(0, 0, 0, 0);
+
+    const endDate = hasDateRange
+      ? parseCalendarDate(endDateParam || startDateParam!)
+      : now;
+    endDate.setHours(23, 59, 59, 999);
+
+    const orders = await this.saleModal
+      .find({
+        employeeId,
+        status: SaleStatus.COMPLETED,
+        date: {
+          $gte: startDate,
+          $lte: endDate,
+        },
+      })
+      .sort({ date: -1 })
+      .lean();
+
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'Salesman dispatch orders fetched successfully',
+      data: orders.map((order: any) => ({
+        orderId: order.saleId,
+        orderNo: order.saleId,
+        outletName: order.customerName,
+        outlet: order.customerName,
+        invoiceNo: order.saleId,
+        status: 'Pending Dispatch',
+        orderDate: order.date,
+        dispatchDate: null,
+        vehicleNo: order.vanName,
+        cases: Number(order.netCases || order.totalCases || 0),
+        pieces: Number(order.totalPieces || order.totalQty || 0),
+        netValue: Number(order.totalValue || 0),
+      })),
+    };
+  }
+
+  async shareSalesmanReport(
+    type: 'MST' | 'MSR' | 'DSR',
+    params?: {
+      date?: string;
+      startDate?: string;
+      endDate?: string;
+    },
+  ) {
+    const reportType = type === 'MSR' ? 'MST' : type;
+    const summary = await this.getSalesmanPocketAndTarget(
+      params?.date,
+      'cases',
+      params?.startDate,
+      params?.endDate,
+    );
+    const data = summary.data;
+    const startDate = data?.startDate ? new Date(data.startDate) : new Date();
+    const endDate = data?.endDate ? new Date(data.endDate) : startDate;
+    const rangeLabel =
+      formatCalendarDate(startDate) === formatCalendarDate(endDate)
+        ? formatCalendarDate(startDate)
+        : `${formatCalendarDate(startDate)} to ${formatCalendarDate(endDate)}`;
+    const pocket = data?.pocket || {};
+    const target = data?.target || {};
+    const selectedTarget = target?.selected || {};
+
+    const shareText = [
+      `${reportType} Report`,
+      `Period: ${rangeLabel}`,
+      `TC: ${Number(pocket.tc || 0)}`,
+      `PC: ${Number(pocket.pc || 0)}`,
+      `UPC: ${Number(pocket.upc || 0)}`,
+      `UTC: ${Number(pocket.utc || 0)}`,
+      `LPC: ${Number(pocket.lpc || 0)}`,
+      `Cases: ${Number(target.achievedCases || selectedTarget.achieved || 0)}`,
+      `Target: ${Number(target.targetCases || selectedTarget.target || 0)}`,
+      `Achievement: ${Number(
+        target.achievementPercentage || selectedTarget.achievementPercentage || 0,
+      )}%`,
+    ].join('\n');
+
+    return {
+      statusCode: HttpStatus.OK,
+      message: `${reportType} sharing content prepared successfully`,
+      data: {
+        type: reportType,
+        message: shareText,
+        shareText,
+        text: shareText,
       },
     };
   }
@@ -2830,6 +3047,8 @@ export class EmployeeService extends MongoRepository<Employee> {
       managerOrders,
       visitedCustomers,
       productiveCustomers,
+      totalCalls,
+      productiveCalls,
       zeroOrderOutlets,
     ] = await Promise.all([
       /* ======================================
@@ -3007,6 +3226,37 @@ export class EmployeeService extends MongoRepository<Employee> {
         employeeId: {
           $in: employeeIds,
         },
+        outletId: {
+          $in: assignedCustomerIds,
+        },
+        status: ShopVisitStatus.COMPLETED,
+        checkInTime: {
+          $gte: startDate,
+          $lte: endDate,
+        },
+      }),
+
+      /* ======================================
+       * UNIQUE PRODUCTIVE OUTLETS (UPC)
+       * ====================================== */
+      this.saleModal.distinct('customerId', {
+        employeeId: {
+          $in: employeeIds,
+        },
+        status: SaleStatus.COMPLETED,
+        date: {
+          $gte: startDate,
+          $lte: endDate,
+        },
+      }),
+
+      /* ======================================
+       * TOTAL CALLS (TC)
+       * ====================================== */
+      this.shopVisitModel.countDocuments({
+        employeeId: {
+          $in: employeeIds,
+        },
         status: ShopVisitStatus.COMPLETED,
         checkInTime: {
           $gte: startDate,
@@ -3017,7 +3267,7 @@ export class EmployeeService extends MongoRepository<Employee> {
       /* ======================================
        * PRODUCTIVE CALLS (PC)
        * ====================================== */
-      this.saleModal.distinct('customerId', {
+      this.saleModal.countDocuments({
         employeeId: {
           $in: employeeIds,
         },
@@ -3081,13 +3331,16 @@ export class EmployeeService extends MongoRepository<Employee> {
      * ========================================== */
     const tc = visitedCustomers.length;
 
-    const pc = productiveCustomers.length;
+    const upc = productiveCustomers.length;
 
     const zeroOrder = zeroOrderOutlets.length;
 
     const notVisited = Math.max(totalAssignedOutlets - tc, 0);
 
-    const productivity = tc > 0 ? Number(((pc / tc) * 100).toFixed(2)) : 0;
+    const productivity =
+      totalCalls > 0
+        ? Number(((productiveCalls / totalCalls) * 100).toFixed(2))
+        : 0;
 
     const managerOrder = managerOrders?.[0] || {
       orders: 0,
@@ -3127,8 +3380,11 @@ export class EmployeeService extends MongoRepository<Employee> {
 
         outletSummary: {
           upc: {
-            count: pc,
-            percentage: productivity,
+            count: upc,
+            percentage:
+              totalAssignedOutlets > 0
+                ? Number(((upc / totalAssignedOutlets) * 100).toFixed(2))
+                : 0,
           },
 
           zeroOrder: {
@@ -3153,8 +3409,8 @@ export class EmployeeService extends MongoRepository<Employee> {
           },
 
           productivity: {
-            pc,
-            tc,
+            pc: productiveCalls,
+            tc: totalCalls,
             percentage: productivity,
           },
         },
@@ -3199,6 +3455,7 @@ export class EmployeeService extends MongoRepository<Employee> {
           outlets: 0,
           outletsPlanned: 0,
           upc: 0,
+          utc: 0,
           uic: 0,
         },
       };
@@ -3231,6 +3488,19 @@ export class EmployeeService extends MongoRepository<Employee> {
       ),
     ];
 
+    const visitedBeatIds = await this.routeSessionModel.distinct('routeId', {
+      userId: {
+        $in: employeeIds,
+      },
+      routeId: {
+        $in: routeIds,
+      },
+      sessionDate: {
+        $gte: startDate,
+        $lte: endDate,
+      },
+    });
+
     /* ==========================================
      * WAREHOUSES
      * ========================================== */
@@ -3252,23 +3522,20 @@ export class EmployeeService extends MongoRepository<Employee> {
     const outlets = assignedCustomerIds.length;
 
     /* ==========================================
-     * UIC (UNIQUE VISITED OUTLETS)
+     * UTC (UNIQUE VISITED OUTLETS)
      * ========================================== */
-    const visitedCustomerIds = await this.shopVisitModel.distinct(
-      'customerId',
-      {
-        employeeId: {
-          $in: employeeIds,
-        },
-        status: ShopVisitStatus.COMPLETED,
-        createdAt: {
-          $gte: startDate,
-          $lte: endDate,
-        },
+    const visitedOutletIds = await this.shopVisitModel.distinct('outletId', {
+      employeeId: {
+        $in: employeeIds,
       },
-    );
+      status: ShopVisitStatus.COMPLETED,
+      checkInTime: {
+        $gte: startDate,
+        $lte: endDate,
+      },
+    });
 
-    const uic = visitedCustomerIds.length;
+    const utc = visitedOutletIds.length;
 
     /* ==========================================
      * UPC (UNIQUE PRODUCTIVE OUTLETS)
@@ -3289,12 +3556,16 @@ export class EmployeeService extends MongoRepository<Employee> {
     /* ==========================================
      * OUTLETS PLANNED
      * ========================================== */
-    const outletsPlanned = await this.routeCustomerMappingModel.countDocuments({
-      routeId: {
-        $in: routeIds,
-      },
-      status: RouteCustomerMappingStatus.ACTIVE,
-    });
+    const plannedCustomerIds = visitedBeatIds.length
+      ? await this.routeCustomerMappingModel.distinct('customerId', {
+          routeId: {
+            $in: visitedBeatIds,
+          },
+          status: RouteCustomerMappingStatus.ACTIVE,
+        })
+      : [];
+
+    const outletsPlanned = plannedCustomerIds.length;
 
     return {
       statusCode: HttpStatus.OK,
@@ -3305,7 +3576,8 @@ export class EmployeeService extends MongoRepository<Employee> {
         outlets,
         outletsPlanned,
         upc,
-        uic,
+        utc,
+        uic: upc,
       },
     };
   }
@@ -3343,8 +3615,12 @@ export class EmployeeService extends MongoRepository<Employee> {
         message: 'Beat-O-Meter fetched successfully',
         data: {
           totalOutlets: 0,
-          visitedOutlets: 0,
-          orderedOutlets: 0,
+          summary: {
+            visitedOutlets: 0,
+            orderedOutlets: 0,
+            visitedPercentage: 0,
+            orderedPercentage: 0,
+          },
           outletTypes: [],
         },
       };
@@ -3419,16 +3695,45 @@ export class EmployeeService extends MongoRepository<Employee> {
     );
 
     /* ==========================================
+     * VISIT HISTORY
+     * ========================================== */
+    const visitHistory = await this.shopVisitModel.aggregate([
+      {
+        $match: {
+          outletId: {
+            $in: customerIds,
+          },
+          status: ShopVisitStatus.COMPLETED,
+        },
+      },
+      {
+        $group: {
+          _id: '$outletId',
+          lastVisitedAt: {
+            $max: '$checkInTime',
+          },
+        },
+      },
+    ]);
+
+    const lastVisitMap = new Map(
+      visitHistory.map((item) => [item._id, item.lastVisitedAt]),
+    );
+
+    /* ==========================================
      * MTD VISITED
      * ========================================== */
     const visitedCustomerIds = await this.shopVisitModel.distinct(
-      'customerId',
+      'outletId',
       {
         employeeId: {
           $in: employeeIds,
         },
+        outletId: {
+          $in: customerIds,
+        },
         status: ShopVisitStatus.COMPLETED,
-        createdAt: {
+        checkInTime: {
           $gte: startDate,
           $lte: endDate,
         },
@@ -3443,6 +3748,9 @@ export class EmployeeService extends MongoRepository<Employee> {
     const orderedCustomerIds = await this.saleModal.distinct('customerId', {
       employeeId: {
         $in: employeeIds,
+      },
+      customerId: {
+        $in: customerIds,
       },
       status: SaleStatus.COMPLETED,
       date: {
@@ -3470,15 +3778,23 @@ export class EmployeeService extends MongoRepository<Employee> {
 
       const lastOrder = lastOrderMap.get(customerId);
 
-      const lastVisited = customer.lastVisitedAt;
+      const lastVisited = lastVisitMap.get(customerId);
 
-      const ageDays = Math.floor(
-        (now.getTime() - customer.createdAt.getTime()) / 86400000,
-      );
+      const createdAt = customer.createdAt ? new Date(customer.createdAt) : null;
+      const ageDays = createdAt
+        ? Math.floor((now.getTime() - createdAt.getTime()) / 86400000)
+        : Number.POSITIVE_INFINITY;
 
       if (ageDays <= 30) {
         buckets.NEW.push(customerId);
-        continue;
+      }
+
+      if (customer.status === CustomerStatus.ACTIVE) {
+        buckets.ACTIVE.push(customerId);
+      }
+
+      if (!lastOrder) {
+        buckets.NO_ORDER.push(customerId);
       }
 
       if (!lastVisited) {
@@ -3487,7 +3803,6 @@ export class EmployeeService extends MongoRepository<Employee> {
       }
 
       if (!lastOrder) {
-        buckets.NO_ORDER.push(customerId);
         continue;
       }
 
@@ -3495,12 +3810,10 @@ export class EmployeeService extends MongoRepository<Employee> {
         (now.getTime() - new Date(lastOrder).getTime()) / 86400000,
       );
 
-      if (orderAge <= 30) {
-        buckets.ACTIVE.push(customerId);
-      } else if (orderAge <= 60) {
-        buckets.TO_BE_DORMANT.push(customerId);
-      } else {
+      if (orderAge >= 60) {
         buckets.DORMANT.push(customerId);
+      } else if (orderAge >= 45) {
+        buckets.TO_BE_DORMANT.push(customerId);
       }
     }
 
@@ -3516,13 +3829,13 @@ export class EmployeeService extends MongoRepository<Employee> {
 
         total,
 
-        visited: {
+        mtdVisited: {
           count: visited,
           percentage:
             total > 0 ? Number(((visited / total) * 100).toFixed(1)) : 0,
         },
 
-        ordered: {
+        mtdOrder: {
           count: ordered,
           percentage:
             total > 0 ? Number(((ordered / total) * 100).toFixed(1)) : 0,
@@ -3542,19 +3855,18 @@ export class EmployeeService extends MongoRepository<Employee> {
       data: {
         totalOutlets,
 
-        visitedOutlets,
-
-        orderedOutlets,
-
-        visitedPercentage:
-          totalOutlets > 0
-            ? Number(((visitedOutlets / totalOutlets) * 100).toFixed(1))
-            : 0,
-
-        orderedPercentage:
-          totalOutlets > 0
-            ? Number(((orderedOutlets / totalOutlets) * 100).toFixed(1))
-            : 0,
+        summary: {
+          visitedOutlets,
+          orderedOutlets,
+          visitedPercentage:
+            totalOutlets > 0
+              ? Number(((visitedOutlets / totalOutlets) * 100).toFixed(1))
+              : 0,
+          orderedPercentage:
+            totalOutlets > 0
+              ? Number(((orderedOutlets / totalOutlets) * 100).toFixed(1))
+              : 0,
+        },
 
         outletTypes: [
           buildRow('New', buckets.NEW),
@@ -3596,17 +3908,42 @@ export class EmployeeService extends MongoRepository<Employee> {
     const result = await Promise.all(
       employees.map(async (employee) => {
         /* ==========================================
-         * CURRENT ACTIVITY
+         * DATE ACTIVITY
          * ========================================== */
-        const activity = await this.activityModel
-          .findOne({
-            userId: employee.employeeId,
-            status: ActivityStatus.ACTIVE,
-          })
-          .sort({
-            startTime: -1,
-          })
-          .lean();
+        const [activity, leave] = await Promise.all([
+          this.activityModel
+            .findOne({
+              userId: employee.employeeId,
+              status: {
+                $in: [ActivityStatus.ACTIVE, ActivityStatus.COMPLETED],
+              },
+              startTime: {
+                $gte: startOfDay,
+                $lte: endOfDay,
+              },
+            })
+            .sort({
+              startTime: -1,
+            })
+            .lean(),
+          this.leaveModel
+            .findOne({
+              userId: employee.employeeId,
+              status: LeaveStatus.COMPLETED,
+              createdAt: {
+                $gte: startOfDay,
+                $lte: endOfDay,
+              },
+            })
+            .sort({
+              createdAt: -1,
+            })
+            .lean(),
+        ]);
+        const activityName = activity?.name || (leave ? 'Leave' : 'Offline');
+        const isOfficialWork =
+          activityName === 'Official Work' || activityName === 'Office Work';
+        const isRetailing = activityName === 'Retailing';
 
         /* ==========================================
          * USER VAN
@@ -3683,7 +4020,7 @@ export class EmployeeService extends MongoRepository<Employee> {
         /* ==========================================
          * TC
          * ========================================== */
-        const tcCustomers = await this.shopVisitModel.distinct('outletId', {
+        const tcCalls = await this.shopVisitModel.countDocuments({
           employeeId: employee.employeeId,
           status: ShopVisitStatus.COMPLETED,
           checkInTime: {
@@ -3695,7 +4032,7 @@ export class EmployeeService extends MongoRepository<Employee> {
         /* ==========================================
          * PC
          * ========================================== */
-        const pcCustomers = await this.saleModal.distinct('customerId', {
+        const pcCalls = await this.saleModal.countDocuments({
           employeeId: employee.employeeId,
           status: SaleStatus.COMPLETED,
           date: {
@@ -3706,36 +4043,30 @@ export class EmployeeService extends MongoRepository<Employee> {
 
         /* ==========================================
          * LPC
-         * LPC = Total Pieces / Productive Calls
+         * LPC = Order item lines / Productive Calls
          * ========================================== */
-        const salesSummary = await this.saleModal.aggregate([
-          {
-            $match: {
-              employeeId: employee.employeeId,
-              status: SaleStatus.COMPLETED,
-              date: {
-                $gte: startOfDay,
-                $lte: endOfDay,
-              },
-            },
+        const saleIds = await this.saleModal.distinct('saleId', {
+          employeeId: employee.employeeId,
+          status: SaleStatus.COMPLETED,
+          date: {
+            $gte: startOfDay,
+            $lte: endOfDay,
           },
-          {
-            $group: {
-              _id: null,
-              totalPieces: {
-                $sum: '$totalPieces',
+        });
+
+        const orderItemLines = saleIds.length
+          ? await this.saleItemModel.countDocuments({
+              saleId: {
+                $in: saleIds,
               },
-            },
-          },
-        ]);
+            })
+          : 0;
 
-        const tc = tcCustomers.length;
+        const tc = tcCalls;
 
-        const pc = pcCustomers.length;
+        const pc = pcCalls;
 
-        const totalPieces = salesSummary?.[0]?.totalPieces || 0;
-
-        const lpc = pc > 0 ? Number((totalPieces / pc).toFixed(1)) : 0;
+        const lpc = pc > 0 ? Number((orderItemLines / pc).toFixed(1)) : 0;
 
         return {
           employeeId: employee.employeeId,
@@ -3745,13 +4076,19 @@ export class EmployeeService extends MongoRepository<Employee> {
           mobile: employee.mobile || '',
 
           activity: {
-            name: activity?.name || 'Offline',
-            color: activity?.name === 'Official Work' ? '#6D28D9' : '#22C55E',
+            name: activityName,
+            color: isOfficialWork
+              ? '#6D28D9'
+              : isRetailing
+                ? '#22C55E'
+                : leave
+                  ? '#F59E0B'
+                  : '#EF4444',
           },
 
-          routeName: activity?.name === 'Official Work' ? 'Admin' : routeName,
+          routeName: isOfficialWork ? 'Admin' : isRetailing ? routeName : '-',
 
-          location: activity?.description || '',
+          location: isRetailing || isOfficialWork ? activity?.description || '' : '',
 
           summary: {
             firstCallTime: firstCall?.checkInTime || null,
@@ -3777,7 +4114,9 @@ export class EmployeeService extends MongoRepository<Employee> {
 
   async getManagerUserTimeline(query: { employeeId: string; date?: string }) {
     const managerId = RequestContextStore.getStore()?.userId;
-    const selectedDate = query?.date ? parseCalendarDate(query.date) : new Date();
+    const selectedDate = query?.date
+      ? parseCalendarDate(query.date)
+      : new Date();
     const startOfDay = new Date(selectedDate);
     startOfDay.setHours(0, 0, 0, 0);
     const endOfDay = new Date(selectedDate);
@@ -4117,6 +4456,232 @@ export class EmployeeService extends MongoRepository<Employee> {
         dayStartImageUrl: workSession?.dayStartImageUrl || null,
         dayStartImageMediaId: workSession?.dayStartImageMediaId || null,
         activities: data,
+      },
+    };
+  }
+
+  private getDayRange(date?: string) {
+    const selectedDate = date ? parseCalendarDate(date) : new Date();
+    const startOfDay = new Date(selectedDate);
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(selectedDate);
+    endOfDay.setHours(23, 59, 59, 999);
+
+    return { selectedDate, startOfDay, endOfDay };
+  }
+
+  private getMonthRange(date?: string) {
+    const selectedDate = date ? parseCalendarDate(date) : new Date();
+    const startOfMonth = new Date(
+      selectedDate.getFullYear(),
+      selectedDate.getMonth(),
+      1,
+    );
+    startOfMonth.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(selectedDate);
+    endOfDay.setHours(23, 59, 59, 999);
+
+    return { selectedDate, startOfMonth, endOfDay };
+  }
+
+  private async getManagedEmployee(employeeId: string) {
+    const managerId = RequestContextStore.getStore()?.userId;
+    const employee = await this.findOne({
+      employeeId,
+      status: UserStatus.ACTIVE,
+      $or: [{ reportsTo: managerId }, { hierarchyPath: managerId }],
+    });
+
+    if (!employee) throw new NotFoundException(EMPLOYEE.NOT_FOUND);
+
+    return employee;
+  }
+
+  private async getAssignedBeatCustomers(
+    employeeId: string,
+    startDate: Date,
+    endDate: Date,
+  ) {
+    const vans = await this.vanModel
+      .find(
+        {
+          associatedUsers: employeeId,
+          status: VanStatus.ACTIVE,
+        },
+        {
+          associatedRoutes: 1,
+        },
+      )
+      .lean();
+
+    const routeIds = [
+      ...new Set(
+        vans.flatMap((van: any) =>
+          (van.associatedRoutes || [])
+            .filter((route: any) => {
+              const fromDate = route.fromDate ? new Date(route.fromDate) : null;
+              const toDate = route.toDate ? new Date(route.toDate) : null;
+
+              return (
+                route.routeId &&
+                (!fromDate || fromDate <= endDate) &&
+                (!toDate || toDate >= startDate)
+              );
+            })
+            .map((route: any) => route.routeId),
+        ),
+      ),
+    ];
+
+    if (!routeIds.length) return [];
+
+    return this.routeCustomerMappingModel
+      .find({
+        routeId: { $in: routeIds },
+        status: RouteCustomerMappingStatus.ACTIVE,
+        effectiveFrom: { $lte: endDate },
+        $or: [
+          { effectiveTo: null },
+          { effectiveTo: { $exists: false } },
+          { effectiveTo: { $gte: startDate } },
+        ],
+      })
+      .sort({ sequence: 1 })
+      .lean();
+  }
+
+  async getManagerUserMtdSummary(query: { employeeId: string; date?: string }) {
+    const employee = await this.getManagedEmployee(query.employeeId);
+    const { selectedDate, startOfMonth, endOfDay } = this.getMonthRange(
+      query.date,
+    );
+
+    const [assignedBeatCustomers, visitedOutletIds, billedOutletIds] =
+      await Promise.all([
+        this.getAssignedBeatCustomers(employee.employeeId, startOfMonth, endOfDay),
+        this.shopVisitModel.distinct('outletId', {
+          employeeId: employee.employeeId,
+          checkInTime: {
+            $gte: startOfMonth,
+            $lte: endOfDay,
+          },
+          status: ShopVisitStatus.COMPLETED,
+        }),
+        this.saleModal.distinct('customerId', {
+          employeeId: employee.employeeId,
+          date: {
+            $gte: startOfMonth,
+            $lte: endOfDay,
+          },
+          status: SaleStatus.COMPLETED,
+        }),
+      ]);
+
+    const visitedBeatOutletCount = new Set(
+      assignedBeatCustomers.map((mapping: any) => mapping.customerId),
+    ).size;
+    const utc = visitedOutletIds.length;
+    const upc = billedOutletIds.length;
+    const zeroOrder = Math.max(utc - upc, 0);
+    const notVisited = Math.max(visitedBeatOutletCount - utc, 0);
+    const total = utc + upc + zeroOrder + notVisited;
+
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'Manager user MTD summary fetched successfully',
+      data: {
+        employeeId: employee.employeeId,
+        employeeName: employee.name,
+        date: formatCalendarDate(selectedDate),
+        utc,
+        upc,
+        zeroOrder,
+        notVisited,
+        total,
+      },
+    };
+  }
+
+  async getManagerUserRoutePlan(query: { employeeId: string; date?: string }) {
+    const employee = await this.getManagedEmployee(query.employeeId);
+    const { selectedDate, startOfDay, endOfDay } = this.getDayRange(query.date);
+    const assignedBeatCustomers = await this.getAssignedBeatCustomers(
+      employee.employeeId,
+      startOfDay,
+      endOfDay,
+    );
+    const customerIds = [
+      ...new Set(assignedBeatCustomers.map((mapping: any) => mapping.customerId)),
+    ];
+
+    const [customers, visitedOutletIds, billedOutletIds] = await Promise.all([
+      customerIds.length
+        ? this.customerModel
+            .find(
+              { customerId: { $in: customerIds } },
+              { customerId: 1, name: 1, customerTypeId: 1 },
+            )
+            .lean()
+        : [],
+      customerIds.length
+        ? this.shopVisitModel.distinct('outletId', {
+            employeeId: employee.employeeId,
+            outletId: { $in: customerIds },
+            checkInTime: {
+              $gte: startOfDay,
+              $lte: endOfDay,
+            },
+            status: ShopVisitStatus.COMPLETED,
+          })
+        : [],
+      customerIds.length
+        ? this.saleModal.distinct('customerId', {
+            employeeId: employee.employeeId,
+            customerId: { $in: customerIds },
+            date: {
+              $gte: startOfDay,
+              $lte: endOfDay,
+            },
+            status: SaleStatus.COMPLETED,
+          })
+        : [],
+    ]);
+
+    const customersById = new Map<string, any>(
+      customers.map((customer: any) => [customer.customerId, customer] as [string, any]),
+    );
+    const visited = new Set(visitedOutletIds);
+    const billed = new Set(billedOutletIds);
+    const seen = new Set<string>();
+    const stops = assignedBeatCustomers
+      .filter((mapping: any) => {
+        if (!mapping.customerId || seen.has(mapping.customerId)) return false;
+        seen.add(mapping.customerId);
+        return true;
+      })
+      .map((mapping: any, index: number) => {
+        const customer = customersById.get(mapping.customerId);
+        const isVisited = visited.has(mapping.customerId);
+        const isBilled = billed.has(mapping.customerId);
+
+        return {
+          id: mapping.mappingId || mapping.customerId,
+          outletId: mapping.customerId,
+          name: customer?.name || mapping.customerId,
+          time: `Stop ${index + 1}`,
+          status: isBilled ? 'completed' : isVisited ? 'missed' : 'pending',
+          type: customer?.customerTypeId || 'Outlet',
+        };
+      });
+
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'Manager user route plan fetched successfully',
+      data: {
+        employeeId: employee.employeeId,
+        employeeName: employee.name,
+        date: formatCalendarDate(selectedDate),
+        stops,
       },
     };
   }

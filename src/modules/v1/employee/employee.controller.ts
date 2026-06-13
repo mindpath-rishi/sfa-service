@@ -290,6 +290,24 @@ export class EmployeeController {
     return this.employeeService.getManagerUserTimeline(query);
   }
 
+  @Get('/manager/user-mtd-summary')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Get manager field user MTD outlet summary' })
+  async getManagerUserMtdSummary(
+    @Query() query: { employeeId: string; date?: string },
+  ) {
+    return this.employeeService.getManagerUserMtdSummary(query);
+  }
+
+  @Get('/manager/user-route-plan')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Get manager field user route plan' })
+  async getManagerUserRoutePlan(
+    @Query() query: { employeeId: string; date?: string },
+  ) {
+    return this.employeeService.getManagerUserRoutePlan(query);
+  }
+
   @Get('/salesman/my-pocket-target')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Get salesman pocket and target' })
@@ -413,6 +431,83 @@ export class EmployeeController {
       query?.endDate,
       query?.groupBy,
     );
+  }
+
+  @Get('/salesman/dispatch-order')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Get salesman dispatch orders' })
+  @ApiSuccessResponse(
+    [
+      {
+        orderId: 'SALE-12345678',
+        orderNo: 'SALE-12345678',
+        outletName: 'ABC Store',
+        invoiceNo: 'SALE-12345678',
+        status: 'Pending Dispatch',
+        orderDate: '2026-06-13',
+        vehicleNo: 'Van 01',
+        cases: 12.5,
+        pieces: 120,
+        netValue: 2500,
+      },
+    ],
+    EMPLOYEE.FETCHED,
+  )
+  async getSalesmanDispatchOrders(
+    @Query()
+    query: {
+      date?: string;
+      startDate?: string;
+      endDate?: string;
+    },
+  ) {
+    return this.employeeService.getSalesmanDispatchOrders(
+      query?.date,
+      query?.startDate,
+      query?.endDate,
+    );
+  }
+
+  @Post('/salesman/share-mst')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Prepare salesman MST sharing content' })
+  async shareSalesmanMST(
+    @Body()
+    body: {
+      date?: string;
+      startDate?: string;
+      endDate?: string;
+    },
+  ) {
+    return this.employeeService.shareSalesmanReport('MST', body);
+  }
+
+  @Post('/salesman/share-dsr')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Prepare salesman DSR sharing content' })
+  async shareSalesmanDSR(
+    @Body()
+    body: {
+      date?: string;
+      startDate?: string;
+      endDate?: string;
+    },
+  ) {
+    return this.employeeService.shareSalesmanReport('DSR', body);
+  }
+
+  @Post('/salesman/share-msr')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Prepare salesman MSR sharing content' })
+  async shareSalesmanMSR(
+    @Body()
+    body: {
+      date?: string;
+      startDate?: string;
+      endDate?: string;
+    },
+  ) {
+    return this.employeeService.shareSalesmanReport('MSR', body);
   }
 
   /**

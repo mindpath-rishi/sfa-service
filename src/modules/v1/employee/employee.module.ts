@@ -54,6 +54,10 @@ import {
   WorkSession,
   WorkSessionSchema,
 } from 'src/core/database/mongo/schema/work-session.schema';
+import {
+  RouteSession,
+  RouteSessionSchema,
+} from 'src/core/database/mongo/schema/route-session.schema';
 
 @Module({
   imports: [
@@ -72,6 +76,7 @@ import {
       { name: NonSale.name, schema: NonSaleSchema },
       { name: SaleItem.name, schema: SaleItemSchema },
       { name: WorkSession.name, schema: WorkSessionSchema },
+      { name: RouteSession.name, schema: RouteSessionSchema },
     ]),
     UserModule,
   ],
