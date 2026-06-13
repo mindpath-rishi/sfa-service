@@ -13,9 +13,11 @@ export const NotificationProvider: Provider = {
       return existingApp;
     }
 
-    const serviceAccount = require(
-      path.join(__dirname, '../../../firebase-admin.json'),
-    );
+    const filePath = path.resolve(process.cwd(), 'firebase-admin.json');
+
+    console.log(filePath);
+
+    const serviceAccount = require(filePath);
 
     return admin.initializeApp({
       credential: admin.credential.cert(serviceAccount),
