@@ -250,29 +250,173 @@ export class CustomerService extends MongoRepository<Customer> {
   //   };
   // }
 
+  // async findByCustomerId(customerId: string) {
+  //   const doc = await this.findOne({ customerId }, { lean: true });
+
+  //   if (!doc) throw new NotFoundException(CUSTOMER.NOT_FOUND);
+
+  //   // Get current date range for MTD (Month to Date)
+  //   const now = new Date();
+  //   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  //   const monthToDateEnd = now;
+
+  //   // Get last 5 completed orders
+  //   const last5Orders: any = await this.saleModel
+  //     .find({
+  //       customerId,
+  //       status: 'COMPLETED',
+  //       isDeleted: false,
+  //     })
+  //     .sort({ createdAt: -1 })
+  //     .limit(5)
+  //     .lean();
+
+  //   // Calculate MTD order value and quantity
+  //   const mtdOrders: any = await this.saleModel.aggregate([
+  //     {
+  //       $match: {
+  //         customerId,
+  //         status: 'COMPLETED',
+  //         isDeleted: false,
+  //         date: {
+  //           $gte: startOfMonth,
+  //           $lte: monthToDateEnd,
+  //         },
+  //       },
+  //     },
+  //     {
+  //       $group: {
+  //         _id: null,
+  //         mtdOrderValue: { $sum: '$totalValue' },
+  //         mtdTotalCases: {
+  //           $sum: {
+  //             $ifNull: ['$netCases', 0],
+  //           },
+  //         },
+  //         mtdOrderCount: { $sum: 1 },
+  //       },
+  //     },
+  //   ]);
+
+  //   // Calculate last 5 orders statistics
+  //   let avgOrderValue = 0;
+  //   let avgOrderQty = 0;
+  //   let avgLPC = 0;
+
+  //   if (last5Orders.length > 0) {
+  //     const pc = last5Orders.length;
+  //     const totalValue = last5Orders.reduce(
+  //       (sum, order: any) => sum + (order.totalValue || 0),
+  //       0,
+  //     );
+  //     const totalCasesSold = last5Orders.reduce(
+  //       (sum, order) => sum + (order.totalCases || order.netCases || 0),
+  //       0,
+  //     );
+
+  //     avgOrderValue = totalValue / pc;
+  //     avgOrderQty = totalCasesSold / pc;
+  //     avgLPC = totalCasesSold / pc;
+  //   }
+
+  //   // Get last order date
+  //   const lastOrder = await this.saleModel
+  //     .findOne({ customerId, status: 'COMPLETED', isDeleted: false })
+  //     .sort({ date: -1 })
+  //     .lean();
+
+  //   // Get last visit date from visits collection (assuming you have a visit model)
+  //   const lastVisit = await this.shopVisitModel
+  //     .findOne({ customerId, status: 'COMPLETED' })
+  //     .sort({ checkInTime: -1 })
+  //     .lean();
+
+  //   // Prepare summary data
+  //   const summary = {
+  //     mtd: {
+  //       orderValue: mtdOrders[0]?.mtdOrderValue || 0,
+  //       orderQuantity: mtdOrders[0]?.mtdTotalCases || 0,
+  //       orderCount: mtdOrders[0]?.mtdOrderCount || 0,
+  //     },
+  //     last5Orders: {
+  //       avgOrderValue: parseFloat(avgOrderValue.toFixed(2)),
+  //       avgOrderQuantity: parseFloat(avgOrderQty.toFixed(2)),
+  //       avgLPC: parseFloat(avgLPC.toFixed(2)),
+  //       orders: last5Orders.map((order) => ({
+  //         saleId: order.saleId,
+  //         date: order.date,
+  //         totalValue: order.totalValue,
+  //         totalCases: order.totalCases,
+  //         totalPieces: order.totalPieces,
+  //         totalLPC: order.totalLpc || order.totalLPC || 0,
+  //       })),
+  //     },
+  //     lastOrderDate: lastOrder?.date || null,
+  //     lastVisitDate: lastVisit?.checkInTime || null,
+  //   };
+
+  //   return {
+  //     statusCode: HttpStatus.OK,
+  //     message: CUSTOMER.FETCHED,
+  //     data: {
+  //       ...doc,
+  //       summary,
+  //     },
+  //   };
+  // }
+
   async findByCustomerId(customerId: string) {
     const doc = await this.findOne({ customerId }, { lean: true });
 
-    if (!doc) throw new NotFoundException(CUSTOMER.NOT_FOUND);
+    if (!doc) {
+      throw new NotFoundException(CUSTOMER.NOT_FOUND);
+    }
 
-    // Get current date range for MTD (Month to Date)
+    // MTD Date Range
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const monthToDateEnd = now;
 
-    // Get last 5 completed orders
-    const last5Orders: any = await this.saleModel
-      .find({
-        customerId,
-        status: 'COMPLETED',
-        isDeleted: false,
-      })
-      .sort({ createdAt: -1 })
-      .limit(5)
-      .lean();
+    // MTD Summary
+    // const mtdSummary: any[] = await this.saleModel.aggregate([
+    //   {
+    //     $match: {
+    //       customerId,
+    //       status: 'COMPLETED',
+    //       isDeleted: false,
+    //       date: {
+    //         $gte: startOfMonth,
+    //         $lte: now,
+    //       },
+    //     },
+    //   },
+    //   {
+    //     $group: {
+    //       _id: null,
+    //       orderValue: {
+    //         $sum: {
+    //           $ifNull: ['$totalValue', 0],
+    //         },
+    //       },
+    //       orderQuantity: {
+    //         $sum: {
+    //           $ifNull: ['$netCases', 0],
+    //         },
+    //       },
+    //       orderCount: {
+    //         $sum: 1,
+    //       },
+    //       totalLPC: {
+    //         $sum: {
+    //           $size: {
+    //             $ifNull: ['$items', []],
+    //           },
+    //         },
+    //       },
+    //     },
+    //   },
+    // ]);
 
-    // Calculate MTD order value and quantity
-    const mtdOrders: any = await this.saleModel.aggregate([
+    const mtdSummary = await this.saleModel.aggregate([
       {
         $match: {
           customerId,
@@ -280,77 +424,82 @@ export class CustomerService extends MongoRepository<Customer> {
           isDeleted: false,
           date: {
             $gte: startOfMonth,
-            $lte: monthToDateEnd,
+            $lte: now,
+          },
+        },
+      },
+      {
+        $lookup: {
+          from: 'sale_items',
+          localField: 'saleId',
+          foreignField: 'saleId',
+          as: 'items',
+        },
+      },
+      {
+        $project: {
+          totalValue: 1,
+          netCases: 1,
+          lpc: {
+            $size: '$items',
           },
         },
       },
       {
         $group: {
           _id: null,
-          mtdOrderValue: { $sum: '$totalValue' },
-          mtdTotalCases: {
-            $sum: {
-              $ifNull: ['$netCases', 0],
-            },
-          },
-          mtdOrderCount: { $sum: 1 },
+          orderValue: { $sum: '$totalValue' },
+          orderQuantity: { $sum: '$netCases' },
+          orderCount: { $sum: 1 },
+          totalLPC: { $sum: '$lpc' },
         },
       },
     ]);
 
-    // Calculate last 5 orders statistics
-    let avgOrderValue = 0;
-    let avgOrderQty = 0;
-    let avgLPC = 0;
+    const mtd = mtdSummary[0] || {};
 
-    if (last5Orders.length > 0) {
-      const pc = last5Orders.length;
-      const totalValue = last5Orders.reduce(
-        (sum, order: any) => sum + (order.totalValue || 0),
-        0,
-      );
-      const totalCasesSold = last5Orders.reduce(
-        (sum, order) => sum + (order.totalCases || order.netCases || 0),
-        0,
-      );
+    const orderValue = mtd.orderValue || 0;
+    const orderQuantity = mtd.orderQuantity || 0;
+    const orderCount = mtd.orderCount || 0;
+    const totalLPC = mtd.totalLPC || 0;
 
-      avgOrderValue = totalValue / pc;
-      avgOrderQty = totalCasesSold / pc;
-      avgLPC = totalCasesSold / pc;
-    }
-
-    // Get last order date
+    // Last Order Date
     const lastOrder = await this.saleModel
-      .findOne({ customerId, status: 'COMPLETED', isDeleted: false })
+      .findOne({
+        customerId,
+        status: 'COMPLETED',
+        isDeleted: false,
+      })
       .sort({ date: -1 })
       .lean();
 
-    // Get last visit date from visits collection (assuming you have a visit model)
+    // Last Visit Date
     const lastVisit = await this.shopVisitModel
-      .findOne({ customerId, status: 'COMPLETED' })
+      .findOne({
+        customerId,
+        status: 'COMPLETED',
+      })
       .sort({ checkInTime: -1 })
       .lean();
 
-    // Prepare summary data
     const summary = {
       mtd: {
-        orderValue: mtdOrders[0]?.mtdOrderValue || 0,
-        orderQuantity: mtdOrders[0]?.mtdTotalCases || 0,
-        orderCount: mtdOrders[0]?.mtdOrderCount || 0,
+        orderValue,
+        orderQuantity,
+        orderCount,
+
+        avgOrderValue:
+          orderCount > 0 ? parseFloat((orderValue / orderCount).toFixed(2)) : 0,
+
+        avgOrderQuantity:
+          orderCount > 0
+            ? parseFloat((orderQuantity / orderCount).toFixed(2))
+            : 0,
+
+        avgLPC:
+          orderCount > 0 ? parseFloat((totalLPC / orderCount).toFixed(2)) : 0,
       },
-      last5Orders: {
-        avgOrderValue: parseFloat(avgOrderValue.toFixed(2)),
-        avgOrderQuantity: parseFloat(avgOrderQty.toFixed(2)),
-        avgLPC: parseFloat(avgLPC.toFixed(2)),
-        orders: last5Orders.map((order) => ({
-          saleId: order.saleId,
-          date: order.date,
-          totalValue: order.totalValue,
-          totalCases: order.totalCases,
-          totalPieces: order.totalPieces,
-          totalLPC: order.totalLpc || order.totalLPC || 0,
-        })),
-      },
+
       lastOrderDate: lastOrder?.date || null,
       lastVisitDate: lastVisit?.checkInTime || null,
     };

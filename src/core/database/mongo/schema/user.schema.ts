@@ -96,16 +96,10 @@ export const UserSchema = SchemaFactory.createForClass(User);
  * ====================================================== */
 
 // 🔐 Same loginId cannot exist twice within same agent
-UserSchema.index(
-  { loginId: 1, agent: 1 },
-  { unique: true },
-);
+UserSchema.index({ loginId: 1, agent: 1 }, { unique: true });
 
 // 🔐 Same mobile cannot exist twice within same agent
-UserSchema.index(
-  { mobile: 1, agent: 1 },
-  { unique: true, sparse: true },
-);
+UserSchema.index({ mobile: 1, agent: 1 }, { unique: true, sparse: true });
 
 // 🔐 Same email cannot exist twice within same agent
 UserSchema.index(
@@ -116,5 +110,3 @@ UserSchema.index(
     sparse: true,
   },
 );
-
-

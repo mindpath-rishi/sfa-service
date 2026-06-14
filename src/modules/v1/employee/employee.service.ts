@@ -983,7 +983,12 @@ export class EmployeeService extends MongoRepository<Employee> {
 
       // 💰 Payment Collections (Today)
       this.paymentModel.aggregate([
-        { $match: { employeeId, createdAt: { $gte: startOfDay, $lte: endOfDay } } },
+        {
+          $match: {
+            employeeId,
+            createdAt: { $gte: startOfDay, $lte: endOfDay },
+          },
+        },
         {
           $group: {
             _id: null,
@@ -2120,7 +2125,9 @@ export class EmployeeService extends MongoRepository<Employee> {
       `Cases: ${Number(target.achievedCases || selectedTarget.achieved || 0)}`,
       `Target: ${Number(target.targetCases || selectedTarget.target || 0)}`,
       `Achievement: ${Number(
-        target.achievementPercentage || selectedTarget.achievementPercentage || 0,
+        target.achievementPercentage ||
+          selectedTarget.achievementPercentage ||
+          0,
       )}%`,
     ].join('\n');
 
@@ -3489,6 +3496,174 @@ export class EmployeeService extends MongoRepository<Employee> {
     };
   }
 
+  // async getTeamCoverage() {
+  //   const managerId = RequestContextStore.getStore()?.userId;
+
+  //   const now = new Date();
+
+  //   const startDate = new Date(
+  //     now.getFullYear(),
+  //     now.getMonth(),
+  //     1,
+  //     0,
+  //     0,
+  //     0,
+  //     0,
+  //   );
+
+  //   const endDate = now;
+
+  //   /* ==========================================
+  //    * TEAM MEMBERS
+  //    * ========================================== */
+  //   const employees = await this.find({
+  //     $or: [{ reportsTo: managerId }, { hierarchyPath: managerId }],
+  //     status: UserStatus.ACTIVE,
+  //   });
+
+  //   const employeeIds = employees.map((employee) => employee.employeeId);
+
+  //   if (!employeeIds.length) {
+  //     return {
+  //       statusCode: HttpStatus.OK,
+  //       message: 'Team coverage fetched successfully',
+  //       data: {
+  //         users: 0,
+  //         vans: 0,
+  //         warehouse: 0,
+  //         routes: 0,
+  //         outlets: 0,
+  //         outletsPlanned: 0,
+  //         upc: 0,
+  //         utc: 0,
+  //         uic: 0,
+  //       },
+  //     };
+  //   }
+
+  //   /* ==========================================
+  //    * TEAM VANS
+  //    * ========================================== */
+  //   const vans = await this.vanModel.find(
+  //     {
+  //       associatedUsers: {
+  //         $in: employeeIds,
+  //       },
+  //       status: VanStatus.ACTIVE,
+  //     },
+  //     {
+  //       associatedRoutes: 1,
+  //       warehouseId: 1,
+  //     },
+  //   );
+
+  //   /* ==========================================
+  //    * ROUTES
+  //    * ========================================== */
+  //   const routeIds = [
+  //     ...new Set(
+  //       vans.flatMap((van) =>
+  //         (van.associatedRoutes || []).map((route) => route.routeId),
+  //       ),
+  //     ),
+  //   ];
+
+  //   const visitedBeatIds = await this.routeSessionModel.distinct('routeId', {
+  //     userId: {
+  //       $in: employeeIds,
+  //     },
+  //     routeId: {
+  //       $in: routeIds,
+  //     },
+  //     sessionDate: {
+  //       $gte: startDate,
+  //       $lte: endDate,
+  //     },
+  //   });
+
+  //   /* ==========================================
+  //    * WAREHOUSES
+  //    * ========================================== */
+  //   const warehouseIds = [];
+
+  //   /* ==========================================
+  //    * ASSIGNED OUTLETS
+  //    * ========================================== */
+  //   const assignedCustomerIds = await this.routeCustomerMappingModel.distinct(
+  //     'customerId',
+  //     {
+  //       routeId: {
+  //         $in: routeIds,
+  //       },
+  //       status: RouteCustomerMappingStatus.ACTIVE,
+  //     },
+  //   );
+
+  //   const outlets = assignedCustomerIds.length;
+
+  //   /* ==========================================
+  //    * UTC (UNIQUE VISITED OUTLETS)
+  //    * ========================================== */
+  //   const visitedOutletIds = await this.shopVisitModel.distinct('outletId', {
+  //     employeeId: {
+  //       $in: employeeIds,
+  //     },
+  //     status: ShopVisitStatus.COMPLETED,
+  //     checkInTime: {
+  //       $gte: startDate,
+  //       $lte: endDate,
+  //     },
+  //   });
+
+  //   const utc = visitedOutletIds.length;
+
+  //   /* ==========================================
+  //    * UPC (UNIQUE PRODUCTIVE OUTLETS)
+  //    * ========================================== */
+  //   const productiveCustomerIds = await this.saleModal.distinct('customerId', {
+  //     employeeId: {
+  //       $in: employeeIds,
+  //     },
+  //     status: SaleStatus.COMPLETED,
+  //     date: {
+  //       $gte: startDate,
+  //       $lte: endDate,
+  //     },
+  //   });
+
+  //   const upc = productiveCustomerIds.length;
+
+  //   /* ==========================================
+  //    * OUTLETS PLANNED
+  //    * ========================================== */
+  //   const plannedCustomerIds = visitedBeatIds.length
+  //     ? await this.routeCustomerMappingModel.distinct('customerId', {
+  //         routeId: {
+  //           $in: visitedBeatIds,
+  //         },
+  //         status: RouteCustomerMappingStatus.ACTIVE,
+  //       })
+  //     : [];
+
+  //   const outletsPlanned = plannedCustomerIds.length;
+
+  //   return {
+  //     statusCode: HttpStatus.OK,
+  //     message: 'Team coverage fetched successfully',
+  //     data: {
+  //       users: employeeIds.length,
+  //       vans: vans.length,
+  //       warehouse: warehouseIds.length,
+  //       routes: routeIds.length,
+  //       outlets,
+  //       outletsPlanned,
+  //       upc,
+  //       utc,
+  //       uic: upc,
+  //     },
+  //   };
+  // }
+
   async getTeamCoverage() {
     const managerId = RequestContextStore.getStore()?.userId;
 
@@ -3507,20 +3682,22 @@ export class EmployeeService extends MongoRepository<Employee> {
     const endDate = now;
 
     /* ==========================================
-     * TEAM MEMBERS
+     * TEAM MEMBERS (DIRECT + INDIRECT)
      * ========================================== */
-    const employees = await this.find({
+    const employeeIds: any = await this.model.distinct('employeeId', {
       $or: [{ reportsTo: managerId }, { hierarchyPath: managerId }],
       status: UserStatus.ACTIVE,
     });
 
-    const employeeIds = employees.map((employee) => employee.employeeId);
+    employeeIds.push(managerId); // Include manager themselves
 
     if (!employeeIds.length) {
       return {
         statusCode: HttpStatus.OK,
         message: 'Team coverage fetched successfully',
         data: {
+          users: 0,
+          vans: 0,
           warehouse: 0,
           routes: 0,
           outlets: 0,
@@ -3533,122 +3710,136 @@ export class EmployeeService extends MongoRepository<Employee> {
     }
 
     /* ==========================================
-     * TEAM VANS
+     * ASSIGNED VANS
      * ========================================== */
     const vans = await this.vanModel.find(
       {
-        associatedUsers: {
-          $in: employeeIds,
-        },
+        associatedUsers: { $in: employeeIds },
         status: VanStatus.ACTIVE,
       },
       {
-        associatedRoutes: 1,
+        vanId: 1,
         warehouseId: 1,
+        associatedRoutes: 1,
       },
+      { lean: true },
     );
 
-    /* ==========================================
-     * ROUTES
-     * ========================================== */
-    const routeIds = [
-      ...new Set(
-        vans.flatMap((van) =>
-          (van.associatedRoutes || []).map((route) => route.routeId),
-        ),
-      ),
-    ];
-
-    const visitedBeatIds = await this.routeSessionModel.distinct('routeId', {
-      userId: {
-        $in: employeeIds,
-      },
-      routeId: {
-        $in: routeIds,
-      },
-      sessionDate: {
-        $gte: startDate,
-        $lte: endDate,
-      },
-    });
+    const vanIds = vans.map((v: any) => v.vanId);
 
     /* ==========================================
      * WAREHOUSES
      * ========================================== */
-    const warehouseIds = [];
+    const warehouseIds = [
+      ...new Set(vans.map((v: any) => v.warehouseId).filter(Boolean)),
+    ];
 
+    /* ==========================================
+     * ROUTES FROM ASSIGNED VANS
+     * ========================================== */
+    const routeIds = [
+      ...new Set(
+        vans.flatMap((van: any) =>
+          (van.associatedRoutes || []).map((route: any) => route.routeId),
+        ),
+      ),
+    ];
+
+    console.log(routeIds, 'routeIds');
     /* ==========================================
      * ASSIGNED OUTLETS
      * ========================================== */
-    const assignedCustomerIds = await this.routeCustomerMappingModel.distinct(
-      'customerId',
-      {
-        routeId: {
-          $in: routeIds,
-        },
-        status: RouteCustomerMappingStatus.ACTIVE,
-      },
-    );
+    const assignedCustomerIds =
+      routeIds.length > 0
+        ? await this.routeCustomerMappingModel.distinct('customerId', {
+            routeId: { $in: routeIds },
+            status: RouteCustomerMappingStatus.ACTIVE,
+          })
+        : [];
 
     const outlets = assignedCustomerIds.length;
 
     /* ==========================================
-     * UTC (UNIQUE VISITED OUTLETS)
+     * VISITED ROUTES (MTD)
      * ========================================== */
-    const visitedOutletIds = await this.shopVisitModel.distinct('outletId', {
-      employeeId: {
-        $in: employeeIds,
-      },
-      status: ShopVisitStatus.COMPLETED,
-      checkInTime: {
-        $gte: startDate,
-        $lte: endDate,
-      },
-    });
+    const visitedBeatIds =
+      routeIds.length > 0
+        ? await this.routeSessionModel.distinct('routeId', {
+            userId: { $in: employeeIds },
+            routeId: { $in: routeIds },
+            sessionDate: {
+              $gte: startDate,
+              $lte: endDate,
+            },
+          })
+        : [];
+
+    /* ==========================================
+     * PLANNED OUTLETS
+     * Only routes actually visited this month
+     * ========================================== */
+    const plannedCustomerIds =
+      visitedBeatIds.length > 0
+        ? await this.routeCustomerMappingModel.distinct('customerId', {
+            routeId: { $in: visitedBeatIds },
+            status: RouteCustomerMappingStatus.ACTIVE,
+          })
+        : [];
+
+    const outletsPlanned = plannedCustomerIds.length;
+
+    /* ==========================================
+     * UNIQUE VISITED OUTLETS (UTC)
+     * ========================================== */
+    const visitedOutletIds =
+      employeeIds.length > 0
+        ? await this.shopVisitModel.distinct('outletId', {
+            employeeId: { $in: employeeIds },
+            status: ShopVisitStatus.COMPLETED,
+            checkInTime: {
+              $gte: startDate,
+              $lte: endDate,
+            },
+          })
+        : [];
 
     const utc = visitedOutletIds.length;
 
     /* ==========================================
-     * UPC (UNIQUE PRODUCTIVE OUTLETS)
+     * UNIQUE PRODUCTIVE OUTLETS (UPC)
      * ========================================== */
-    const productiveCustomerIds = await this.saleModal.distinct('customerId', {
-      employeeId: {
-        $in: employeeIds,
-      },
-      status: SaleStatus.COMPLETED,
-      date: {
-        $gte: startDate,
-        $lte: endDate,
-      },
-    });
+    const productiveCustomerIds =
+      employeeIds.length > 0
+        ? await this.saleModal.distinct('customerId', {
+            employeeId: { $in: employeeIds },
+            status: SaleStatus.COMPLETED,
+            date: {
+              $gte: startDate,
+              $lte: endDate,
+            },
+          })
+        : [];
 
     const upc = productiveCustomerIds.length;
 
     /* ==========================================
-     * OUTLETS PLANNED
+     * UNIQUE INVOICED CUSTOMERS (UIC)
      * ========================================== */
-    const plannedCustomerIds = visitedBeatIds.length
-      ? await this.routeCustomerMappingModel.distinct('customerId', {
-          routeId: {
-            $in: visitedBeatIds,
-          },
-          status: RouteCustomerMappingStatus.ACTIVE,
-        })
-      : [];
-
-    const outletsPlanned = plannedCustomerIds.length;
+    const uic = upc;
 
     return {
       statusCode: HttpStatus.OK,
       message: 'Team coverage fetched successfully',
       data: {
+        users: employeeIds.length - 1, // Exclude manager themselves
+        vans: vanIds.length,
         warehouse: warehouseIds.length,
         routes: routeIds.length,
         outlets,
         outletsPlanned,
         upc,
         utc,
-        uic: upc,
+        uic,
       },
     };
   }
@@ -3678,8 +3869,9 @@ export class EmployeeService extends MongoRepository<Employee> {
       status: UserStatus.ACTIVE,
     });
 
-    const employeeIds = employees.map((employee) => employee.employeeId);
+    const employeeIds: any = employees.map((employee) => employee.employeeId);
 
+    employeeIds.push(managerId); // Include manager themselves
     if (!employeeIds.length) {
       return {
         statusCode: HttpStatus.OK,
@@ -3794,22 +3986,19 @@ export class EmployeeService extends MongoRepository<Employee> {
     /* ==========================================
      * MTD VISITED
      * ========================================== */
-    const visitedCustomerIds = await this.shopVisitModel.distinct(
-      'outletId',
-      {
-        employeeId: {
-          $in: employeeIds,
-        },
-        outletId: {
-          $in: customerIds,
-        },
-        status: ShopVisitStatus.COMPLETED,
-        checkInTime: {
-          $gte: startDate,
-          $lte: endDate,
-        },
+    const visitedCustomerIds = await this.shopVisitModel.distinct('outletId', {
+      employeeId: {
+        $in: employeeIds,
       },
-    );
+      outletId: {
+        $in: customerIds,
+      },
+      status: ShopVisitStatus.COMPLETED,
+      checkInTime: {
+        $gte: startDate,
+        $lte: endDate,
+      },
+    });
 
     const visitedSet = new Set(visitedCustomerIds);
 
@@ -3851,7 +4040,9 @@ export class EmployeeService extends MongoRepository<Employee> {
 
       const lastVisited = lastVisitMap.get(customerId);
 
-      const createdAt = customer.createdAt ? new Date(customer.createdAt) : null;
+      const createdAt = customer.createdAt
+        ? new Date(customer.createdAt)
+        : null;
       const ageDays = createdAt
         ? Math.floor((now.getTime() - createdAt.getTime()) / 86400000)
         : Number.POSITIVE_INFINITY;
@@ -4163,7 +4354,8 @@ export class EmployeeService extends MongoRepository<Employee> {
 
           routeName: isOfficialWork ? 'Admin' : isRetailing ? routeName : '-',
 
-          location: isRetailing || isOfficialWork ? activity?.description || '' : '',
+          location:
+            isRetailing || isOfficialWork ? activity?.description || '' : '',
 
           summary: {
             firstCallTime: firstCall?.checkInTime || null,
@@ -4407,7 +4599,10 @@ export class EmployeeService extends MongoRepository<Employee> {
     };
 
     const latestBackgroundLocation = (workSession?.backgroundLocations || [])
-      .map((location, index) => ({ location: normalizeLocation(location), index }))
+      .map((location, index) => ({
+        location: normalizeLocation(location),
+        index,
+      }))
       .filter((item) => item.location)
       .sort(
         (first: any, second: any) =>
@@ -4676,7 +4871,11 @@ export class EmployeeService extends MongoRepository<Employee> {
 
     const [assignedBeatCustomers, visitedOutletIds, billedOutletIds] =
       await Promise.all([
-        this.getAssignedBeatCustomers(employee.employeeId, startOfMonth, endOfDay),
+        this.getAssignedBeatCustomers(
+          employee.employeeId,
+          startOfMonth,
+          endOfDay,
+        ),
         this.shopVisitModel.distinct('outletId', {
           employeeId: employee.employeeId,
           checkInTime: {
@@ -4729,7 +4928,9 @@ export class EmployeeService extends MongoRepository<Employee> {
       endOfDay,
     );
     const customerIds = [
-      ...new Set(assignedBeatCustomers.map((mapping: any) => mapping.customerId)),
+      ...new Set(
+        assignedBeatCustomers.map((mapping: any) => mapping.customerId),
+      ),
     ];
 
     const [customers, visitedOutletIds, billedOutletIds] = await Promise.all([
@@ -4766,7 +4967,9 @@ export class EmployeeService extends MongoRepository<Employee> {
     ]);
 
     const customersById = new Map<string, any>(
-      customers.map((customer: any) => [customer.customerId, customer] as [string, any]),
+      customers.map(
+        (customer: any) => [customer.customerId, customer] as [string, any],
+      ),
     );
     const visited = new Set(visitedOutletIds);
     const billed = new Set(billedOutletIds);

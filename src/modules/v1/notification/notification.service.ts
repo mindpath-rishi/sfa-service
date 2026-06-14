@@ -81,6 +81,7 @@ export class NotificationService extends MongoRepository<Notification> {
           ...payload.data,
           notificationId: notification._id.toString(),
           route: payload.data?.route ?? '/notifications',
+          openAsModal: true,
         },
       );
 
