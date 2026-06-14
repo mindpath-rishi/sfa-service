@@ -17,6 +17,26 @@ import { WorkSessionStatus } from 'src/shared/enums/work-session.enums';
 
 export type WorkSessionDocument = HydratedDocument<WorkSession>;
 
+export class LocationPoint {
+  @Prop({ type: Number })
+  latitude?: number;
+
+  @Prop({ type: Number })
+  longitude?: number;
+
+  @Prop({ type: Number })
+  accuracy?: number;
+
+  @Prop({ type: Number })
+  altitude?: number;
+
+  @Prop({ type: Number })
+  speed?: number;
+
+  @Prop({ type: Date })
+  capturedAt?: Date;
+}
+
 @Schema({ timestamps: true, collection: 'work_sessions' })
 export class WorkSession {
   /* ======================================================
@@ -88,6 +108,15 @@ export class WorkSession {
 
   @Prop({ type: String })
   dayStartImageUrl?: string;
+
+  @Prop({ type: Object })
+  dayStartLocation?: LocationPoint;
+
+  @Prop({ type: Object })
+  dayEndLocation?: LocationPoint;
+
+  @Prop({ type: [Object], default: [] })
+  backgroundLocations?: LocationPoint[];
 
   // Activity status
   @Prop({

@@ -7,8 +7,10 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
+import { LocationPointDto } from 'src/shared/dto/location-point.dto';
 
 export class UpdateShopVisitDto {
   /**
@@ -75,6 +77,18 @@ export class UpdateShopVisitDto {
   @Type(() => Date)
   @IsDate()
   checkInTime?: Date;
+
+  @ApiPropertyOptional({ type: LocationPointDto })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => LocationPointDto)
+  checkInLocation?: LocationPointDto;
+
+  @ApiPropertyOptional({ type: LocationPointDto })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => LocationPointDto)
+  checkOutLocation?: LocationPointDto;
 
   @ApiPropertyOptional({
     enum: ShopVisitStatus,

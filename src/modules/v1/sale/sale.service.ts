@@ -727,6 +727,242 @@ export class SaleService extends MongoRepository<Sale> {
     }
   }
 
+  async getCategoryWiseSaleDetail(query: {
+    vanId?: string;
+    outletId?: string;
+    categoryName?: string;
+    year?: number;
+    monthNumber?: number;
+  }) {
+    const { vanId, outletId, categoryName, year, monthNumber } = query;
+
+    const emptyData = {
+      year,
+      monthNumber,
+      categoryName,
+      totalCases: 0,
+      totalPieces: 0,
+      totalQtyInCases: 0,
+      totalValue: 0,
+      totalWeight: 0,
+      products: [],
+    };
+
+    if (!categoryName || !year || !monthNumber) {
+      return {
+        statusCode: HttpStatus.OK,
+        message: 'Category wise sales detail fetched successfully',
+        data: emptyData,
+      };
+    }
+
+    const match: Record<string, any> = {
+      isDeleted: false,
+      date: {
+        $gte: new Date(year, monthNumber - 1, 1),
+        $lt: new Date(year, monthNumber, 1),
+      },
+    };
+
+    if (vanId) {
+      match.vanId = vanId;
+    }
+
+    if (outletId) {
+      match.customerId = outletId;
+    }
+
+    const [detail] = await this.model.aggregate([
+      {
+        $match: match,
+      },
+      {
+        $lookup: {
+          from: 'sale_items',
+          localField: 'saleId',
+          foreignField: 'saleId',
+          as: 'items',
+        },
+      },
+      {
+        $unwind: '$items',
+      },
+      {
+        $match: {
+          'items.isDeleted': false,
+        },
+      },
+      {
+        $lookup: {
+          from: 'product_master',
+          localField: 'items.productId',
+          foreignField: 'productId',
+          as: 'product',
+        },
+      },
+      {
+        $unwind: {
+          path: '$product',
+          preserveNullAndEmptyArrays: true,
+        },
+      },
+      {
+        $lookup: {
+          from: 'productcategories',
+          localField: 'product.categoryId',
+          foreignField: 'categoryId',
+          as: 'category',
+        },
+      },
+      {
+        $unwind: {
+          path: '$category',
+          preserveNullAndEmptyArrays: true,
+        },
+      },
+      {
+        $match: {
+          $expr: {
+            $eq: [{ $ifNull: ['$category.name', 'UNKNOWN'] }, categoryName],
+          },
+        },
+      },
+      {
+        $group: {
+          _id: {
+            productId: '$items.productId',
+            productName: {
+              $ifNull: ['$items.productName', '$product.name'],
+            },
+          },
+          cases: {
+            $sum: {
+              $ifNull: ['$items.caseQty', 0],
+            },
+          },
+          pieces: {
+            $sum: {
+              $ifNull: ['$items.pieceQty', 0],
+            },
+          },
+          qtyInCases: {
+            $sum: {
+              $add: [
+                {
+                  $ifNull: ['$items.caseQty', 0],
+                },
+                {
+                  $cond: [
+                    {
+                      $gt: ['$items.unitQtyInCase', 0],
+                    },
+                    {
+                      $divide: [
+                        {
+                          $ifNull: ['$items.pieceQty', 0],
+                        },
+                        '$items.unitQtyInCase',
+                      ],
+                    },
+                    0,
+                  ],
+                },
+              ],
+            },
+          },
+          value: {
+            $sum: {
+              $ifNull: ['$items.totalValue', 0],
+            },
+          },
+          weight: {
+            $sum: {
+              $ifNull: ['$items.totalNetWeight', 0],
+            },
+          },
+        },
+      },
+      {
+        $sort: {
+          value: -1,
+          '_id.productName': 1,
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          totalCases: { $sum: '$cases' },
+          totalPieces: { $sum: '$pieces' },
+          totalQtyInCases: { $sum: '$qtyInCases' },
+          totalValue: { $sum: '$value' },
+          totalWeight: { $sum: '$weight' },
+          products: {
+            $push: {
+              productId: '$_id.productId',
+              productName: '$_id.productName',
+              cases: '$cases',
+              pieces: '$pieces',
+              qtyInCases: '$qtyInCases',
+              value: '$value',
+              weight: '$weight',
+            },
+          },
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          totalCases: 1,
+          totalPieces: 1,
+          totalQtyInCases: {
+            $round: ['$totalQtyInCases', 3],
+          },
+          totalValue: {
+            $round: ['$totalValue', 3],
+          },
+          totalWeight: {
+            $round: ['$totalWeight', 3],
+          },
+          products: {
+            $map: {
+              input: '$products',
+              as: 'product',
+              in: {
+                productId: '$$product.productId',
+                productName: '$$product.productName',
+                cases: '$$product.cases',
+                pieces: '$$product.pieces',
+                qtyInCases: {
+                  $round: ['$$product.qtyInCases', 3],
+                },
+                value: {
+                  $round: ['$$product.value', 3],
+                },
+                weight: {
+                  $round: ['$$product.weight', 3],
+                },
+              },
+            },
+          },
+        },
+      },
+    ]);
+
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'Category wise sales detail fetched successfully',
+      data: {
+        ...emptyData,
+        totalCases: detail?.totalCases ?? 0,
+        totalPieces: detail?.totalPieces ?? 0,
+        totalQtyInCases: detail?.totalQtyInCases ?? 0,
+        totalValue: detail?.totalValue ?? 0,
+        totalWeight: detail?.totalWeight ?? 0,
+        products: detail?.products ?? [],
+      },
+    };
+  }
+
   async findBySaleId(saleId: string) {
     const [doc] = await this.model.aggregate([
       {

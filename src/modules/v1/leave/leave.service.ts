@@ -29,7 +29,13 @@ export class LeaveService extends MongoRepository<Leave> {
   async create(payload: CreateLeaveDto) {
     try {
       return await this.withTransaction(async (session) => {
-        const filter: FilterQuery<Leave> = {};
+        const filter: FilterQuery<Leave> = {
+          userId: payload.userId,
+          createdAt: {
+            $gte: new Date(new Date().setHours(0, 0, 0, 0)),
+            $lte: new Date(new Date().setHours(23, 59, 59, 999)),
+          },
+        };
 
         const existing = await this.findOne(filter, {
           session,

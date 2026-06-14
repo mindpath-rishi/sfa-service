@@ -5,10 +5,12 @@
  * Used by : BACK_OFFICE / ADMIN / SALES
  *
  * Flow :
- *  DRAFT → SUBMITTED → APPROVED → REJECTED
+ *  DRAFT → SUBMITTED → APPROVED → ACCEPTED / DECLINED / REJECTED
  *
  * On APPROVED:
- *  - Deduct warehouse_inventory
+ *  - Notify salesman to accept stock
+ *
+ * On ACCEPTED:
  *  - Increase van_inventory
  *  - Insert inventory_transactions
  *
@@ -118,6 +120,21 @@ export class VanInventoryTopup {
   // Optional remark
   @Prop()
   remark?: string;
+
+  @Prop({ type: Date })
+  acceptedAt?: Date;
+
+  @Prop({ type: String })
+  acceptedBy?: string;
+
+  @Prop({ type: Date })
+  declinedAt?: Date;
+
+  @Prop({ type: String })
+  declinedBy?: string;
+
+  @Prop({ type: String })
+  declinedReason?: string;
 
   /* ======================================================
    * STATUS

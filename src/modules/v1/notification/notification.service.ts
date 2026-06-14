@@ -178,7 +178,7 @@ export class NotificationService extends MongoRepository<Notification> {
 
   async markVanChangeRequestResolved(
     workSessionId: string,
-    status: 'APPROVED' | 'REJECTED',
+    status: 'APPROVED' | 'REJECTED' | 'CANCELLED',
   ) {
     await this.updateOne(
       {

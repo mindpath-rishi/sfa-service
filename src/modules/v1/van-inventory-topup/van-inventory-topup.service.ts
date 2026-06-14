@@ -32,6 +32,8 @@ import {
 import { InventoryTransactionService } from '../inventory-transaction/inventory-transaction.service';
 import { VanDailyStockService } from '../van-daily-stock/van-daily-stock.service';
 import { VanDailyStockStatus } from 'src/shared/enums/van-daily-stock.enums';
+import { NotificationService } from '../notification/notification.service';
+import { RequestContextStore } from 'src/core/context/request-context';
 
 @Injectable()
 export class VanInventoryTopupService extends MongoRepository<VanInventoryTopup> {
@@ -42,6 +44,7 @@ export class VanInventoryTopupService extends MongoRepository<VanInventoryTopup>
     private readonly vanInventoryService: VanInventoryService,
     private readonly inventoryTransactionService: InventoryTransactionService,
     private readonly vanDailyStockService: VanDailyStockService,
+    private readonly notificationService: NotificationService,
   ) {
     super(mongo.getModel(VanInventoryTopup.name, VanInventoryTopupSchema));
   }
@@ -276,6 +279,8 @@ export class VanInventoryTopupService extends MongoRepository<VanInventoryTopup>
         let totalRequestedQty = 0;
         let totalRequestedWeight = 0;
         let totalRequestedValue = 0;
+        let totalRequestedCases = 0;
+        let totalRequestedPieces = 0;
 
         let totalApprovedQty = 0;
         let totalApprovedWeight = 0;
@@ -310,6 +315,8 @@ export class VanInventoryTopupService extends MongoRepository<VanInventoryTopup>
           totalRequestedQty += requestedQty;
           totalRequestedWeight += requestedWeight;
           totalRequestedValue += requestedValue;
+          totalRequestedCases += item.requestedCaseQty || 0;
+          totalRequestedPieces += item.requestedPieceQty || 0;
 
           totalApprovedQty += requestedQty;
           totalApprovedWeight += requestedWeight;
@@ -345,22 +352,6 @@ export class VanInventoryTopupService extends MongoRepository<VanInventoryTopup>
         }
 
         /* ======================================================
-         * 3. DUPLICATE CHECK
-         * ====================================================== */
-        const existing = await this.findOne(
-          {
-            vanId: payload.vanId,
-            warehouseId: payload.warehouseId,
-            date: payload.date,
-          },
-          { session, includeDeleted: true },
-        );
-
-        // if (existing && !existing.isDeleted) {
-        //   throw new ConflictException(VAN_INVENTORY_TOPUP.DUPLICATE);
-        // }
-
-        /* ======================================================
          * 4. CREATE HEADER
          * ====================================================== */
         const vanInventoryTopupId = IdGenerator.generate('INVTOP', 8);
@@ -372,6 +363,8 @@ export class VanInventoryTopupService extends MongoRepository<VanInventoryTopup>
             totalRequestedQty,
             totalRequestedWeight,
             totalRequestedValue,
+            totalRequestedCases,
+            totalRequestedPieces,
             totalApprovedQty,
             totalApprovedWeight,
             totalApprovedValue,
@@ -396,106 +389,10 @@ export class VanInventoryTopupService extends MongoRepository<VanInventoryTopup>
         );
 
         /* ======================================================
-         * 6. UPDATE VAN INVENTORY
+         * 6. NOTIFY SALESMAN - STOCK NOT POSTED UNTIL ACCEPTED
          * ====================================================== */
-        for (const item of itemsToInsert) {
-          await this.vanInventoryService.updateOne(
-            {
-              vanId: payload.vanId,
-              productId: item.productId,
-            },
-            {
-              $inc: { quantity: item.approvedQty },
-              $setOnInsert: {
-                vanId: payload.vanId,
-                productId: item.productId,
-                inventoryId: IdGenerator.generate('INV', 8),
-              },
-            },
-            { upsert: true, session },
-          );
-        }
+        await this.notifySalesmanTopupAwaitingAcceptance(doc);
 
-        /* ======================================================
-         * 7. INVENTORY TRANSACTION (HISTORY)
-         * ====================================================== */
-        const transactions = itemsToInsert.map((item) => ({
-          transactionId: IdGenerator.generate('TRX', 10),
-
-          productId: item.productId,
-          vanId: payload.vanId,
-          employeeId: payload.employeeId,
-          warehouseId: payload.warehouseId,
-
-          transactionType: TransactionType.LOAD,
-          direction: Direction.IN,
-
-          quantity: item.approvedQty,
-          cases: item.approvedCaseQty || 0,
-          pieces: item.approvedPieceQty || 0,
-
-          referenceNo: vanInventoryTopupId,
-          remark: 'Van Inventory Topup',
-
-          transactionDate: payload.date || new Date(),
-          status: InventoryTransactionStatus.POSTED,
-        }));
-
-        await this.inventoryTransactionService.bulkCreate(transactions, {
-          session,
-        });
-
-        /* ======================================================
-         * 8. VAN DAILY STOCK (UPSERT)
-         * ====================================================== */
-        const today = new Date(payload.date || new Date());
-        today.setHours(0, 0, 0, 0);
-
-        await this.vanDailyStockService.bulkUpdate(
-          itemsToInsert.map((item) => ({
-            filter: {
-              date: today,
-              vanId: payload.vanId,
-              productId: item.productId,
-            },
-            update: {
-              $set: {
-                // ensure base fields exist if record already exists
-                workSessionId: payload.workSessionId,
-                employeeId: payload.employeeId,
-              },
-
-              $setOnInsert: {
-                vanDailyStockId: IdGenerator.generate('VDS', 8),
-
-                date: today,
-                vanId: payload.vanId,
-
-                productId: item.productId,
-                unitQtyInCase: item.unitQtyInCase,
-                piecePrice: item.piecePrice,
-                pieceNetWeight: item.pieceNetWeight,
-
-                openingQty: 0,
-                outQty: 0,
-                adjustmentQty: 0,
-                // closingQty: 0,
-
-                status: VanDailyStockStatus.DRAFT,
-              },
-
-              $inc: {
-                inQty: item.approvedQty,
-                closingQty: item.approvedQty,
-              },
-            },
-          })),
-          { session, upsert: true },
-        );
-
-        /* ======================================================
-         * DONE
-         * ====================================================== */
         return {
           statusCode: HttpStatus.CREATED,
           message: VAN_INVENTORY_TOPUP.CREATED,
@@ -503,35 +400,94 @@ export class VanInventoryTopupService extends MongoRepository<VanInventoryTopup>
         };
       });
     } catch (error) {
-      console.log(error)
       this.handleDuplicateError(error);
     }
   }
 
   async findAll(query: VanInventoryTopupQueryDto) {
-    const { searchText, status, page = 1, limit = 20 } = query;
+    const {
+      searchText,
+      status,
+      page = 1,
+      limit = 20,
+      vanId,
+      employeeId,
+      warehouseId,
+      startDate,
+      endDate,
+      minValue,
+      maxValue,
+    } = query as VanInventoryTopupQueryDto & {
+      startDate?: string;
+      endDate?: string;
+      minValue?: string | number;
+      maxValue?: string | number;
+    };
 
     const filter: FilterQuery<VanInventoryTopup> = {};
 
-    if (status) filter.status = status;
+    if (status) {
+      filter.status = Array.isArray(status) ? ({ $in: status } as any) : status;
+    }
+    if (vanId) filter.vanId = vanId;
+    if (employeeId) filter.employeeId = employeeId;
+    if (warehouseId) filter.warehouseId = warehouseId;
+
+    if (startDate || endDate) {
+      filter.date = {} as any;
+      if (startDate) {
+        const from = new Date(startDate);
+        from.setHours(0, 0, 0, 0);
+        (filter.date as any).$gte = from;
+      }
+      if (endDate) {
+        const to = new Date(endDate);
+        to.setHours(23, 59, 59, 999);
+        (filter.date as any).$lte = to;
+      }
+    }
+
+    if (minValue || maxValue) {
+      filter.totalRequestedValue = {} as any;
+      if (minValue) (filter.totalRequestedValue as any).$gte = Number(minValue);
+      if (maxValue) (filter.totalRequestedValue as any).$lte = Number(maxValue);
+    }
 
     if (searchText) {
       const regex = new RegExp(searchText, 'i');
-      filter.$or = [{ vanName: regex }];
+      filter.$or = [
+        { vanName: regex },
+        { employeeId: regex },
+        { vanInventoryTopupId: regex },
+      ];
     }
 
-    const result = await this.paginate(filter, {
-      page,
-      limit,
-      sort: { createdAt: -1 },
-      lean: true,
-    });
+    const activeFilter = { ...filter, isDeleted: { $ne: true } } as any;
+    const pageNumber = Math.max(1, Number(page) || 1);
+    const pageLimit = Math.max(1, Number(limit) || 20);
+    const skip = (pageNumber - 1) * pageLimit;
+
+    const [items, total] = await Promise.all([
+      this.model
+        .find(activeFilter)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(pageLimit)
+        .lean()
+        .exec(),
+      this.model.countDocuments(activeFilter),
+    ]);
 
     return {
       statusCode: HttpStatus.OK,
       message: VAN_INVENTORY_TOPUP.FETCHED,
-      data: result.items,
-      meta: result.meta,
+      data: items,
+      meta: {
+        total,
+        page: pageNumber,
+        limit: pageLimit,
+        totalPages: Math.ceil(total / pageLimit),
+      },
     };
   }
 
@@ -563,17 +519,163 @@ export class VanInventoryTopupService extends MongoRepository<VanInventoryTopup>
   async update(vanInventoryTopupId: string, dto: UpdateVanInventoryTopupDto) {
     try {
       return await this.withTransaction(async (session) => {
-        const doc = await this.updateOne({ vanInventoryTopupId }, dto, {
+        const previous = await this.findOne({ vanInventoryTopupId }, { session });
+
+        if (!previous) throw new NotFoundException(VAN_INVENTORY_TOPUP.NOT_FOUND);
+
+        const doc = await this.model.findOneAndUpdate({ vanInventoryTopupId }, dto, {
           session,
           new: true,
         });
 
         if (!doc) throw new NotFoundException(VAN_INVENTORY_TOPUP.NOT_FOUND);
 
+        if (
+          dto.status === VanInventoryTopupStatus.APPROVED &&
+          previous.status !== VanInventoryTopupStatus.APPROVED
+        ) {
+          await this.notifySalesmanTopupAwaitingAcceptance(doc);
+        }
+
         return {
           statusCode: HttpStatus.OK,
           message: VAN_INVENTORY_TOPUP.UPDATED,
           data: doc,
+        };
+      });
+    } catch (error) {
+      this.handleDuplicateError(error);
+    }
+  }
+
+  async accept(vanInventoryTopupId: string) {
+    try {
+      return await this.withTransaction(async (session) => {
+        const topup = await this.model
+          .findOne({ vanInventoryTopupId, isDeleted: { $ne: true } } as any)
+          .session(session)
+          .exec();
+
+        if (!topup) throw new NotFoundException(VAN_INVENTORY_TOPUP.NOT_FOUND);
+
+        if (topup.status === VanInventoryTopupStatus.ACCEPTED) {
+          return {
+            statusCode: HttpStatus.OK,
+            message: 'Top-up already accepted',
+            data: topup,
+          };
+        }
+
+        if (topup.status !== VanInventoryTopupStatus.APPROVED) {
+          throw new BadRequestException(
+            `Top-up cannot be accepted when status is ${topup.status}`,
+          );
+        }
+
+        const items =
+          await this.vanInventoryTopupItemService.findAllByVanInventoryTopupId(
+            vanInventoryTopupId,
+            session,
+          );
+
+        if (!items.length) {
+          throw new BadRequestException('Top-up has no items to accept');
+        }
+
+        const acceptedBy =
+          RequestContextStore.getStore()?.userId || topup.employeeId;
+        const acceptedAt = new Date();
+
+        const updated = await this.model.findOneAndUpdate(
+          {
+            vanInventoryTopupId,
+            status: VanInventoryTopupStatus.APPROVED,
+            isDeleted: { $ne: true },
+          },
+          {
+            $set: {
+              status: VanInventoryTopupStatus.ACCEPTED,
+              acceptedBy,
+              acceptedAt,
+            },
+          },
+          { new: true, session },
+        );
+
+        if (!updated) {
+          throw new BadRequestException('Top-up is no longer available to accept');
+        }
+
+        await this.postAcceptedTopupStock(topup, items, session);
+
+        await this.markTopupNotificationResolved(
+          vanInventoryTopupId,
+          VanInventoryTopupStatus.ACCEPTED,
+          session,
+        );
+
+        return {
+          statusCode: HttpStatus.OK,
+          message: 'Top-up accepted and stock updated successfully',
+          data: updated,
+        };
+      });
+    } catch (error) {
+      this.handleDuplicateError(error);
+    }
+  }
+
+  async rejectBySalesman(vanInventoryTopupId: string, reason?: string) {
+    try {
+      return await this.withTransaction(async (session) => {
+        const topup = await this.model
+          .findOne({ vanInventoryTopupId, isDeleted: { $ne: true } } as any)
+          .session(session)
+          .exec();
+
+        if (!topup) throw new NotFoundException(VAN_INVENTORY_TOPUP.NOT_FOUND);
+
+        if (topup.status !== VanInventoryTopupStatus.APPROVED) {
+          throw new BadRequestException(
+            `Top-up cannot be rejected by salesman when status is ${topup.status}`,
+          );
+        }
+
+        const declinedBy =
+          RequestContextStore.getStore()?.userId || topup.employeeId;
+        const declinedAt = new Date();
+
+        const updated = await this.model.findOneAndUpdate(
+          {
+            vanInventoryTopupId,
+            status: VanInventoryTopupStatus.APPROVED,
+            isDeleted: { $ne: true },
+          },
+          {
+            $set: {
+              status: VanInventoryTopupStatus.DECLINED,
+              declinedBy,
+              declinedAt,
+              declinedReason: reason || 'Declined by salesman',
+            },
+          },
+          { new: true, session },
+        );
+
+        if (!updated) {
+          throw new BadRequestException('Top-up is no longer available to reject');
+        }
+
+        await this.markTopupNotificationResolved(
+          vanInventoryTopupId,
+          VanInventoryTopupStatus.DECLINED,
+          session,
+        );
+
+        return {
+          statusCode: HttpStatus.OK,
+          message: 'Top-up rejected successfully',
+          data: updated,
         };
       });
     } catch (error) {
@@ -593,6 +695,128 @@ export class VanInventoryTopupService extends MongoRepository<VanInventoryTopup>
       message: VAN_INVENTORY_TOPUP.DELETED,
       data: existing,
     };
+  }
+
+  private async postAcceptedTopupStock(topup: any, items: any[], session: any) {
+    for (const item of items) {
+      await this.vanInventoryService.updateOne(
+        {
+          vanId: topup.vanId,
+          productId: item.productId,
+        },
+        {
+          $inc: { quantity: item.approvedQty },
+          $setOnInsert: {
+            vanId: topup.vanId,
+            productId: item.productId,
+            inventoryId: IdGenerator.generate('INV', 8),
+          },
+        },
+        { upsert: true, session },
+      );
+    }
+
+    const transactions = items.map((item) => ({
+      transactionId: IdGenerator.generate('TRX', 10),
+      productId: item.productId,
+      vanId: topup.vanId,
+      employeeId: topup.employeeId,
+      warehouseId: topup.warehouseId,
+      transactionType: TransactionType.LOAD,
+      direction: Direction.IN,
+      quantity: item.approvedQty,
+      cases: item.approvedCaseQty || 0,
+      pieces: item.approvedPieceQty || 0,
+      referenceNo: topup.vanInventoryTopupId,
+      remark: 'Van Inventory Topup Accepted',
+      transactionDate: topup.date || new Date(),
+      status: InventoryTransactionStatus.POSTED,
+    }));
+
+    await this.inventoryTransactionService.bulkCreate(transactions, {
+      session,
+    });
+
+    const stockDate = new Date(topup.date || new Date());
+    stockDate.setHours(0, 0, 0, 0);
+
+    await this.vanDailyStockService.bulkUpdate(
+      items.map((item) => ({
+        filter: {
+          date: stockDate,
+          vanId: topup.vanId,
+          productId: item.productId,
+        },
+        update: {
+          $set: {
+            workSessionId: topup.workSessionId,
+            employeeId: topup.employeeId,
+          },
+          $setOnInsert: {
+            vanDailyStockId: IdGenerator.generate('VDS', 8),
+            date: stockDate,
+            vanId: topup.vanId,
+            productId: item.productId,
+            unitQtyInCase: item.unitQtyInCase,
+            piecePrice: item.piecePrice,
+            pieceNetWeight: item.pieceNetWeight,
+            openingQty: 0,
+            outQty: 0,
+            adjustmentQty: 0,
+            status: VanDailyStockStatus.DRAFT,
+          },
+          $inc: {
+            inQty: item.approvedQty,
+            closingQty: item.approvedQty,
+          },
+        },
+      })),
+      { session, upsert: true },
+    );
+  }
+
+  private async notifySalesmanTopupAwaitingAcceptance(topup: any) {
+    if (!topup?.employeeId) return;
+
+    await this.notificationService.create({
+      recipientId: topup.employeeId,
+      title: 'Top-up approved',
+      body: `${topup.vanName || 'Your van'} top-up is approved. Accept it to update stock.`,
+      category: 'topup',
+      data: {
+        category: 'topup',
+        action: 'ACCEPTANCE_REQUIRED',
+        status: VanInventoryTopupStatus.APPROVED,
+        vanInventoryTopupId: topup.vanInventoryTopupId,
+        vanId: topup.vanId,
+        vanName: topup.vanName,
+        route: `/topup/detail?id=${topup.vanInventoryTopupId}`,
+      },
+    });
+  }
+
+  private async markTopupNotificationResolved(
+    vanInventoryTopupId: string,
+    status: VanInventoryTopupStatus.ACCEPTED | VanInventoryTopupStatus.DECLINED,
+    session?: any,
+  ) {
+    await this.notificationService.updateOne(
+      {
+        category: 'topup',
+        'data.vanInventoryTopupId': vanInventoryTopupId,
+        'data.action': 'ACCEPTANCE_REQUIRED',
+      } as any,
+      {
+        $set: {
+          isRead: true,
+          readAt: new Date(),
+          'data.status': status,
+          'data.action': status,
+          'data.resolvedAt': new Date(),
+        },
+      } as any,
+      { session },
+    );
   }
 
   private handleDuplicateError(error: any): never {

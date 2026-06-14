@@ -135,6 +135,24 @@ export class VanInventoryTopupQueryDto extends PaginationDto {
     default: VanInventoryTopupStatus.DRAFT,
   })
   @IsOptional()
-  @IsEnum(VanInventoryTopupStatus)
-  status?: VanInventoryTopupStatus;
+  @IsEnum(VanInventoryTopupStatus, { each: true })
+  status?: VanInventoryTopupStatus | VanInventoryTopupStatus[];
+
+  @ApiPropertyOptional({ type: String, description: 'Start date filter' })
+  @IsOptional()
+  @IsString()
+  startDate?: string;
+
+  @ApiPropertyOptional({ type: String, description: 'End date filter' })
+  @IsOptional()
+  @IsString()
+  endDate?: string;
+
+  @ApiPropertyOptional({ type: Number, description: 'Minimum requested value' })
+  @IsOptional()
+  minValue?: string | number;
+
+  @ApiPropertyOptional({ type: Number, description: 'Maximum requested value' })
+  @IsOptional()
+  maxValue?: string | number;
 }

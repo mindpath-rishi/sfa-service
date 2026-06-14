@@ -18,6 +18,26 @@ import { ActivityStatus } from 'src/shared/enums/activity.enums';
 
 export type ActivityDocument = HydratedDocument<Activity>;
 
+export class LocationPoint {
+  @Prop({ type: Number })
+  latitude?: number;
+
+  @Prop({ type: Number })
+  longitude?: number;
+
+  @Prop({ type: Number })
+  accuracy?: number;
+
+  @Prop({ type: Number })
+  altitude?: number;
+
+  @Prop({ type: Number })
+  speed?: number;
+
+  @Prop({ type: Date })
+  capturedAt?: Date;
+}
+
 @Schema({ timestamps: true})
 export class Activity {
   /* ======================================================
@@ -88,6 +108,12 @@ export class Activity {
   // Activity end times
   @Prop({ type: Date })
   endTime!: Date;
+
+  @Prop({ type: Object })
+  startLocation?: LocationPoint;
+
+  @Prop({ type: Object })
+  endLocation?: LocationPoint;
 }
 
 export const ActivitySchema = SchemaFactory.createForClass(Activity);

@@ -57,6 +57,7 @@ export class ActivityService extends MongoRepository<Activity> {
         name: payload.name,
         description: payload.description || '',
         startTime: new Date(),
+        startLocation: payload.startLocation,
         workSessionId: payload.workSessionId,
       };
 

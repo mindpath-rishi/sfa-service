@@ -58,6 +58,10 @@ import {
   RouteSession,
   RouteSessionSchema,
 } from 'src/core/database/mongo/schema/route-session.schema';
+import {
+  VanDailyStock,
+  VanDailyStockSchema,
+} from 'src/core/database/mongo/schema/van-daily-stock.schema';
 
 @Module({
   imports: [
@@ -77,6 +81,7 @@ import {
       { name: SaleItem.name, schema: SaleItemSchema },
       { name: WorkSession.name, schema: WorkSessionSchema },
       { name: RouteSession.name, schema: RouteSessionSchema },
+      { name: VanDailyStock.name, schema: VanDailyStockSchema },
     ]),
     UserModule,
   ],

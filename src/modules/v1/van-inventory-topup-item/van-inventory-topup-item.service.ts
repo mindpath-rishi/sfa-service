@@ -182,6 +182,14 @@ export class VanInventoryTopupItemService extends MongoRepository<VanInventoryTo
     };
   }
 
+  async findAllByVanInventoryTopupId(vanInventoryTopupId: string, session?: any) {
+    return this.model
+      .find({ vanInventoryTopupId, isDeleted: { $ne: true } } as any)
+      .session(session)
+      .lean()
+      .exec();
+  }
+
   async update(
     vanInventoryTopupId: string,
     dto: UpdateVanInventoryTopupItemDto,

@@ -7,7 +7,10 @@ import {
   IsOptional,
   IsString,
   ValidateIf,
+  ValidateNested,
 } from 'class-validator';
+import { Type } from 'class-transformer';
+import { LocationPointDto } from 'src/shared/dto/location-point.dto';
 
 export class CreateActivityDto {
   /**
@@ -61,4 +64,10 @@ export class CreateActivityDto {
   @IsNotEmpty({ message: 'totalShops is required for Retailing activity' })
   @IsNumber({}, { message: 'totalShops must be a number' })
   totalShops?: number;
+
+  @ApiPropertyOptional({ type: LocationPointDto })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => LocationPointDto)
+  startLocation?: LocationPointDto;
 }

@@ -66,6 +66,8 @@ import { NonSale } from 'src/core/database/mongo/schema/non-sale.schema';
 import { SaleItem } from 'src/core/database/mongo/schema/sale-item.schema';
 import { WorkSession } from 'src/core/database/mongo/schema/work-session.schema';
 import { RouteSession } from 'src/core/database/mongo/schema/route-session.schema';
+import { VanDailyStock } from 'src/core/database/mongo/schema/van-daily-stock.schema';
+import { RouteSessionStatus } from 'src/shared/enums/route-session.enums';
 
 const REPORT_TIMEZONE =
   process.env.APP_TIMEZONE || process.env.TZ || 'Asia/Kolkata';
@@ -121,6 +123,8 @@ export class EmployeeService extends MongoRepository<Employee> {
     private readonly workSessionModel: Model<WorkSession>,
     @InjectModel(RouteSession.name)
     private readonly routeSessionModel: Model<RouteSession>,
+    @InjectModel(VanDailyStock.name)
+    private readonly vanDailyStockModel: Model<VanDailyStock>,
   ) {
     super(mongo.getModel(Employee.name, EmployeeSchema));
   }
@@ -925,8 +929,15 @@ export class EmployeeService extends MongoRepository<Employee> {
     const endOfDay = new Date();
     endOfDay.setHours(23, 59, 59, 999);
 
-    const dateFilter = {
-      createdAt: {
+    const visitDateFilter = {
+      checkInTime: {
+        $gte: startOfDay,
+        $lte: endOfDay,
+      },
+    };
+
+    const saleDateFilter = {
+      date: {
         $gte: startOfDay,
         $lte: endOfDay,
       },
@@ -938,7 +949,7 @@ export class EmployeeService extends MongoRepository<Employee> {
         {
           $match: {
             employeeId,
-            ...dateFilter,
+            ...visitDateFilter,
             status: ShopVisitStatus.COMPLETED,
           },
         },
@@ -952,19 +963,27 @@ export class EmployeeService extends MongoRepository<Employee> {
 
       // 🧾 Sales Orders (Today)
       this.saleModal.aggregate([
-        { $match: { employeeId, ...dateFilter } },
+        {
+          $match: {
+            employeeId,
+            ...saleDateFilter,
+            status: SaleStatus.COMPLETED,
+          },
+        },
         {
           $group: {
             _id: null,
             totalOrders: { $sum: 1 },
             totalOrderValue: { $sum: '$totalValue' },
+            totalCases: { $sum: '$netCases' },
+            totalWeight: { $sum: '$totalWeight' },
           },
         },
       ]),
 
       // 💰 Payment Collections (Today)
       this.paymentModel.aggregate([
-        { $match: { employeeId, ...dateFilter } },
+        { $match: { employeeId, createdAt: { $gte: startOfDay, $lte: endOfDay } } },
         {
           $group: {
             _id: null,
@@ -980,10 +999,14 @@ export class EmployeeService extends MongoRepository<Employee> {
       message: 'Today employee stats fetched successfully',
       data: {
         visits: visitData[0]?.totalVisits || 0,
+        tc: visitData[0]?.totalVisits || 0,
+        pc: salesData[0]?.totalOrders || 0,
 
         orders: {
           count: salesData[0]?.totalOrders || 0,
           value: salesData[0]?.totalOrderValue || 0,
+          cases: salesData[0]?.totalCases || 0,
+          weight: salesData[0]?.totalWeight || 0,
         },
 
         collections: {
@@ -1073,6 +1096,7 @@ export class EmployeeService extends MongoRepository<Employee> {
       totalVisits,
       uniqueVisitedOutlets,
       retailingDays,
+      vanStockSummary,
     ] = await Promise.all([
       this.targetModel.aggregate([
         {
@@ -1204,6 +1228,33 @@ export class EmployeeService extends MongoRepository<Employee> {
           $count: 'days',
         },
       ]),
+
+      this.vanDailyStockModel.aggregate([
+        {
+          $match: {
+            employeeId,
+            date: {
+              $gte: startDate,
+              $lte: endDate,
+            },
+          },
+        },
+        {
+          $addFields: {
+            unitQty: {
+              $cond: [{ $gt: ['$unitQtyInCase', 0] }, '$unitQtyInCase', 1],
+            },
+          },
+        },
+        {
+          $group: {
+            _id: null,
+            openingCases: { $sum: { $divide: ['$openingQty', '$unitQty'] } },
+            topupCases: { $sum: { $divide: ['$inQty', '$unitQty'] } },
+            salesCases: { $sum: { $divide: ['$outQty', '$unitQty'] } },
+          },
+        },
+      ]),
     ]);
 
     const targetSummary = targets[0] || {
@@ -1220,6 +1271,19 @@ export class EmployeeService extends MongoRepository<Employee> {
       saleIds: [],
       uniqueBilledOutlets: [],
     };
+    const stock = vanStockSummary[0] || {
+      openingCases: 0,
+      topupCases: 0,
+      salesCases: 0,
+    };
+    const openingStockCases = Number(stock.openingCases || 0);
+    const topupStockCases = Number(stock.topupCases || 0);
+    const totalStockCases = openingStockCases + topupStockCases;
+    const stockSalesCases = Number(stock.salesCases || 0);
+    const utilizationPercentage =
+      totalStockCases > 0
+        ? Number(((stockSalesCases / totalStockCases) * 100).toFixed(2))
+        : 0;
 
     const lmtdTargetSummary = lmtdTargets[0] || {
       targetCases: 0,
@@ -1673,6 +1737,13 @@ export class EmployeeService extends MongoRepository<Employee> {
           lpc: pc > 0 ? Number((totalLinesSold / pc).toFixed(2)) : 0,
           avgFirstCallTime,
           avgFirstPcTime,
+        },
+        vanUtilization: {
+          openingStockCases: Number(openingStockCases.toFixed(2)),
+          topupStockCases: Number(topupStockCases.toFixed(2)),
+          totalStockCases: Number(totalStockCases.toFixed(2)),
+          salesCases: Number(stockSalesCases.toFixed(2)),
+          utilizationPercentage,
         },
         dayWiseSummary,
       },
@@ -3946,33 +4017,37 @@ export class EmployeeService extends MongoRepository<Employee> {
         const isRetailing = activityName === 'Retailing';
 
         /* ==========================================
-         * USER VAN
+         * ROUTE SESSION
          * ========================================== */
-        const van = await this.vanModel
+        const routeSession = await this.routeSessionModel
           .findOne(
             {
-              associatedUsers: employee.employeeId,
-              status: VanStatus.ACTIVE,
+              userId: employee.employeeId,
+              status: {
+                $in: [RouteSessionStatus.ACTIVE, RouteSessionStatus.COMPLETED],
+              },
+              sessionDate: {
+                $gte: startOfDay,
+                $lte: endOfDay,
+              },
             },
             {
-              name: 1,
-              associatedRoutes: 1,
+              routeId: 1,
+              routeName: 1,
+              startTime: 1,
             },
           )
+          .sort({ startTime: -1 })
           .lean();
-
-        /* ==========================================
-         * ROUTE
-         * ========================================== */
-        const routeId = van?.associatedRoutes?.[0]?.routeId;
-
         let routeName = '-';
 
-        if (routeId) {
+        if (routeSession?.routeName) {
+          routeName = routeSession.routeName;
+        } else if (routeSession?.routeId) {
           const route = await this.routeModel
             .findOne(
               {
-                routeId,
+                routeId: routeSession.routeId,
               },
               {
                 name: 1,
@@ -4313,6 +4388,38 @@ export class EmployeeService extends MongoRepository<Employee> {
       return `${minutes} mins`;
     };
 
+    const normalizeLocation = (location?: any) => {
+      const latitude = Number(location?.latitude);
+      const longitude = Number(location?.longitude);
+
+      if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+        return null;
+      }
+
+      return {
+        latitude,
+        longitude,
+        accuracy: location?.accuracy,
+        altitude: location?.altitude,
+        speed: location?.speed,
+        capturedAt: location?.capturedAt || null,
+      };
+    };
+
+    const latestBackgroundLocation = (workSession?.backgroundLocations || [])
+      .map((location, index) => ({ location: normalizeLocation(location), index }))
+      .filter((item) => item.location)
+      .sort(
+        (first: any, second: any) =>
+          new Date(second.location.capturedAt || 0).getTime() -
+            new Date(first.location.capturedAt || 0).getTime() ||
+          second.index - first.index,
+      )[0]?.location;
+    const dayStartLocation = normalizeLocation(workSession?.dayStartLocation);
+    const dayEndLocation = normalizeLocation(workSession?.dayEndLocation);
+    const currentLocation =
+      dayEndLocation || latestBackgroundLocation || dayStartLocation || null;
+
     const buildOrderDetail = (sale: any) => {
       const items = itemsBySaleId.get(sale.saleId) || [];
       const categoryMap = new Map<string, any>();
@@ -4409,6 +4516,11 @@ export class EmployeeService extends MongoRepository<Employee> {
         outlet: visit.outletName || sale?.customerName || visit.outletId,
         owner: sale?.customerName || visit.outletName || visit.outletId,
         metrics,
+        location:
+          normalizeLocation(visit.checkOutLocation) ||
+          normalizeLocation(visit.checkInLocation),
+        checkInLocation: normalizeLocation(visit.checkInLocation),
+        checkOutLocation: normalizeLocation(visit.checkOutLocation),
         order: sale ? buildOrderDetail(sale) : undefined,
         sortTime: new Date(visit.checkInTime).getTime(),
       };
@@ -4453,8 +4565,14 @@ export class EmployeeService extends MongoRepository<Employee> {
         employeeName: employee.name,
         date: selectedDate,
         dayStartTime: dayStartTime ? formatActivityTime(dayStartTime) : null,
+        dayEndTime: workSession?.dayEndTime
+          ? formatActivityTime(workSession.dayEndTime)
+          : null,
         dayStartImageUrl: workSession?.dayStartImageUrl || null,
         dayStartImageMediaId: workSession?.dayStartImageMediaId || null,
+        dayStartLocation,
+        dayEndLocation,
+        currentLocation,
         activities: data,
       },
     };

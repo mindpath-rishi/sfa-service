@@ -95,6 +95,37 @@ export class VanInventoryTopupController {
   }
 
   /**
+   * Accept approved topup and update stock
+   * --------------------------------------
+   */
+  @Permissions('VAN_INVENTORY_TOPUP_UPDATE')
+  @Patch(':vanInventoryTopupId/accept')
+  @ApiParam({
+    name: 'vanInventoryTopupId',
+    description: 'VanInventoryTopup vanInventoryTopupId',
+  })
+  async accept(@Param('vanInventoryTopupId') vanInventoryTopupId: string) {
+    return this.service.accept(vanInventoryTopupId);
+  }
+
+  /**
+   * Reject approved topup by salesman
+   * ---------------------------------
+   */
+  @Permissions('VAN_INVENTORY_TOPUP_UPDATE')
+  @Patch(':vanInventoryTopupId/reject')
+  @ApiParam({
+    name: 'vanInventoryTopupId',
+    description: 'VanInventoryTopup vanInventoryTopupId',
+  })
+  async rejectBySalesman(
+    @Param('vanInventoryTopupId') vanInventoryTopupId: string,
+    @Body() body: { reason?: string },
+  ) {
+    return this.service.rejectBySalesman(vanInventoryTopupId, body?.reason);
+  }
+
+  /**
    * Get VanInventoryTopup by ID
    * ---------------------------
    */

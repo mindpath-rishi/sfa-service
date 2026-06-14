@@ -107,6 +107,31 @@ export class SalesController {
   }
 
   /**
+   * Get Category Month Product Detail
+   * ---------------------------------
+   */
+  @Permissions('SALES_VIEW')
+  @Get('category-wise/detail')
+  @ApiOperation({
+    summary: 'Get category month product sales detail',
+  })
+  async getCategoryWiseSaleDetail(
+    @Query('vanId') vanId?: string,
+    @Query('outletId') outletId?: string,
+    @Query('categoryName') categoryName?: string,
+    @Query('year') year?: string,
+    @Query('monthNumber') monthNumber?: string,
+  ) {
+    return this.service.getCategoryWiseSaleDetail({
+      vanId,
+      outletId,
+      categoryName,
+      year: year ? Number(year) : undefined,
+      monthNumber: monthNumber ? Number(monthNumber) : undefined,
+    });
+  }
+
+  /**
    * Get Sales by ID
    * ---------------
    */

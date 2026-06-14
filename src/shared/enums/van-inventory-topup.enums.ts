@@ -11,8 +11,14 @@ export enum VanInventoryTopupStatus {
   // Submitted for approval, locked for editing
   SUBMITTED = 'SUBMITTED',
 
-  // Approved by supervisor, inventory updated
+  // Approved by supervisor, waiting for salesman acceptance
   APPROVED = 'APPROVED',
+
+  // Accepted by salesman, inventory updated
+  ACCEPTED = 'ACCEPTED',
+
+  // Declined by salesman after approval
+  DECLINED = 'DECLINED',
 
   // Rejected by supervisor
   REJECTED = 'REJECTED',

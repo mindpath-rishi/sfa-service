@@ -68,6 +68,24 @@ export class WorkSessionService extends MongoRepository<WorkSession> {
     this.employeeModel = mongo.getModel(Employee.name, EmployeeSchema);
   }
 
+  private normalizeLocation(location?: any) {
+    const latitude = Number(location?.latitude);
+    const longitude = Number(location?.longitude);
+
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+      return undefined;
+    }
+
+    return {
+      latitude,
+      longitude,
+      accuracy: location?.accuracy,
+      altitude: location?.altitude,
+      speed: location?.speed,
+      capturedAt: location?.capturedAt || new Date(),
+    };
+  }
+
   async create(payload: CreateWorkSessionDto) {
     try {
       return await this.withTransaction(async (session) => {
@@ -108,6 +126,10 @@ export class WorkSessionService extends MongoRepository<WorkSession> {
           throw new BadRequestException('Requested van not found');
         }
 
+        const dayStartLocation = this.normalizeLocation(
+          payload.dayStartLocation || (payload as any).startLocation,
+        );
+
         const newWork: Partial<WorkSession> = {
           userId: ctx?.userId,
           userName: ctx?.name,
@@ -116,6 +138,8 @@ export class WorkSessionService extends MongoRepository<WorkSession> {
           dayStartTime: new Date(),
           dayStartImageMediaId: payload.dayStartImageMediaId,
           dayStartImageUrl: payload.dayStartImageUrl,
+          dayStartLocation,
+          backgroundLocations: dayStartLocation ? [dayStartLocation] : [],
           status: WorkSessionStatus.ACTIVE,
         };
 
@@ -549,6 +573,53 @@ export class WorkSessionService extends MongoRepository<WorkSession> {
   //   }
   // }
 
+  async trackLocation(payload: any) {
+    const ctx = RequestContextStore.getStore();
+
+    const filter: FilterQuery<WorkSession> = {
+      userId: ctx?.userId,
+      status: WorkSessionStatus.ACTIVE,
+    };
+
+    if (payload.workSessionId) {
+      filter.workSessionId = payload.workSessionId;
+    }
+
+    const location = payload.location;
+
+    if (location?.latitude === undefined || location?.longitude === undefined) {
+      throw new BadRequestException('Location is required');
+    }
+
+    const doc = await this.model.findOneAndUpdate(
+      { ...filter, isDeleted: false } as any,
+      {
+        $push: {
+          backgroundLocations: {
+            $each: [
+              {
+                ...location,
+                capturedAt: location.capturedAt || new Date(),
+              },
+            ],
+            $slice: -1000,
+          },
+        },
+      } as any,
+      { new: true },
+    ).exec();
+
+    if (!doc) {
+      throw new NotFoundException(WORK_SESSION.NOT_FOUND);
+    }
+
+    return {
+      statusCode: HttpStatus.OK,
+      message: WORK_SESSION.UPDATED,
+      data: { workSessionId: doc.workSessionId },
+    };
+  }
+
   async complete(payload: any) {
     try {
       return await this.withTransaction(async (session) => {
@@ -577,6 +648,7 @@ export class WorkSessionService extends MongoRepository<WorkSession> {
          * 2. COMPLETE WORK SESSION
          * ====================================================== */
         workSession.dayEndTime = new Date();
+        workSession.dayEndLocation = payload.dayEndLocation;
         workSession.status = WorkSessionStatus.COMPLETED;
 
         await workSession.save({ session });
@@ -1001,6 +1073,39 @@ export class WorkSessionService extends MongoRepository<WorkSession> {
           },
         },
       },
+      {
+        $addFields: {
+          vanChangeActionTaken: {
+            $gt: [
+              {
+                $size: {
+                  $filter: {
+                    input: '$activities',
+                    as: 'act',
+                    cond: {
+                      $and: [
+                        { $eq: ['$$act.name', 'Retailing'] },
+                        {
+                          $or: [
+                            {
+                              $eq: [
+                                { $ifNull: ['$vanChangeApprovedAt', null] },
+                                null,
+                              ],
+                            },
+                            { $gte: ['$$act.startTime', '$vanChangeApprovedAt'] },
+                          ],
+                        },
+                      ],
+                    },
+                  },
+                },
+              },
+              0,
+            ],
+          },
+        },
+      },
 
       /* ===== 7. ROUTE ===== */
       {
@@ -1051,6 +1156,13 @@ export class WorkSessionService extends MongoRepository<WorkSession> {
           vanChangeStatus: 1,
           vanChangeApprovedAt: 1,
           vanChangeRejectedAt: 1,
+          vanChangeActionTaken: 1,
+          vanChangeRequiresAction: {
+            $and: [
+              { $eq: ['$vanChangeStatus', 'APPROVED'] },
+              { $eq: ['$vanChangeActionTaken', false] },
+            ],
+          },
         },
       },
     ];
@@ -1217,6 +1329,116 @@ export class WorkSessionService extends MongoRepository<WorkSession> {
     return {
       statusCode: HttpStatus.OK,
       message: 'Van change request rejected',
+      data: updated,
+    };
+  }
+
+  async cancelVanChange(workSessionId: string) {
+    const ctx = RequestContextStore.getStore();
+    const workSession = await this.findOne({ workSessionId });
+
+    if (!workSession) throw new NotFoundException(WORK_SESSION.NOT_FOUND);
+    if (workSession.userId !== ctx?.userId) {
+      throw new BadRequestException('You can only cancel your own van change request');
+    }
+    if (
+      workSession.vanChangeStatus !== 'PENDING' ||
+      !workSession.requestedVanId
+    ) {
+      throw new BadRequestException('No pending van change request found');
+    }
+
+    await this.updateOne(
+      { workSessionId },
+      {
+        $unset: {
+          requestedVanId: '',
+          requestedVanName: '',
+          vanChangeReason: '',
+          vanChangeStatus: '',
+        },
+      },
+      { new: true },
+    );
+
+    const updated = await this.findOne({ workSessionId });
+
+    await this.notificationService.markVanChangeRequestResolved(
+      workSessionId,
+      'CANCELLED',
+    );
+
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'Van change request cancelled',
+      data: updated,
+    };
+  }
+
+  async requestVanChange(
+    workSessionId: string,
+    payload: {
+      requestedVanId: string;
+      requestedVanName?: string;
+      vanChangeReason?: string;
+    },
+  ) {
+    const ctx = RequestContextStore.getStore();
+    const workSession = await this.findOne({ workSessionId });
+
+    if (!workSession) throw new NotFoundException(WORK_SESSION.NOT_FOUND);
+    if (workSession.userId !== ctx?.userId) {
+      throw new BadRequestException('You can only request van change for your own session');
+    }
+    if (workSession.status !== WorkSessionStatus.ACTIVE) {
+      throw new BadRequestException('No active work session found');
+    }
+    if (!payload.requestedVanId) {
+      throw new BadRequestException('requestedVanId is required');
+    }
+    if (workSession.vanChangeStatus === 'PENDING') {
+      throw new BadRequestException('Van change request already pending');
+    }
+
+    const requestedVan = await this.vanService.findOne({
+      vanId: payload.requestedVanId,
+    });
+
+    if (!requestedVan) {
+      throw new BadRequestException('Requested van not found');
+    }
+
+    await this.updateOne(
+      { workSessionId },
+      {
+        $set: {
+          requestedVanId: payload.requestedVanId,
+          requestedVanName:
+            payload.requestedVanName ||
+            (requestedVan as any)?.name ||
+            (requestedVan as any)?.vanName,
+          vanChangeReason: payload.vanChangeReason,
+          vanChangeStatus: 'PENDING',
+        },
+        $unset: {
+          vanChangeApprovedBy: '',
+          vanChangeApprovedAt: '',
+          vanChangeRejectedBy: '',
+          vanChangeRejectedAt: '',
+        },
+      },
+      { new: true },
+    );
+
+    const updated = await this.findOne({ workSessionId });
+
+    if (updated) {
+      await this.notifyManagerForVanChange(updated);
+    }
+
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'Van change request submitted',
       data: updated,
     };
   }

@@ -2,14 +2,14 @@ import { WorkSessionStatus } from 'src/shared/enums/work-session.enums';
 
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
-  IsDate,
-  IsEnum,
   IsNotEmpty,
-  IsNumber,
   IsOptional,
   IsString,
   ValidateIf,
+  ValidateNested,
 } from 'class-validator';
+import { Type } from 'class-transformer';
+import { LocationPointDto } from 'src/shared/dto/location-point.dto';
 
 export class CreateWorkSessionDto {
   /**
@@ -78,4 +78,10 @@ export class CreateWorkSessionDto {
   @IsOptional()
   @IsString()
   dayStartImageUrl?: string;
+
+  @ApiPropertyOptional({ type: LocationPointDto })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => LocationPointDto)
+  dayStartLocation?: LocationPointDto;
 }

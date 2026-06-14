@@ -51,6 +51,10 @@ import { CreateWorkSessionDto } from './dto/create-work-session.dto';
 import { UpdateWorkSessionDto } from './dto/update-work-session.dto';
 import { WorkSessionQueryDto } from './dto/work-session-query.dto';
 import { WORK_SESSION } from './work-session.constants';
+import {
+  CompleteWorkSessionDto,
+  TrackLocationDto,
+} from './dto/track-location.dto';
 import { VanChangeApprovalDto } from './dto/van-change-approval.dto';
 
 @ApiTags('Work-session')
@@ -90,10 +94,16 @@ export class WorkSessionController {
   @Permissions('WORK_SESSION_END')
   @Post('complete')
   // @ApiParam({ name: 'workSessionId', description: 'WorkSession workSessionId' })
-  async complete(@Body() payload: { carryForwardStock: any}) {
+  async complete(@Body() payload: CompleteWorkSessionDto) {
     // @Param('workSessionId') workSessionId: string,
     // @Body() dto: UpdateWorkSessionDto,
     return this.service.complete(payload);
+  }
+
+  @Permissions('WORK_SESSION_CREATE')
+  @Post('location')
+  async trackLocation(@Body() payload: TrackLocationDto) {
+    return this.service.trackLocation(payload);
   }
   /**
    * Get Today Active Work Session
@@ -123,6 +133,28 @@ export class WorkSessionController {
     @Body() _dto: VanChangeApprovalDto,
   ) {
     return this.service.rejectVanChange(workSessionId);
+  }
+
+  @Permissions('WORK_SESSION_CREATE')
+  @Patch('van-change/:workSessionId/request')
+  @ApiParam({ name: 'workSessionId', description: 'WorkSession workSessionId' })
+  async requestVanChange(
+    @Param('workSessionId') workSessionId: string,
+    @Body()
+    payload: {
+      requestedVanId: string;
+      requestedVanName?: string;
+      vanChangeReason?: string;
+    },
+  ) {
+    return this.service.requestVanChange(workSessionId, payload);
+  }
+
+  @Permissions('WORK_SESSION_CREATE')
+  @Patch('van-change/:workSessionId/cancel')
+  @ApiParam({ name: 'workSessionId', description: 'WorkSession workSessionId' })
+  async cancelVanChange(@Param('workSessionId') workSessionId: string) {
+    return this.service.cancelVanChange(workSessionId);
   }
 
   /**

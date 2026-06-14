@@ -15,6 +15,26 @@ import {
 
 export type ShopVisitDocument = HydratedDocument<ShopVisit>;
 
+export class LocationPoint {
+  @Prop({ type: Number })
+  latitude?: number;
+
+  @Prop({ type: Number })
+  longitude?: number;
+
+  @Prop({ type: Number })
+  accuracy?: number;
+
+  @Prop({ type: Number })
+  altitude?: number;
+
+  @Prop({ type: Number })
+  speed?: number;
+
+  @Prop({ type: Date })
+  capturedAt?: Date;
+}
+
 @Schema({ timestamps: true, collection: 'shop_visits' })
 export class ShopVisit {
   /* ======================================================
@@ -77,6 +97,12 @@ export class ShopVisit {
   // Check-out time
   @Prop({ type: Date })
   checkOutTime!: Date;
+
+  @Prop({ type: Object })
+  checkInLocation?: LocationPoint;
+
+  @Prop({ type: Object })
+  checkOutLocation?: LocationPoint;
 
   // Visit Type
   @Prop({
