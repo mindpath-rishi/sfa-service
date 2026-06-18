@@ -17,6 +17,16 @@ export const OracleProvider = {
       return null;
     }
 
+    /**
+     * Oracle Thin Mode
+     * ----------------
+     * node-oracledb uses Thin mode by default.
+     * Do NOT call oracledb.initOracleClient().
+     */
+    logger.info(
+      `OracleDB driver mode: ${oracledb.thin ? 'THIN' : 'THICK'}`,
+    );
+
     const config: OracleConfigOptions = {
       user: process.env.ORACLE_USER!,
       password: process.env.ORACLE_PASSWORD!,
@@ -45,14 +55,17 @@ export const OracleProvider = {
         `OracleDB pool config: min=${config.poolMin}, max=${config.poolMax}, increment=${config.poolIncrement}`,
       );
 
+      logger.info(
+        `OracleDB pool status: open=${pool.connectionsOpen}, inUse=${pool.connectionsInUse}`,
+      );
+
       return pool;
     } catch (error) {
       logger.error('OracleDB connection pool creation failed', error);
 
       /**
-       * Important:
-       * Do not throw error if Oracle should be optional.
-       * App will continue running without Oracle.
+       * Oracle is optional.
+       * App will continue without Oracle.
        */
       return null;
     }
