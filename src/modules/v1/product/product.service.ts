@@ -247,6 +247,7 @@ export class ProductService extends MongoRepository<Product> {
 
       const unitSize = null;
 
+
       return {
         updateOne: {
           filter: {
@@ -274,6 +275,7 @@ export class ProductService extends MongoRepository<Product> {
 
               isDeleted: false,
               parentCategoryId,
+              
             },
           },
           upsert: true,
