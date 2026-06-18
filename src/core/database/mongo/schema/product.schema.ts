@@ -15,7 +15,6 @@ export class Product {
 
   @Prop({ required: true, trim: true, type: String })
   name!: string;
-  
 
   @Prop({ required: true, trim: true, unique: true, type: String })
   productSysCode!: string;
@@ -24,6 +23,9 @@ export class Product {
 
   @Prop({ required: true, type: String, ref: 'ProductCategory' })
   categoryId!: string;
+
+  @Prop({ required: true, type: String, ref: 'ProductCategory' })
+  parentCategoryId!: string;
 
   /* ================= PRICING ================= */
 
@@ -53,18 +55,17 @@ export class Product {
   @Prop({ type: String })
   unitType?: string;
 
-    @Prop({ type: String })
-  itemGroup?: string;
+  // @Prop({ type: String })
+  // itemGroup?: string;
 
-    @Prop({ type: String })
-  itemsSubGroup?: string;
+  // @Prop({ type: String })
+  // itemsSubGroup?: string;
 
   @Prop({ type: String })
   unitSize?: string;
 
-  @Prop({ type: String, default: 'Y' })
+  @Prop({ type: String, default: 'N' })
   isFocusedPack?: string;
-
 
   @Prop({ required: true, type: Number })
   unitQtyInCase!: number;

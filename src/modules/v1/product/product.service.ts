@@ -135,39 +135,39 @@ export class ProductService extends MongoRepository<Product> {
     });
   }
 
-/**
- * Sync Products From ERP Oracle
- * -----------------------------
- * Source table : ESS_PRODUCT
- * Target table : product_master
- */
-async syncProductsFromERP() {
-  if (!this.oracleRepository.isEnabled()) {
-    return {
-      statusCode: HttpStatus.OK,
-      message: PRODUCT.ORACLE_DISABLED,
-      data: {
-        synced: 0,
-        skipped: true,
-      },
+  /**
+   * Sync Products From ERP Oracle
+   * -----------------------------
+   * Source table : ESS_PRODUCT
+   * Target table : product_master
+   */
+  async syncProductsFromERP() {
+    if (!this.oracleRepository.isEnabled()) {
+      return {
+        statusCode: HttpStatus.OK,
+        message: PRODUCT.ORACLE_DISABLED,
+        data: {
+          synced: 0,
+          skipped: true,
+        },
+      };
+    }
+
+    const toStringSafe = (value: any): string => {
+      return String(value ?? '').trim();
     };
-  }
 
-  const toStringSafe = (value: any): string => {
-    return String(value ?? '').trim();
-  };
+    const toNumberSafe = (value: any, defaultValue = 0): number => {
+      const numberValue = Number(value);
+      return Number.isFinite(numberValue) ? numberValue : defaultValue;
+    };
 
-  const toNumberSafe = (value: any, defaultValue = 0): number => {
-    const numberValue = Number(value);
-    return Number.isFinite(numberValue) ? numberValue : defaultValue;
-  };
+    const round4 = (value: number): number => {
+      return Number(value.toFixed(4));
+    };
 
-  const round4 = (value: number): number => {
-    return Number(value.toFixed(4));
-  };
-
-  const rows = await this.oracleRepository.query<any>(
-    `
+    const rows = await this.oracleRepository.query<any>(
+      `
     SELECT
       VC_COMP_CODE           AS "compCode",
       VC_ITEM_CODE           AS "itemCode",
@@ -188,132 +188,127 @@ async syncProductsFromERP() {
     FROM ESS_PRODUCT
     WHERE VC_ITEM_CODE IS NOT NULL
     `,
-  );
-
-  if (!rows.length) {
-    return {
-      statusCode: HttpStatus.OK,
-      message: PRODUCT.NOT_FOUND,
-      data: {
-        synced: 0,
-      },
-    };
-  }
-
-  /**
-   * Deduplicate ERP rows by itemCode because productId is unique in Mongo.
-   * If same item appears multiple times, latest row in Oracle result will be used.
-   */
-  const uniqueRowsMap = new Map<string, any>();
-
-  for (const row of rows) {
-    const itemCode = toStringSafe(row.itemCode);
-
-    if (!itemCode) continue;
-
-    uniqueRowsMap.set(itemCode, row);
-  }
-
-  const uniqueRows = Array.from(uniqueRowsMap.values());
-
-  const operations = uniqueRows.map((row) => {
-    const compCode = toStringSafe(row.compCode);
-    const itemCode = toStringSafe(row.itemCode);
-
-    const productId = itemCode;
-    const productSysCode = itemCode;
-
-    const unitQtyInCase = Math.max(toNumberSafe(row.outerQty, 1), 1);
-
-    const casePrice = toNumberSafe(
-      row.sellingPrice ?? row.basicPrice,
-      0,
     );
 
-    const piecePrice = round4(casePrice / unitQtyInCase);
-
-    const caseNetWeight = toNumberSafe(row.netWeight, 0);
-
-    const pieceNetWeight = round4(caseNetWeight / unitQtyInCase);
-
-    const name =
-      toStringSafe(row.itemDesc) ||
-      toStringSafe(row.techDesc) ||
-      itemCode;
-
-    const categoryId =
-      toStringSafe(row.categoryCode) ||
-      toStringSafe(row.parentCategoryCode) ||
-      toStringSafe(row.itemGroup) ||
-      'UNCATEGORIZED';
-
-    const unitType = toStringSafe(row.unitType) || undefined;
-
-    const unitSize = toStringSafe(row.itemSubGroup) || undefined;
-
-
-
-    return {
-      updateOne: {
-        filter: {
-          productId,
+    if (!rows.length) {
+      return {
+        statusCode: HttpStatus.OK,
+        message: PRODUCT.NOT_FOUND,
+        data: {
+          synced: 0,
         },
-        update: {
-          $set: {
-            compCode,
+      };
+    }
+
+    /**
+     * Deduplicate ERP rows by itemCode because productId is unique in Mongo.
+     * If same item appears multiple times, latest row in Oracle result will be used.
+     */
+    const uniqueRowsMap = new Map<string, any>();
+
+    for (const row of rows) {
+      const itemCode = toStringSafe(row.itemCode);
+
+      if (!itemCode) continue;
+
+      uniqueRowsMap.set(itemCode, row);
+    }
+
+    const uniqueRows = Array.from(uniqueRowsMap.values());
+
+    const operations: any = uniqueRows.map((row) => {
+      const compCode = toStringSafe(row.compCode);
+      const itemCode = toStringSafe(row.itemCode);
+
+      const productId = itemCode;
+      const productSysCode = itemCode;
+
+      const unitQtyInCase = Math.max(toNumberSafe(row.outerQty, 1), 1);
+
+      const casePrice = toNumberSafe(row.sellingPrice ?? row.basicPrice, 0);
+
+      const piecePrice = round4(casePrice / unitQtyInCase);
+
+      const caseNetWeight = toNumberSafe(row.netWeight, 0);
+
+      const pieceNetWeight = round4(caseNetWeight / unitQtyInCase);
+
+      const name =
+        toStringSafe(row.itemDesc) || toStringSafe(row.techDesc) || itemCode;
+
+      const categoryId =
+        toStringSafe(row.categoryCode) ||
+        toStringSafe(row.itemGroup) ||
+        'UNCATEGORIZED';
+
+      const parentCategoryId = toStringSafe(row.parentCategoryCode);
+
+      const unitType = toStringSafe(row.unitType) || undefined;
+
+      const unitSize = null;
+
+      return {
+        updateOne: {
+          filter: {
             productId,
-            name,
-            productSysCode,
-            categoryId,
-
-            casePrice,
-            piecePrice,
-
-            caseNetWeight,
-            pieceNetWeight,
-
-            priceType: PriceType.STANDARD,
-
-            unitType,
-            unitSize,
-            unitQtyInCase,
-
-            isDeleted: false,
           },
-        },
-        upsert: true,
-      },
-    };
-  });
+          update: {
+            $set: {
+              compCode,
+              productId,
+              name,
+              productSysCode,
+              categoryId,
 
-  if (!operations.length) {
+              casePrice,
+              piecePrice,
+
+              caseNetWeight,
+              pieceNetWeight,
+
+              priceType: PriceType.STANDARD,
+
+              unitType,
+              unitSize,
+              unitQtyInCase,
+
+              isDeleted: false,
+              parentCategoryId,
+            },
+          },
+          upsert: true,
+        },
+      };
+    });
+
+    if (!operations.length) {
+      return {
+        statusCode: HttpStatus.OK,
+        message: PRODUCT.NOT_FOUND,
+        data: {
+          synced: 0,
+        },
+      };
+    }
+
+    const result = await this.model.bulkWrite(operations, {
+      ordered: false,
+    });
+
     return {
       statusCode: HttpStatus.OK,
-      message: PRODUCT.NOT_FOUND,
+      message: PRODUCT.SYNCED,
       data: {
-        synced: 0,
+        totalERPRecords: rows.length,
+        totalUniqueRecords: uniqueRows.length,
+        totalValidRecords: operations.length,
+        inserted: result.upsertedCount || 0,
+        updated: result.modifiedCount || 0,
+        matched: result.matchedCount || 0,
+        synced: operations.length,
       },
     };
   }
-
-  const result = await this.model.bulkWrite(operations, {
-    ordered: false,
-  });
-
-  return {
-    statusCode: HttpStatus.OK,
-    message: PRODUCT.SYNCED,
-    data: {
-      totalERPRecords: rows.length,
-      totalUniqueRecords: uniqueRows.length,
-      totalValidRecords: operations.length,
-      inserted: result.upsertedCount || 0,
-      updated: result.modifiedCount || 0,
-      matched: result.matchedCount || 0,
-      synced: operations.length,
-    },
-  };
-}
 
   /**
    * Get Products
