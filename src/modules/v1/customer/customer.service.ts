@@ -159,7 +159,7 @@ export class CustomerService extends MongoRepository<Customer> {
           // ✅ CASE 3: Create new customer
           const doc = await this.save(
             {
-              customerId: IdGenerator.generate('CUST', 8),
+              customerId: IdGenerator.generateRandomNumber(12),
               ...payload,
             },
             { session },

@@ -22,10 +22,19 @@ export class SaleItem {
   saleId!: string;
 
   @Prop({ type: String, required: true, index: true })
+  compCode!: string;
+
+  @Prop({ type: String, required: true, index: true })
   productId!: string;
 
   @Prop({ type: String, required: true })
   productName!: string;
+
+  @Prop({ type: String, required: true })
+  categoryId!: string;
+
+  @Prop({ type: String, required: true })
+  parentCategoryId!: string;
 
   /* ================= QUANTITY ================= */
 
@@ -37,6 +46,9 @@ export class SaleItem {
 
   @Prop({ type: Number, required: true })
   quantity!: number;
+
+  @Prop({ type: Number, required: true })
+  netCases!: number;
 
   /* ================= RETURNS ================= */
 

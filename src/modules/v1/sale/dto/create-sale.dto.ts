@@ -26,6 +26,21 @@ export class CreateSaleDto {
   @IsString()
   vanId!: string;
 
+  @ApiProperty({ type: String, description: 'Company code' })
+  @IsNotEmpty()
+  @IsString()
+  compCode!: string;
+
+  @ApiProperty({ type: String, description: 'Child categoryId' })
+  @IsNotEmpty()
+  @IsString()
+  categoryId!: string;
+
+  @ApiProperty({ type: String, description: 'Parent categoryId' })
+  @IsNotEmpty()
+  @IsString()
+  parentCategoryId!: string;
+
   @ApiProperty({ type: String })
   @IsNotEmpty()
   @IsString()

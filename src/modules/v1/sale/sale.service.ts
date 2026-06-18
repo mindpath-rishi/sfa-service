@@ -31,6 +31,7 @@ import {
 import { InventoryTransactionService } from '../inventory-transaction/inventory-transaction.service';
 import { CustomerService } from '../customer/customer.service';
 import { VanDailyStockService } from '../van-daily-stock/van-daily-stock.service';
+import { OracleRepository } from 'src/core/database/oracle/oracle.repository';
 
 @Injectable()
 export class SaleService extends MongoRepository<Sale> {
@@ -43,6 +44,7 @@ export class SaleService extends MongoRepository<Sale> {
     private readonly inventoryTxnService: InventoryTransactionService,
     private readonly customerService: CustomerService,
     private readonly vanDailyStockService: VanDailyStockService,
+    private readonly oracleRepository: OracleRepository,
   ) {
     super(mongo.getModel(Sale.name, SaleSchema));
   }
@@ -88,6 +90,7 @@ export class SaleService extends MongoRepository<Sale> {
         const processedItems: any[] = [];
 
         for (const item of items) {
+          const { compCode, categoryId, parentCategoryId } = item;
           const caseQty = item.caseQty || 0;
           const pieceQty = item.pieceQty || 0;
 
@@ -131,13 +134,13 @@ export class SaleService extends MongoRepository<Sale> {
           const itemWeight = toFixed4(itemWeightRaw);
 
           /* ================= TOTALS ================= */
-
+          const itemNetCases = quantity / unitQtyInCase;
           totalCases += caseQty;
           totalPieces += pieceQty;
           totalQty += quantity;
           totalWeight += itemWeight;
           totalValue += itemValue;
-          netCases += quantity / unitQtyInCase;
+          netCases += itemNetCases;
 
           processedItems.push({
             saleId: '',
@@ -158,6 +161,15 @@ export class SaleService extends MongoRepository<Sale> {
 
             totalNetWeight: itemWeight,
             totalValue: itemValue,
+
+            categoryId,
+            parentCategoryId,
+            compCode,
+
+            /**
+             * Item-wise net cases, not cumulative total.
+             */
+            netCases: toFixed4(itemNetCases),
           });
         }
 
@@ -369,6 +381,16 @@ export class SaleService extends MongoRepository<Sale> {
             { session },
           );
         }
+
+        /* ======================================================
+         * EXPORT SALE TO ERP SFA_ORDER
+         * ====================================================== */
+
+        await this.exportSaleToErpSfaOrder({
+          sale: doc,
+          items: processedItems,
+          saleId,
+        });
 
         /* ======================================================
          * RESPONSE
@@ -1027,6 +1049,177 @@ export class SaleService extends MongoRepository<Sale> {
       message: SALE.DELETED,
       data: existing,
     };
+  }
+
+  /**
+   * Export Sale To ERP SFA_ORDER
+   * ----------------------------
+   * Source : Mongo Sale + Sale Items
+   * Target : Oracle SFA_ORDER
+   *
+   * Oracle table columns:
+   * VC_COMP_CODE
+   * VC_ORDER_NO
+   * DT_ORDER_DATE
+   * NU_CUSTOMER_CODE
+   * VC_ITEM_CODE
+   * NU_QTY
+   * VC_ORDER_NO_SFA
+   * DT_ORDER_DATE_SFA
+   * VC_STORE_CODE
+   * DT_MOD_DATE
+   */
+  private async exportSaleToErpSfaOrder(params: {
+    sale: any;
+    items: any[];
+    saleId: string;
+  }): Promise<void> {
+    if (!this.oracleRepository.isEnabled()) {
+      return;
+    }
+
+    const { sale, items, saleId } = params;
+
+    const toStringSafe = (value: any): string => {
+      return String(value ?? '').trim();
+    };
+
+    const toNumberSafe = (value: any, defaultValue = 0): number => {
+      const numberValue = Number(value);
+      return Number.isFinite(numberValue) ? numberValue : defaultValue;
+    };
+
+    const toFixed4 = (value: number): number => {
+      return Number((value || 0).toFixed(4));
+    };
+
+    const firstItemWithCompCode = items.find((item) =>
+      toStringSafe(item.compCode),
+    );
+
+    const compCode = toStringSafe(sale.compCode);
+
+    const orderNo = '';
+    const orderNoSfa = saleId;
+    const storeCode = toStringSafe(sale.vanId);
+    const orderDate = sale.date ? new Date(sale.date) : new Date();
+    const customerCode = toNumberSafe(sale.customerId);
+
+    if (!compCode) {
+      throw new BadRequestException(
+        `Invalid company code for ERP export. Sale: ${saleId}`,
+      );
+    }
+
+    if (!customerCode) {
+      throw new BadRequestException(
+        `Invalid ERP customer code for sale ${saleId}. customerId must be numeric for NU_CUSTOMER_CODE.`,
+      );
+    }
+
+    if (!storeCode) {
+      throw new BadRequestException(
+        `Invalid ERP store code for sale ${saleId}. vanId is required for VC_STORE_CODE.`,
+      );
+    }
+
+    const itemMap = new Map<
+      string,
+      {
+        productId: string;
+        qty: number;
+      }
+    >();
+
+    for (const item of items) {
+      const productId = toStringSafe(item.productId)
+
+      if (!productId) continue;
+
+      const itemNetCases = toNumberSafe(item.netCases, 0);
+
+      const qty =
+        itemNetCases > 0
+          ? itemNetCases
+          : toFixed4(
+              toNumberSafe(item.caseQty, 0) +
+                toNumberSafe(item.pieceQty, 0) /
+                  Math.max(toNumberSafe(item.unitQtyInCase, 1), 1),
+            );
+
+      if (qty <= 0) continue;
+
+      const existing = itemMap.get(productId);
+
+      if (existing) {
+        existing.qty = toFixed4(existing.qty + qty);
+      } else {
+        itemMap.set(productId, {
+          productId,
+          qty: toFixed4(qty),
+        });
+      }
+    }
+
+    const exportItems = Array.from(itemMap.values());
+
+    const erpOrderDate = null;
+    const erpOrderNumber = null;
+
+    if (!exportItems.length) {
+      throw new BadRequestException(
+        `No valid sale items found to export sale ${saleId} to ERP.`,
+      );
+    }
+
+    await this.oracleRepository.transaction(async (connection) => {
+      for (const item of exportItems) {
+        await connection.execute(
+          `
+        INSERT INTO SFA_ORDER (
+          VC_COMP_CODE,
+          VC_ORDER_NO,
+          DT_ORDER_DATE,
+          NU_CUSTOMER_CODE,
+          VC_ITEM_CODE,
+          NU_QTY,
+          VC_ORDER_NO_SFA,
+          DT_ORDER_DATE_SFA,
+          VC_STORE_CODE,
+          DT_MOD_DATE
+        ) VALUES (
+          :compCode,
+          :orderNo,
+          :orderDate,
+          :customerCode,
+          :itemCode,
+          :qty,
+          :orderNoSfa,
+          :orderDateSfa,
+          :storeCode,
+          :modDate
+        )
+        `,
+          {
+            compCode,
+            erpOrderNumber,
+            erpOrderDate,
+            customerCode,
+            itemCode: item.productId,
+            qty: item.qty,
+            orderNoSfa,
+            orderDateSfa: orderDate,
+            storeCode,
+            modDate: new Date(),
+          },
+          {
+            autoCommit: false,
+          },
+        );
+      }
+
+      return true;
+    });
   }
 
   private handleDuplicateError(error: any): never {
