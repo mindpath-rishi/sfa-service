@@ -20,10 +20,15 @@ export const oracleConfig = (
 ): oracledb.PoolAttributes => {
   logger.setContext('OracleDB');
 
-  /* ==================== ORACLE GLOBAL SETTINGS ==================== */
-
-  oracledb.outFormat = oracledb.OUT_FORMAT_OBJECT;
-  oracledb.autoCommit = false;
+  /*
+   * Do not set global Oracle options here:
+   *
+   * oracledb.outFormat = oracledb.OUT_FORMAT_OBJECT;
+   * oracledb.autoCommit = false;
+   *
+   * In your installed oracledb version, outFormat is getter-only.
+   * Set outFormat and autoCommit per query inside OracleRepository.
+   */
 
   return {
     user: config.user,
