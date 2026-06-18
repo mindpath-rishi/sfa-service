@@ -51,6 +51,7 @@ import { CreatePriceDto } from './dto/create-price.dto';
 import { UpdatePriceDto } from './dto/update-price.dto';
 import { PriceQueryDto } from './dto/price-query.dto';
 import { PRICE } from './price.constants';
+import { Public } from 'src/core/decorators/public.decorator';
 
 @ApiTags('Price')
 @FeatureFlag(API_MODULE_ENABLE_KEYS.PRICE)
@@ -82,6 +83,7 @@ export class PriceController {
     return this.service.create(dto);
   }
 
+  @Public()
   @Permissions('PRICE_SYNC')
   @Post('sync')
   @HttpCode(HttpStatus.OK)

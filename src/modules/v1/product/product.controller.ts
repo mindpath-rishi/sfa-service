@@ -89,6 +89,8 @@ export class ProductController {
   async create(@Body() dto: ProductCreateDto) {
     return this.productService.create(dto);
   }
+
+@Public()
 @Permissions('PRODUCT_SYNC')
 @Post('sync')
 @HttpCode(HttpStatus.OK)

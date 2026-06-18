@@ -51,6 +51,7 @@ import { CreateVanErpClosingDto } from './dto/create-van-erp-closing.dto';
 import { UpdateVanErpClosingDto } from './dto/update-van-erp-closing.dto';
 import { VanErpClosingQueryDto } from './dto/van-erp-closing-query.dto';
 import { VAN_ERP_CLOSING } from './van-erp-closing.constants';
+import { Public } from 'src/core/decorators/public.decorator';
 
 @ApiTags('Van-erp-closing')
 @FeatureFlag(API_MODULE_ENABLE_KEYS.VAN_ERP_CLOSING)
@@ -80,6 +81,21 @@ export class VanErpClosingController {
   )
   async create(@Body() dto: CreateVanErpClosingDto) {
     return this.service.create(dto);
+  }
+
+  @Public()
+  @Permissions('VAN_ERP_CLOSING_CREATE')
+  @Post('sync')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Create van-erp-closing' })
+  @ApiBody({ type: CreateVanErpClosingDto })
+  @ApiSuccessResponse(
+    { stockId: 'VAN_-001' },
+    VAN_ERP_CLOSING.CREATED,
+    HttpStatus.CREATED,
+  )
+  async sync() {
+    return this.service.syncVanClosingStockFromERP();
   }
 
   /**
