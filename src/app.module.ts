@@ -55,6 +55,9 @@ import { SaleModule } from './modules/v1/sale/sale.module';
 import { SaleItemModule } from './modules/v1/sale-item/sale-item.module';
 import { LeaveModule } from './modules/v1/leave/leave.module';
 import { TargetModule } from './modules/v1/target/target.module';
+import { OracleModule } from './core/database/oracle/oracle.module';
+import { PriceModule } from './modules/v1/price/price.module';
+import { VanErpClosingModule } from './modules/v1/van-erp-closing/van-erp-closing.module';
 
 @Global()
 @Module({
@@ -122,7 +125,10 @@ import { TargetModule } from './modules/v1/target/target.module';
     SaleModule,
     SaleItemModule,
     LeaveModule,
-    TargetModule,],
+    TargetModule,
+    OracleModule,
+    PriceModule,
+    VanErpClosingModule,],
   providers: [
     AppControlService,
     MongoService,

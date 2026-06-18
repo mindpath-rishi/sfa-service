@@ -7,12 +7,15 @@ export type ProductDocument = HydratedDocument<Product>;
 @Schema({ collection: 'product_master' })
 export class Product {
   /* ================= IDENTITY ================= */
+  @Prop({ required: true, trim: true, type: String })
+  compCode!: string;
 
   @Prop({ required: true, trim: true, unique: true, type: String })
   productId!: string;
 
   @Prop({ required: true, trim: true, type: String })
   name!: string;
+  
 
   @Prop({ required: true, trim: true, unique: true, type: String })
   productSysCode!: string;
@@ -50,11 +53,18 @@ export class Product {
   @Prop({ type: String })
   unitType?: string;
 
+    @Prop({ type: String })
+  itemGroup?: string;
+
+    @Prop({ type: String })
+  itemsSubGroup?: string;
+
   @Prop({ type: String })
   unitSize?: string;
 
-  @Prop({ type: String })
+  @Prop({ type: String, default: 'Y' })
   isFocusedPack?: string;
+
 
   @Prop({ required: true, type: Number })
   unitQtyInCase!: number;

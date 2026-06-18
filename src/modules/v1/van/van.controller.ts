@@ -103,6 +103,27 @@ export class VanController {
     return this.vanService.changeVan(dto);
   }
 
+  @Permissions('VAN_SYNC')
+  @Post('sync')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Sync vans from ERP Oracle to MongoDB' })
+  @ApiSuccessResponse(
+    {
+      totalERPRecords: 10,
+      totalUniqueRecords: 10,
+      totalValidRecords: 10,
+      inserted: 2,
+      updated: 8,
+      matched: 8,
+      synced: 10,
+    },
+    'ERP vans synced successfully.',
+    HttpStatus.OK,
+  )
+  async syncVans() {
+    return this.vanService.syncVansFromERP();
+  }
+
   /**
    * Get Van mapped routes
    * -------------

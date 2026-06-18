@@ -39,10 +39,15 @@ import { PRODUCT } from './product.constants';
 import { ProductCreateDto } from './dto/create-product.dto';
 import { ProductUpdateDto } from './dto/update-product.dto';
 import { RequestContextStore } from 'src/core/context/request-context';
+import { OracleRepository } from 'src/core/database/oracle/oracle.repository';
+import { PriceType, ProductStatus } from 'src/shared/enums/product.enums';
 
 @Injectable()
 export class ProductService extends MongoRepository<Product> {
-  constructor(mongo: MongoService) {
+  constructor(
+    mongo: MongoService,
+    private readonly oracleRepository: OracleRepository,
+  ) {
     super(mongo.getModel(Product.name, ProductSchema));
   }
 
@@ -130,6 +135,186 @@ export class ProductService extends MongoRepository<Product> {
     });
   }
 
+/**
+ * Sync Products From ERP Oracle
+ * -----------------------------
+ * Source table : ESS_PRODUCT
+ * Target table : product_master
+ */
+async syncProductsFromERP() {
+  if (!this.oracleRepository.isEnabled()) {
+    return {
+      statusCode: HttpStatus.OK,
+      message: PRODUCT.ORACLE_DISABLED,
+      data: {
+        synced: 0,
+        skipped: true,
+      },
+    };
+  }
+
+  const toStringSafe = (value: any): string => {
+    return String(value ?? '').trim();
+  };
+
+  const toNumberSafe = (value: any, defaultValue = 0): number => {
+    const numberValue = Number(value);
+    return Number.isFinite(numberValue) ? numberValue : defaultValue;
+  };
+
+  const round4 = (value: number): number => {
+    return Number(value.toFixed(4));
+  };
+
+  const rows = await this.oracleRepository.query<any>(
+    `
+    SELECT
+      VC_COMP_CODE           AS "compCode",
+      VC_ITEM_CODE           AS "itemCode",
+      VC_ITEM_DESC           AS "itemDesc",
+      VC_TECH_DESC           AS "techDesc",
+      VC_UNIT                AS "unitType",
+      NU_SELLING_PRICE       AS "sellingPrice",
+      NU_BASIC_PRICE         AS "basicPrice",
+      VC_ITEM_GROUP          AS "itemGroup",
+      VC_ITEM_SUB_GROUP      AS "itemSubGroup",
+      CH_STATUS              AS "erpStatus",
+      NU_NET_WT              AS "netWeight",
+      NU_OUTER_QTY           AS "outerQty",
+      PRODUCT_TYPE           AS "parentCategoryName",
+      SUB_PRODUCT_TYPE       AS "categoryName",
+      PRODUCT_TYPE_CODE      AS "parentCategoryCode",
+      SUB_PRODUCT_TYPE_CODE  AS "categoryCode"
+    FROM ESS_PRODUCT
+    WHERE VC_ITEM_CODE IS NOT NULL
+    `,
+  );
+
+  if (!rows.length) {
+    return {
+      statusCode: HttpStatus.OK,
+      message: PRODUCT.NOT_FOUND,
+      data: {
+        synced: 0,
+      },
+    };
+  }
+
+  /**
+   * Deduplicate ERP rows by itemCode because productId is unique in Mongo.
+   * If same item appears multiple times, latest row in Oracle result will be used.
+   */
+  const uniqueRowsMap = new Map<string, any>();
+
+  for (const row of rows) {
+    const itemCode = toStringSafe(row.itemCode);
+
+    if (!itemCode) continue;
+
+    uniqueRowsMap.set(itemCode, row);
+  }
+
+  const uniqueRows = Array.from(uniqueRowsMap.values());
+
+  const operations = uniqueRows.map((row) => {
+    const compCode = toStringSafe(row.compCode);
+    const itemCode = toStringSafe(row.itemCode);
+
+    const productId = itemCode;
+    const productSysCode = itemCode;
+
+    const unitQtyInCase = Math.max(toNumberSafe(row.outerQty, 1), 1);
+
+    const casePrice = toNumberSafe(
+      row.sellingPrice ?? row.basicPrice,
+      0,
+    );
+
+    const piecePrice = round4(casePrice / unitQtyInCase);
+
+    const caseNetWeight = toNumberSafe(row.netWeight, 0);
+
+    const pieceNetWeight = round4(caseNetWeight / unitQtyInCase);
+
+    const name =
+      toStringSafe(row.itemDesc) ||
+      toStringSafe(row.techDesc) ||
+      itemCode;
+
+    const categoryId =
+      toStringSafe(row.categoryCode) ||
+      toStringSafe(row.parentCategoryCode) ||
+      toStringSafe(row.itemGroup) ||
+      'UNCATEGORIZED';
+
+    const unitType = toStringSafe(row.unitType) || undefined;
+
+    const unitSize = toStringSafe(row.itemSubGroup) || undefined;
+
+
+
+    return {
+      updateOne: {
+        filter: {
+          productId,
+        },
+        update: {
+          $set: {
+            compCode,
+            productId,
+            name,
+            productSysCode,
+            categoryId,
+
+            casePrice,
+            piecePrice,
+
+            caseNetWeight,
+            pieceNetWeight,
+
+            priceType: PriceType.STANDARD,
+
+            unitType,
+            unitSize,
+            unitQtyInCase,
+
+            isDeleted: false,
+          },
+        },
+        upsert: true,
+      },
+    };
+  });
+
+  if (!operations.length) {
+    return {
+      statusCode: HttpStatus.OK,
+      message: PRODUCT.NOT_FOUND,
+      data: {
+        synced: 0,
+      },
+    };
+  }
+
+  const result = await this.model.bulkWrite(operations, {
+    ordered: false,
+  });
+
+  return {
+    statusCode: HttpStatus.OK,
+    message: PRODUCT.SYNCED,
+    data: {
+      totalERPRecords: rows.length,
+      totalUniqueRecords: uniqueRows.length,
+      totalValidRecords: operations.length,
+      inserted: result.upsertedCount || 0,
+      updated: result.modifiedCount || 0,
+      matched: result.matchedCount || 0,
+      synced: operations.length,
+    },
+  };
+}
+
   /**
    * Get Products
    * ------------
@@ -148,7 +333,7 @@ export class ProductService extends MongoRepository<Product> {
       hasDiscount,
       page = 1,
       limit = 20,
-      isFocusedPack
+      isFocusedPack,
     } = query;
 
     /**
@@ -178,7 +363,7 @@ export class ProductService extends MongoRepository<Product> {
       if (maxPrice) match.price.$lte = Number(maxPrice);
     }
 
-    if(isFocusedPack){
+    if (isFocusedPack) {
       match.isFocusedPack = isFocusedPack;
     }
 

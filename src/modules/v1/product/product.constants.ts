@@ -5,4 +5,6 @@ export const PRODUCT = {
   UPDATED: 'Product updated successfully',
   DELETED: 'Product deleted successfully',
   FETCHED: 'Product fetched successfully',
+  SYNCED: 'Product synced successfully',
+  ORACLE_DISABLED: 'OracleDB is disabled. Product sync skipped.',
 };

@@ -89,6 +89,26 @@ export class ProductController {
   async create(@Body() dto: ProductCreateDto) {
     return this.productService.create(dto);
   }
+@Permissions('PRODUCT_SYNC')
+@Post('sync')
+@HttpCode(HttpStatus.OK)
+@ApiOperation({ summary: 'Sync products from ERP Oracle to MongoDB' })
+@ApiSuccessResponse(
+  {
+    totalERPRecords: 100,
+    totalUniqueRecords: 100,
+    totalValidRecords: 100,
+    inserted: 10,
+    updated: 90,
+    matched: 90,
+    synced: 100,
+  },
+  PRODUCT.SYNCED,
+  HttpStatus.OK,
+)
+async syncProducts() {
+  return this.productService.syncProductsFromERP();
+}
 
   /**
    * Get Products

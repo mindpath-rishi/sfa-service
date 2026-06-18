@@ -36,10 +36,14 @@ import { VAN } from './van.constants';
 import { RequestContextStore } from 'src/core/context/request-context';
 import { VanStatus } from 'src/shared/enums/van.enums';
 import { ChangeVanDto } from './van.controller';
+import { OracleRepository } from 'src/core/database/oracle/oracle.repository';
 
 @Injectable()
 export class VanService extends MongoRepository<Van> {
-  constructor(mongo: MongoService) {
+  constructor(
+    mongo: MongoService,
+    private readonly oracleRepository: OracleRepository,
+  ) {
     super(mongo.getModel(Van.name, VanSchema));
   }
 
@@ -105,6 +109,127 @@ export class VanService extends MongoRepository<Van> {
         data: van,
       };
     });
+  }
+
+  /**
+   * Sync Vans From ERP Oracle
+   * -------------------------
+   * Source table : VAN_MASTER
+   * Target table : vans
+   */
+  async syncVansFromERP() {
+    if (!this.oracleRepository.isEnabled()) {
+      return {
+        statusCode: HttpStatus.OK,
+        message: 'OracleDB is disabled. Van sync skipped.',
+        data: {
+          synced: 0,
+          skipped: true,
+        },
+      };
+    }
+
+    const toStringSafe = (value: any): string => {
+      return String(value ?? '').trim();
+    };
+
+    const rows = await this.oracleRepository.query<any>(
+      `
+    SELECT
+      VC_WAREHOUSE_CODE AS "warehouseCode",
+      VC_WAREHOUSE_DESC AS "warehouseDesc",
+      VC_ADD1           AS "address1",
+      VC_ADD2           AS "address2",
+      VC_MASTER_CODE    AS "masterCode"
+    FROM VAN_MASTER
+    WHERE VC_WAREHOUSE_CODE IS NOT NULL
+    `,
+    );
+
+    if (!rows.length) {
+      return {
+        statusCode: HttpStatus.OK,
+        message: 'No vans found from ERP.',
+        data: {
+          synced: 0,
+        },
+      };
+    }
+
+    /**
+     * Deduplicate by warehouse code because vanId is unique in Mongo.
+     */
+    const uniqueRowsMap = new Map<string, any>();
+
+    for (const row of rows) {
+      const warehouseCode = toStringSafe(row.warehouseCode);
+
+      if (!warehouseCode) continue;
+
+      uniqueRowsMap.set(warehouseCode, row);
+    }
+
+    const uniqueRows = Array.from(uniqueRowsMap.values());
+
+    const operations = uniqueRows.map((row) => {
+      const warehouseCode = toStringSafe(row.warehouseCode);
+
+      const vanId = warehouseCode;
+      const vanNumber = warehouseCode;
+
+      const name =
+        toStringSafe(row.warehouseDesc) ||
+        toStringSafe(row.masterCode) ||
+        warehouseCode;
+
+      return {
+        updateOne: {
+          filter: {
+            vanId,
+          },
+          update: {
+            $set: {
+              vanId,
+              name,
+              vanNumber,
+            },
+            $setOnInsert: {
+              associatedUsers: [],
+              associatedRoutes: [],
+            },
+          },
+          upsert: true,
+        },
+      };
+    });
+
+    if (!operations.length) {
+      return {
+        statusCode: HttpStatus.OK,
+        message: 'No valid vans found from ERP.',
+        data: {
+          synced: 0,
+        },
+      };
+    }
+
+    const result = await this.model.bulkWrite(operations, {
+      ordered: false,
+    });
+
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'ERP vans synced successfully.',
+      data: {
+        totalERPRecords: rows.length,
+        totalUniqueRecords: uniqueRows.length,
+        totalValidRecords: operations.length,
+        inserted: result.upsertedCount || 0,
+        updated: result.modifiedCount || 0,
+        matched: result.matchedCount || 0,
+        synced: operations.length,
+      },
+    };
   }
 
   /**
