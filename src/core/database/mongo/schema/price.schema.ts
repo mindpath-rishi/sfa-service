@@ -8,7 +8,8 @@
  * - Price identity
  * - Product price details
  * - Category details
- * - VAT inclusive / exclusive prices
+ * - VAT inclusive / exclusive case prices
+ * - VAT inclusive / exclusive piece prices
  * - Effective date
  * - Price flag
  *
@@ -52,14 +53,24 @@ export class Price {
   categoryCode!: string;
 
   /* ======================================================
-   * PRICE
+   * CASE PRICE
    * ====================================================== */
 
   @Prop({ required: true, type: Number, default: 0 })
-  priceInclVat!: number;
+  casePriceExclVat!: number;
 
   @Prop({ required: true, type: Number, default: 0 })
-  priceExclVat!: number;
+  casePriceInclVat!: number;
+
+  /* ======================================================
+   * PIECE PRICE
+   * ====================================================== */
+
+  @Prop({ required: true, type: Number, default: 0 })
+  piecePriceExclVat!: number;
+
+  @Prop({ required: true, type: Number, default: 0 })
+  piecePriceInclVat!: number;
 
   /* ======================================================
    * EFFECTIVE DATE

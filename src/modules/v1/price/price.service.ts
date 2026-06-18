@@ -80,7 +80,6 @@ export class PriceService extends MongoRepository<Price> {
       this.handleDuplicateError(error);
     }
   }
-
   /**
    * Sync Prices From ERP Oracle
    * ---------------------------
@@ -124,14 +123,19 @@ export class PriceService extends MongoRepository<Price> {
       );
     };
 
+    const round4 = (value: number): number => {
+      return Number(value.toFixed(4));
+    };
+
     const rows = await this.oracleRepository.query<any>(
       `
     SELECT
       VC_CATG_CODE       AS "categoryCode",
       VC_CATG_NAME       AS "categoryName",
       VC_ITEM_CODE       AS "productId",
-      NU_EXCL_VAT        AS "priceExclVat",
-      NU_INCL_VAT        AS "priceInclVat",
+      NU_EXCL_VAT        AS "casePriceExclVat",
+      NU_INCL_VAT        AS "casePriceInclVat",
+      NU_OUTER_QTY       AS "piecePerCase",
       DT_EFFECTIVE_DATE  AS "effectiveDate",
       PRICE_FLAG         AS "priceFlag",
       CH_STATUS          AS "status",
@@ -158,15 +162,8 @@ export class PriceService extends MongoRepository<Price> {
     }
 
     /**
-     * Deduplicate ERP rows according to Mongo price uniqueness.
-     * Current schema stores:
-     * - productId
-     * - categoryCode
-     * - categoryName
-     * - priceInclVat
-     * - priceExclVat
-     * - effectiveDate
-     * - priceFlag
+     * Deduplicate ERP rows according to Mongo unique index:
+     * productId + categoryCode + priceFlag + effectiveDate
      */
     const uniqueRowsMap = new Map<string, any>();
 
@@ -189,6 +186,8 @@ export class PriceService extends MongoRepository<Price> {
 
       uniqueRowsMap.set(uniqueKey, {
         ...row,
+        productId,
+        categoryCode,
         priceFlag,
         effectiveDate: normalizedEffectiveDate,
       });
@@ -199,15 +198,29 @@ export class PriceService extends MongoRepository<Price> {
     const operations = uniqueRows.map((row) => {
       const productId = toStringSafe(row.productId);
       const categoryCode = toStringSafe(row.categoryCode);
+
       const categoryName =
         toStringSafe(row.categoryName) || categoryCode || 'UNCATEGORIZED';
 
       const priceFlag = toStringSafe(row.priceFlag) || 'N';
-
       const effectiveDate = row.effectiveDate as Date;
 
-      const priceInclVat = toNumberSafe(row.priceInclVat, 0);
-      const priceExclVat = toNumberSafe(row.priceExclVat, 0);
+      /**
+       * ERP gives case prices:
+       * NU_EXCL_VAT = casePriceExclVat
+       * NU_INCL_VAT = casePriceInclVat
+       *
+       * Piece price is calculated by:
+       * case price / NU_OUTER_QTY
+       */
+      const piecePerCaseRaw = toNumberSafe(row.piecePerCase, 1);
+      const piecePerCase = piecePerCaseRaw > 0 ? piecePerCaseRaw : 1;
+
+      const casePriceExclVat = toNumberSafe(row.casePriceExclVat, 0);
+      const casePriceInclVat = toNumberSafe(row.casePriceInclVat, 0);
+
+      const piecePriceExclVat = round4(casePriceExclVat / piecePerCase);
+      const piecePriceInclVat = round4(casePriceInclVat / piecePerCase);
 
       return {
         updateOne: {
@@ -222,10 +235,15 @@ export class PriceService extends MongoRepository<Price> {
               productId,
               categoryCode,
               categoryName,
-              priceInclVat,
-              priceExclVat,
+
+              casePriceExclVat,
+              casePriceInclVat,
+              piecePriceExclVat,
+              piecePriceInclVat,
+
               effectiveDate,
               priceFlag,
+              isDeleted: false,
             },
             $setOnInsert: {
               priceId: IdGenerator.generate('PRIC', 8),
