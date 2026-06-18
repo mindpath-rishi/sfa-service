@@ -4,6 +4,8 @@ import { LoggerService } from 'src/core/logger/logger.service';
 
 export const ORACLE_POOL = 'ORACLE_POOL';
 
+let oracleClientInitialized = false;
+
 export const OracleProvider = {
   provide: ORACLE_POOL,
   inject: [LoggerService],
@@ -18,14 +20,35 @@ export const OracleProvider = {
     }
 
     /**
-     * Oracle Thin Mode
-     * ----------------
-     * node-oracledb uses Thin mode by default.
-     * Do NOT call oracledb.initOracleClient().
+     * Enable Oracle Thick Mode when ORACLE_THICK_MODE=true.
+     * Required when DB user has old password verifier like 0x939.
      */
-    logger.info(
-      `OracleDB driver mode: ${oracledb.thin ? 'THIN' : 'THICK'}`,
-    );
+    if (process.env.ORACLE_THICK_MODE === 'true' && !oracleClientInitialized) {
+      try {
+        oracledb.initOracleClient({
+          libDir: process.env.ORACLE_CLIENT_LIB_DIR,
+        });
+
+        oracleClientInitialized = true;
+
+        logger.info(
+          `OracleDB Thick mode enabled. Client path: ${process.env.ORACLE_CLIENT_LIB_DIR}`,
+        );
+      } catch (error: any) {
+        /**
+         * NJS-078 means Oracle Client was already initialized.
+         * It can happen during hot reload / repeated bootstrap.
+         */
+        if (error?.code !== 'NJS-078') {
+          logger.error('OracleDB Thick mode initialization failed', error);
+          return null;
+        }
+
+        oracleClientInitialized = true;
+      }
+    } else {
+      logger.info(`OracleDB driver mode: ${oracledb.thin ? 'THIN' : 'THICK'}`);
+    }
 
     const config: OracleConfigOptions = {
       user: process.env.ORACLE_USER!,
@@ -41,9 +64,7 @@ export const OracleProvider = {
     };
 
     if (!config.user || !config.password || !config.connectString) {
-      logger.warn(
-        'OracleDB credentials missing. Skipping Oracle pool creation.',
-      );
+      logger.warn('OracleDB credentials missing. Skipping Oracle pool creation.');
       return null;
     }
 
@@ -54,19 +75,13 @@ export const OracleProvider = {
       logger.info(
         `OracleDB pool config: min=${config.poolMin}, max=${config.poolMax}, increment=${config.poolIncrement}`,
       );
-
       logger.info(
-        `OracleDB pool status: open=${pool.connectionsOpen}, inUse=${pool.connectionsInUse}`,
+        `OracleDB driver mode after pool create: ${oracledb.thin ? 'THIN' : 'THICK'}`,
       );
 
       return pool;
     } catch (error) {
       logger.error('OracleDB connection pool creation failed', error);
-
-      /**
-       * Oracle is optional.
-       * App will continue without Oracle.
-       */
       return null;
     }
   },
