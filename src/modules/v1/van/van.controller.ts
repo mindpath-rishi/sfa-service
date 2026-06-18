@@ -103,6 +103,7 @@ export class VanController {
     return this.vanService.changeVan(dto);
   }
 
+  @Public()
   @Permissions('VAN_SYNC')
   @Post('sync')
   @HttpCode(HttpStatus.OK)
