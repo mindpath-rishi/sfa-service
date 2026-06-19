@@ -1205,23 +1205,11 @@ export class SaleService extends MongoRepository<Sale> {
       return Number((value || 0).toFixed(4));
     };
 
-    const firstItemWithCompCode = items.find((item) =>
-      toStringSafe(item.compCode),
-    );
-
-    const compCode = toStringSafe(sale.compCode);
-
     const orderNo = '';
     const orderNoSfa = saleId;
     const storeCode = toStringSafe(sale.vanId);
     const orderDate = sale.date ? new Date(sale.date) : new Date();
     const customerCode = toNumberSafe(sale.customerId);
-
-    if (!compCode) {
-      throw new BadRequestException(
-        `Invalid company code for ERP export. Sale: ${saleId}`,
-      );
-    }
 
     if (!customerCode) {
       throw new BadRequestException(
@@ -1240,13 +1228,21 @@ export class SaleService extends MongoRepository<Sale> {
       {
         productId: string;
         qty: number;
+        compCode: string;
       }
     >();
 
     for (const item of items) {
       const productId = toStringSafe(item.productId);
+      const compCode = toStringSafe(item.compCode);
 
       if (!productId) continue;
+
+      if (!compCode) {
+        throw new BadRequestException(
+          `Invalid ERP company code for sale ${saleId}. compCode is required in sale items.`,
+        );
+      }
 
       const itemNetCases = toNumberSafe(item.netCases, 0);
 
@@ -1261,22 +1257,21 @@ export class SaleService extends MongoRepository<Sale> {
 
       if (qty <= 0) continue;
 
-      const existing = itemMap.get(productId);
+      const itemKey = `${compCode}:${productId}`;
+      const existing = itemMap.get(itemKey);
 
       if (existing) {
         existing.qty = toFixed4(existing.qty + qty);
       } else {
-        itemMap.set(productId, {
+        itemMap.set(itemKey, {
           productId,
           qty: toFixed4(qty),
+          compCode,
         });
       }
     }
 
     const exportItems = Array.from(itemMap.values());
-
-    const erpOrderDate = null;
-    const erpOrderNumber = null;
 
     if (!exportItems.length) {
       throw new BadRequestException(
@@ -1313,9 +1308,9 @@ export class SaleService extends MongoRepository<Sale> {
         )
         `,
           {
-            compCode,
-            erpOrderNumber,
-            erpOrderDate,
+            compCode: item.compCode,
+            orderNo,
+            orderDate: null,
             customerCode,
             itemCode: item.productId,
             qty: item.qty,
