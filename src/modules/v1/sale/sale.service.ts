@@ -1293,8 +1293,7 @@ export class SaleService extends MongoRepository<Sale> {
     await this.oracleRepository.transaction(async (connection) => {
       for (const item of exportItems) {
         await connection.execute(
-          `
-        INSERT INTO SFA_ORDER (
+          `INSERT INTO ORDER_SFA (
           VC_COMP_CODE,
           VC_ORDER_NO,
           DT_ORDER_DATE,
