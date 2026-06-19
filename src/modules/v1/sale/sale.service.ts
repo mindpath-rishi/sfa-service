@@ -5,12 +5,17 @@ import {
   HttpStatus,
   BadRequestException,
 } from '@nestjs/common';
+import { Model } from 'mongoose';
 
 import { MongoService } from 'src/core/database/mongo/mongo.service';
 import { MongoRepository } from 'src/core/database/mongo/mongo.repository';
 import { FilterQuery } from 'src/core/database/mongo/mongo.interface';
 
 import { Sale, SaleSchema } from 'src/core/database/mongo/schema/sale.schema';
+import {
+  Employee,
+  EmployeeSchema,
+} from 'src/core/database/mongo/schema/employee.schema';
 
 import { IdGenerator } from 'src/shared/utils/id-generator.utils';
 import { ProductService } from '../product/product.service';
@@ -32,9 +37,12 @@ import { InventoryTransactionService } from '../inventory-transaction/inventory-
 import { CustomerService } from '../customer/customer.service';
 import { VanDailyStockService } from '../van-daily-stock/van-daily-stock.service';
 import { OracleRepository } from 'src/core/database/oracle/oracle.repository';
+import { RequestContextStore } from 'src/core/context/request-context';
 
 @Injectable()
 export class SaleService extends MongoRepository<Sale> {
+  private readonly employeeModel: Model<Employee>;
+
   constructor(
     mongo: MongoService,
     private readonly productService: ProductService,
@@ -47,6 +55,7 @@ export class SaleService extends MongoRepository<Sale> {
     private readonly oracleRepository: OracleRepository,
   ) {
     super(mongo.getModel(Sale.name, SaleSchema));
+    this.employeeModel = mongo.getModel(Employee.name, EmployeeSchema);
   }
 
   async create(payload: CreateSaleDto) {
@@ -58,6 +67,86 @@ export class SaleService extends MongoRepository<Sale> {
         if (!items.length) {
           throw new BadRequestException('At least one item is required');
         }
+
+        const ctx = RequestContextStore.getStore();
+        const loggedInEmployeeId = ctx?.userId;
+
+        if (!loggedInEmployeeId) {
+          throw new BadRequestException('Logged-in employee is required');
+        }
+
+        const employee = await this.employeeModel
+          .findOne({
+            employeeId: loggedInEmployeeId,
+            isDeleted: false,
+          } as any)
+          .select({
+            employeeId: 1,
+            name: 1,
+            roleId: 1,
+            hierarchyPath: 1,
+          })
+          .session(session)
+          .lean()
+          .exec();
+
+        if (!employee) {
+          throw new BadRequestException(
+            `Employee not found: ${loggedInEmployeeId}`,
+          );
+        }
+
+        const hierarchyEmployeeIds = [
+          ...new Set([employee.employeeId, ...(employee.hierarchyPath ?? [])]),
+        ];
+
+        const hierarchyEmployees = await this.employeeModel
+          .find({
+            employeeId: { $in: hierarchyEmployeeIds },
+            isDeleted: false,
+          } as any)
+          .select({
+            employeeId: 1,
+            name: 1,
+            roleId: 1,
+          })
+          .session(session)
+          .lean()
+          .exec();
+
+        const hierarchyEmployeeById = new Map(
+          hierarchyEmployees.map((employee) => [employee.employeeId, employee]),
+        );
+
+        const saleEmployees = hierarchyEmployeeIds
+          .map((employeeId) => {
+            const hierarchyEmployee = hierarchyEmployeeById.get(employeeId);
+
+            if (!hierarchyEmployee) return null;
+
+            return {
+              employeeId: hierarchyEmployee.employeeId,
+              employeeName:
+                hierarchyEmployee.employeeId === loggedInEmployeeId
+                  ? ctx?.name || hierarchyEmployee.name
+                  : hierarchyEmployee.name,
+              role:
+                hierarchyEmployee.employeeId === loggedInEmployeeId
+                  ? ctx?.role || hierarchyEmployee.roleId
+                  : hierarchyEmployee.roleId,
+            };
+          })
+          .filter(
+            (
+              employee,
+            ): employee is {
+              employeeId: string;
+              employeeName: string;
+              role: string;
+            } => Boolean(employee),
+          );
+
+        const primaryEmployee = saleEmployees[0];
 
         if (
           type === SaleType.CASH &&
@@ -90,13 +179,26 @@ export class SaleService extends MongoRepository<Sale> {
         const processedItems: any[] = [];
 
         for (const item of items) {
-          const { compCode, categoryId, parentCategoryId } = item;
           const caseQty = item.caseQty || 0;
           const pieceQty = item.pieceQty || 0;
 
+          const itemCustomerCategoryId =
+            (item as any).customerCategoryId ||
+            (rest as any).customerCategoryId;
+
+          if (!itemCustomerCategoryId) {
+            throw new BadRequestException(
+              `Customer category is required for product: ${item.productId}`,
+            );
+          }
+
           const response = await this.productService.findByProductId(
             item.productId,
+            {
+              customerCategoryId: itemCustomerCategoryId,
+            },
           );
+
           const product = response?.data;
 
           if (!product) {
@@ -110,7 +212,6 @@ export class SaleService extends MongoRepository<Sale> {
           const unitQtyInCase = product.unitQtyInCase || 1;
           const casePrice = Number(product.casePrice || 0);
 
-          // ✅ Use backend stored piece price OR derive safely
           const piecePrice = Number(
             product.piecePrice ?? casePrice / unitQtyInCase,
           );
@@ -122,7 +223,6 @@ export class SaleService extends MongoRepository<Sale> {
           /* ================= VALUE ================= */
 
           const itemValueRaw = caseQty * casePrice + pieceQty * piecePrice;
-
           const itemValue = toFixed4(itemValueRaw);
 
           /* ================= WEIGHT ================= */
@@ -134,7 +234,9 @@ export class SaleService extends MongoRepository<Sale> {
           const itemWeight = toFixed4(itemWeightRaw);
 
           /* ================= TOTALS ================= */
+
           const itemNetCases = quantity / unitQtyInCase;
+
           totalCases += caseQty;
           totalPieces += pieceQty;
           totalQty += quantity;
@@ -162,13 +264,12 @@ export class SaleService extends MongoRepository<Sale> {
             totalNetWeight: itemWeight,
             totalValue: itemValue,
 
-            categoryId,
-            parentCategoryId,
-            compCode,
+            categoryId: (item as any).categoryId || (rest as any).categoryId,
+            parentCategoryId:
+              (item as any).parentCategoryId || (rest as any).parentCategoryId,
+            customerCategoryId: itemCustomerCategoryId,
+            compCode: (item as any).compCode || (rest as any).compCode,
 
-            /**
-             * Item-wise net cases, not cumulative total.
-             */
             netCases: toFixed4(itemNetCases),
           });
         }
@@ -177,13 +278,10 @@ export class SaleService extends MongoRepository<Sale> {
 
         totalWeight = toFixed4(totalWeight);
         totalValue = toFixed4(totalValue);
-
-        console.log('BACKEND TOTAL:', totalValue);
-
-        console.log('Other  Total', totalCases, totalPieces, totalQty);
+        netCases = toFixed4(netCases);
 
         /* ======================================================
-         * VALIDATE FRONTEND DATA (SAFE COMPARISON)
+         * VALIDATE FRONTEND DATA
          * ====================================================== */
 
         if (
@@ -233,6 +331,8 @@ export class SaleService extends MongoRepository<Sale> {
           {
             saleId,
             ...rest,
+
+            employees: saleEmployees,
 
             totalCases,
             totalPieces,
@@ -297,10 +397,10 @@ export class SaleService extends MongoRepository<Sale> {
             { session },
           );
 
-          const response = await this.vanDailyStockService.updateOne(
+          await this.vanDailyStockService.updateOne(
             {
-              productId: inventory?.productId,
-              vanId: inventory?.vanId,
+              productId: inventory.productId,
+              vanId: inventory.vanId,
               date: { $gte: new Date().setHours(0, 0, 0, 0) } as any,
             },
             {
@@ -309,18 +409,14 @@ export class SaleService extends MongoRepository<Sale> {
                 closingQty: -quantity,
               },
             },
-            {
-              session,
-            },
+            { session },
           );
-
-          console.log('Van Daily Stock Update Result:', response);
 
           await this.inventoryTxnService.create(
             {
               productId,
               vanId: doc.vanId,
-              employeeId: doc.employeeId,
+              employeeId: primaryEmployee.employeeId,
 
               transactionType: TransactionType.SALE,
               direction: Direction.OUT,
@@ -347,7 +443,7 @@ export class SaleService extends MongoRepository<Sale> {
             {
               customerId: doc.customerId,
               vanId: doc.vanId,
-              employeeId: doc.employeeId,
+              employeeId: primaryEmployee.employeeId,
               amount: paidAmount,
               paymentMode: payload.paymentMode,
               status: PaymentStatus.SUCCESS,
@@ -366,10 +462,9 @@ export class SaleService extends MongoRepository<Sale> {
         }
 
         /* ======================================================
-         * CUSTOMER OUTSTANDING UPDATE (CREDIT SALE)
+         * CUSTOMER OUTSTANDING UPDATE
          * ====================================================== */
 
-        console.log(type, pendingAmount);
         if (type === SaleType.CREDIT && pendingAmount > 0) {
           await this.customerService.updateOne(
             { customerId: doc.customerId },
@@ -391,10 +486,6 @@ export class SaleService extends MongoRepository<Sale> {
           items: processedItems,
           saleId,
         });
-
-        /* ======================================================
-         * RESPONSE
-         * ====================================================== */
 
         return {
           statusCode: HttpStatus.CREATED,
@@ -419,6 +510,7 @@ export class SaleService extends MongoRepository<Sale> {
       customerName,
       employeeId,
       employeeName,
+      employeeRole,
       status,
       type,
       paymentStatus,
@@ -429,6 +521,7 @@ export class SaleService extends MongoRepository<Sale> {
     const match: Record<string, any> = {
       isDeleted: false,
     };
+
     const toSafeRegex = (value: string) =>
       new RegExp(value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
 
@@ -436,10 +529,20 @@ export class SaleService extends MongoRepository<Sale> {
     if (salesId) match.saleId = salesId;
     if (vanId) match.vanId = vanId;
     if (customerId) match.customerId = customerId;
-    if (employeeId) match.employeeId = employeeId;
-    if (employeeName) match.employeeName = employeeName;
     if (type) match.type = type;
     if (paymentStatus) match.paymentStatus = paymentStatus;
+
+    if (employeeId) {
+      match['employees.employeeId'] = employeeId;
+    }
+
+    if (employeeName) {
+      match['employees.employeeName'] = toSafeRegex(employeeName);
+    }
+
+    if (employeeRole) {
+      match['employees.role'] = employeeRole;
+    }
 
     if (vanName) {
       match.vanName = toSafeRegex(vanName);
@@ -451,14 +554,22 @@ export class SaleService extends MongoRepository<Sale> {
 
     if (searchText) {
       const regex = toSafeRegex(searchText);
-      match.$or = [{ customerName: regex }, { vanName: regex }];
+
+      match.$or = [
+        { saleId: regex },
+        { customerName: regex },
+        { customerId: regex },
+        { vanName: regex },
+        { vanId: regex },
+        { 'employees.employeeId': regex },
+        { 'employees.employeeName': regex },
+        { 'employees.role': regex },
+      ];
     }
 
-    if (type) {
-      match.type = type;
-    }
-
-    const skip = (page - 1) * limit;
+    const pageNumber = Number(page);
+    const limitNumber = Number(limit);
+    const skip = (pageNumber - 1) * limitNumber;
 
     const pipeline: any[] = [
       { $match: match },
@@ -473,13 +584,14 @@ export class SaleService extends MongoRepository<Sale> {
       },
       {
         $facet: {
-          items: [{ $skip: skip }, { $limit: limit }],
+          items: [{ $skip: skip }, { $limit: limitNumber }],
           meta: [{ $count: 'total' }],
         },
       },
     ];
 
     const [result] = await this.model.aggregate(pipeline);
+
     const total = result?.meta?.[0]?.total ?? 0;
 
     return {
@@ -488,9 +600,9 @@ export class SaleService extends MongoRepository<Sale> {
       data: result?.items ?? [],
       meta: {
         total,
-        page,
-        limit,
-        totalPages: Math.ceil(total / limit),
+        page: pageNumber,
+        limit: limitNumber,
+        totalPages: Math.ceil(total / limitNumber),
       },
     };
   }
@@ -1132,7 +1244,7 @@ export class SaleService extends MongoRepository<Sale> {
     >();
 
     for (const item of items) {
-      const productId = toStringSafe(item.productId)
+      const productId = toStringSafe(item.productId);
 
       if (!productId) continue;
 

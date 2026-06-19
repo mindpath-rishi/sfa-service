@@ -1,8 +1,13 @@
-import { SaleType, SaleStatus } from 'src/shared/enums/sale.enums';
-import { PaymentMode, PaymentStatus } from 'src/shared/enums/payment.enums';
+import {
+  SalePaymentStatus,
+  SaleStatus,
+  SaleType,
+} from 'src/shared/enums/sale.enums';
+import { PaymentMode } from 'src/shared/enums/payment.enums';
 
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
+  ArrayMinSize,
   IsArray,
   IsDate,
   IsEnum,
@@ -15,12 +20,42 @@ import {
 import { Type } from 'class-transformer';
 import { CreateSaleItemDto } from '../../sale-item/dto/create-sale-item.dto';
 
+export class CreateSaleEmployeeDto {
+  @ApiProperty({
+    type: String,
+    description: 'Business identifier for employee',
+    example: 'EMP001',
+  })
+  @IsNotEmpty()
+  @IsString()
+  employeeId!: string;
+
+  @ApiProperty({
+    type: String,
+    description: 'Employee name',
+    example: 'Ramesh',
+  })
+  @IsNotEmpty()
+  @IsString()
+  employeeName!: string;
+
+  @ApiProperty({
+    type: String,
+    description: 'Employee role in sale',
+    example: 'SALESMAN',
+  })
+  @IsNotEmpty()
+  @IsString()
+  role!: string;
+}
+
 export class CreateSaleDto {
   /**
-   * CreateSalesDto
+   * CreateSaleDto
    * =================
    * Data Transfer Object for creating new Sales records
    */
+
   @ApiProperty({ type: String, description: 'Business identifier for van' })
   @IsNotEmpty()
   @IsString()
@@ -41,7 +76,7 @@ export class CreateSaleDto {
   @IsString()
   parentCategoryId!: string;
 
-  @ApiProperty({ type: String })
+  @ApiProperty({ type: String, description: 'Van name' })
   @IsNotEmpty()
   @IsString()
   vanName!: string;
@@ -62,23 +97,35 @@ export class CreateSaleDto {
   @IsString()
   visitId!: string;
 
-  @ApiProperty({ type: String })
+  @ApiProperty({ type: String, description: 'Customer name' })
   @IsNotEmpty()
   @IsString()
   customerName!: string;
 
   @ApiProperty({
-    type: String,
-    description: 'Business identifier for employee',
+    type: [CreateSaleEmployeeDto],
+    required: false,
+    description:
+      'Employees involved in sale. Ignored on create; derived from logged-in employee.',
+    example: [
+      {
+        employeeId: 'EMP001',
+        employeeName: 'Ramesh',
+        role: 'SALESMAN',
+      },
+      {
+        employeeId: 'EMP002',
+        employeeName: 'Suresh',
+        role: 'DRIVER',
+      },
+    ],
   })
-  @IsNotEmpty()
-  @IsString()
-  employeeId!: string;
-
-  @ApiProperty({ type: String })
-  @IsNotEmpty()
-  @IsString()
-  employeeName!: string;
+  @IsOptional()
+  @IsArray()
+  @ArrayMinSize(1)
+  @ValidateNested({ each: true })
+  @Type(() => CreateSaleEmployeeDto)
+  employees?: CreateSaleEmployeeDto[];
 
   @ApiProperty({ type: Date })
   @IsNotEmpty()
@@ -104,7 +151,7 @@ export class CreateSaleDto {
   @ApiPropertyOptional({ type: Number, default: 0 })
   @IsNotEmpty()
   @IsNumber()
-  totalNetWeight!: number;
+  totalWeight!: number;
 
   @ApiPropertyOptional({ type: Number, default: 0 })
   @IsNotEmpty()
@@ -116,14 +163,17 @@ export class CreateSaleDto {
     example: SaleType.CASH,
     default: SaleType.CASH,
   })
-  @IsNotEmpty()
+  @IsOptional()
   @IsEnum(SaleType)
   type?: SaleType;
 
-  @ApiPropertyOptional({ enum: PaymentStatus, default: PaymentStatus.PENDING })
+  @ApiPropertyOptional({
+    enum: SalePaymentStatus,
+    default: SalePaymentStatus.UNPAID,
+  })
   @IsOptional()
-  @IsEnum(PaymentStatus)
-  paymentStatus?: PaymentStatus;
+  @IsEnum(SalePaymentStatus)
+  paymentStatus?: SalePaymentStatus;
 
   @ApiPropertyOptional({ type: Number, default: 0 })
   @IsOptional()
@@ -144,7 +194,7 @@ export class CreateSaleDto {
     enum: SaleStatus,
     example: SaleStatus.COMPLETED,
     default: SaleStatus.COMPLETED,
-    description: 'Amount received',
+    description: 'Sale status',
   })
   @IsOptional()
   @IsEnum(SaleStatus)
@@ -160,6 +210,7 @@ export class CreateSaleDto {
     description: 'Product-wise sales items',
   })
   @IsArray()
+  @ArrayMinSize(1)
   @ValidateNested({ each: true })
   @Type(() => CreateSaleItemDto)
   items!: CreateSaleItemDto[];

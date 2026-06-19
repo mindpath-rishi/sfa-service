@@ -38,11 +38,38 @@ export class Sale {
   @Prop({ type: String, required: true, index: true })
   customerName!: string;
 
-  @Prop({ type: String, required: true, index: true })
-  employeeId!: string;
+  /* ======================================================
+   * EMPLOYEES
+   * ====================================================== */
 
-  @Prop({ type: String, required: true, index: true })
-  employeeName!: string;
+  @Prop({
+    type: [
+      {
+        employeeId: {
+          type: String,
+          required: true,
+          trim: true,
+        },
+        employeeName: {
+          type: String,
+          required: true,
+          trim: true,
+        },
+        role: {
+          type: String,
+          required: true,
+          trim: true,
+        },
+      },
+    ],
+    required: true,
+    default: [],
+  })
+  employees!: {
+    employeeId: string;
+    employeeName: string;
+    role: string;
+  }[];
 
   @Prop({ type: Date, required: true, index: true })
   date!: Date;
@@ -69,7 +96,9 @@ export class Sale {
   @Prop({ type: Number, required: true })
   totalValue!: number;
 
-  /* ================= RETURNS ================= */
+  /* ======================================================
+   * RETURNS
+   * ====================================================== */
 
   @Prop({ type: Number, default: 0 })
   totalReturnCases!: number;
@@ -84,7 +113,6 @@ export class Sale {
    * PAYMENT
    * ====================================================== */
 
-  // Cash or Credit
   @Prop({
     type: String,
     enum: SaleType,
@@ -93,7 +121,6 @@ export class Sale {
   })
   type!: SaleType;
 
-  // Payment lifecycle
   @Prop({
     type: String,
     enum: SalePaymentStatus,
@@ -102,11 +129,9 @@ export class Sale {
   })
   paymentStatus!: SalePaymentStatus;
 
-  // Amount received
   @Prop({ type: Number, default: 0 })
   paidAmount!: number;
 
-  // Remaining balance
   @Prop({ type: Number, default: 0 })
   pendingAmount!: number;
 
@@ -114,7 +139,7 @@ export class Sale {
    * META
    * ====================================================== */
 
-  @Prop()
+  @Prop({ type: String })
   remark?: string;
 
   /* ======================================================
@@ -139,4 +164,14 @@ export const SaleSchema = SchemaFactory.createForClass(Sale);
 SaleSchema.index(
   { vanId: 1, customerId: 1, date: 1 },
   { name: 'idx_customer_sales_daily' },
+);
+
+SaleSchema.index(
+  { 'employees.employeeId': 1, date: 1 },
+  { name: 'idx_employee_sales_date' },
+);
+
+SaleSchema.index(
+  { 'employees.role': 1, date: 1 },
+  { name: 'idx_employee_role_sales_date' },
 );

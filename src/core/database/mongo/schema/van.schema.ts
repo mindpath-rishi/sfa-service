@@ -60,6 +60,9 @@ export class Van {
   @Prop({ required: true, unique: true, index: true, type: String })
   vanNumber!: string;
 
+  @Prop({ index: true, type: String })
+  driverName!: string;
+
   /* ======================================================
    * SPECIFICATIONS
    * ====================================================== */

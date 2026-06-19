@@ -12,8 +12,14 @@
  * - Pagination
  */
 
-import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsString, IsArray, IsEnum } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import {
+  IsOptional,
+  IsString,
+  IsArray,
+  IsEnum,
+  IsNotEmpty,
+} from 'class-validator';
 import { Transform } from 'class-transformer';
 import { ProductStatus } from 'src/shared/enums/product.enums';
 import { PaginationDto } from 'src/shared/dto/pagination.dto';
@@ -31,6 +37,11 @@ export class ProductQueryDto extends PaginationDto {
   @IsOptional()
   @IsString()
   searchText?: string;
+
+  @ApiProperty({ example: 'PID-001', required: true })
+  @IsNotEmpty()
+  @IsString()
+  customerCategoryId!: string;
 
   /**
    * Category IDs

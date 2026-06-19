@@ -1,5 +1,8 @@
-import { SaleType, SaleStatus } from 'src/shared/enums/sale.enums';
-import { PaymentStatus } from 'src/shared/enums/payment.enums';
+import {
+  SalePaymentStatus,
+  SaleStatus,
+  SaleType,
+} from 'src/shared/enums/sale.enums';
 
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import {
@@ -11,6 +14,7 @@ import {
   MaxLength,
   MinLength,
 } from 'class-validator';
+import { Type } from 'class-transformer';
 import { PaginationDto } from 'src/shared/dto/pagination.dto';
 
 /**
@@ -24,7 +28,7 @@ import { PaginationDto } from 'src/shared/dto/pagination.dto';
 export class SaleQueryDto extends PaginationDto {
   @ApiPropertyOptional({
     description:
-      'Search by name, code, or identifier (supports partial matching)',
+      'Search by customer name, van name, sale ID, employee name, or employee ID',
     example: 'search term',
   })
   @IsOptional()
@@ -46,7 +50,7 @@ export class SaleQueryDto extends PaginationDto {
   @IsString()
   vanId?: string;
 
-  @ApiPropertyOptional({ type: String })
+  @ApiPropertyOptional({ type: String, description: 'Filter by van name' })
   @IsOptional()
   @IsString()
   vanName?: string;
@@ -56,23 +60,39 @@ export class SaleQueryDto extends PaginationDto {
   @IsString()
   customerId?: string;
 
-  @ApiPropertyOptional({ type: String })
+  @ApiPropertyOptional({ type: String, description: 'Filter by customer name' })
   @IsOptional()
   @IsString()
   customerName?: string;
 
-  @ApiPropertyOptional({ type: String, description: 'Filter by employee ID' })
+  @ApiPropertyOptional({
+    type: String,
+    description: 'Filter by employee ID from employees array',
+  })
   @IsOptional()
   @IsString()
   employeeId?: string;
 
-  @ApiPropertyOptional({ type: String })
+  @ApiPropertyOptional({
+    type: String,
+    description: 'Filter by employee name from employees array',
+  })
   @IsOptional()
   @IsString()
   employeeName?: string;
 
+  @ApiPropertyOptional({
+    type: String,
+    description: 'Filter by employee role from employees array',
+    example: 'SALESMAN',
+  })
+  @IsOptional()
+  @IsString()
+  employeeRole?: string;
+
   @ApiPropertyOptional({ type: Date })
   @IsOptional()
+  @Type(() => Date)
   @IsDate()
   date?: Date;
 
@@ -82,6 +102,7 @@ export class SaleQueryDto extends PaginationDto {
     example: 10,
   })
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   totalCases?: number;
 
@@ -91,6 +112,7 @@ export class SaleQueryDto extends PaginationDto {
     example: 10,
   })
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   totalPieces?: number;
 
@@ -100,8 +122,9 @@ export class SaleQueryDto extends PaginationDto {
     example: 10,
   })
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
-  totalQuantity?: number;
+  totalQty?: number;
 
   @ApiPropertyOptional({
     type: Number,
@@ -109,6 +132,7 @@ export class SaleQueryDto extends PaginationDto {
     example: 10,
   })
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   totalWeight?: number;
 
@@ -118,6 +142,7 @@ export class SaleQueryDto extends PaginationDto {
     example: 10,
   })
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   totalValue?: number;
 
@@ -127,6 +152,7 @@ export class SaleQueryDto extends PaginationDto {
     example: 10,
   })
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   totalReturnCases?: number;
 
@@ -136,6 +162,7 @@ export class SaleQueryDto extends PaginationDto {
     example: 10,
   })
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   totalReturnPieces?: number;
 
@@ -145,12 +172,13 @@ export class SaleQueryDto extends PaginationDto {
     example: 10,
   })
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
-  totalReturnQuantity?: number;
+  totalReturnQty?: number;
 
   @ApiPropertyOptional({
     enum: SaleType,
-    description: 'Filter by type',
+    description: 'Filter by sale type',
     example: SaleType.CASH,
     default: SaleType.CASH,
   })
@@ -159,13 +187,13 @@ export class SaleQueryDto extends PaginationDto {
   type?: SaleType;
 
   @ApiPropertyOptional({
-    enum: PaymentStatus,
-    description: 'Filter by paymentStatus',
-    default: PaymentStatus.PENDING,
+    enum: SalePaymentStatus,
+    description: 'Filter by sale payment status',
+    default: SalePaymentStatus.UNPAID,
   })
   @IsOptional()
-  @IsEnum(PaymentStatus)
-  paymentStatus?: PaymentStatus;
+  @IsEnum(SalePaymentStatus)
+  paymentStatus?: SalePaymentStatus;
 
   @ApiPropertyOptional({
     type: Number,
@@ -173,6 +201,7 @@ export class SaleQueryDto extends PaginationDto {
     example: 10,
   })
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   paidAmount?: number;
 
@@ -182,6 +211,7 @@ export class SaleQueryDto extends PaginationDto {
     example: 10,
   })
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   pendingAmount?: number;
 
@@ -190,11 +220,6 @@ export class SaleQueryDto extends PaginationDto {
   @IsString()
   remark?: string;
 
-  /**
-   * Status
-   * ------
-   * Amount received
-   */
   @ApiPropertyOptional({
     enum: SaleStatus,
     description: 'Filter by status',

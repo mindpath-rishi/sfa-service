@@ -56,7 +56,7 @@ export class EmployeeQueryDto extends PaginationDto {
   })
   @IsOptional()
   @IsString()
-  reportsTo?: string;
+  reportingEmployeeId?: string;
 
   /**
    * Search Text

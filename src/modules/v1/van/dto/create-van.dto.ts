@@ -34,6 +34,10 @@ export class CreateVanDto {
   @IsString()
   name!: string;
 
+  @ApiProperty({ example: 'Ramesh' })
+  @IsString()
+  driverName!: string;
+
   /**
    * Van Number
    * ----------

@@ -32,6 +32,11 @@ export class CreateSaleItemDto {
   @IsString()
   parentCategoryId!: string;
 
+  @ApiProperty({ type: String, description: 'Customer categoryId' })
+  @IsNotEmpty()
+  @IsString()
+  customerCategoryId!: string;
+
   @ApiProperty({ type: String })
   @IsNotEmpty()
   @IsString()

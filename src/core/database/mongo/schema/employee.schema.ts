@@ -93,7 +93,7 @@ export class Employee {
     index: true,
     type: String,
   })
-  reportsTo?: string;
+  reportingEmployeeId?: string;
 
   // Complete reporting chain
   // Example for Salesman:
@@ -160,5 +160,5 @@ export const EmployeeSchema = SchemaFactory.createForClass(Employee);
 // Useful indexes
 EmployeeSchema.index({ employeeId: 1 }, { unique: true });
 EmployeeSchema.index({ roleId: 1 });
-EmployeeSchema.index({ reportsTo: 1 });
+EmployeeSchema.index({ reportingEmployeeId: 1 });
 EmployeeSchema.index({ hierarchyPath: 1 });

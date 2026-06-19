@@ -24,6 +24,10 @@ export class UpdateVanDto {
   @IsNumber()
   capacity?: number;
 
+  @ApiPropertyOptional({ example: 'Ramesh' })
+  @IsString()
+  driverName!: string;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsNumber()

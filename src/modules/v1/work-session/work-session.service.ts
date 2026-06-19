@@ -1450,7 +1450,7 @@ export class WorkSessionService extends MongoRepository<WorkSession> {
 
     const hierarchyPath = employee?.hierarchyPath || [];
     const managerId =
-      employee?.reportsTo || hierarchyPath[hierarchyPath.length - 1];
+      employee?.reportingEmployeeId || hierarchyPath[hierarchyPath.length - 1];
 
     if (!managerId) return;
 

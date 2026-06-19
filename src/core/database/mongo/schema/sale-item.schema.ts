@@ -36,6 +36,9 @@ export class SaleItem {
   @Prop({ type: String, required: true })
   parentCategoryId!: string;
 
+  @Prop({ type: String, required: true, index: true })
+  customerCategoryId!: string;
+
   /* ================= QUANTITY ================= */
 
   @Prop({ type: Number, default: 0 })

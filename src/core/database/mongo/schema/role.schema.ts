@@ -6,6 +6,7 @@
  *
  * Contains:
  * - Role identity
+ * - Reporting role
  * - Permission list
  * - Van association limits
  * - Status
@@ -13,11 +14,12 @@
  * Notes:
  * - Permissions are string-based for flexibility
  * - Van limits are enforced at service layer
+ * - reportingTo stores another roleId
  */
 
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document } from 'mongoose';
-import { UserRole, Status } from 'src/shared/enums/app.enums';
+import { Status } from 'src/shared/enums/app.enums';
 
 @Schema({
   collection: 'roles',
@@ -52,6 +54,26 @@ export class Role extends Document {
   description?: string;
 
   /* ======================================================
+   * REPORTING ROLE
+   * ====================================================== */
+
+  /**
+   * reportingTo stores another roleId.
+   *
+   * Example:
+   * SALESMAN reports to SUPERVISOR
+   * DRIVER reports to SUPERVISOR
+   * SUPERVISOR reports to MANAGER
+   */
+  @Prop({
+    type: String,
+    required: false,
+    trim: true,
+    index: true,
+  })
+  reportingTo?: string;
+
+  /* ======================================================
    * VAN ASSOCIATION RULES
    * ====================================================== */
 
@@ -61,6 +83,7 @@ export class Role extends Document {
     min: -1,
   })
   maxAssociatedVans!: number;
+
   /**
    * -1 → unlimited
    *  0 → no vans
@@ -94,3 +117,9 @@ export class Role extends Document {
 }
 
 export const RoleSchema = SchemaFactory.createForClass(Role);
+
+/* ======================================================
+ * INDEXES
+ * ====================================================== */
+
+RoleSchema.index({ reportingTo: 1 }, { name: 'idx_role_reporting_to' });

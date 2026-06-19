@@ -1,28 +1,70 @@
-import { SaleType, SaleStatus } from 'src/shared/enums/sale.enums';
-import { PaymentStatus } from 'src/shared/enums/payment.enums';
+import {
+  SalePaymentStatus,
+  SaleStatus,
+  SaleType,
+} from 'src/shared/enums/sale.enums';
 
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import {
+  ArrayMinSize,
+  IsArray,
   IsDate,
   IsEnum,
   IsNumber,
   IsOptional,
   IsString,
+  ValidateNested,
 } from 'class-validator';
+import { Type } from 'class-transformer';
+
+export class UpdateSaleEmployeeDto {
+  @ApiPropertyOptional({
+    type: String,
+    description: 'Business identifier for employee',
+    example: 'EMP001',
+  })
+  @IsOptional()
+  @IsString()
+  employeeId?: string;
+
+  @ApiPropertyOptional({
+    type: String,
+    description: 'Employee name',
+    example: 'Ramesh',
+  })
+  @IsOptional()
+  @IsString()
+  employeeName?: string;
+
+  @ApiPropertyOptional({
+    type: String,
+    description: 'Employee role in sale',
+    example: 'SALESMAN',
+  })
+  @IsOptional()
+  @IsString()
+  role?: string;
+}
 
 export class UpdateSaleDto {
   /**
-   * UpdateSalesDto
+   * UpdateSaleDto
    * =================
    * Data Transfer Object for updating Sales records
    *
    * All fields are optional for partial updates
    * Supports partial updates - omitted fields will retain their existing values
    */
+
   @ApiPropertyOptional({ type: String })
   @IsOptional()
   @IsString()
   vanId?: string;
+
+  @ApiPropertyOptional({ type: String })
+  @IsOptional()
+  @IsString()
+  visitId?: string;
 
   @ApiPropertyOptional({ type: String })
   @IsOptional()
@@ -39,60 +81,88 @@ export class UpdateSaleDto {
   @IsString()
   customerName?: string;
 
-  @ApiPropertyOptional({ type: String })
+  @ApiPropertyOptional({
+    type: [UpdateSaleEmployeeDto],
+    description: 'Employees involved in sale',
+    example: [
+      {
+        employeeId: 'EMP001',
+        employeeName: 'Ramesh',
+        role: 'SALESMAN',
+      },
+      {
+        employeeId: 'EMP002',
+        employeeName: 'Suresh',
+        role: 'DRIVER',
+      },
+    ],
+  })
   @IsOptional()
-  @IsString()
-  employeeId?: string;
-
-  @ApiPropertyOptional({ type: String })
-  @IsOptional()
-  @IsString()
-  employeeName?: string;
+  @IsArray()
+  @ArrayMinSize(1)
+  @ValidateNested({ each: true })
+  @Type(() => UpdateSaleEmployeeDto)
+  employees?: UpdateSaleEmployeeDto[];
 
   @ApiPropertyOptional({ type: Date })
   @IsOptional()
+  @Type(() => Date)
   @IsDate()
   date?: Date;
 
   @ApiPropertyOptional({ type: Number, default: 0 })
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   totalCases?: number;
 
   @ApiPropertyOptional({ type: Number, default: 0 })
   @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  netCases?: number;
+
+  @ApiPropertyOptional({ type: Number, default: 0 })
+  @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   totalPieces?: number;
 
   @ApiPropertyOptional({ type: Number, default: 0 })
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
-  totalQuantity?: number;
+  totalQty?: number;
 
   @ApiPropertyOptional({ type: Number, default: 0 })
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   totalWeight?: number;
 
   @ApiPropertyOptional({ type: Number, default: 0 })
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   totalValue?: number;
 
   @ApiPropertyOptional({ type: Number, default: 0 })
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   totalReturnCases?: number;
 
   @ApiPropertyOptional({ type: Number, default: 0 })
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   totalReturnPieces?: number;
 
   @ApiPropertyOptional({ type: Number, default: 0 })
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
-  totalReturnQuantity?: number;
+  totalReturnQty?: number;
 
   @ApiPropertyOptional({
     enum: SaleType,
@@ -103,18 +173,23 @@ export class UpdateSaleDto {
   @IsEnum(SaleType)
   type?: SaleType;
 
-  @ApiPropertyOptional({ enum: PaymentStatus, default: PaymentStatus.PENDING })
+  @ApiPropertyOptional({
+    enum: SalePaymentStatus,
+    default: SalePaymentStatus.UNPAID,
+  })
   @IsOptional()
-  @IsEnum(PaymentStatus)
-  paymentStatus?: PaymentStatus;
+  @IsEnum(SalePaymentStatus)
+  paymentStatus?: SalePaymentStatus;
 
   @ApiPropertyOptional({ type: Number, default: 0 })
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   paidAmount?: number;
 
   @ApiPropertyOptional({ type: Number, default: 0 })
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   pendingAmount?: number;
 
@@ -123,16 +198,11 @@ export class UpdateSaleDto {
   @IsString()
   remark?: string;
 
-  /**
-   * Status
-   * ------
-   * Amount received
-   */
   @ApiPropertyOptional({
     enum: SaleStatus,
     example: SaleStatus.COMPLETED,
     default: SaleStatus.COMPLETED,
-    description: 'Amount received',
+    description: 'Sale status',
   })
   @IsOptional()
   @IsEnum(SaleStatus)

@@ -247,7 +247,6 @@ export class ProductService extends MongoRepository<Product> {
 
       const unitSize = null;
 
-
       return {
         updateOne: {
           filter: {
@@ -275,7 +274,6 @@ export class ProductService extends MongoRepository<Product> {
 
               isDeleted: false,
               parentCategoryId,
-              
             },
           },
           upsert: true,
@@ -312,12 +310,6 @@ export class ProductService extends MongoRepository<Product> {
     };
   }
 
-  /**
-   * Get Products
-   * ------------
-   * Purpose : Retrieve products with filtering and pagination
-   * Supports: Search, multiple categories, multiple brands, price range, stock status, discounts
-   */
   async findAll(query: ProductQueryDto) {
     const {
       searchText,
@@ -331,6 +323,7 @@ export class ProductService extends MongoRepository<Product> {
       page = 1,
       limit = 20,
       isFocusedPack,
+      customerCategoryId,
     } = query;
 
     /**
@@ -340,24 +333,49 @@ export class ProductService extends MongoRepository<Product> {
     const userId = ctx?.userId;
 
     /**
+     * ================= PRICE CATEGORY =================
+     */
+    const priceCategoryCode = customerCategoryId || '';
+
+    /**
+     * If customerCategoryId not sent,
+     * product should not show because price cannot be found.
+     */
+    if (!priceCategoryCode) {
+      return {
+        statusCode: HttpStatus.OK,
+        message: PRODUCT.FETCHED,
+        data: [],
+        meta: {
+          total: 0,
+          page: Number(page),
+          limit: Number(limit),
+          totalPages: 0,
+        },
+      };
+    }
+
+    /**
      * ================= BUILD MATCH =================
      */
-    const match: any = {};
+    const match: any = {
+      isDeleted: false,
+    };
 
-    if (status) match.status = status;
+    if (status) {
+      match.status = status;
+    }
 
     if (categoryIds) {
-      match.categoryId = { $in: categoryIds.split(',') };
+      match.parentCategoryId = {
+        $in: categoryIds.split(','),
+      };
     }
 
     if (brands) {
-      match.brand = { $in: brands.split(',') };
-    }
-
-    if (minPrice || maxPrice) {
-      match.price = {};
-      if (minPrice) match.price.$gte = Number(minPrice);
-      if (maxPrice) match.price.$lte = Number(maxPrice);
+      match.brand = {
+        $in: brands.split(','),
+      };
     }
 
     if (isFocusedPack) {
@@ -365,11 +383,14 @@ export class ProductService extends MongoRepository<Product> {
     }
 
     if (hasDiscount === 'true') {
-      match.discount = { $gt: 0 };
+      match.discount = {
+        $gt: 0,
+      };
     }
 
     if (searchText) {
       const regex = new RegExp(searchText, 'i');
+
       match.$or = [
         { name: regex },
         { productSysCode: regex },
@@ -382,30 +403,42 @@ export class ProductService extends MongoRepository<Product> {
     /**
      * ================= PAGINATION =================
      */
-    const skip = (page - 1) * limit;
+    const pageNumber = Number(page);
+    const limitNumber = Number(limit);
+    const skip = (pageNumber - 1) * limitNumber;
+    const now = new Date();
 
     /**
      * ================= PIPELINE =================
      */
     const pipeline: any[] = [
-      { $match: match },
+      {
+        $match: match,
+      },
 
       /**
-       * 1. Get van from user
+       * 1. Get van from logged-in user
        */
       {
         $lookup: {
           from: 'vans',
-          let: { userId: userId },
+          let: {
+            userId,
+          },
           pipeline: [
             {
               $match: {
                 $expr: {
-                  $in: ['$$userId', '$associatedUsers'], // adjust if object
+                  $in: ['$$userId', '$associatedUsers'],
                 },
               },
             },
-            { $project: { vanId: 1, _id: 0 } },
+            {
+              $project: {
+                vanId: 1,
+                _id: 0,
+              },
+            },
           ],
           as: 'van',
         },
@@ -413,17 +446,22 @@ export class ProductService extends MongoRepository<Product> {
 
       {
         $addFields: {
-          vanId: { $arrayElemAt: ['$van.vanId', 0] },
+          vanId: {
+            $arrayElemAt: ['$van.vanId', 0],
+          },
         },
       },
 
       /**
-       * 2. Lookup inventory
+       * 2. Lookup inventory for product + user van
        */
       {
         $lookup: {
           from: 'inventories',
-          let: { productId: '$productId', vanId: '$vanId' },
+          let: {
+            productId: '$productId',
+            vanId: '$vanId',
+          },
           pipeline: [
             {
               $match: {
@@ -431,13 +469,14 @@ export class ProductService extends MongoRepository<Product> {
                   $and: [
                     { $eq: ['$productId', '$$productId'] },
                     { $eq: ['$vanId', '$$vanId'] },
+                    { $eq: ['$isDeleted', false] },
                   ],
                 },
               },
             },
             {
               $project: {
-                quantity: 1, // adjust field
+                quantity: 1,
                 _id: 0,
               },
             },
@@ -458,42 +497,183 @@ export class ProductService extends MongoRepository<Product> {
       },
 
       /**
-       * 4. Filter inStock
+       * 4. Filter only in-stock products if requested
        */
-      ...(inStockOnly === 'true' ? [{ $match: { stock: { $gt: 0 } } }] : []),
+      ...(inStockOnly === 'true'
+        ? [
+            {
+              $match: {
+                stock: {
+                  $gt: 0,
+                },
+              },
+            },
+          ]
+        : []),
 
       /**
-       * 5. Clean fields
+       * 5. Lookup latest valid customer category price
+       *
+       * price_master.productId = product.productId
+       * price_master.categoryCode = customerCategoryId
+       * price_master.effectiveDate <= now
+       */
+      {
+        $lookup: {
+          from: 'price_master',
+          let: {
+            productId: '$productId',
+            categoryCode: priceCategoryCode,
+            currentDate: now,
+          },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $eq: ['$productId', '$$productId'] },
+                    { $eq: ['$categoryCode', '$$categoryCode'] },
+                    { $lte: ['$effectiveDate', '$$currentDate'] },
+                    { $eq: ['$isDeleted', false] },
+                  ],
+                },
+              },
+            },
+            {
+              $sort: {
+                effectiveDate: -1,
+                createdAt: -1,
+              },
+            },
+            {
+              $limit: 1,
+            },
+            {
+              $project: {
+                _id: 0,
+                priceId: 1,
+                productId: 1,
+                categoryCode: 1,
+                categoryName: 1,
+
+                casePriceExclVat: 1,
+                casePriceInclVat: 1,
+                piecePriceExclVat: 1,
+                piecePriceInclVat: 1,
+
+                effectiveDate: 1,
+                priceFlag: 1,
+              },
+            },
+          ],
+          as: 'customerPrice',
+        },
+      },
+
+      /**
+       * 6. Convert price array to object
+       */
+      {
+        $addFields: {
+          customerPrice: {
+            $arrayElemAt: ['$customerPrice', 0],
+          },
+        },
+      },
+
+      /**
+       * 7. If price does not exist, do not show product
+       */
+      {
+        $match: {
+          customerPrice: {
+            $ne: null,
+          },
+        },
+      },
+
+      /**
+       * 8. Add final price fields from price_master
+       */
+      {
+        $addFields: {
+          priceId: '$customerPrice.priceId',
+          priceCategoryCode: '$customerPrice.categoryCode',
+          priceCategoryName: '$customerPrice.categoryName',
+          priceEffectiveDate: '$customerPrice.effectiveDate',
+          priceFlag: '$customerPrice.priceFlag',
+
+          casePriceExclVat: '$customerPrice.casePriceExclVat',
+          casePriceInclVat: '$customerPrice.casePriceInclVat',
+          piecePriceExclVat: '$customerPrice.piecePriceExclVat',
+          piecePriceInclVat: '$customerPrice.piecePriceInclVat',
+
+          /**
+           * App compatibility fields
+           */
+          casePrice: '$customerPrice.casePriceInclVat',
+          piecePrice: '$customerPrice.piecePriceInclVat',
+        },
+      },
+
+      /**
+       * 9. Apply price filter after customer price applied
+       */
+      ...(minPrice || maxPrice
+        ? [
+            {
+              $match: {
+                casePriceInclVat: {
+                  ...(minPrice ? { $gte: Number(minPrice) } : {}),
+                  ...(maxPrice ? { $lte: Number(maxPrice) } : {}),
+                },
+              },
+            },
+          ]
+        : []),
+
+      /**
+       * 10. Clean internal fields
        */
       {
         $project: {
           inventory: 0,
           van: 0,
+          customerPrice: 0,
         },
       },
 
       /**
-       * 6. Sort + paginate
+       * 11. Sort + paginate + count
        */
-      { $sort: { createdAt: -1 } },
-      { $skip: skip },
-      { $limit: limit },
+      {
+        $facet: {
+          items: [
+            {
+              $sort: {
+                createdAt: -1,
+              },
+            },
+            {
+              $skip: skip,
+            },
+            {
+              $limit: limitNumber,
+            },
+          ],
+          meta: [
+            {
+              $count: 'total',
+            },
+          ],
+        },
+      },
     ];
 
-    /**
-     * ================= EXECUTE =================
-     */
-    const items = await this.model.aggregate(pipeline);
+    const [result] = await this.model.aggregate(pipeline);
 
-    /**
-     * ================= COUNT =================
-     */
-    const totalResult = await this.model.aggregate([
-      { $match: match },
-      { $count: 'total' },
-    ]);
-
-    const total = totalResult[0]?.total || 0;
+    const items = result?.items ?? [];
+    const total = result?.meta?.[0]?.total ?? 0;
 
     return {
       statusCode: HttpStatus.OK,
@@ -501,9 +681,9 @@ export class ProductService extends MongoRepository<Product> {
       data: items,
       meta: {
         total,
-        page,
-        limit,
-        totalPages: Math.ceil(total / limit),
+        page: pageNumber,
+        limit: limitNumber,
+        totalPages: Math.ceil(total / limitNumber),
       },
     };
   }
@@ -511,10 +691,144 @@ export class ProductService extends MongoRepository<Product> {
   /**
    * Get Product by ID
    * -----------------
-   * Purpose : Retrieve a single product
+   * Purpose : Retrieve a single product with latest customer category price
+   *
+   * Price rules:
+   * - price_master.productId = product.productId
+   * - price_master.categoryCode = customerCategoryId
+   * - price_master.effectiveDate <= current date/time
+   * - latest effectiveDate selected
+   * - if price not found, product will not be shown
    */
-  async findByProductId(productId: string) {
-    const product = await this.findOne({ productId }, { lean: true });
+  async findByProductId(
+    productId: string,
+    query?: {
+      customerCategoryId?: string;
+    },
+  ) {
+    const priceCategoryCode = query?.customerCategoryId || '';
+
+    if (!priceCategoryCode) {
+      throw new NotFoundException(PRODUCT.NOT_FOUND);
+    }
+
+    const now = new Date();
+
+    const [product] = await this.model.aggregate([
+      {
+        $match: {
+          productId,
+          isDeleted: false,
+        },
+      },
+
+      /**
+       * Lookup latest valid price from price_master
+       */
+      {
+        $lookup: {
+          from: 'price_master',
+          let: {
+            productId: '$productId',
+            categoryCode: priceCategoryCode,
+            currentDate: now,
+          },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $eq: ['$productId', '$$productId'] },
+                    { $eq: ['$categoryCode', '$$categoryCode'] },
+                    { $lte: ['$effectiveDate', '$$currentDate'] },
+                    { $eq: ['$isDeleted', false] },
+                  ],
+                },
+              },
+            },
+            {
+              $sort: {
+                effectiveDate: -1,
+                createdAt: -1,
+              },
+            },
+            {
+              $limit: 1,
+            },
+            {
+              $project: {
+                _id: 0,
+                priceId: 1,
+                productId: 1,
+                categoryCode: 1,
+                categoryName: 1,
+
+                casePriceExclVat: 1,
+                casePriceInclVat: 1,
+                piecePriceExclVat: 1,
+                piecePriceInclVat: 1,
+
+                effectiveDate: 1,
+                priceFlag: 1,
+              },
+            },
+          ],
+          as: 'customerPrice',
+        },
+      },
+
+      /**
+       * Convert price array to object
+       */
+      {
+        $addFields: {
+          customerPrice: {
+            $arrayElemAt: ['$customerPrice', 0],
+          },
+        },
+      },
+
+      /**
+       * If price does not exist, do not return product
+       */
+      {
+        $match: {
+          customerPrice: {
+            $ne: null,
+          },
+        },
+      },
+
+      /**
+       * Add final price fields
+       */
+      {
+        $addFields: {
+          priceId: '$customerPrice.priceId',
+          priceCategoryCode: '$customerPrice.categoryCode',
+          priceCategoryName: '$customerPrice.categoryName',
+          priceEffectiveDate: '$customerPrice.effectiveDate',
+          priceFlag: '$customerPrice.priceFlag',
+
+          casePriceExclVat: '$customerPrice.casePriceExclVat',
+          casePriceInclVat: '$customerPrice.casePriceInclVat',
+          piecePriceExclVat: '$customerPrice.piecePriceExclVat',
+          piecePriceInclVat: '$customerPrice.piecePriceInclVat',
+
+          /**
+           * App compatibility fields
+           */
+          casePrice: '$customerPrice.casePriceInclVat',
+          piecePrice: '$customerPrice.piecePriceInclVat',
+        },
+      },
+
+      {
+        $project: {
+          customerPrice: 0,
+        },
+      },
+    ]);
 
     if (!product) {
       throw new NotFoundException(PRODUCT.NOT_FOUND);

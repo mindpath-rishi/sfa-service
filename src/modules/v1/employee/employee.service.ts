@@ -267,7 +267,7 @@ export class EmployeeService extends MongoRepository<Employee> {
     const {
       status,
       roleId,
-      reportsTo,
+      reportingEmployeeId,
       searchText,
       page = 1,
       limit = 20,
@@ -283,8 +283,8 @@ export class EmployeeService extends MongoRepository<Employee> {
       filter.roleId = roleId;
     }
 
-    if (reportsTo) {
-      filter.reportsTo = reportsTo;
+    if (reportingEmployeeId) {
+      filter.reportingEmployeeId = reportingEmployeeId;
     }
 
     if (searchText) {
@@ -416,7 +416,7 @@ export class EmployeeService extends MongoRepository<Employee> {
   //    * TEAM MEMBERS
   //    * ===================================================== */
   //   const employees = await this.find({
-  //     $or: [{ reportsTo: managerId }, { hierarchyPath: managerId }],
+  //     $or: [{ reportingEmployeeId: managerId }, { hierarchyPath: managerId }],
   //     status: UserStatus.ACTIVE,
   //   });
 
@@ -630,7 +630,7 @@ export class EmployeeService extends MongoRepository<Employee> {
      * TEAM MEMBERS
      * ===================================================== */
     const employees = await this.find({
-      $or: [{ reportsTo: managerId }, { hierarchyPath: managerId }],
+      $or: [{ reportingEmployeeId: managerId }, { hierarchyPath: managerId }],
       status: UserStatus.ACTIVE,
     });
 
@@ -2167,7 +2167,7 @@ export class EmployeeService extends MongoRepository<Employee> {
      * TEAM MEMBERS
      * ========================================== */
     const employees = await this.find({
-      $or: [{ reportsTo: managerId }, { hierarchyPath: managerId }],
+      $or: [{ reportingEmployeeId: managerId }, { hierarchyPath: managerId }],
       status: UserStatus.ACTIVE,
     });
 
@@ -2342,7 +2342,7 @@ export class EmployeeService extends MongoRepository<Employee> {
     );
 
     const employees = await this.find({
-      $or: [{ reportsTo: managerId }, { hierarchyPath: managerId }],
+      $or: [{ reportingEmployeeId: managerId }, { hierarchyPath: managerId }],
       status: UserStatus.ACTIVE,
     });
 
@@ -2702,7 +2702,7 @@ export class EmployeeService extends MongoRepository<Employee> {
   //    * TEAM MEMBERS
   //    * ========================================== */
   //   const employees = await this.find({
-  //     $or: [{ reportsTo: managerId }, { hierarchyPath: managerId }],
+  //     $or: [{ reportingEmployeeId: managerId }, { hierarchyPath: managerId }],
   //     status: UserStatus.ACTIVE,
   //   });
 
@@ -2996,7 +2996,7 @@ export class EmployeeService extends MongoRepository<Employee> {
      * TEAM MEMBERS
      * ========================================== */
     const employees = await this.find({
-      $or: [{ reportsTo: managerId }, { hierarchyPath: managerId }],
+      $or: [{ reportingEmployeeId: managerId }, { hierarchyPath: managerId }],
       status: UserStatus.ACTIVE,
     });
 
@@ -3517,7 +3517,7 @@ export class EmployeeService extends MongoRepository<Employee> {
   //    * TEAM MEMBERS
   //    * ========================================== */
   //   const employees = await this.find({
-  //     $or: [{ reportsTo: managerId }, { hierarchyPath: managerId }],
+  //     $or: [{ reportingEmployeeId: managerId }, { hierarchyPath: managerId }],
   //     status: UserStatus.ACTIVE,
   //   });
 
@@ -3685,7 +3685,7 @@ export class EmployeeService extends MongoRepository<Employee> {
      * TEAM MEMBERS (DIRECT + INDIRECT)
      * ========================================== */
     const employeeIds: any = await this.model.distinct('employeeId', {
-      $or: [{ reportsTo: managerId }, { hierarchyPath: managerId }],
+      $or: [{ reportingEmployeeId: managerId }, { hierarchyPath: managerId }],
       status: UserStatus.ACTIVE,
     });
 
@@ -3865,7 +3865,7 @@ export class EmployeeService extends MongoRepository<Employee> {
      * TEAM MEMBERS
      * ========================================== */
     const employees = await this.find({
-      $or: [{ reportsTo: managerId }, { hierarchyPath: managerId }],
+      $or: [{ reportingEmployeeId: managerId }, { hierarchyPath: managerId }],
       status: UserStatus.ACTIVE,
     });
 
@@ -4155,7 +4155,7 @@ export class EmployeeService extends MongoRepository<Employee> {
      * TEAM MEMBERS
      * ========================================== */
     const employees = await this.find({
-      $or: [{ reportsTo: managerId }, { hierarchyPath: managerId }],
+      $or: [{ reportingEmployeeId: managerId }, { hierarchyPath: managerId }],
       status: UserStatus.ACTIVE,
     });
 
@@ -4392,7 +4392,7 @@ export class EmployeeService extends MongoRepository<Employee> {
     const employee = await this.findOne({
       employeeId: query.employeeId,
       status: UserStatus.ACTIVE,
-      $or: [{ reportsTo: managerId }, { hierarchyPath: managerId }],
+      $or: [{ reportingEmployeeId: managerId }, { hierarchyPath: managerId }],
     });
 
     if (!employee) throw new NotFoundException(EMPLOYEE.NOT_FOUND);
@@ -4802,7 +4802,7 @@ export class EmployeeService extends MongoRepository<Employee> {
     const employee = await this.findOne({
       employeeId,
       status: UserStatus.ACTIVE,
-      $or: [{ reportsTo: managerId }, { hierarchyPath: managerId }],
+      $or: [{ reportingEmployeeId: managerId }, { hierarchyPath: managerId }],
     });
 
     if (!employee) throw new NotFoundException(EMPLOYEE.NOT_FOUND);
