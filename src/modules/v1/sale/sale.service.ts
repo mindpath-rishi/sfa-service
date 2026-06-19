@@ -1201,6 +1201,17 @@ export class SaleService extends MongoRepository<Sale> {
       return Number.isFinite(numberValue) ? numberValue : defaultValue;
     };
 
+    const toErpCustomerCode = (value: any): number => {
+      const rawValue = toStringSafe(value);
+      const directNumber = Number(rawValue);
+
+      if (Number.isFinite(directNumber)) {
+        return directNumber;
+      }
+
+      return toNumberSafe(rawValue.replace(/\D/g, ''));
+    };
+
     const toFixed4 = (value: number): number => {
       return Number((value || 0).toFixed(4));
     };
@@ -1209,11 +1220,11 @@ export class SaleService extends MongoRepository<Sale> {
     const orderNoSfa = saleId;
     const storeCode = toStringSafe(sale.vanId);
     const orderDate = sale.date ? new Date(sale.date) : new Date();
-    const customerCode = toNumberSafe(sale.customerId);
+    const customerCode = toErpCustomerCode(sale.customerId);
 
     if (!customerCode) {
       throw new BadRequestException(
-        `Invalid ERP customer code for sale ${saleId}. customerId must be numeric for NU_CUSTOMER_CODE.`,
+        `Invalid ERP customer code for sale ${saleId}. customerId must contain a numeric code for NU_CUSTOMER_CODE.`,
       );
     }
 
