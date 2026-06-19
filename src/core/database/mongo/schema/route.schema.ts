@@ -36,22 +36,22 @@ export class Route {
   })
   name!: string;
 
-  // @Prop({
-  //   required: true,
-  //   index: true,
-  //   type: String,
-  // })
-  // beatId!: string;
+  @Prop({
+    required: true,
+    index: true,
+    type: String,
+  })
+  beatId!: string;
 
   /* ======================================================
    * ERP / LOCATION
    * ====================================================== */
 
-  // @Prop({
-  //   type: String,
-  //   index: true,
-  // })
-  // beatErpId!: string;
+  @Prop({
+    type: String,
+    index: true,
+  })
+  beatErpId!: string;
 
   @Prop({
     type: String,
