@@ -21,10 +21,15 @@ import { CustomerCategoryQueryDto } from './dto/customer-category-query.dto';
 import { IdGenerator } from 'src/shared/utils/id-generator.utils';
 import { TextNormalizer } from 'src/shared/utils/text-normalizer.utils';
 import { NormalizeType } from 'src/shared/enums/normalize.enums';
+import { OracleRepository } from 'src/core/database/oracle/oracle.repository';
+import { CustomerCategoryStatus } from 'src/shared/enums/customer-category.enums';
 
 @Injectable()
 export class CustomerCategoryService extends MongoRepository<CustomerCategory> {
-  constructor(mongo: MongoService) {
+  constructor(
+    mongo: MongoService,
+    private readonly oracleRepository: OracleRepository,
+  ) {
     super(mongo.getModel(CustomerCategory.name, CustomerCategorySchema));
   }
 
@@ -56,7 +61,7 @@ export class CustomerCategoryService extends MongoRepository<CustomerCategory> {
             existing._id.toString(),
             {
               ...payload,
-              status: 'ACTIVE',
+              status: CustomerCategoryStatus.ACTIVE,
               isDeleted: false,
             },
             { session },
@@ -88,6 +93,126 @@ export class CustomerCategoryService extends MongoRepository<CustomerCategory> {
     }
   }
 
+  /**
+   * Sync Customer Categories From ERP Oracle
+   * ----------------------------------------
+   * Source table : VAN_ASST_PRICE_MASTER
+   * Target table : customer_category_master
+   *
+   * Mapping:
+   * VC_CATG_CODE -> customerCategoryId
+   * VC_CATG_NAME -> name
+   */
+  async syncCustomerCategoriesFromERP() {
+    if (!this.oracleRepository.isEnabled()) {
+      return {
+        statusCode: HttpStatus.OK,
+        message: 'OracleDB is disabled. Customer category sync skipped.',
+        data: {
+          synced: 0,
+          skipped: true,
+        },
+      };
+    }
+
+    const toStringSafe = (value: any): string => {
+      return String(value ?? '').trim();
+    };
+
+    const rows = await this.oracleRepository.query<any>(
+      `
+      SELECT DISTINCT
+        VC_CATG_CODE AS "categoryCode",
+        VC_CATG_NAME AS "categoryName"
+      FROM VAN_ASST_PRICE_MASTER
+      WHERE VC_CATG_CODE IS NOT NULL
+      `,
+    );
+
+    if (!rows.length) {
+      return {
+        statusCode: HttpStatus.OK,
+        message: 'No customer categories found from ERP.',
+        data: {
+          synced: 0,
+        },
+      };
+    }
+
+    /**
+     * Deduplicate by ERP category code.
+     * Mongo customerCategoryId = ERP VC_CATG_CODE
+     */
+    const uniqueCategoryMap = new Map<
+      string,
+      {
+        customerCategoryId: string;
+        name: string;
+      }
+    >();
+
+    for (const row of rows) {
+      const categoryCode = toStringSafe(row.categoryCode);
+      const categoryName = toStringSafe(row.categoryName);
+
+      if (!categoryCode) continue;
+
+      uniqueCategoryMap.set(categoryCode, {
+        customerCategoryId: categoryCode,
+        name: categoryName || categoryCode,
+      });
+    }
+
+    const uniqueCategories = Array.from(uniqueCategoryMap.values());
+
+    const operations = uniqueCategories.map((category) => {
+      return {
+        updateOne: {
+          filter: {
+            customerCategoryId: category.customerCategoryId,
+          },
+          update: {
+            $set: {
+              customerCategoryId: category.customerCategoryId,
+              name: category.name,
+              status: CustomerCategoryStatus.ACTIVE,
+              isDeleted: false,
+            },
+          },
+          upsert: true,
+        },
+      };
+    });
+
+    if (!operations.length) {
+      return {
+        statusCode: HttpStatus.OK,
+        message: 'No valid customer categories found from ERP.',
+        data: {
+          synced: 0,
+        },
+      };
+    }
+
+    const result = await this.model.bulkWrite(operations, {
+      ordered: false,
+    });
+
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'ERP customer categories synced successfully.',
+      data: {
+        totalERPRecords: rows.length,
+        totalUniqueRecords: uniqueCategories.length,
+        totalValidRecords: operations.length,
+        inserted: result.upsertedCount || 0,
+        updated: result.modifiedCount || 0,
+        matched: result.matchedCount || 0,
+        synced: operations.length,
+      },
+    };
+  }
+
   async findAll(query: CustomerCategoryQueryDto) {
     const { searchText, status, page = 1, limit = 20 } = query;
 
@@ -97,7 +222,7 @@ export class CustomerCategoryService extends MongoRepository<CustomerCategory> {
 
     if (searchText) {
       const regex = new RegExp(searchText, 'i');
-      filter.$or = [{ customerCategoryId: regex }];
+      filter.$or = [{ customerCategoryId: regex }, { name: regex }];
     }
 
     const result = await this.paginate(filter, {
@@ -170,6 +295,7 @@ export class CustomerCategoryService extends MongoRepository<CustomerCategory> {
     if (error?.code === 11000 || error?.code === 11001) {
       throw new ConflictException(CUSTOMER_CATEGORY.DUPLICATE);
     }
+
     throw error;
   }
 }

@@ -1,4 +1,3 @@
-
 /**
  * CustomerCategory Controller
  * ----------------------------
@@ -34,7 +33,6 @@ import { FeatureFlag } from 'src/core/decorators/feature-flag.decorator';
 import { ApiSuccessResponse } from 'src/core/swagger/api.response.swagger';
 import {
   ApiInternalErrorResponse,
-  ApiNotFoundResponse,
   ApiUnauthorizedResponse,
   ApiUnprocessableEntityResponse,
 } from 'src/core/swagger/api-error.response.swagger';
@@ -52,6 +50,7 @@ import { CreateCustomerCategoryDto } from './dto/create-customer-category.dto';
 import { UpdateCustomerCategoryDto } from './dto/update-customer-category.dto';
 import { CustomerCategoryQueryDto } from './dto/customer-category-query.dto';
 import { CUSTOMER_CATEGORY } from './customer-category.constants';
+import { Public } from 'src/core/decorators/public.decorator';
 
 @ApiTags('CustomerCategory')
 @FeatureFlag(API_MODULE_ENABLE_KEYS.CUSTOMER_CATEGORY)
@@ -81,6 +80,17 @@ export class CustomerCategoryController {
   )
   async create(@Body() dto: CreateCustomerCategoryDto) {
     return this.service.create(dto);
+  }
+
+  @Public()
+  @Permissions('CUSTOMER_CATEGORY_SYNC')
+  @Post('sync')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Sync customer categories from ERP Oracle to MongoDB',
+  })
+  async syncCustomerCategories() {
+    return this.service.syncCustomerCategoriesFromERP();
   }
 
   /**
