@@ -43,6 +43,9 @@ export class RouteSession {
   @Prop({ type: String })
   routeName?: string;
 
+  @Prop({ type: String, index: true })
+  customerCategoryId?: string;
+
   /* ======================================================
    * ROUTE PROGRESS ⭐
    * ====================================================== */

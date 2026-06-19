@@ -97,6 +97,7 @@ export class ActivityService extends MongoRepository<Activity> {
           routeId: payload.routeId,
           totalShops: payload.totalShops || 0,
           routeName: payload.routeName || '',
+          customerCategoryId: payload.customerCategoryId,
         };
 
         await this.routeSessionService.create(newRouteSession, { session });

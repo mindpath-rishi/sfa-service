@@ -27,6 +27,11 @@ export class CreateRouteSessionDto {
   @IsString()
   routeName?: string;
 
+  @ApiPropertyOptional({ type: String })
+  @IsOptional()
+  @IsString()
+  customerCategoryId?: string;
+
   @ApiPropertyOptional({ type: Number })
   @IsNotEmpty()
   @IsNumber()

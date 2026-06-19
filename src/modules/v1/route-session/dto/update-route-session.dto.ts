@@ -47,6 +47,11 @@ export class UpdateRouteSessionDto {
   @IsString()
   routeName?: string;
 
+  @ApiPropertyOptional({ type: String })
+  @IsOptional()
+  @IsString()
+  customerCategoryId?: string;
+
   @ApiPropertyOptional({ type: Number, default: 0 })
   @IsOptional()
   @IsNumber()
