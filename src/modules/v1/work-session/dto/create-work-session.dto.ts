@@ -58,6 +58,11 @@ export class CreateWorkSessionDto {
   @ApiPropertyOptional({ type: String })
   @IsOptional()
   @IsString()
+  customerCategoryId?: string;
+
+  @ApiPropertyOptional({ type: String })
+  @IsOptional()
+  @IsString()
   description?: string;
 
   /**

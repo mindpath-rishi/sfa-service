@@ -181,6 +181,7 @@ export class WorkSessionService extends MongoRepository<WorkSession> {
             routeId: payload.routeId,
             totalShops: payload.totalShops,
             routeName: payload.routeName,
+            customerCategoryId: payload.customerCategoryId,
             vanId: payload?.vanId,
           };
 

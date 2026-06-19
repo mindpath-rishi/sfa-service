@@ -567,6 +567,7 @@ export class VanService extends MongoRepository<Van> {
             provinceId: '$route.provinceId',
             marketId: '$route.marketId',
             countryId: '$route.countryId',
+            customerCategoryId: '$route.customerCategoryId'
           },
         },
       },
