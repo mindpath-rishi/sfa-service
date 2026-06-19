@@ -325,7 +325,7 @@ export class SaleService extends MongoRepository<Sale> {
          * CREATE SALES HEADER
          * ====================================================== */
 
-        const saleId = IdGenerator.generate('SALE', 8);
+        const saleId = IdGenerator.generate('OR', 6);
 
         const doc = await this.save(
           {
