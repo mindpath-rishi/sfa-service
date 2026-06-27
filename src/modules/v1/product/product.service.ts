@@ -41,14 +41,150 @@ import { ProductUpdateDto } from './dto/update-product.dto';
 import { RequestContextStore } from 'src/core/context/request-context';
 import { OracleRepository } from 'src/core/database/oracle/oracle.repository';
 import { PriceType, ProductStatus } from 'src/shared/enums/product.enums';
+import * as XLSX from 'xlsx';
+import {
+  ProductCategory,
+  ProductCategorySchema,
+} from 'src/core/database/mongo/schema/product-category';
+
+const REPORT_TIMEZONE =
+  process.env.APP_TIMEZONE || process.env.TZ || 'Asia/Kolkata';
 
 @Injectable()
 export class ProductService extends MongoRepository<Product> {
+  private readonly productCategoryModel;
+
   constructor(
     mongo: MongoService,
     private readonly oracleRepository: OracleRepository,
   ) {
     super(mongo.getModel(Product.name, ProductSchema));
+    this.productCategoryModel = mongo.getModel(
+      ProductCategory.name,
+      ProductCategorySchema,
+    );
+  }
+
+  private getExportColumns(columns?: string) {
+    const definitions = [
+      { key: 'primary', title: 'Product' },
+      { key: 'productId', title: 'Product ID' },
+      { key: 'productSysCode', title: 'System Code' },
+      { key: 'compCode', title: 'Company Code' },
+      { key: 'categoryId', title: 'Category' },
+      { key: 'parentCategoryId', title: 'Parent Category' },
+      { key: 'casePrice', title: 'Case Price' },
+      { key: 'piecePrice', title: 'Piece Price' },
+      { key: 'caseNetWeight', title: 'Case Net Weight' },
+      { key: 'pieceNetWeight', title: 'Piece Net Weight' },
+      { key: 'priceType', title: 'Price Type' },
+      { key: 'unitType', title: 'Unit Type' },
+      { key: 'unitSize', title: 'Unit Size' },
+      { key: 'unitQtyInCase', title: 'Units / Case' },
+      { key: 'isFocusedPack', title: 'Focused Pack' },
+      { key: 'status', title: 'Status' },
+    ];
+    const requested = columns?.split(',').map((value) => value.trim()).filter(Boolean);
+    const selected = requested?.length
+      ? definitions.filter((column) => requested.includes(column.key))
+      : definitions;
+    return selected.length ? selected : definitions;
+  }
+
+  private escapePdfText(value: string) {
+    return value.replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)');
+  }
+
+  private buildPdfBuffer(title: string, rows: string[][]) {
+    const [headers = [], ...dataRows] = rows;
+    const pageWidth = 842;
+    const pageHeight = 595;
+    const margin = 28;
+    const tableWidth = pageWidth - margin * 2;
+    const columnWidth = tableWidth / Math.max(headers.length, 1);
+    const headerY = pageHeight - 96;
+    const rowHeight = 23;
+    const headerHeight = 25;
+    const rowsPerPage = Math.max(1, Math.floor((headerY - margin - headerHeight) / rowHeight));
+    const pageRows: string[][][] = [];
+    for (let index = 0; index < dataRows.length; index += rowsPerPage) {
+      pageRows.push(dataRows.slice(index, index + rowsPerPage));
+    }
+    if (!pageRows.length) pageRows.push([]);
+    const formatDate = new Intl.DateTimeFormat('en-IN', {
+      dateStyle: 'medium',
+      timeStyle: 'short',
+      timeZone: REPORT_TIMEZONE,
+    }).format(new Date());
+    const fontSize = headers.length > 7 ? 6.5 : 7.5;
+    const headerFontSize = headers.length > 7 ? 6.8 : 7.8;
+    const textLimit = (width: number, size: number) => Math.max(6, Math.floor(width / (size * 0.52)));
+    const truncate = (value: string, limit: number) => {
+      const cleanValue = String(value ?? '').replace(/\s+/g, ' ').trim();
+      return cleanValue.length > limit ? `${cleanValue.slice(0, Math.max(0, limit - 3))}...` : cleanValue;
+    };
+    const text = (x: number, y: number, value: string, size = fontSize) =>
+      `BT /F1 ${size} Tf ${x.toFixed(2)} ${y.toFixed(2)} Td (${this.escapePdfText(value)}) Tj ET`;
+    const rect = (x: number, y: number, width: number, height: number, mode: 'S' | 'f' = 'S') =>
+      `${x.toFixed(2)} ${y.toFixed(2)} ${width.toFixed(2)} ${height.toFixed(2)} re ${mode}`;
+    const objects: string[] = [];
+    const pageObjectIds: number[] = [];
+    const fontObjectId = 3;
+    let nextObjectId = 4;
+    objects[1] = '<< /Type /Catalog /Pages 2 0 R >>';
+    objects[fontObjectId] = '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>';
+
+    for (const [pageIndex, rowsForPage] of pageRows.entries()) {
+      const pageObjectId = nextObjectId;
+      const contentObjectId = nextObjectId + 1;
+      nextObjectId += 2;
+      pageObjectIds.push(pageObjectId);
+      const commands: string[] = [
+        '0.08 0.13 0.2 rg',
+        text(margin, pageHeight - 42, title, 16),
+        '0.35 0.43 0.53 rg',
+        text(margin, pageHeight - 62, `Generated ${formatDate} - ${dataRows.length} row(s)`, 8),
+        text(pageWidth - margin - 84, pageHeight - 62, `Page ${pageIndex + 1} of ${pageRows.length}`, 8),
+        '0.15 0.39 0.92 rg',
+        rect(margin, headerY, tableWidth, headerHeight, 'f'),
+        '1 1 1 rg',
+        ...headers.map((header, columnIndex) =>
+          text(margin + columnIndex * columnWidth + 5, headerY + 9, truncate(header, textLimit(columnWidth - 10, headerFontSize)), headerFontSize),
+        ),
+      ];
+      rowsForPage.forEach((row, rowIndex) => {
+        const y = headerY - (rowIndex + 1) * rowHeight;
+        if (rowIndex % 2 === 0) commands.push('0.96 0.98 1 rg', rect(margin, y, tableWidth, rowHeight, 'f'));
+        commands.push('0.85 0.89 0.94 RG', rect(margin, y, tableWidth, rowHeight), '0.08 0.13 0.2 rg');
+        row.forEach((value, columnIndex) => {
+          const x = margin + columnIndex * columnWidth;
+          commands.push(
+            '0.85 0.89 0.94 RG',
+            rect(x, y, columnWidth, rowHeight),
+            '0.08 0.13 0.2 rg',
+            text(x + 5, y + 8, truncate(value, textLimit(columnWidth - 10, fontSize)), fontSize),
+          );
+        });
+      });
+      const content = commands.join('\n');
+      objects[pageObjectId] = `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageWidth} ${pageHeight}] /Resources << /Font << /F1 ${fontObjectId} 0 R >> >> /Contents ${contentObjectId} 0 R >>`;
+      objects[contentObjectId] = `<< /Length ${Buffer.byteLength(content)} >>\nstream\n${content}\nendstream`;
+    }
+    objects[2] = `<< /Type /Pages /Kids [${pageObjectIds.map((id) => `${id} 0 R`).join(' ')}] /Count ${pageObjectIds.length} >>`;
+    let pdf = '%PDF-1.4\n';
+    const offsets = [0];
+    for (let id = 1; id < objects.length; id += 1) {
+      if (!objects[id]) continue;
+      offsets[id] = Buffer.byteLength(pdf);
+      pdf += `${id} 0 obj\n${objects[id]}\nendobj\n`;
+    }
+    const xrefOffset = Buffer.byteLength(pdf);
+    pdf += `xref\n0 ${objects.length}\n0000000000 65535 f \n`;
+    for (let id = 1; id < objects.length; id += 1) {
+      pdf += `${String(offsets[id] ?? 0).padStart(10, '0')} 00000 n \n`;
+    }
+    pdf += `trailer\n<< /Size ${objects.length} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`;
+    return Buffer.from(pdf);
   }
 
   /**
@@ -88,11 +224,15 @@ export class ProductService extends MongoRepository<Product> {
         await this.updateById(
           existing._id.toString(),
           {
+            compCode: payload.productSysCode,
             name: payload.name,
             categoryId: payload.categoryId,
+            parentCategoryId: payload.parentCategoryId,
             productSysCode: payload.productSysCode,
-            price: payload.price,
-            netWeight: payload.netWeight,
+            casePrice: payload.price,
+            piecePrice: payload.price / (payload.unitQtyInCase || 1),
+            caseNetWeight: payload.netWeight * (payload.unitQtyInCase || 1),
+            pieceNetWeight: payload.netWeight,
             priceType: payload.priceType,
             unitType: payload.unitType,
             unitSize: payload.unitSize,
@@ -113,11 +253,15 @@ export class ProductService extends MongoRepository<Product> {
       // Create new product
       const product = await this.save(
         {
+          compCode: payload.productSysCode,
           productId: payload.productId,
           name: payload.name,
           categoryId: payload.categoryId,
+          parentCategoryId: payload.parentCategoryId,
           productSysCode: payload.productSysCode,
           casePrice: payload.price,
+          piecePrice: payload.price / (payload.unitQtyInCase || 1),
+          caseNetWeight: payload.netWeight * (payload.unitQtyInCase || 1),
           pieceNetWeight: payload.netWeight,
           priceType: payload.priceType,
           unitType: payload.unitType,
@@ -310,6 +454,80 @@ export class ProductService extends MongoRepository<Product> {
     };
   }
 
+  async exportProducts(
+    query: ProductQueryDto,
+  ) {
+    const filter: Record<string, any> = {};
+    const selectedCategoryIds = query.categoryIds?.split(',').filter(Boolean) ?? [];
+    const categoryFilter = selectedCategoryIds.length
+      ? [{ categoryId: { $in: selectedCategoryIds } }, { parentCategoryId: { $in: selectedCategoryIds } }]
+      : [];
+    const searchFilter = query.searchText
+      ? [
+          { name: new RegExp(query.searchText, 'i') },
+          { productId: new RegExp(query.searchText, 'i') },
+          { productSysCode: new RegExp(query.searchText, 'i') },
+        ]
+      : [];
+    if (categoryFilter.length && searchFilter.length) {
+      filter.$and = [{ $or: categoryFilter }, { $or: searchFilter }];
+    } else if (categoryFilter.length || searchFilter.length) {
+      filter.$or = categoryFilter.length ? categoryFilter : searchFilter;
+    }
+    if (query.categoryId) filter.categoryId = query.categoryId;
+    if (query.parentCategoryId) filter.parentCategoryId = query.parentCategoryId;
+    if (query.status) filter.status = query.status;
+    if (query.isFocusedPack) filter.isFocusedPack = query.isFocusedPack;
+    if (query.minPrice || query.maxPrice) {
+      filter.casePrice = {
+        ...(query.minPrice ? { $gte: Number(query.minPrice) } : {}),
+        ...(query.maxPrice ? { $lte: Number(query.maxPrice) } : {}),
+      };
+    }
+
+    const [products, categories] = await Promise.all([
+      this.findLean(filter, { sort: { createdAt: -1 } }),
+      this.productCategoryModel.find({ isDeleted: false }).lean(),
+    ]);
+    const categoryNameById = new Map(
+      categories.map((category: any) => [category.categoryId, category.name]),
+    );
+    const columns = this.getExportColumns(query.columns);
+    const exportRows = products.map((product: any) => {
+      const values: Record<string, string> = {
+        primary: product.name || '',
+        productId: product.productId || '',
+        productSysCode: product.productSysCode || '',
+        compCode: product.compCode || '',
+        categoryId: categoryNameById.get(product.categoryId) || product.categoryId || '',
+        parentCategoryId: categoryNameById.get(product.parentCategoryId) || product.parentCategoryId || '',
+        casePrice: product.casePrice !== undefined ? String(product.casePrice) : '',
+        piecePrice: product.piecePrice !== undefined ? String(product.piecePrice) : '',
+        caseNetWeight: product.caseNetWeight !== undefined ? String(product.caseNetWeight) : '',
+        pieceNetWeight: product.pieceNetWeight !== undefined ? String(product.pieceNetWeight) : '',
+        priceType: product.priceType || '',
+        unitType: product.unitType || '',
+        unitSize: product.unitSize || '',
+        unitQtyInCase: product.unitQtyInCase !== undefined ? String(product.unitQtyInCase) : '',
+        isFocusedPack: product.isFocusedPack === 'Y' ? 'Yes' : 'No',
+        status: product.status || '',
+      };
+      return columns.map((column) => values[column.key] ?? '');
+    });
+    const rows = [columns.map((column) => column.title), ...exportRows];
+
+    if (query.fileType === 'pdf') {
+      return { buffer: this.buildPdfBuffer('Product Listing', rows), fileName: 'product-listing.pdf', mimeType: 'application/pdf' };
+    }
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(rows), 'Products');
+    return {
+      buffer: XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' }),
+      fileName: 'product-listing.xlsx',
+      mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    };
+  }
+
   async findAll(query: ProductQueryDto) {
     const {
       searchText,
@@ -342,16 +560,50 @@ export class ProductService extends MongoRepository<Product> {
      * product should not show because price cannot be found.
      */
     if (!priceCategoryCode) {
+      const basicFilter: Record<string, any> = {};
+      if (status) basicFilter.status = status;
+      if (categoryIds) {
+        const selectedCategoryIds = categoryIds.split(',');
+        basicFilter.$or = [
+          { categoryId: { $in: selectedCategoryIds } },
+          { parentCategoryId: { $in: selectedCategoryIds } },
+        ];
+      }
+      if (query.categoryId) basicFilter.categoryId = query.categoryId;
+      if (query.parentCategoryId) basicFilter.parentCategoryId = query.parentCategoryId;
+      if (brands) basicFilter.brand = { $in: brands.split(',') };
+      if (isFocusedPack) basicFilter.isFocusedPack = isFocusedPack;
+      if (searchText) {
+        const regex = new RegExp(searchText, 'i');
+        const searchFilters = [
+          { productId: regex },
+          { productSysCode: regex },
+          { name: regex },
+        ];
+        if (basicFilter.$or) {
+          basicFilter.$and = [{ $or: basicFilter.$or }, { $or: searchFilters }];
+          delete basicFilter.$or;
+        } else {
+          basicFilter.$or = searchFilters;
+        }
+      }
+      if (minPrice || maxPrice) {
+        basicFilter.casePrice = {
+          ...(minPrice ? { $gte: Number(minPrice) } : {}),
+          ...(maxPrice ? { $lte: Number(maxPrice) } : {}),
+        };
+      }
+
+      const result = await this.paginate(basicFilter, {
+        page: Number(page),
+        limit: Number(limit),
+        sort: { createdAt: -1 },
+      });
       return {
         statusCode: HttpStatus.OK,
         message: PRODUCT.FETCHED,
-        data: [],
-        meta: {
-          total: 0,
-          page: Number(page),
-          limit: Number(limit),
-          totalPages: 0,
-        },
+        data: result.items,
+        meta: result.meta,
       };
     }
 
@@ -367,10 +619,14 @@ export class ProductService extends MongoRepository<Product> {
     }
 
     if (categoryIds) {
-      match.parentCategoryId = {
-        $in: categoryIds.split(','),
-      };
+      const selectedCategoryIds = categoryIds.split(',');
+      match.$or = [
+        { categoryId: { $in: selectedCategoryIds } },
+        { parentCategoryId: { $in: selectedCategoryIds } },
+      ];
     }
+    if (query.categoryId) match.categoryId = query.categoryId;
+    if (query.parentCategoryId) match.parentCategoryId = query.parentCategoryId;
 
     if (brands) {
       match.brand = {
@@ -391,13 +647,19 @@ export class ProductService extends MongoRepository<Product> {
     if (searchText) {
       const regex = new RegExp(searchText, 'i');
 
-      match.$or = [
+      const searchFilters = [
         { name: regex },
         { productSysCode: regex },
         { productId: regex },
         { sku: regex },
         { brand: regex },
       ];
+      if (match.$or) {
+        match.$and = [{ $or: match.$or }, { $or: searchFilters }];
+        delete match.$or;
+      } else {
+        match.$or = searchFilters;
+      }
     }
 
     /**
@@ -709,7 +971,13 @@ export class ProductService extends MongoRepository<Product> {
     const priceCategoryCode = query?.customerCategoryId || '';
 
     if (!priceCategoryCode) {
-      throw new NotFoundException(PRODUCT.NOT_FOUND);
+      const product = await this.findOne({ productId }, { lean: true });
+      if (!product) throw new NotFoundException(PRODUCT.NOT_FOUND);
+      return {
+        statusCode: HttpStatus.OK,
+        message: PRODUCT.FETCHED,
+        data: product,
+      };
     }
 
     const now = new Date();
@@ -847,7 +1115,15 @@ export class ProductService extends MongoRepository<Product> {
    * Purpose : Update product master data
    */
   async update(productId: string, payload: ProductUpdateDto) {
-    const product = await this.updateOne({ productId }, payload);
+    const { price, netWeight, ...values } = payload;
+    const product = await this.updateOne(
+      { productId },
+      {
+        ...values,
+        ...(price !== undefined ? { casePrice: price } : {}),
+        ...(netWeight !== undefined ? { pieceNetWeight: netWeight } : {}),
+      },
+    );
 
     if (!product) {
       throw new NotFoundException(PRODUCT.NOT_FOUND);

@@ -50,6 +50,11 @@ export class ProductCreateDto {
   @IsString()
   categoryId!: string;
 
+  @ApiProperty({ example: 'CAT-PARENT-001', required: true })
+  @IsNotEmpty()
+  @IsString()
+  parentCategoryId!: string;
+
   /**
    * System Code
    * -----------

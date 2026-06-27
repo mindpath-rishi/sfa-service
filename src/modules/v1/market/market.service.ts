@@ -85,15 +85,16 @@ export class MarketService extends MongoRepository<Market> {
   }
 
   async findAll(query: MarketQueryDto) {
-    const { searchText, status, page = 1, limit = 20 } = query;
+    const { searchText, status, provinceId, page = 1, limit = 20 } = query;
 
     const filter: FilterQuery<Market> = {};
 
     if (status) filter.status = status;
+    if (provinceId) filter.provinceId = provinceId;
 
     if (searchText) {
       const regex = new RegExp(searchText, 'i');
-      filter.$or = [{ marketId: regex }];
+      filter.$or = [{ marketId: regex }, { name: regex }];
     }
 
     const result = await this.paginate(filter, {

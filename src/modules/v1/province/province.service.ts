@@ -93,7 +93,7 @@ export class ProvinceService extends MongoRepository<Province> {
 
     if (searchText) {
       const regex = new RegExp(searchText, 'i');
-      filter.$or = [{ provinceId: regex }];
+      filter.$or = [{ provinceId: regex }, { name: regex }];
     }
 
     const result = await this.paginate(filter, {

@@ -221,7 +221,11 @@ export class UserService extends MongoRepository<User> {
       60 * 60 * 24 * 7,
     );
 
-    const vanId: string = profile?.associatedVans?.[0];
+    const assignedVans = await this.vanService.findLean(
+      { associatedUsers: { $in: [user.profileId] } } as any,
+      { sort: { updatedAt: -1 } },
+    );
+    const vanId = assignedVans[0]?.vanId;
 
     const accessToken = this.jwtService.sign(
       {
@@ -258,6 +262,7 @@ export class UserService extends MongoRepository<User> {
       user: {
         profileId: user.profileId,
         profile,
+        vanId,
       },
       message: USER.LOGIN,
     };

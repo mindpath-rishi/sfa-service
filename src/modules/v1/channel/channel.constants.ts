@@ -1,4 +1,3 @@
-
 export const CHANNEL = {
   CREATED: 'Channel created successfully',
   FETCHED: 'Channel fetched successfully',

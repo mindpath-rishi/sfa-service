@@ -32,6 +32,9 @@ export class VanRoute {
   @Prop({ required: true, type: String })
   routeId!: string;
 
+  @Prop({ required: false, type: String })
+  day?: string;
+
   @Prop({ required: true, type: Date })
   fromDate!: Date;
 

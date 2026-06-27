@@ -27,8 +27,10 @@ import {
   Patch,
   Post,
   Query,
+  Res,
 } from '@nestjs/common';
 import { ApiBody, ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger';
+import type { Response } from 'express';
 
 import { FeatureFlag } from 'src/core/decorators/feature-flag.decorator';
 import { ApiSuccessResponse } from 'src/core/swagger/api.response.swagger';
@@ -149,6 +151,19 @@ async syncProducts() {
     return this.productService.findAll(query);
   }
 
+  @Get('export')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Export products' })
+  async exportProducts(
+    @Query() query: ProductQueryDto,
+    @Res() res: Response,
+  ) {
+    const file = await this.productService.exportProducts(query);
+    res.setHeader('Content-Type', file.mimeType);
+    res.setHeader('Content-Disposition', `attachment; filename="${file.fileName}"`);
+    res.send(file.buffer);
+  }
+
   /**
    * Get Product by ID
    * -----------------
@@ -167,8 +182,13 @@ async syncProducts() {
     PRODUCT.FETCHED,
   )
   @ApiNotFoundResponse()
-  async findOne(@Param('productId') productId: string) {
-    return this.productService.findByProductId(productId);
+  async findOne(
+    @Param('productId') productId: string,
+    @Query('customerCategoryId') customerCategoryId?: string,
+  ) {
+    return this.productService.findByProductId(productId, {
+      customerCategoryId,
+    });
   }
 
   /**

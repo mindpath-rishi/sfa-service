@@ -1,7 +1,7 @@
 import { RouteStatus } from 'src/shared/enums/route.enums';
 
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEnum, IsNumber, IsOptional, IsString, ValidateNested } from 'class-validator';
+import { IsArray, IsEnum, IsNumber, IsOptional, IsString, Min, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 
 
@@ -13,7 +13,9 @@ export class UpdateRouteCustomerDto {
 
   @ApiPropertyOptional({ type: Number })
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
+  @Min(1)
   sequence?: number;
 
 }
@@ -35,23 +37,36 @@ export class UpdateRouteDto {
   @ApiPropertyOptional({ type: String })
   @IsOptional()
   @IsString()
-  beatId?: string;
-
-  @ApiPropertyOptional({ type: () => [UpdateRouteCustomerDto], description: 'Update embedded RouteCustomer array' , default: [] })
-  @IsOptional()
-  @ValidateNested({ each: true })
-  @Type(() => UpdateRouteCustomerDto)
-  associatedCustomers?: UpdateRouteCustomerDto[];
+  countryId?: string;
 
   @ApiPropertyOptional({ type: String })
   @IsOptional()
   @IsString()
-  day?: string;
+  customerCategoryId?: string;
 
-  @ApiPropertyOptional({ type: Number , default: 0 })
+  @ApiPropertyOptional({ type: String })
   @IsOptional()
+  @IsString()
+  provinceId?: string;
+
+  @ApiPropertyOptional({ type: String })
+  @IsOptional()
+  @IsString()
+  marketId?: string;
+
+  @ApiPropertyOptional({ type: () => [UpdateRouteCustomerDto], description: 'Update mapped outlets array' , default: [] })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => UpdateRouteCustomerDto)
+  associatedCustomers?: UpdateRouteCustomerDto[];
+
+  @ApiPropertyOptional({ type: Number, default: 0 })
+  @IsOptional()
+  @Type(() => Number)
   @IsNumber()
-  distance?: number;
+  @Min(0)
+  outletCount?: number;
 
   @ApiPropertyOptional({ enum: RouteStatus, default: RouteStatus.ACTIVE })
   @IsOptional()

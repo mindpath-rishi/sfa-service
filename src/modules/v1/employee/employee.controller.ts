@@ -27,11 +27,14 @@ import {
   Patch,
   Post,
   Query,
+  Res,
 } from '@nestjs/common';
 import { ApiBody, ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger';
+import type { Response } from 'express';
 
 import { CreateEmployeeDto } from './dto/create-employee.dto';
 import { UpdateEmployeeDto } from './dto/update-employee.dto';
+import { BulkUploadEmployeesDto } from './dto/bulk-upload-employees.dto';
 
 import { EmployeeService } from './employee.service';
 import { FeatureFlag } from 'src/core/decorators/feature-flag.decorator';
@@ -93,6 +96,15 @@ export class EmployeeController {
   )
   async create(@Body() dto: CreateEmployeeDto) {
     return this.employeeService.create(dto);
+  }
+
+  @Permissions('EMPLOYEE_CREATE')
+  @Post('/bulk-upload')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Bulk upload employees' })
+  @ApiBody({ type: BulkUploadEmployeesDto })
+  async bulkUpload(@Body() dto: BulkUploadEmployeesDto) {
+    return this.employeeService.bulkUpload(dto);
   }
 
   @Get('/manager/stats')
@@ -279,6 +291,13 @@ export class EmployeeController {
   )
   async getFieldUsersSummary(@Query() query: { date?: string }) {
     return this.employeeService.getFieldUsersSummary(query?.date);
+  }
+
+  @Get('/manager/live-locations')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Get latest live locations for manager field users' })
+  async getManagerLiveLocations(@Query() query: { date?: string }) {
+    return this.employeeService.getManagerLiveLocations(query?.date);
   }
 
   @Get('/manager/user-timeline')
@@ -508,6 +527,27 @@ export class EmployeeController {
     },
   ) {
     return this.employeeService.shareSalesmanReport('MSR', body);
+  }
+
+  @Get('/export')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Export employees' })
+  async exportEmployees(
+    @Query()
+    query: EmployeeQueryDto & {
+      fileType?: 'excel' | 'pdf';
+      columns?: string;
+    },
+    @Res() res: Response,
+  ) {
+    const file = await this.employeeService.exportEmployees(query);
+
+    res.setHeader('Content-Type', file.mimeType);
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${file.fileName}"`,
+    );
+    res.send(file.buffer);
   }
 
   /**

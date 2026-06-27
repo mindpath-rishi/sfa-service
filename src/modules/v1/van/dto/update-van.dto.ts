@@ -6,7 +6,36 @@
  */
 
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsString, IsNumber, IsArray } from 'class-validator';
+import {
+  IsOptional,
+  IsString,
+  IsNumber,
+  IsArray,
+  IsEnum,
+  IsDateString,
+  ValidateNested,
+} from 'class-validator';
+import { Type } from 'class-transformer';
+import { VanStatus } from 'src/shared/enums/van.enums';
+
+export class UpdateVanRouteDto {
+  @ApiPropertyOptional({ example: 'ROUTE-001' })
+  @IsString()
+  routeId!: string;
+
+  @ApiPropertyOptional({ example: 'MONDAY' })
+  @IsOptional()
+  @IsString()
+  day?: string;
+
+  @ApiPropertyOptional({ example: '2026-06-01' })
+  @IsDateString()
+  fromDate!: string;
+
+  @ApiPropertyOptional({ example: '2026-06-30' })
+  @IsDateString()
+  toDate!: string;
+}
 
 export class UpdateVanDto {
   @ApiPropertyOptional()
@@ -25,8 +54,9 @@ export class UpdateVanDto {
   capacity?: number;
 
   @ApiPropertyOptional({ example: 'Ramesh' })
+  @IsOptional()
   @IsString()
-  driverName!: string;
+  driverName?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -36,10 +66,18 @@ export class UpdateVanDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsArray()
+  @IsString({ each: true })
   associatedUsers?: string[];
 
-  @ApiPropertyOptional({ example: 'ACTIVE' })
+  @ApiPropertyOptional({ type: [UpdateVanRouteDto] })
   @IsOptional()
-  @IsString()
-  status?: string;
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => UpdateVanRouteDto)
+  associatedRoutes?: UpdateVanRouteDto[];
+
+  @ApiPropertyOptional({ example: VanStatus.ACTIVE, enum: VanStatus })
+  @IsOptional()
+  @IsEnum(VanStatus)
+  status?: VanStatus;
 }

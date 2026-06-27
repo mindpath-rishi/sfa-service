@@ -19,6 +19,7 @@ import {
   IsArray,
   IsEnum,
   IsNotEmpty,
+  IsIn,
 } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { ProductStatus } from 'src/shared/enums/product.enums';
@@ -38,10 +39,10 @@ export class ProductQueryDto extends PaginationDto {
   @IsString()
   searchText?: string;
 
-  @ApiProperty({ example: 'PID-001', required: true })
-  @IsNotEmpty()
+  @ApiPropertyOptional({ example: 'RETAIL' })
+  @IsOptional()
   @IsString()
-  customerCategoryId!: string;
+  customerCategoryId?: string;
 
   /**
    * Category IDs
@@ -56,6 +57,16 @@ export class ProductQueryDto extends PaginationDto {
   @IsOptional()
   @IsString()
   categoryIds?: string;
+
+  @ApiPropertyOptional({ description: 'Filter by exact category ID' })
+  @IsOptional()
+  @IsString()
+  categoryId?: string;
+
+  @ApiPropertyOptional({ description: 'Filter by exact parent category ID' })
+  @IsOptional()
+  @IsString()
+  parentCategoryId?: string;
 
   /**
    * Brands
@@ -144,4 +155,14 @@ export class ProductQueryDto extends PaginationDto {
   @IsOptional()
   @IsString()
   hasDiscount?: string;
+
+  @ApiPropertyOptional({ enum: ['excel', 'pdf'] })
+  @IsOptional()
+  @IsIn(['excel', 'pdf'])
+  fileType?: 'excel' | 'pdf';
+
+  @ApiPropertyOptional({ description: 'Comma-separated export column keys' })
+  @IsOptional()
+  @IsString()
+  columns?: string;
 }

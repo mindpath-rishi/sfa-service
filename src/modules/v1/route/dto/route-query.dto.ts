@@ -1,16 +1,7 @@
 import { RouteStatus } from 'src/shared/enums/route.enums';
 
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import {
-  IsEnum,
-  IsNotEmpty,
-  IsNumber,
-  IsOptional,
-  IsString,
-  MaxLength,
-  MinLength,
-} from 'class-validator';
-import { Type } from 'class-transformer';
+import { IsEnum, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 
 import { PaginationDto } from 'src/shared/dto/pagination.dto';
 
@@ -45,33 +36,25 @@ export class RouteQueryDto extends PaginationDto {
   @IsString()
   name?: string;
 
-  @ApiPropertyOptional({
-    type: String,
-    description: 'Filter by beat ID',
-    example: 'BEAT-001',
-  })
+  @ApiPropertyOptional({ type: String, description: 'Filter by country ID' })
   @IsOptional()
   @IsString()
-  beatId?: string;
+  countryId?: string;
 
-  @ApiPropertyOptional({
-    type: String,
-    description: 'Day of route',
-    example: 'MON',
-  })
+  @ApiPropertyOptional({ type: String, description: 'Filter by province ID' })
   @IsOptional()
   @IsString()
-  day?: string;
+  provinceId?: string;
 
-  @ApiPropertyOptional({
-    type: Number,
-    description: 'Supports operators: gt, gte, lt, lte',
-    example: 10,
-  })
+  @ApiPropertyOptional({ type: String, description: 'Filter by market ID' })
   @IsOptional()
-  @Type(() => Number) // ✅ FIX
-  @IsNumber()
-  distance?: number;
+  @IsString()
+  marketId?: string;
+
+  @ApiPropertyOptional({ type: String, description: 'Filter by customer category ID' })
+  @IsOptional()
+  @IsString()
+  customerCategoryId?: string;
 
   @ApiPropertyOptional({
     enum: RouteStatus,
@@ -81,6 +64,16 @@ export class RouteQueryDto extends PaginationDto {
   @IsOptional()
   @IsEnum(RouteStatus)
   status?: RouteStatus;
+
+  @ApiPropertyOptional({ example: 'name' })
+  @IsOptional()
+  @IsString()
+  sortBy?: string;
+
+  @ApiPropertyOptional({ example: 'asc' })
+  @IsOptional()
+  @IsString()
+  sortOrder?: 'asc' | 'desc';
 }
 
 /**

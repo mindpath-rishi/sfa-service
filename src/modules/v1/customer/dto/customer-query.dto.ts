@@ -64,6 +64,23 @@ export class CustomerQueryDto extends PaginationDto {
   @IsString()
   address?: string;
 
+  @ApiPropertyOptional({
+    description: 'Sort field',
+    example: 'name',
+  })
+  @IsOptional()
+  @IsString()
+  sortBy?: string;
+
+  @ApiPropertyOptional({
+    description: 'Sort direction',
+    enum: ['asc', 'desc'],
+    example: 'asc',
+  })
+  @IsOptional()
+  @IsString()
+  sortOrder?: 'asc' | 'desc';
+
   /**
    * Status
    * ------

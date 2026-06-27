@@ -4,6 +4,10 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsNotEmpty, IsString, IsOptional, IsEnum } from 'class-validator';
 
 export class CreateMarketDto {
+  @ApiProperty()
+  @IsNotEmpty()
+  @IsString()
+  provinceId!: string;
 /**
  * Market Create DTO
  * ====================

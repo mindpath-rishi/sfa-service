@@ -28,7 +28,9 @@ import { EmployeeModule } from './modules/v1/employee/employee.module';
 import { NotificationModule } from './modules/v1/notification/notification.module';
 import { ProductModule } from './modules/v1/product/product.module';
 import { ProductCategoryModule } from './modules/v1/product-category/product-category.module';
+import { MasterBulkModule } from './modules/v1/master-bulk/master-bulk.module';
 import { VanModule } from './modules/v1/van/van.module';
+import { DesignationModule } from './modules/v1/designation/designation.module';
 import { MarketModule } from './modules/v1/market/market.module';
 import { ProvinceModule } from './modules/v1/province/province.module';
 import { OutletTypeModule } from './modules/v1/outlet-type/outlet-type.module';
@@ -58,6 +60,8 @@ import { TargetModule } from './modules/v1/target/target.module';
 import { OracleModule } from './core/database/oracle/oracle.module';
 import { PriceModule } from './modules/v1/price/price.module';
 import { VanErpClosingModule } from './modules/v1/van-erp-closing/van-erp-closing.module';
+import { DashboardModule } from './modules/v1/dashboard/dashboard.module';
+import { ChannelModule } from './modules/v1/channel/channel.module';
 
 @Global()
 @Module({
@@ -98,7 +102,9 @@ import { VanErpClosingModule } from './modules/v1/van-erp-closing/van-erp-closin
     NotificationModule,
     ProductModule,
     ProductCategoryModule,
+    MasterBulkModule,
     VanModule,
+    DesignationModule,
     MarketModule,
     ProvinceModule,
     CustomerCategoryModule,
@@ -128,7 +134,9 @@ import { VanErpClosingModule } from './modules/v1/van-erp-closing/van-erp-closin
     TargetModule,
     OracleModule,
     PriceModule,
-    VanErpClosingModule,],
+    DashboardModule,
+    VanErpClosingModule,
+    ChannelModule,],
   providers: [
     AppControlService,
     MongoService,

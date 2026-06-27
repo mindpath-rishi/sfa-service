@@ -62,6 +62,12 @@ import {
   VanDailyStock,
   VanDailyStockSchema,
 } from 'src/core/database/mongo/schema/van-daily-stock.schema';
+import { Role, RoleSchema } from 'src/core/database/mongo/schema/role.schema';
+import {
+  Designation,
+  DesignationSchema,
+} from 'src/core/database/mongo/schema/designation.schema';
+import { User, UserSchema } from 'src/core/database/mongo/schema/user.schema';
 
 @Module({
   imports: [
@@ -82,6 +88,9 @@ import {
       { name: WorkSession.name, schema: WorkSessionSchema },
       { name: RouteSession.name, schema: RouteSessionSchema },
       { name: VanDailyStock.name, schema: VanDailyStockSchema },
+      { name: Role.name, schema: RoleSchema },
+      { name: Designation.name, schema: DesignationSchema },
+      { name: User.name, schema: UserSchema },
     ]),
     UserModule,
   ],

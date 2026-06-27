@@ -23,6 +23,8 @@ import {
   NotFoundException,
   ConflictException,
   HttpStatus,
+  BadRequestException,
+  HttpException,
 } from '@nestjs/common';
 
 import { MongoService } from 'src/core/database/mongo/mongo.service';
@@ -38,6 +40,7 @@ import { UserService } from 'src/modules/v1/user/user.service';
 import { CreateEmployeeDto } from './dto/create-employee.dto';
 import { UpdateEmployeeDto } from './dto/update-employee.dto';
 import { EmployeeQueryDto } from './dto/employee.query.dto';
+import { BulkUploadEmployeesDto } from './dto/bulk-upload-employees.dto';
 import { EMPLOYEE } from './employee.constants';
 import { IdGenerator } from 'src/shared/utils/id-generator.utils';
 import { InjectModel } from '@nestjs/mongoose';
@@ -68,6 +71,10 @@ import { WorkSession } from 'src/core/database/mongo/schema/work-session.schema'
 import { RouteSession } from 'src/core/database/mongo/schema/route-session.schema';
 import { VanDailyStock } from 'src/core/database/mongo/schema/van-daily-stock.schema';
 import { RouteSessionStatus } from 'src/shared/enums/route-session.enums';
+import { Role } from 'src/core/database/mongo/schema/role.schema';
+import { Designation } from 'src/core/database/mongo/schema/designation.schema';
+import * as XLSX from 'xlsx';
+import { User } from 'src/core/database/mongo/schema/user.schema';
 
 const REPORT_TIMEZONE =
   process.env.APP_TIMEZONE || process.env.TZ || 'Asia/Kolkata';
@@ -125,8 +132,155 @@ export class EmployeeService extends MongoRepository<Employee> {
     private readonly routeSessionModel: Model<RouteSession>,
     @InjectModel(VanDailyStock.name)
     private readonly vanDailyStockModel: Model<VanDailyStock>,
+    @InjectModel(Role.name)
+    private readonly roleModel: Model<Role>,
+    @InjectModel(Designation.name)
+    private readonly designationModel: Model<Designation>,
+    @InjectModel(User.name)
+    private readonly userModel: Model<User>,
   ) {
     super(mongo.getModel(Employee.name, EmployeeSchema));
+  }
+
+  private async validateAssignedVansForRole(
+    roleId?: string,
+    assignedVanIds?: string[],
+  ) {
+    if (!roleId || assignedVanIds === undefined) return;
+
+    const role = await this.roleModel.findOne({ roleId }).lean();
+    if (!role) return;
+
+    const maxAssociatedVans = role.maxAssociatedVans ?? 0;
+    if (maxAssociatedVans === -1) return;
+
+    if (assignedVanIds.length > maxAssociatedVans) {
+      throw new BadRequestException(
+        `Role allows only ${maxAssociatedVans} associated van(s).`,
+      );
+    }
+  }
+
+  private async buildHierarchyPath(reportingEmployeeId?: string) {
+    if (!reportingEmployeeId) return [];
+
+    const reportingEmployee = await this.findOne(
+      { employeeId: reportingEmployeeId },
+      { lean: true },
+    );
+
+    if (!reportingEmployee) {
+      throw new BadRequestException('Reporting employee not found.');
+    }
+
+    return [
+      ...(reportingEmployee.hierarchyPath || []),
+      reportingEmployee.employeeId,
+    ];
+  }
+
+  private async attachLoginIds<T extends { employeeId?: string }>(employees: T[]) {
+    const employeeIds = employees
+      .map((employee) => employee.employeeId)
+      .filter((employeeId): employeeId is string => Boolean(employeeId));
+
+    if (!employeeIds.length) return employees;
+
+    const users = await this.userModel
+      .find({ profileId: { $in: employeeIds } })
+      .select('profileId loginId')
+      .lean();
+    const loginIdByProfileId = new Map(
+      users.map((user) => [user.profileId, user.loginId]),
+    );
+
+    return employees.map((employee) => ({
+      ...employee,
+      loginId: employee.employeeId
+        ? loginIdByProfileId.get(employee.employeeId)
+        : undefined,
+    }));
+  }
+
+  private async attachAssignedVanIds<T extends { employeeId?: string }>(
+    employees: T[],
+  ) {
+    const employeeIds = employees
+      .map((employee) => employee.employeeId)
+      .filter((employeeId): employeeId is string => Boolean(employeeId));
+
+    if (!employeeIds.length) return employees;
+
+    const vans = await this.vanModel
+      .find({ associatedUsers: { $in: employeeIds } })
+      .select('vanId associatedUsers')
+      .lean();
+    const vanIdsByEmployeeId = new Map<string, string[]>();
+
+    vans.forEach((van) => {
+      (van.associatedUsers || []).forEach((employeeId) => {
+        if (!employeeIds.includes(employeeId)) return;
+        const vanIds = vanIdsByEmployeeId.get(employeeId) || [];
+        vanIds.push(van.vanId);
+        vanIdsByEmployeeId.set(employeeId, vanIds);
+      });
+    });
+
+    return employees.map((employee) => ({
+      ...employee,
+      assignedVanIds: employee.employeeId
+        ? vanIdsByEmployeeId.get(employee.employeeId) || []
+        : [],
+    }));
+  }
+
+  private async resolveVanIds(values?: string[]) {
+    if (!values) return values;
+    if (!values.length) return [];
+
+    const resolved: string[] = [];
+
+    for (const value of values) {
+      const van = await this.vanModel
+        .findOne({
+          $or: [
+            { vanId: value },
+            { name: this.exactRegex(value) },
+            { vanNumber: this.exactRegex(value) },
+          ],
+        })
+        .lean();
+
+      if (!van) {
+        throw new BadRequestException(`Van not found: ${value}`);
+      }
+
+      resolved.push(van.vanId);
+    }
+
+    return [...new Set(resolved)];
+  }
+
+  private async syncEmployeeVanAssignments(
+    employeeId: string,
+    assignedVanIds?: string[],
+    session?: any,
+  ) {
+    if (assignedVanIds === undefined) return;
+
+    await this.vanModel.updateMany(
+      { associatedUsers: employeeId },
+      { $pull: { associatedUsers: employeeId } },
+      { session },
+    );
+
+    if (!assignedVanIds.length) return;
+
+    await this.vanModel.updateMany(
+      { vanId: { $in: assignedVanIds } },
+      { $addToSet: { associatedUsers: employeeId } },
+      { session },
+    );
   }
 
   /**
@@ -144,13 +298,23 @@ export class EmployeeService extends MongoRepository<Employee> {
    * Notes:
    * - Operation is fully transactional
    * - Prevents duplicate active employees
-   */
+  */
   async create(payload: CreateEmployeeDto) {
+    const assignedVanIds = await this.resolveVanIds(payload.assignedVanIds);
+    await this.validateAssignedVansForRole(payload.roleId, assignedVanIds);
+    const hierarchyPath = await this.buildHierarchyPath(
+      payload.reportingEmployeeId,
+    );
+
     return this.withTransaction(async (session) => {
       // Check existing employee (including soft-deleted)
+      const duplicateConditions = [
+        { mobile: payload.mobile },
+        ...(payload.email ? [{ email: payload.email }] : []),
+      ];
       const existingEmployee = await this.findOne(
         {
-          $or: [{ mobile: payload.mobile }, { email: payload.email }],
+          $or: duplicateConditions,
         },
         { session, includeDeleted: true },
       );
@@ -167,16 +331,24 @@ export class EmployeeService extends MongoRepository<Employee> {
           {
             name: payload.name,
             roleId: payload.roleId,
+            designationId: payload.designationId,
+            reportingEmployeeId: payload.reportingEmployeeId,
+            hierarchyPath,
             permissionOverrides: payload.permissionOverrides
               ? {
                   allow: payload.permissionOverrides.allow || [],
                   deny: payload.permissionOverrides.deny || [],
                 }
               : undefined,
-            status: UserStatus.ACTIVE,
+            status: payload.status || UserStatus.ACTIVE,
             isDeleted: false,
           },
           { session },
+        );
+        await this.syncEmployeeVanAssignments(
+          existingEmployee.employeeId,
+          assignedVanIds,
+          session,
         );
 
         await this.userService.restoreUser(
@@ -195,7 +367,7 @@ export class EmployeeService extends MongoRepository<Employee> {
         return {
           statusCode: HttpStatus.OK,
           message: EMPLOYEE.CREATED,
-          data: { employeeId: existingEmployee.employeeId },
+          data: { employeeId: existingEmployee.employeeId, assignedVanIds },
         };
       }
 
@@ -222,13 +394,16 @@ export class EmployeeService extends MongoRepository<Employee> {
           name: payload.name,
           email: payload.email,
           roleId: payload.roleId,
+          designationId: payload.designationId,
+          reportingEmployeeId: payload.reportingEmployeeId,
+          hierarchyPath,
           permissionOverrides: payload.permissionOverrides
             ? {
                 allow: payload.permissionOverrides.allow || [],
                 deny: payload.permissionOverrides.deny || [],
               }
             : undefined,
-          status: UserStatus.ACTIVE,
+          status: payload.status || UserStatus.ACTIVE,
         },
         { session },
       );
@@ -244,13 +419,515 @@ export class EmployeeService extends MongoRepository<Employee> {
         },
         session,
       );
+      await this.syncEmployeeVanAssignments(employeeId, assignedVanIds, session);
 
       return {
         statusCode: HttpStatus.CREATED,
         message: EMPLOYEE.CREATED,
-        data: employee,
+        data: {
+          ...(employee.toObject?.() ?? employee),
+          assignedVanIds: assignedVanIds || [],
+        },
       };
     });
+  }
+
+  async bulkUpload(dto: BulkUploadEmployeesDto) {
+    const results: Array<{
+      row: number;
+      status: 'CREATED' | 'FAILED';
+      employeeId?: string;
+      message?: string;
+    }> = [];
+    let created = 0;
+    let failed = 0;
+
+    for (const [index, item] of dto.items.entries()) {
+      try {
+        const resolvedItem = await this.resolveBulkUploadReferences(item);
+        const response = await this.create(resolvedItem);
+        const employeeId =
+          typeof response.data === 'object' && response.data
+            ? (response.data as { employeeId?: string }).employeeId
+            : undefined;
+
+        created += 1;
+        results.push({
+          row: index + 1,
+          status: 'CREATED',
+          employeeId,
+        });
+      } catch (error) {
+        failed += 1;
+        results.push({
+          row: index + 1,
+          status: 'FAILED',
+          message: this.getBulkUploadErrorMessage(error),
+        });
+      }
+    }
+
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'Employees bulk upload processed',
+      data: {
+        total: dto.items.length,
+        created,
+        failed,
+        results,
+      },
+    };
+  }
+
+  private escapeExactRegex(value: string) {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+
+  private exactRegex(value: string) {
+    return new RegExp(`^${this.escapeExactRegex(value.trim())}$`, 'i');
+  }
+
+  private async resolveRoleId(value: string): Promise<string>;
+  private async resolveRoleId(value?: string): Promise<string | undefined>;
+  private async resolveRoleId(value?: string) {
+    if (!value) return value;
+
+    const role = await this.roleModel
+      .findOne({
+        $or: [
+          { roleId: value },
+          { name: this.exactRegex(value) },
+          { displayName: this.exactRegex(value) },
+        ],
+      })
+      .lean();
+
+    if (!role) {
+      throw new BadRequestException(`Role not found: ${value}`);
+    }
+
+    return role.roleId;
+  }
+
+  private async resolveDesignationId(value?: string) {
+    if (!value) return value;
+
+    const designation = await this.designationModel
+      .findOne({
+        $or: [{ designationId: value }, { name: this.exactRegex(value) }],
+      })
+      .lean();
+
+    if (!designation) {
+      throw new BadRequestException(`Designation not found: ${value}`);
+    }
+
+    return designation.designationId;
+  }
+
+  private async resolveReportingEmployeeId(value?: string) {
+    if (!value) return value;
+
+    const employee = await this.findOne(
+      {
+        $or: [{ employeeId: value }, { name: this.exactRegex(value) }],
+      },
+      { lean: true },
+    );
+
+    if (!employee) {
+      throw new BadRequestException(`Report To employee not found: ${value}`);
+    }
+
+    return employee.employeeId;
+  }
+
+  private async resolveBulkUploadReferences(item: CreateEmployeeDto) {
+    return {
+      ...item,
+      roleId: await this.resolveRoleId(item.roleId),
+      designationId: await this.resolveDesignationId(item.designationId),
+      assignedVanIds: await this.resolveVanIds(item.assignedVanIds),
+      reportingEmployeeId: await this.resolveReportingEmployeeId(
+        item.reportingEmployeeId,
+      ),
+    };
+  }
+
+  private getBulkUploadErrorMessage(error: unknown) {
+    if (error instanceof HttpException) {
+      const response = error.getResponse();
+
+      if (typeof response === 'string') return response;
+      if (typeof response === 'object' && response && 'message' in response) {
+        const message = (response as { message?: string | string[] }).message;
+        return Array.isArray(message) ? message.join(', ') : message;
+      }
+    }
+
+    return error instanceof Error ? error.message : 'Unable to create employee';
+  }
+
+  private buildEmployeeFilter(query: EmployeeQueryDto) {
+    const {
+      status,
+      roleId,
+      designationId,
+      reportingEmployeeId,
+      searchText,
+    } = query;
+    const filter: Record<string, any> = {};
+
+    if (status) filter.status = status;
+    if (roleId) filter.roleId = roleId;
+    if (designationId) filter.designationId = designationId;
+    if (reportingEmployeeId) filter.reportingEmployeeId = reportingEmployeeId;
+
+    if (searchText) {
+      const regex = new RegExp(searchText, 'i');
+
+      filter.$or = [
+        { employeeId: regex },
+        { name: regex },
+        { mobile: regex },
+        { email: regex },
+        { designationId: regex },
+      ];
+    }
+
+    return filter;
+  }
+
+  private getExportColumns(columns?: string) {
+    const definitions = [
+      { key: 'primary', title: 'Name' },
+      { key: 'loginId', title: 'Login ID' },
+      { key: 'secondary', title: 'Role' },
+      { key: 'owner', title: 'Reports To' },
+      { key: 'designation', title: 'Designation' },
+      { key: 'assignedVans', title: 'Assigned Vans' },
+      { key: 'status', title: 'Status' },
+    ];
+    const requested = columns
+      ?.split(',')
+      .map((column) => column.trim())
+      .filter(Boolean);
+
+    if (!requested?.length) return definitions;
+
+    const selected = definitions.filter((column) =>
+      requested.includes(column.key),
+    );
+
+    return selected.length ? selected : definitions;
+  }
+
+  private async getEmployeeListingMaps(employees: any[]) {
+    const reportingEmployeeIds = [
+      ...new Set(
+        employees
+          .map((employee) => employee.reportingEmployeeId)
+          .filter(Boolean),
+      ),
+    ];
+    const [roles, designations, vans, reportingEmployees] =
+      await Promise.all([
+        this.roleModel.find({}).lean(),
+        this.designationModel.find({}).lean(),
+        this.vanModel.find({}).lean(),
+        reportingEmployeeIds.length
+          ? this.findLean({ employeeId: { $in: reportingEmployeeIds } } as any)
+          : [],
+      ]);
+
+    return {
+      employeeNameById: new Map([
+        ...employees.map(
+          (employee) => [employee.employeeId, employee.name] as [string, string],
+        ),
+        ...reportingEmployees.map((employee: any) => [
+          employee.employeeId,
+          employee.name,
+        ] as [string, string]),
+      ]),
+      roleNameById: new Map(
+        roles.map((role) => [
+          role.roleId,
+          role.displayName || role.name || role.roleId,
+        ]),
+      ),
+      designationNameById: new Map(
+        designations.map((designation) => [
+          designation.designationId,
+          designation.name || designation.designationId,
+        ]),
+      ),
+      vanNameById: new Map(
+        vans.map((van) => [van.vanId, van.name || van.vanNumber || van.vanId]),
+      ),
+    };
+  }
+
+  private getEmployeeListingValue(employee: any, maps: any, key: string) {
+    const values: Record<string, string> = {
+      primary: employee.name || '',
+      loginId: employee.loginId || '',
+      secondary:
+        (employee.roleId && maps.roleNameById.get(employee.roleId)) ||
+        employee.roleId ||
+        '',
+      owner:
+        (employee.reportingEmployeeId &&
+          maps.employeeNameById.get(employee.reportingEmployeeId)) ||
+        employee.reportingEmployeeId ||
+        '',
+      designation:
+        (employee.designationId &&
+          (maps.designationNameById.get(employee.designationId) ||
+            employee.designationId)) ||
+        '',
+      assignedVans: Array.isArray(employee.assignedVanIds)
+        ? employee.assignedVanIds
+            .map((vanId: string) => maps.vanNameById.get(vanId) || vanId)
+            .join(', ')
+        : '',
+      status: employee.status || '',
+    };
+
+    return values[key] ?? '';
+  }
+
+  private escapePdfText(value: string) {
+    return value.replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)');
+  }
+
+  private buildPdfBuffer(title: string, rows: string[][]) {
+    const [headers = [], ...dataRows] = rows;
+    const pageWidth = 842;
+    const pageHeight = 595;
+    const margin = 28;
+    const tableWidth = pageWidth - margin * 2;
+    const columnWidth = tableWidth / Math.max(headers.length, 1);
+    const headerY = pageHeight - 96;
+    const rowHeight = 23;
+    const headerHeight = 25;
+    const rowsPerPage = Math.max(
+      1,
+      Math.floor((headerY - margin - headerHeight) / rowHeight),
+    );
+    const pageRows: string[][][] = [];
+
+    for (let index = 0; index < dataRows.length; index += rowsPerPage) {
+      pageRows.push(dataRows.slice(index, index + rowsPerPage));
+    }
+
+    if (!pageRows.length) pageRows.push([]);
+
+    const formatDate = new Intl.DateTimeFormat('en-IN', {
+      dateStyle: 'medium',
+      timeStyle: 'short',
+      timeZone: REPORT_TIMEZONE,
+    }).format(new Date());
+    const fontSize = headers.length > 7 ? 6.5 : 7.5;
+    const headerFontSize = headers.length > 7 ? 6.8 : 7.8;
+    const textLimit = (width: number, size: number) =>
+      Math.max(6, Math.floor(width / (size * 0.52)));
+    const truncate = (value: string, limit: number) => {
+      const cleanValue = String(value ?? '').replace(/\s+/g, ' ').trim();
+      return cleanValue.length > limit
+        ? `${cleanValue.slice(0, Math.max(0, limit - 3))}...`
+        : cleanValue;
+    };
+    const text = (x: number, y: number, value: string, size = fontSize) =>
+      `BT /F1 ${size} Tf ${x.toFixed(2)} ${y.toFixed(2)} Td (${this.escapePdfText(value)}) Tj ET`;
+    const rect = (
+      x: number,
+      y: number,
+      width: number,
+      height: number,
+      mode: 'S' | 'f' = 'S',
+    ) =>
+      `${x.toFixed(2)} ${y.toFixed(2)} ${width.toFixed(2)} ${height.toFixed(2)} re ${mode}`;
+    const objects: string[] = [];
+    const pageObjectIds: number[] = [];
+    const fontObjectId = 3;
+    let nextObjectId = 4;
+
+    objects[1] = '<< /Type /Catalog /Pages 2 0 R >>';
+    objects[fontObjectId] = '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>';
+
+    for (const [pageIndex, rowsForPage] of pageRows.entries()) {
+      const pageObjectId = nextObjectId;
+      const contentObjectId = nextObjectId + 1;
+      nextObjectId += 2;
+      pageObjectIds.push(pageObjectId);
+
+      const commands: string[] = [
+        '0.08 0.13 0.2 rg',
+        text(margin, pageHeight - 42, title, 16),
+        '0.35 0.43 0.53 rg',
+        text(
+          margin,
+          pageHeight - 62,
+          `Generated ${formatDate} - ${dataRows.length} row(s)`,
+          8,
+        ),
+        text(
+          pageWidth - margin - 84,
+          pageHeight - 62,
+          `Page ${pageIndex + 1} of ${pageRows.length}`,
+          8,
+        ),
+        '0.15 0.39 0.92 rg',
+        rect(margin, headerY, tableWidth, headerHeight, 'f'),
+        '1 1 1 rg',
+        ...headers.map((header, columnIndex) =>
+          text(
+            margin + columnIndex * columnWidth + 5,
+            headerY + 9,
+            truncate(header, textLimit(columnWidth - 10, headerFontSize)),
+            headerFontSize,
+          ),
+        ),
+      ];
+
+      rowsForPage.forEach((row, rowIndex) => {
+        const y = headerY - (rowIndex + 1) * rowHeight;
+
+        if (rowIndex % 2 === 0) {
+          commands.push('0.96 0.98 1 rg', rect(margin, y, tableWidth, rowHeight, 'f'));
+        }
+
+        commands.push('0.85 0.89 0.94 RG', rect(margin, y, tableWidth, rowHeight));
+        commands.push('0.08 0.13 0.2 rg');
+
+        row.forEach((value, columnIndex) => {
+          const x = margin + columnIndex * columnWidth;
+          commands.push(
+            '0.85 0.89 0.94 RG',
+            rect(x, y, columnWidth, rowHeight),
+            '0.08 0.13 0.2 rg',
+            text(
+              x + 5,
+              y + 8,
+              truncate(value, textLimit(columnWidth - 10, fontSize)),
+              fontSize,
+            ),
+          );
+        });
+      });
+
+      const content = commands.join('\n');
+
+      objects[pageObjectId] =
+        `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageWidth} ${pageHeight}] /Resources << /Font << /F1 ${fontObjectId} 0 R >> >> /Contents ${contentObjectId} 0 R >>`;
+      objects[contentObjectId] =
+        `<< /Length ${Buffer.byteLength(content)} >>\nstream\n${content}\nendstream`;
+    }
+
+    objects[2] =
+      `<< /Type /Pages /Kids [${pageObjectIds.map((id) => `${id} 0 R`).join(' ')}] /Count ${pageObjectIds.length} >>`;
+
+    let pdf = '%PDF-1.4\n';
+    const offsets = [0];
+
+    for (let id = 1; id < objects.length; id += 1) {
+      if (!objects[id]) continue;
+      offsets[id] = Buffer.byteLength(pdf);
+      pdf += `${id} 0 obj\n${objects[id]}\nendobj\n`;
+    }
+
+    const xrefOffset = Buffer.byteLength(pdf);
+    pdf += `xref\n0 ${objects.length}\n0000000000 65535 f \n`;
+
+    for (let id = 1; id < objects.length; id += 1) {
+      pdf += `${String(offsets[id] ?? 0).padStart(10, '0')} 00000 n \n`;
+    }
+
+    pdf += `trailer\n<< /Size ${objects.length} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`;
+
+    return Buffer.from(pdf);
+  }
+
+  async exportEmployees(
+    query: EmployeeQueryDto & { fileType?: 'excel' | 'pdf'; columns?: string },
+  ) {
+    const columns = this.getExportColumns(query.columns);
+    const employees = await this.attachAssignedVanIds(
+      await this.attachLoginIds(
+        await this.findLean(this.buildEmployeeFilter(query), {
+          sort: { createdAt: -1 },
+        }),
+      ),
+    );
+    const [roles, designations, vans] = await Promise.all([
+      this.roleModel.find({}).lean(),
+      this.designationModel.find({}).lean(),
+      this.vanModel.find({}).lean(),
+    ]);
+    const employeeNameById = new Map(
+      employees.map((employee: any) => [employee.employeeId, employee.name]),
+    );
+    const roleNameById = new Map(
+      roles.map((role) => [role.roleId, role.displayName || role.name || role.roleId]),
+    );
+    const designationNameById = new Map(
+      designations.map((designation) => [
+        designation.designationId,
+        designation.name || designation.designationId,
+      ]),
+    );
+    const vanNameById = new Map(
+      vans.map((van) => [van.vanId, van.name || van.vanNumber || van.vanId]),
+    );
+    const exportRows = employees.map((employee: any) => {
+      const values: Record<string, string> = {
+        primary: employee.name || '',
+        loginId: employee.loginId || '',
+        secondary:
+          (employee.roleId && roleNameById.get(employee.roleId)) ||
+          employee.roleId ||
+          '',
+        owner:
+          (employee.reportingEmployeeId &&
+            employeeNameById.get(employee.reportingEmployeeId)) ||
+          employee.reportingEmployeeId ||
+          '',
+        designation:
+          (employee.designationId &&
+            (designationNameById.get(employee.designationId) ||
+              employee.designationId)) ||
+          '',
+        assignedVans: Array.isArray(employee.assignedVanIds)
+          ? employee.assignedVanIds
+              .map((vanId: string) => vanNameById.get(vanId) || vanId)
+              .join(', ')
+          : '',
+        status: employee.status || '',
+      };
+
+      return columns.map((column) => values[column.key] ?? '');
+    });
+    const headerRow = columns.map((column) => column.title);
+
+    if (query.fileType === 'pdf') {
+      return {
+        buffer: this.buildPdfBuffer('Employee Listing', [headerRow, ...exportRows]),
+        fileName: 'employee-listing.pdf',
+        mimeType: 'application/pdf',
+      };
+    }
+
+    const worksheet = XLSX.utils.aoa_to_sheet([headerRow, ...exportRows]);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Employees');
+
+    return {
+      buffer: XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' }),
+      fileName: 'employee-listing.xlsx',
+      mimeType:
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    };
   }
 
   /**
@@ -267,8 +944,11 @@ export class EmployeeService extends MongoRepository<Employee> {
     const {
       status,
       roleId,
+      designationId,
       reportingEmployeeId,
       searchText,
+      sortBy,
+      sortOrder,
       page = 1,
       limit = 20,
     } = query;
@@ -283,6 +963,10 @@ export class EmployeeService extends MongoRepository<Employee> {
       filter.roleId = roleId;
     }
 
+    if (designationId) {
+      filter.designationId = designationId;
+    }
+
     if (reportingEmployeeId) {
       filter.reportingEmployeeId = reportingEmployeeId;
     }
@@ -295,7 +979,40 @@ export class EmployeeService extends MongoRepository<Employee> {
         { name: regex },
         { mobile: regex },
         { email: regex },
+        { designationId: regex },
       ];
+    }
+
+    if (sortBy && ['loginId', 'secondary', 'assignedVans'].includes(sortBy)) {
+      const allItems = await this.attachAssignedVanIds(
+        await this.attachLoginIds(
+          await this.findLean(filter, { sort: { createdAt: -1 } }),
+        ),
+      );
+      const maps = await this.getEmployeeListingMaps(allItems);
+      const direction = sortOrder === 'desc' ? -1 : 1;
+      const sortedItems = allItems.sort((first: any, second: any) =>
+        this.getEmployeeListingValue(first, maps, sortBy).localeCompare(
+          this.getEmployeeListingValue(second, maps, sortBy),
+          undefined,
+          { numeric: true, sensitivity: 'base' },
+        ) * direction,
+      );
+      const safePage = Math.max(1, page);
+      const safeLimit = Math.max(1, limit);
+      const start = (safePage - 1) * safeLimit;
+
+      return {
+        statusCode: HttpStatus.OK,
+        message: EMPLOYEE.FETCHED,
+        data: sortedItems.slice(start, start + safeLimit),
+        meta: {
+          total: sortedItems.length,
+          page: safePage,
+          limit: safeLimit,
+          totalPages: Math.ceil(sortedItems.length / safeLimit),
+        },
+      };
     }
 
     const result = await this.paginate(filter, {
@@ -308,7 +1025,11 @@ export class EmployeeService extends MongoRepository<Employee> {
     return {
       statusCode: HttpStatus.OK,
       message: EMPLOYEE.FETCHED,
-      data: result.items,
+      data: await this.attachAssignedVanIds(
+        await this.attachLoginIds(
+          result.items.map((item: any) => item.toObject?.() ?? item),
+        ),
+      ),
       meta: result.meta,
     };
   }
@@ -331,7 +1052,13 @@ export class EmployeeService extends MongoRepository<Employee> {
     return {
       statusCode: HttpStatus.OK,
       message: EMPLOYEE.FETCHED,
-      data: employee,
+      data: (
+        await this.attachAssignedVanIds(
+          await this.attachLoginIds([
+            (employee as any).toObject?.() ?? employee,
+          ]),
+        )
+      )[0],
     };
   }
 
@@ -344,16 +1071,58 @@ export class EmployeeService extends MongoRepository<Employee> {
    * - Identity fields remain unchanged
    */
   async update(employeeId: string, dto: UpdateEmployeeDto) {
-    const employee = await this.updateOne({ employeeId }, dto);
-
-    if (!employee) {
+    const existing = await this.findOne({ employeeId }, { lean: true });
+    if (!existing) {
       throw new NotFoundException(EMPLOYEE.NOT_FOUND);
     }
+    const { assignedVanIds, ...employeeDto } = dto;
+    const resolvedAssignedVanIds = await this.resolveVanIds(assignedVanIds);
+    await this.validateAssignedVansForRole(
+      employeeDto.roleId ?? existing.roleId,
+      resolvedAssignedVanIds,
+    );
+
+    const nextReportingEmployeeId =
+      employeeDto.reportingEmployeeId !== undefined
+        ? employeeDto.reportingEmployeeId
+        : existing.reportingEmployeeId;
+    const hierarchyPath = await this.buildHierarchyPath(
+      nextReportingEmployeeId,
+    );
+
+    const employee = await this.withTransaction(async (session) => {
+      const updated = await this.updateOne(
+        { employeeId },
+        {
+          ...employeeDto,
+          hierarchyPath,
+        },
+        { session },
+      );
+
+      if (!updated) {
+        throw new NotFoundException(EMPLOYEE.NOT_FOUND);
+      }
+
+      await this.syncEmployeeVanAssignments(
+        employeeId,
+        resolvedAssignedVanIds,
+        session,
+      );
+
+      return this.findOne({ employeeId }, { session, lean: true });
+    });
+
+    if (!employee) throw new NotFoundException(EMPLOYEE.NOT_FOUND);
 
     return {
       statusCode: HttpStatus.OK,
       message: EMPLOYEE.UPDATED,
-      data: employee,
+      data: (
+        await this.attachAssignedVanIds([
+          (employee as any).toObject?.() ?? employee,
+        ])
+      )[0],
     };
   }
 
@@ -4376,6 +5145,78 @@ export class EmployeeService extends MongoRepository<Employee> {
       statusCode: HttpStatus.OK,
       message: 'Field users summary fetched successfully',
       data: result,
+    };
+  }
+
+  async getManagerLiveLocations(date?: string) {
+    const managerId = RequestContextStore.getStore()?.userId;
+    const selectedDate = date ? parseCalendarDate(date) : new Date();
+    const startOfDay = new Date(selectedDate);
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(selectedDate);
+    endOfDay.setHours(23, 59, 59, 999);
+
+    const employees = await this.find({
+      $or: [{ reportingEmployeeId: managerId }, { hierarchyPath: managerId }],
+      status: UserStatus.ACTIVE,
+    });
+    const employeeIds = employees.map((employee) => employee.employeeId);
+
+    const sessions = employeeIds.length
+      ? await this.workSessionModel
+          .find({
+            userId: { $in: employeeIds },
+            dayStartTime: { $gte: startOfDay, $lte: endOfDay },
+          })
+          .sort({ dayStartTime: -1 })
+          .lean()
+      : [];
+    const sessionByUser = new Map<string, any>();
+    for (const session of sessions) {
+      if (!sessionByUser.has(session.userId)) sessionByUser.set(session.userId, session);
+    }
+
+    const normalizeLocation = (value?: any) => {
+      const latitude = Number(value?.latitude);
+      const longitude = Number(value?.longitude);
+      if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
+      return {
+        latitude,
+        longitude,
+        accuracy: value?.accuracy ?? null,
+        speed: value?.speed ?? null,
+        capturedAt: value?.capturedAt ?? null,
+      };
+    };
+
+    const data = employees.map((employee) => {
+      const session = sessionByUser.get(employee.employeeId);
+      const backgroundLocation = [...(session?.backgroundLocations || [])]
+        .reverse()
+        .map(normalizeLocation)
+        .find(Boolean);
+      const location =
+        normalizeLocation(session?.dayEndLocation) ||
+        backgroundLocation ||
+        normalizeLocation(session?.dayStartLocation);
+
+      return {
+        employeeId: employee.employeeId,
+        employeeName: employee.name,
+        mobile: employee.mobile || '',
+        status: session?.status || 'OFFLINE',
+        vanId: session?.vanId || null,
+        vanName: session?.vanName || null,
+        dayStartTime: session?.dayStartTime || null,
+        dayEndTime: session?.dayEndTime || null,
+        location,
+      };
+    });
+
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'Live locations fetched successfully',
+      data,
     };
   }
 

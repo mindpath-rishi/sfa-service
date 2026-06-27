@@ -1,4 +1,3 @@
-
 /**
  * Channel Controller
  * -------------------
@@ -9,7 +8,7 @@
  * - Create channels
  * - Fetch channels with filters & pagination
  * - Retrieve individual channel details
- * - Update channels
+ * - Update channel
  * - Soft delete channels
  *
  * Notes:
@@ -99,7 +98,7 @@ export class ChannelController {
    */
   @Permissions('CHANNEL_VIEW')
   @Get(':channelId')
-  @ApiParam({ name: 'channelId' })
+  @ApiParam({ name: 'channelId', description: 'Channel channelId' })
   async findOne(@Param('channelId') channelId: string) {
     return this.service.findByChannelId(channelId);
   }
@@ -110,6 +109,7 @@ export class ChannelController {
    */
   @Permissions('CHANNEL_UPDATE')
   @Patch(':channelId')
+  @ApiParam({ name: 'channelId', description: 'Channel channelId' })
   async update(
     @Param('channelId') channelId: string,
     @Body() dto: UpdateChannelDto,
@@ -123,6 +123,7 @@ export class ChannelController {
    */
   @Permissions('CHANNEL_DELETE')
   @Delete(':channelId')
+  @ApiParam({ name: 'channelId', description: 'Channel channelId' })
   async delete(@Param('channelId') channelId: string) {
     return this.service.delete(channelId);
   }

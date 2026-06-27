@@ -1,31 +1,19 @@
-import { ChannelStatus } from 'src/shared/enums/channel.enums';
-
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsNotEmpty, IsString, IsOptional, IsEnum } from 'class-validator';
+import { IsNotEmpty, IsOptional, IsString, IsEnum } from 'class-validator';
+import { ChannelStatus } from 'src/shared/enums/channel.enums';
 
 export class CreateChannelDto {
   /**
-   * Channel Create DTO
-   * ====================
-   * Data Transfer Object for creating new Channel records
+   * CreateChannelDto
+   * =================
+   * DTO for creating Channel
    */
-  /**
-   * Name
-   * ----
-   * Display name of channel
-   */
-
-  @ApiProperty()
+  @ApiProperty({ type: String })
   @IsNotEmpty()
   @IsString()
   name!: string;
-  /**
-   * Status
-   * ------
-   * Channel availability status
-   */
 
-  @ApiPropertyOptional({ example: ChannelStatus.ACTIVE, enum: ChannelStatus })
+  @ApiPropertyOptional({ enum: ChannelStatus, enumName: 'ChannelStatus' })
   @IsOptional()
   @IsEnum(ChannelStatus)
   status?: ChannelStatus;

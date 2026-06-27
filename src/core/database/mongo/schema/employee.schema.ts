@@ -8,7 +8,7 @@
  * - Employee identity and contact details
  * - Role reference for RBAC
  * - Employee reporting hierarchy
- * - Assigned vans and permission overrides
+ * - Permission overrides
  * - Account status
  *
  * Notes:
@@ -80,6 +80,19 @@ export class Employee {
   roleId!: string;
 
   /* ======================================================
+   * DESIGNATION
+   * ====================================================== */
+
+  // Designation reference that owns territory assignment
+  @Prop({
+    required: false,
+    ref: 'designation_master',
+    index: true,
+    type: String,
+  })
+  designationId?: string;
+
+  /* ======================================================
    * HIERARCHY
    * ====================================================== */
 
@@ -104,17 +117,6 @@ export class Employee {
     index: true,
   })
   hierarchyPath!: string[];
-
-  /* ======================================================
-   * ASSOCIATIONS
-   * ====================================================== */
-
-  // Vans assigned to the employee
-  @Prop({
-    type: [String],
-    default: [],
-  })
-  associatedVans!: string[];
 
   /* ======================================================
    * PERMISSION OVERRIDES
@@ -160,5 +162,6 @@ export const EmployeeSchema = SchemaFactory.createForClass(Employee);
 // Useful indexes
 EmployeeSchema.index({ employeeId: 1 }, { unique: true });
 EmployeeSchema.index({ roleId: 1 });
+EmployeeSchema.index({ designationId: 1 });
 EmployeeSchema.index({ reportingEmployeeId: 1 });
 EmployeeSchema.index({ hierarchyPath: 1 });

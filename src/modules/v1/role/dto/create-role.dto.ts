@@ -23,7 +23,10 @@ import {
   IsInt,
   Min,
   MaxLength,
+  IsBoolean,
+  IsEnum,
 } from 'class-validator';
+import { Status } from 'src/shared/enums/app.enums';
 
 export class CreateRoleDto {
   /**
@@ -60,6 +63,20 @@ export class CreateRoleDto {
   @IsString()
   @MaxLength(200)
   description?: string;
+
+  /**
+   * Reporting Role
+   * --------------
+   * Purpose : Role ID this role reports to
+   */
+  @ApiProperty({
+    example: 'RID-001',
+    description: 'Reporting role ID',
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  reportingTo?: string;
 
   /**
    * Permissions
@@ -105,4 +122,22 @@ export class CreateRoleDto {
   @IsInt()
   @Min(-1)
   maxAssociatedVans?: number;
+
+  @ApiProperty({
+    example: 'ACTIVE',
+    enum: Status,
+    required: false,
+  })
+  @IsOptional()
+  @IsEnum(Status)
+  status?: Status;
+
+  @ApiProperty({
+    example: false,
+    description: 'Whether this is a system admin role',
+    required: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  isSystemAdmin?: boolean;
 }

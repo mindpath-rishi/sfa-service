@@ -26,8 +26,10 @@ import {
   Patch,
   Post,
   Query,
+  Res,
 } from '@nestjs/common';
 import { ApiBody, ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger';
+import type { Response } from 'express';
 
 import { FeatureFlag } from 'src/core/decorators/feature-flag.decorator';
 import { ApiSuccessResponse } from 'src/core/swagger/api.response.swagger';
@@ -83,7 +85,6 @@ export class RouteController {
   async create(@Body() dto: CreateRouteDto) {
     return this.service.create(dto);
   }
-  z;
 
   /**
    * Get Routes
@@ -95,10 +96,42 @@ export class RouteController {
     return this.service.findAll(query);
   }
 
+  @Get('/export')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Export routes' })
+  async exportRoutes(
+    @Query()
+    query: RouteQueryDto & {
+      fileType?: 'excel' | 'pdf';
+      columns?: string;
+    },
+    @Res() res: Response,
+  ) {
+    const file = await this.service.exportRoutes(query);
+
+    res.setHeader('Content-Type', file.mimeType);
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${file.fileName}"`,
+    );
+    res.send(file.buffer);
+  }
+
   /**
    * Get Route by ID
    * ---------------
    */
+  @Permissions('ROUTE_VIEW')
+  @Get(':routeId/customers')
+  @ApiOperation({ summary: 'Get customers for a route' })
+  @ApiParam({ name: 'routeId', description: 'Route routeId' })
+  async getRouteCustomers(
+    @Param('routeId') routeId: string,
+    @Query() query: RouteCustomerQueryDto,
+  ) {
+    return this.service.getRouteCustomers(routeId, query);
+  }
+
   @Permissions('ROUTE_VIEW')
   @Get(':routeId')
   @ApiParam({ name: 'routeId', description: 'Route routeId' })
@@ -126,16 +159,5 @@ export class RouteController {
   @ApiParam({ name: 'routeId', description: 'Route routeId' })
   async delete(@Param('routeId') routeId: string) {
     return this.service.delete(routeId);
-  }
-
-  @Permissions('ROUTE_VIEW')
-  @Get(':routeId/customers')
-  @ApiOperation({ summary: 'Get customers for a route' })
-  @ApiParam({ name: 'routeId', description: 'Route routeId' })
-  async getRouteCustomers(
-    @Param('routeId') routeId: string,
-    @Query() query: RouteCustomerQueryDto,
-  ) {
-    return this.service.getRouteCustomers(routeId, query);
   }
 }

@@ -7,6 +7,17 @@ import { RouteStatus } from 'src/shared/enums/route.enums';
 
 export type RouteDocument = HydratedDocument<Route>;
 
+@Schema({ _id: false, timestamps: false })
+export class RouteCustomer {
+  @Prop({ required: true, type: String })
+  customerId!: string;
+
+  @Prop({ required: true, type: Number, min: 1 })
+  sequence!: number;
+}
+
+export const RouteCustomerSchema = SchemaFactory.createForClass(RouteCustomer);
+
 @Schema({
   timestamps: true,
   collection: 'route_master',
@@ -36,22 +47,9 @@ export class Route {
   })
   name!: string;
 
-  @Prop({
-    required: true,
-    index: true,
-    type: String,
-  })
-  beatId!: string;
-
   /* ======================================================
-   * ERP / LOCATION
+   * LOCATION
    * ====================================================== */
-
-  @Prop({
-    type: String,
-    index: true,
-  })
-  beatErpId!: string;
 
   @Prop({
     type: String,
@@ -77,17 +75,6 @@ export class Route {
   })
   marketId!: string;
 
-  /* ======================================================
-   * ROUTE METADATA
-   * ====================================================== */
-
-  @Prop({
-    type: Number,
-    default: 0,
-  })
-  distance!: number;
-
-  // Optional optimization
   @Prop({
     type: Number,
     default: 0,

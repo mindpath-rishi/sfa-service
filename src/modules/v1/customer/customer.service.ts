@@ -20,10 +20,7 @@ import { UpdateCustomerDto } from './dto/update-customer.dto';
 import { CustomerQueryDto } from './dto/customer-query.dto';
 import { IdGenerator } from 'src/shared/utils/id-generator.utils';
 import { RouteCustomerMappingService } from '../route-customer-mapping/route-customer-mapping.service';
-import {
-  Days,
-  RouteCustomerMappingStatus,
-} from 'src/shared/enums/route-customer-mapping.enums';
+import { RouteCustomerMappingStatus } from 'src/shared/enums/route-customer-mapping.enums';
 import { InjectModel } from '@nestjs/mongoose';
 import { ShopVisit } from 'src/core/database/mongo/schema/shop-visit.schema';
 import { Sale } from 'src/core/database/mongo/schema/sale.schema';
@@ -36,6 +33,9 @@ import { Market } from 'src/core/database/mongo/schema/market.schema';
 import { Route } from 'src/core/database/mongo/schema/route.schema';
 import { RouteCustomerMapping } from 'src/core/database/mongo/schema/route-customer-mapping.schema';
 import { Van } from 'src/core/database/mongo/schema/van.schema';
+
+const REPORT_TIMEZONE =
+  process.env.APP_TIMEZONE || process.env.TZ || 'Asia/Kolkata';
 
 @Injectable()
 export class CustomerService extends MongoRepository<Customer> {
@@ -65,6 +65,280 @@ export class CustomerService extends MongoRepository<Customer> {
     private readonly routeCustomerMappingModel: Model<RouteCustomerMapping>,
   ) {
     super(mongo.getModel(Customer.name, CustomerSchema));
+  }
+
+  private buildCustomerFilter(query: CustomerQueryDto) {
+    const {
+      searchText,
+      status,
+      customerIds,
+      customerCategoryId,
+      channelId,
+      outletTypeId,
+      marketId,
+      provinceId,
+      ownerName,
+      phoneNumber,
+      outletName,
+      address,
+    } = query;
+    const filter: FilterQuery<Customer> = {};
+
+    if (status) filter.status = status;
+    if (customerCategoryId) filter.customerCategoryId = customerCategoryId;
+    if (channelId) filter.channelId = channelId;
+    if (outletTypeId) filter.customerTypeId = outletTypeId;
+    if (marketId) filter.marketId = marketId;
+    if (provinceId) filter.provinceId = provinceId;
+    if (ownerName) filter.ownerName = new RegExp(ownerName, 'i') as any;
+    if (phoneNumber) filter.phoneNumber = new RegExp(phoneNumber, 'i') as any;
+    if (outletName) filter.name = new RegExp(outletName, 'i') as any;
+
+    if (address) {
+      const regex = new RegExp(address, 'i');
+      filter.$or = [
+        ...(Array.isArray(filter.$or) ? filter.$or : []),
+        { 'address.line1': regex },
+        { 'address.line2': regex },
+      ] as any;
+    }
+
+    if (searchText) {
+      const regex = new RegExp(searchText, 'i');
+      filter.$or = [
+        ...(Array.isArray(filter.$or) ? filter.$or : []),
+        { customerId: regex },
+        { name: regex },
+        { ownerName: regex },
+        { phoneNumber: regex },
+        { customerCategoryId: regex },
+        { marketId: regex },
+        { provinceId: regex },
+      ] as any;
+    }
+
+    if (customerIds) {
+      filter.customerId = { $in: customerIds } as any;
+    }
+
+    return filter;
+  }
+
+  private getCustomerSort(query: CustomerQueryDto): Record<string, 1 | -1> {
+    const sortMap: Record<string, string> = {
+      primary: 'name',
+      name: 'name',
+      customerId: 'customerId',
+      owner: 'ownerName',
+      ownerName: 'ownerName',
+      phoneNumber: 'phoneNumber',
+      secondary: 'customerCategoryId',
+      customerCategoryId: 'customerCategoryId',
+      customerTypeId: 'customerTypeId',
+      market: 'marketId',
+      marketId: 'marketId',
+      province: 'provinceId',
+      provinceId: 'provinceId',
+      metric: 'outstanding',
+      outstanding: 'outstanding',
+      creditLimit: 'creditLimit',
+      creditDays: 'creditDays',
+      createdAt: 'createdAt',
+    };
+    const sortField = query.sortBy ? sortMap[query.sortBy] : undefined;
+
+    if (!sortField) return { createdAt: -1 };
+
+    return { [sortField]: query.sortOrder === 'desc' ? -1 : 1 };
+  }
+
+  private getExportColumns(columns?: string) {
+    const definitions = [
+      { key: 'primary', title: 'Outlet' },
+      { key: 'customerId', title: 'Customer ID' },
+      { key: 'owner', title: 'Owner' },
+      { key: 'phoneNumber', title: 'Phone' },
+      { key: 'secondary', title: 'Category' },
+      { key: 'market', title: 'Market' },
+      { key: 'province', title: 'Province' },
+      { key: 'route', title: 'Route' },
+      { key: 'metric', title: 'Outstanding' },
+      { key: 'address', title: 'Address' },
+      { key: 'status', title: 'Status' },
+      { key: 'creditLimit', title: 'Credit Limit' },
+      { key: 'creditDays', title: 'Credit Days' },
+    ];
+    const requested = columns
+      ?.split(',')
+      .map((column) => column.trim())
+      .filter(Boolean);
+
+    if (!requested?.length) return definitions;
+
+    const selected = definitions.filter((column) =>
+      requested.includes(column.key),
+    );
+
+    return selected.length ? selected : definitions;
+  }
+
+  private formatCustomerAddress(address?: Customer['address'] | string) {
+    if (!address) return '';
+    if (typeof address === 'string') return address;
+
+    return [address.line1, address.line2].filter(Boolean).join(', ');
+  }
+
+  private escapePdfText(value: string) {
+    return String(value ?? '').replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)');
+  }
+
+  private buildPdfBuffer(title: string, rows: string[][]) {
+    const [headers = [], ...dataRows] = rows;
+    const pageWidth = 842;
+    const pageHeight = 595;
+    const margin = 28;
+    const tableWidth = pageWidth - margin * 2;
+    const columnWidth = tableWidth / Math.max(headers.length, 1);
+    const headerY = pageHeight - 96;
+    const rowHeight = 23;
+    const headerHeight = 25;
+    const rowsPerPage = Math.max(
+      1,
+      Math.floor((headerY - margin - headerHeight) / rowHeight),
+    );
+    const pageRows: string[][][] = [];
+
+    for (let index = 0; index < dataRows.length; index += rowsPerPage) {
+      pageRows.push(dataRows.slice(index, index + rowsPerPage));
+    }
+
+    if (!pageRows.length) pageRows.push([]);
+
+    const formatDate = new Intl.DateTimeFormat('en-IN', {
+      dateStyle: 'medium',
+      timeStyle: 'short',
+      timeZone: REPORT_TIMEZONE,
+    }).format(new Date());
+    const fontSize = headers.length > 7 ? 6.5 : 7.5;
+    const headerFontSize = headers.length > 7 ? 6.8 : 7.8;
+    const textLimit = (width: number, size: number) =>
+      Math.max(6, Math.floor(width / (size * 0.52)));
+    const truncate = (value: string, limit: number) => {
+      const cleanValue = String(value ?? '').replace(/\s+/g, ' ').trim();
+      return cleanValue.length > limit
+        ? `${cleanValue.slice(0, Math.max(0, limit - 3))}...`
+        : cleanValue;
+    };
+    const text = (x: number, y: number, value: string, size = fontSize) =>
+      `BT /F1 ${size} Tf ${x.toFixed(2)} ${y.toFixed(2)} Td (${this.escapePdfText(value)}) Tj ET`;
+    const rect = (
+      x: number,
+      y: number,
+      width: number,
+      height: number,
+      mode: 'S' | 'f' = 'S',
+    ) =>
+      `${x.toFixed(2)} ${y.toFixed(2)} ${width.toFixed(2)} ${height.toFixed(2)} re ${mode}`;
+    const objects: string[] = [];
+    const pageObjectIds: number[] = [];
+    const fontObjectId = 3;
+    let nextObjectId = 4;
+
+    objects[1] = '<< /Type /Catalog /Pages 2 0 R >>';
+    objects[fontObjectId] = '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>';
+
+    for (const [pageIndex, rowsForPage] of pageRows.entries()) {
+      const pageObjectId = nextObjectId;
+      const contentObjectId = nextObjectId + 1;
+      nextObjectId += 2;
+      pageObjectIds.push(pageObjectId);
+
+      const commands: string[] = [
+        '0.08 0.13 0.2 rg',
+        text(margin, pageHeight - 42, title, 16),
+        '0.35 0.43 0.53 rg',
+        text(
+          margin,
+          pageHeight - 62,
+          `Generated ${formatDate} - ${dataRows.length} row(s)`,
+          8,
+        ),
+        text(
+          pageWidth - margin - 84,
+          pageHeight - 62,
+          `Page ${pageIndex + 1} of ${pageRows.length}`,
+          8,
+        ),
+        '0.05 0.47 0.47 rg',
+        rect(margin, headerY, tableWidth, headerHeight, 'f'),
+        '1 1 1 rg',
+        ...headers.map((header, columnIndex) =>
+          text(
+            margin + columnIndex * columnWidth + 5,
+            headerY + 9,
+            truncate(header, textLimit(columnWidth - 10, headerFontSize)),
+            headerFontSize,
+          ),
+        ),
+      ];
+
+      rowsForPage.forEach((row, rowIndex) => {
+        const y = headerY - (rowIndex + 1) * rowHeight;
+
+        if (rowIndex % 2 === 0) {
+          commands.push('0.95 0.99 0.99 rg', rect(margin, y, tableWidth, rowHeight, 'f'));
+        }
+
+        commands.push('0.85 0.89 0.94 RG', rect(margin, y, tableWidth, rowHeight));
+        commands.push('0.08 0.13 0.2 rg');
+
+        row.forEach((value, columnIndex) => {
+          const x = margin + columnIndex * columnWidth;
+          commands.push(
+            '0.85 0.89 0.94 RG',
+            rect(x, y, columnWidth, rowHeight),
+            '0.08 0.13 0.2 rg',
+            text(
+              x + 5,
+              y + 8,
+              truncate(value, textLimit(columnWidth - 10, fontSize)),
+              fontSize,
+            ),
+          );
+        });
+      });
+
+      const content = commands.join('\n');
+
+      objects[pageObjectId] =
+        `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageWidth} ${pageHeight}] /Resources << /Font << /F1 ${fontObjectId} 0 R >> >> /Contents ${contentObjectId} 0 R >>`;
+      objects[contentObjectId] =
+        `<< /Length ${Buffer.byteLength(content)} >>\nstream\n${content}\nendstream`;
+    }
+
+    objects[2] =
+      `<< /Type /Pages /Kids [${pageObjectIds.map((id) => `${id} 0 R`).join(' ')}] /Count ${pageObjectIds.length} >>`;
+
+    let pdf = '%PDF-1.4\n';
+    const offsets = [0];
+
+    for (let id = 1; id < objects.length; id += 1) {
+      if (!objects[id]) continue;
+      offsets[id] = Buffer.byteLength(pdf);
+      pdf += `${id} 0 obj\n${objects[id]}\nendobj\n`;
+    }
+
+    const xrefOffset = Buffer.byteLength(pdf);
+    pdf += `xref\n0 ${objects.length}\n0000000000 65535 f \n`;
+
+    for (let id = 1; id < objects.length; id += 1) {
+      pdf += `${String(offsets[id] ?? 0).padStart(10, '0')} 00000 n \n`;
+    }
+
+    pdf += `trailer\n<< /Size ${objects.length} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`;
+
+    return Buffer.from(pdf);
   }
 
   // async create(payload: CreateCustomerDto) {
@@ -186,7 +460,6 @@ export class CustomerService extends MongoRepository<Customer> {
               routeId: payload.routeId,
               customerId,
               sequence: nextSequence,
-              day: Days.MON,
             },
             session,
           );
@@ -208,25 +481,12 @@ export class CustomerService extends MongoRepository<Customer> {
   }
 
   async findAll(query: CustomerQueryDto) {
-    const { searchText, status, page = 1, limit = 20, customerIds } = query;
+    const { page = 1, limit = 20 } = query;
 
-    const filter: FilterQuery<Customer> = {};
-
-    if (status) filter.status = status;
-
-    if (searchText) {
-      const regex = new RegExp(searchText, 'i');
-      filter.$or = [{ name: regex }];
-    }
-
-    if (customerIds) {
-      filter.customerId = { $in: customerIds } as any;
-    }
-
-    const result = await this.paginate(filter, {
+    const result = await this.paginate(this.buildCustomerFilter(query), {
       page,
       limit,
-      sort: { createdAt: -1 },
+      sort: this.getCustomerSort(query),
       lean: true,
     });
 
@@ -235,6 +495,54 @@ export class CustomerService extends MongoRepository<Customer> {
       message: CUSTOMER.FETCHED,
       data: result.items,
       meta: result.meta,
+    };
+  }
+
+  async exportCustomers(
+    query: CustomerQueryDto & { fileType?: 'excel' | 'pdf'; columns?: string },
+  ) {
+    const columns = this.getExportColumns(query.columns);
+    const customers = await this.findLean(this.buildCustomerFilter(query), {
+      sort: this.getCustomerSort(query),
+    });
+    const exportRows = customers.map((customer: any) => {
+      const values: Record<string, string> = {
+        primary: customer.name || '',
+        customerId: customer.customerId || '',
+        owner: customer.ownerName || '',
+        phoneNumber: customer.phoneNumber || '',
+        secondary: customer.customerCategoryId || '',
+        market: customer.marketId || '',
+        province: customer.provinceId || '',
+        route: customer.routeId || '',
+        metric: String(customer.outstanding ?? 0),
+        address: this.formatCustomerAddress(customer.address),
+        status: customer.status || '',
+        creditLimit: String(customer.creditLimit ?? 0),
+        creditDays: String(customer.creditDays ?? 0),
+      };
+
+      return columns.map((column) => values[column.key] ?? '');
+    });
+    const headerRow = columns.map((column) => column.title);
+
+    if (query.fileType === 'pdf') {
+      return {
+        buffer: this.buildPdfBuffer('Outlet Listing', [headerRow, ...exportRows]),
+        fileName: 'outlet-listing.pdf',
+        mimeType: 'application/pdf',
+      };
+    }
+
+    const worksheet = XLSX.utils.aoa_to_sheet([headerRow, ...exportRows]);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Outlets');
+
+    return {
+      buffer: XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' }),
+      fileName: 'outlet-listing.xlsx',
+      mimeType:
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     };
   }
 
@@ -1599,6 +1907,7 @@ export class CustomerService extends MongoRepository<Customer> {
             const beatErpId = row[COLUMN.BEAT_ERP_ID];
 
             if (!beatErpId) continue;
+            const routeName = row[COLUMN.BEAT_NAME] || beatErpId;
 
             const countryName = row[COLUMN.COUNTRY]?.trim();
 
@@ -1616,9 +1925,10 @@ export class CustomerService extends MongoRepository<Customer> {
 
             const marketId = marketMap.get(marketKey);
 
-            let route = await this.routeModel
+            let route: any = await this.routeModel
               .findOne({
-                beatErpId,
+                name: routeName,
+                marketId,
               })
               .lean();
 
@@ -1626,11 +1936,7 @@ export class CustomerService extends MongoRepository<Customer> {
               route = await this.routeModel.create({
                 routeId: IdGenerator.generate('ROUTE', 8),
 
-                name: row[COLUMN.BEAT_NAME] || beatErpId,
-
-                beatId: beatErpId,
-
-                beatErpId,
+                name: routeName,
 
                 countryId,
 
@@ -1812,8 +2118,6 @@ export class CustomerService extends MongoRepository<Customer> {
                 customerId,
 
                 sequence: sequence++,
-
-                day: Days.MON,
               },
               session,
             );

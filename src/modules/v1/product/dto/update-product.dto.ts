@@ -38,6 +38,11 @@ export class ProductUpdateDto {
   @IsString()
   categoryId?: string;
 
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  parentCategoryId?: string;
+
   /**
    * Price
    * -----
@@ -95,8 +100,8 @@ export class ProductUpdateDto {
    */
   @ApiPropertyOptional()
   @IsOptional()
-  @IsString()
-  unitQtyInCase?: string;
+  @IsNumber()
+  unitQtyInCase?: number;
 
   /**
    * Status

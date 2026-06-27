@@ -116,4 +116,22 @@ export class RoleQueryDto extends PaginationDto {
   @IsInt()
   @Min(-1)
   maxAssociatedVansGte?: number;
+
+  @ApiPropertyOptional({
+    example: 'name',
+    description: 'Sort field',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  sortBy?: string;
+
+  @ApiPropertyOptional({
+    example: 'asc',
+    enum: ['asc', 'desc'],
+    description: 'Sort direction',
+  })
+  @IsOptional()
+  @IsString()
+  sortOrder?: 'asc' | 'desc';
 }

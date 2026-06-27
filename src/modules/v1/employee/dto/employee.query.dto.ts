@@ -45,6 +45,14 @@ export class EmployeeQueryDto extends PaginationDto {
   @IsString()
   roleId?: string;
 
+  @ApiPropertyOptional({
+    example: 'DESIG-001',
+    description: 'Filter employees by designation ID',
+  })
+  @IsOptional()
+  @IsString()
+  designationId?: string;
+
   /**
    * Reports To
    * ----------
@@ -80,4 +88,20 @@ export class EmployeeQueryDto extends PaginationDto {
   @IsString()
   @MaxLength(50)
   searchText?: string;
+
+  @ApiPropertyOptional({
+    example: 'primary',
+    description: 'Sort column key from the listing UI',
+  })
+  @IsOptional()
+  @IsString()
+  sortBy?: string;
+
+  @ApiPropertyOptional({
+    example: 'asc',
+    description: 'Sort direction: asc or desc',
+  })
+  @IsOptional()
+  @IsString()
+  sortOrder?: 'asc' | 'desc';
 }

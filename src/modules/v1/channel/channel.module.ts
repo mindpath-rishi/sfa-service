@@ -1,8 +1,10 @@
-
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 
-import { Channel, ChannelSchema } from 'src/core/database/mongo/schema/channel.schema';
+import {
+  Channel,
+  ChannelSchema,
+} from 'src/core/database/mongo/schema/channel.schema';
 import { ChannelController } from './channel.controller';
 import { ChannelService } from './channel.service';
 

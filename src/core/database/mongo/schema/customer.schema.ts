@@ -145,6 +145,7 @@ export class Customer {
 
   @Prop({ type: Number, default: 0 })
   outstanding!: number;
+
   /* ======================================================
    * LOCATION
    * ====================================================== */

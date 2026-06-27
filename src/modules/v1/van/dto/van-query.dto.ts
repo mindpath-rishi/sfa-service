@@ -5,7 +5,7 @@
  * Used by : VAN LISTING / ADMIN SCREENS
  */
 
-import { IsOptional, IsString, IsNumberString } from 'class-validator';
+import { IsEnum, IsOptional, IsString } from 'class-validator';
 import { PaginationDto } from 'src/shared/dto/pagination.dto';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { VanStatus } from 'src/shared/enums/van.enums';
@@ -23,6 +23,16 @@ export class VanQueryDto extends PaginationDto {
 
   @ApiPropertyOptional({ example: VanStatus.ACTIVE, enum: VanStatus })
   @IsOptional()
+  @IsEnum(VanStatus)
+  status?: VanStatus;
+
+  @ApiPropertyOptional({ example: 'name' })
+  @IsOptional()
   @IsString()
-  status?: string;
+  sortBy?: string;
+
+  @ApiPropertyOptional({ example: 'asc' })
+  @IsOptional()
+  @IsString()
+  sortOrder?: 'asc' | 'desc';
 }

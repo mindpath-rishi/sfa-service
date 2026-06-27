@@ -128,12 +128,13 @@ export class CreateCustomerDto {
    * ------
    * Reference of customer category
    */
-  // @ApiPropertyOptional({ enum: CustomerStatus, example: CustomerStatus.ACTIVE })
-  // @IsEnum(CustomerStatus)
-  // status?: CustomerStatus;
+  @ApiPropertyOptional({ enum: CustomerStatus, example: CustomerStatus.ACTIVE })
+  @IsOptional()
+  @IsEnum(CustomerStatus)
+  status?: CustomerStatus;
 
-  @ApiProperty({ type: String, description: 'Reference ID' })
-  @IsNotEmpty()
+  @ApiPropertyOptional({ type: String, description: 'Route mapping reference ID' })
+  @IsOptional()
   @IsString()
-  routeId!: string;
+  routeId?: string;
 }

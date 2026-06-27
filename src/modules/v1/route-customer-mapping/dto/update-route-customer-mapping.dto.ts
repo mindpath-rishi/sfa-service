@@ -7,10 +7,7 @@ import {
   IsString,
   Min,
 } from 'class-validator';
-import {
-  Days,
-  RouteCustomerMappingStatus,
-} from 'src/shared/enums/route-customer-mapping.enums';
+import { RouteCustomerMappingStatus } from 'src/shared/enums/route-customer-mapping.enums';
 
 export class UpdateRouteCustomerMappingDto {
   /**
@@ -36,15 +33,6 @@ export class UpdateRouteCustomerMappingDto {
   @IsNumber()
   @Min(1)
   sequence?: number;
-
-  @ApiPropertyOptional({
-    enum: Days,
-    description: 'Day of the week for the route-customer mapping',
-    default: Days.MON
-  })
-  @IsOptional()
-  @IsEnum(Days)
-  day!: Days;
 
   @ApiPropertyOptional({
     enum: RouteCustomerMappingStatus,

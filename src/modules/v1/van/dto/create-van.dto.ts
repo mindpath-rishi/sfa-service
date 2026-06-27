@@ -11,7 +11,36 @@
  */
 
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsNumber, IsOptional, IsArray } from 'class-validator';
+import {
+  IsString,
+  IsNumber,
+  IsOptional,
+  IsArray,
+  IsEnum,
+  IsDateString,
+  ValidateNested,
+} from 'class-validator';
+import { Type } from 'class-transformer';
+import { VanStatus } from 'src/shared/enums/van.enums';
+
+export class VanRouteDto {
+  @ApiProperty({ example: 'ROUTE-001' })
+  @IsString()
+  routeId!: string;
+
+  @ApiProperty({ example: 'MONDAY', required: false })
+  @IsOptional()
+  @IsString()
+  day?: string;
+
+  @ApiProperty({ example: '2026-06-01' })
+  @IsDateString()
+  fromDate!: string;
+
+  @ApiProperty({ example: '2026-06-30' })
+  @IsDateString()
+  toDate!: string;
+}
 
 export class CreateVanDto {
   /**
@@ -77,10 +106,26 @@ export class CreateVanDto {
    * Example : [{ "userId": "EID-001" }]
    */
   @ApiProperty({
-    example: [{ userId: 'EID-001' }],
+    example: ['EID-001'],
     required: false,
   })
   @IsOptional()
   @IsArray()
+  @IsString({ each: true })
   associatedUsers?: string[];
+
+  @ApiProperty({
+    type: [VanRouteDto],
+    required: false,
+  })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => VanRouteDto)
+  associatedRoutes?: VanRouteDto[];
+
+  @ApiProperty({ example: VanStatus.ACTIVE, enum: VanStatus, required: false })
+  @IsOptional()
+  @IsEnum(VanStatus)
+  status?: VanStatus;
 }

@@ -12,6 +12,10 @@ import { PaginationDto } from 'src/shared/dto/pagination.dto';
  * Extends PaginationDto for pagination support
  */
 export class MarketQueryDto extends PaginationDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  provinceId?: string;
   /**
    * SearchText
    * ----------

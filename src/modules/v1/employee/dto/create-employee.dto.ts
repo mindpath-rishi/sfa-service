@@ -25,7 +25,9 @@ import {
   MinLength,
   IsArray,
   ArrayUnique,
+  IsEnum,
 } from 'class-validator';
+import { UserStatus } from '../../user/user.enum';
 
 /**
  * Permission Overrides DTO
@@ -127,8 +129,9 @@ export class CreateEmployeeDto {
     example: 'john.doe@company.com',
     description: 'Employee email address',
   })
+  @IsOptional()
   @IsEmail({}, { message: 'Email must be a valid email address' })
-  email!: string;
+  email?: string;
 
   /**
    * Password
@@ -165,6 +168,59 @@ export class CreateEmployeeDto {
   @IsString({ message: 'roleId must be a string' })
   @IsNotEmpty({ message: 'roleId is required' })
   roleId!: string;
+
+  /**
+   * Designation ID
+   * --------------
+   * Purpose : Assign employee to a designation
+   */
+  @ApiPropertyOptional({
+    example: 'DESIG-001',
+    description: 'Designation identifier assigned to the employee',
+  })
+  @IsOptional()
+  @IsString({ message: 'designationId must be a string' })
+  designationId?: string;
+
+  /**
+   * Reporting Employee
+   * ------------------
+   * Purpose : Direct manager employeeId for hierarchy mapping
+   */
+  @ApiPropertyOptional({
+    example: 'EID-1A2B3C4D',
+    description: 'Direct reporting manager employeeId',
+  })
+  @IsOptional()
+  @IsString({ message: 'reportingEmployeeId must be a string' })
+  reportingEmployeeId?: string;
+
+  /**
+   * Assigned Van IDs
+   * ----------------
+   * Purpose : Assign vans to the employee by updating Van.associatedUsers
+   *
+   * Notes:
+   * - This is not stored on the employee document
+   */
+  @ApiPropertyOptional({
+    example: ['VID-001'],
+    description:
+      'Van IDs assigned to the employee. Stored on van.associatedUsers.',
+  })
+  @IsOptional()
+  @IsArray({ message: 'assignedVanIds must be an array of strings' })
+  @IsString({ each: true, message: 'assignedVanIds values must be strings' })
+  @ArrayUnique({ message: 'assignedVanIds values must be unique' })
+  assignedVanIds?: string[];
+
+  @ApiPropertyOptional({
+    enum: UserStatus,
+    description: 'Employee account status',
+  })
+  @IsOptional()
+  @IsEnum(UserStatus)
+  status?: UserStatus;
 
   /**
    * Permission Overrides
