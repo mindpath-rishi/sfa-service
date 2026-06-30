@@ -4,6 +4,7 @@ export interface RequestContext {
   userId?: string;
   name?: string;
   role?: string;
+  roleId?: string;
   vanId?: string;
   vanName?: string;
 }

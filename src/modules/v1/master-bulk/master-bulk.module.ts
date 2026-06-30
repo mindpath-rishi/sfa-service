@@ -7,11 +7,12 @@ import { ChannelModule } from '../channel/channel.module';
 import { OutletTypeModule } from '../outlet-type/outlet-type.module';
 import { MarketModule } from '../market/market.module';
 import { ProductCategoryModule } from '../product-category/product-category.module';
+import { SegmentationModule } from '../segmentation/segmentation.module';
 import { MasterBulkController } from './master-bulk.controller';
 import { MasterBulkService } from './master-bulk.service';
 
 @Module({
-  imports: [CountryModule, ProvinceModule, DesignationModule, CustomerCategoryModule, ChannelModule, OutletTypeModule, MarketModule, ProductCategoryModule],
+  imports: [CountryModule, ProvinceModule, DesignationModule, CustomerCategoryModule, ChannelModule, OutletTypeModule, MarketModule, ProductCategoryModule, SegmentationModule],
   controllers: [MasterBulkController],
   providers: [MasterBulkService],
 })

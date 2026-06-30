@@ -197,36 +197,46 @@ export class MediaService extends MongoRepository<Media> {
    * - Search by text
    * - Owner / type / purpose filtering
    */
-  async findAll(query: MediaQueryDto) {
-    const { page = 1, limit = 20, searchText, ...rest } = query;
+ async findAll(query: MediaQueryDto) {
+  const { page = 1, limit = 20, searchText, ...rest } = query;
 
-    const filter: any = { isDeleted: false, ...rest };
+  const cleanRest = Object.fromEntries(
+    Object.entries(rest).filter(([_, value]) => {
+      return value !== undefined && value !== null && value !== '';
+    }),
+  );
 
-    if (searchText) {
-      const regex = new RegExp(searchText, 'i');
-      filter.$or = [
-        { mediaId: regex },
-        { storageKey: regex },
-        { url: regex },
-        { 'meta.fileName': regex },
-      ];
-    }
+  const filter: any = {
+    isDeleted: false,
+    ...cleanRest,
+  };
 
-    const result = await this.paginate(filter, {
-      page: Number(page),
-      limit: Number(limit),
-      sort: { isPrimary: -1, sortOrder: 1 },
-      lean: true,
-    });
+  console.log(cleanRest, '===================cleanRest============');
 
-    return {
-      statusCode: HttpStatus.OK,
-      message: MEDIA.FETCHED,
-      data: result.items,
-      meta: result.meta,
-    };
+  if (searchText) {
+    const regex = new RegExp(searchText, 'i');
+    filter.$or = [
+      { mediaId: regex },
+      { storageKey: regex },
+      { url: regex },
+      { 'meta.fileName': regex },
+    ];
   }
 
+  const result = await this.paginate(filter, {
+    page: Number(page),
+    limit: Number(limit),
+    sort: { isPrimary: -1, sortOrder: 1 },
+    lean: true,
+  });
+
+  return {
+    statusCode: HttpStatus.OK,
+    message: MEDIA.FETCHED,
+    data: result.items,
+    meta: result.meta,
+  };
+}
   /**
    * Get Media by ID
    * ---------------

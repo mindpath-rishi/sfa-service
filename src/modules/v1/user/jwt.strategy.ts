@@ -38,6 +38,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     if (store) {
       store.userId = payload.sub;
       store.role = payload.role;
+      store.roleId = payload.roleId;
       store.name = payload.name;
       store.vanId = payload.vanId; // ✅ FIX: SET VAN ID
     }
@@ -48,6 +49,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     return {
       userId: payload.sub,
       role: payload.role,
+      roleId: payload.roleId,
       sessionId: payload.sid,
       name: payload.name,
       vanId: payload.vanId, // optional but useful

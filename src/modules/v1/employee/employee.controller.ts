@@ -28,9 +28,10 @@ import {
   Post,
   Query,
   Res,
+  Req,
 } from '@nestjs/common';
 import { ApiBody, ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger';
-import type { Response } from 'express';
+import type { Request, Response } from 'express';
 
 import { CreateEmployeeDto } from './dto/create-employee.dto';
 import { UpdateEmployeeDto } from './dto/update-employee.dto';
@@ -56,6 +57,7 @@ import { Permissions } from 'src/core/decorators/permission.decorator';
 import { EmployeeQueryDto } from './dto/employee.query.dto';
 import { Public } from 'src/core/decorators/public.decorator';
 import { UserPrimaryCategoryTargetQueryDto } from './dto/user-primary-category-target-query.dto';
+import { UserStatus } from '../user/user.enum';
 
 @ApiTags('Employee')
 @FeatureFlag(API_MODULE_ENABLE_KEYS.EMPLOYEE)
@@ -94,8 +96,12 @@ export class EmployeeController {
     EMPLOYEE.CREATED,
     HttpStatus.CREATED,
   )
-  async create(@Body() dto: CreateEmployeeDto) {
-    return this.employeeService.create(dto);
+  async create(@Body() dto: CreateEmployeeDto, @Req() req: Request) {
+    const isMobile = req.headers['x-client-platform'] === 'mobile';
+    return this.employeeService.create({
+      ...dto,
+      status: isMobile ? UserStatus.PENDING : dto.status,
+    });
   }
 
   @Permissions('EMPLOYEE_CREATE')
@@ -295,9 +301,13 @@ export class EmployeeController {
 
   @Get('/manager/live-locations')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Get latest live locations for manager field users' })
-  async getManagerLiveLocations(@Query() query: { date?: string }) {
-    return this.employeeService.getManagerLiveLocations(query?.date);
+  @ApiOperation({
+    summary: 'Get latest live locations for manager field users',
+  })
+  async getManagerLiveLocations(
+    @Query() query: { date?: string; startDate?: string; endDate?: string },
+  ) {
+    return this.employeeService.getManagerLiveLocations(query);
   }
 
   @Get('/manager/user-timeline')

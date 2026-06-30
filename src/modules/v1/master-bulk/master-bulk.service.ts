@@ -9,6 +9,7 @@ import { ChannelService } from '../channel/channel.service';
 import { OutletTypeService } from '../outlet-type/outlet-type.service';
 import { MarketService } from '../market/market.service';
 import { ProductCategoryService } from '../product-category/product-category.service';
+import { SegmentationService } from '../segmentation/segmentation.service';
 import { CreateCountryDto } from '../country/dto/create-country.dto';
 import { CreateProvinceDto } from '../province/dto/create-province.dto';
 import { CreateDesignationDto } from '../designation/dto/create-designation.dto';
@@ -17,13 +18,14 @@ import { CreateChannelDto } from '../channel/dto/create-channel.dto';
 import { CreateOutletTypeDto } from '../outlet-type/dto/create-outlet-type.dto';
 import { CreateMarketDto } from '../market/dto/create-market.dto';
 import { ProductCategoryCreateDto } from '../product-category/dto/create-product-category.dto';
+import { CreateSegmentationDto } from '../segmentation/dto/create-segmentation.dto';
 import * as XLSX from 'xlsx';
 import { ProductCategoryType } from 'src/core/database/mongo/schema/product-category';
 import * as ExcelJS from 'exceljs';
 
 @Injectable()
 export class MasterBulkService {
-  constructor(private country: CountryService, private province: ProvinceService, private designation: DesignationService, private customerCategory: CustomerCategoryService, private channel: ChannelService, private outletType: OutletTypeService, private market: MarketService, private productCategory: ProductCategoryService) {}
+  constructor(private country: CountryService, private province: ProvinceService, private designation: DesignationService, private customerCategory: CustomerCategoryService, private channel: ChannelService, private outletType: OutletTypeService, private market: MarketService, private productCategory: ProductCategoryService, private segmentation: SegmentationService) {}
 
   async upload(entity: string, items: Record<string, unknown>[]) {
     const configs: Record<string, { dto: new () => object; create: (value: any) => Promise<any> }> = {
@@ -32,6 +34,7 @@ export class MasterBulkService {
       designation: { dto: CreateDesignationDto, create: (v) => this.designation.create(v) },
       'customer-category': { dto: CreateCustomerCategoryDto, create: (v) => this.customerCategory.create(v) },
       channel: { dto: CreateChannelDto, create: (v) => this.channel.create(v) },
+      segmentation: { dto: CreateSegmentationDto, create: (v) => this.segmentation.create(v) },
       'outlet-type': { dto: CreateOutletTypeDto, create: (v) => this.outletType.create(v) },
       market: { dto: CreateMarketDto, create: (v) => this.market.create(v) },
       'product-category': { dto: ProductCategoryCreateDto, create: (v) => this.productCategory.create(v) },
@@ -90,6 +93,7 @@ export class MasterBulkService {
       country: { service: this.country, id: 'countryId' }, province: { service: this.province, id: 'provinceId' },
       designation: { service: this.designation, id: 'designationId' }, 'customer-category': { service: this.customerCategory, id: 'customerCategoryId' },
       channel: { service: this.channel, id: 'channelId' }, 'outlet-type': { service: this.outletType, id: 'outletTypeId' },
+      segmentation: { service: this.segmentation, id: 'segmentationId' },
       market: { service: this.market, id: 'marketId' }, 'product-category': { service: this.productCategory, id: 'categoryId' },
     };
     const config = configs[entity];

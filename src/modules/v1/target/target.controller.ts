@@ -26,7 +26,9 @@ import {
   Patch,
   Post,
   Query,
+  Res,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import { ApiBody, ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger';
 
 import { FeatureFlag } from 'src/core/decorators/feature-flag.decorator';
@@ -51,6 +53,7 @@ import { CreateTargetDto } from './dto/create-target.dto';
 import { UpdateTargetDto } from './dto/update-target.dto';
 import { TargetQueryDto } from './dto/target-query.dto';
 import { TARGET } from './target.constants';
+import { BulkUploadTargetsDto } from './dto/bulk-upload-targets.dto';
 
 @ApiTags('Target')
 @FeatureFlag(API_MODULE_ENABLE_KEYS.TARGET)
@@ -82,6 +85,15 @@ export class TargetController {
     return this.service.create(dto);
   }
 
+  @Permissions('TARGET_CREATE')
+  @Post('bulk-upload')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Bulk upload targets' })
+  @ApiBody({ type: BulkUploadTargetsDto })
+  async bulkUpload(@Body() dto: BulkUploadTargetsDto) {
+    return this.service.bulkUpload(dto);
+  }
+
   /**
    * Get Targets
    * -----------
@@ -90,6 +102,16 @@ export class TargetController {
   @Permissions('TARGET_VIEW')
   async findAll(@Query() query: TargetQueryDto) {
     return this.service.findAll(query);
+  }
+
+  @Get('export')
+  @Permissions('TARGET_VIEW')
+  @ApiOperation({ summary: 'Export targets as Excel or PDF' })
+  async exportTargets(@Query() query: TargetQueryDto, @Res() res: Response) {
+    const file = await this.service.exportTargets(query);
+    res.setHeader('Content-Type', file.mimeType);
+    res.setHeader('Content-Disposition', `attachment; filename="${file.fileName}"`);
+    res.send(file.buffer);
   }
 
   /**

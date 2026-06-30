@@ -55,7 +55,6 @@ import { Activity } from 'src/core/database/mongo/schema/activity.schema';
 import { RequestContextStore } from 'src/core/context/request-context';
 import { LeaveStatus } from 'src/shared/enums/leave.enums';
 import { Leave } from 'src/core/database/mongo/schema/leave.schema';
-import { TargetStatus } from 'src/shared/enums/target.enums';
 import { Target } from 'src/core/database/mongo/schema/target.schema';
 import { Customer } from 'src/core/database/mongo/schema/customer.schema';
 import { CustomerStatus } from 'src/shared/enums/customer.enums';
@@ -179,7 +178,9 @@ export class EmployeeService extends MongoRepository<Employee> {
     ];
   }
 
-  private async attachLoginIds<T extends { employeeId?: string }>(employees: T[]) {
+  private async attachLoginIds<T extends { employeeId?: string }>(
+    employees: T[],
+  ) {
     const employeeIds = employees
       .map((employee) => employee.employeeId)
       .filter((employeeId): employeeId is string => Boolean(employeeId));
@@ -298,8 +299,9 @@ export class EmployeeService extends MongoRepository<Employee> {
    * Notes:
    * - Operation is fully transactional
    * - Prevents duplicate active employees
-  */
+   */
   async create(payload: CreateEmployeeDto) {
+    const initialStatus = payload.status ?? UserStatus.ACTIVE;
     const assignedVanIds = await this.resolveVanIds(payload.assignedVanIds);
     await this.validateAssignedVansForRole(payload.roleId, assignedVanIds);
     const hierarchyPath = await this.buildHierarchyPath(
@@ -340,7 +342,7 @@ export class EmployeeService extends MongoRepository<Employee> {
                   deny: payload.permissionOverrides.deny || [],
                 }
               : undefined,
-            status: payload.status || UserStatus.ACTIVE,
+            status: initialStatus,
             isDeleted: false,
           },
           { session },
@@ -358,7 +360,7 @@ export class EmployeeService extends MongoRepository<Employee> {
             email: payload.email,
             password: payload.password,
             isDeleted: false,
-            status: UserStatus.ACTIVE,
+            status: initialStatus,
             loginId: payload.loginId,
           },
           session,
@@ -403,7 +405,7 @@ export class EmployeeService extends MongoRepository<Employee> {
                 deny: payload.permissionOverrides.deny || [],
               }
             : undefined,
-          status: payload.status || UserStatus.ACTIVE,
+          status: initialStatus,
         },
         { session },
       );
@@ -416,10 +418,15 @@ export class EmployeeService extends MongoRepository<Employee> {
           email: payload.email,
           password: payload.password,
           loginId: payload.loginId,
+          status: initialStatus,
         },
         session,
       );
-      await this.syncEmployeeVanAssignments(employeeId, assignedVanIds, session);
+      await this.syncEmployeeVanAssignments(
+        employeeId,
+        assignedVanIds,
+        session,
+      );
 
       return {
         statusCode: HttpStatus.CREATED,
@@ -569,13 +576,8 @@ export class EmployeeService extends MongoRepository<Employee> {
   }
 
   private buildEmployeeFilter(query: EmployeeQueryDto) {
-    const {
-      status,
-      roleId,
-      designationId,
-      reportingEmployeeId,
-      searchText,
-    } = query;
+    const { status, roleId, designationId, reportingEmployeeId, searchText } =
+      query;
     const filter: Record<string, any> = {};
 
     if (status) filter.status = status;
@@ -630,25 +632,25 @@ export class EmployeeService extends MongoRepository<Employee> {
           .filter(Boolean),
       ),
     ];
-    const [roles, designations, vans, reportingEmployees] =
-      await Promise.all([
-        this.roleModel.find({}).lean(),
-        this.designationModel.find({}).lean(),
-        this.vanModel.find({}).lean(),
-        reportingEmployeeIds.length
-          ? this.findLean({ employeeId: { $in: reportingEmployeeIds } } as any)
-          : [],
-      ]);
+    const [roles, designations, vans, reportingEmployees] = await Promise.all([
+      this.roleModel.find({}).lean(),
+      this.designationModel.find({}).lean(),
+      this.vanModel.find({}).lean(),
+      reportingEmployeeIds.length
+        ? this.findLean({ employeeId: { $in: reportingEmployeeIds } } as any)
+        : [],
+    ]);
 
     return {
       employeeNameById: new Map([
         ...employees.map(
-          (employee) => [employee.employeeId, employee.name] as [string, string],
+          (employee) =>
+            [employee.employeeId, employee.name] as [string, string],
         ),
-        ...reportingEmployees.map((employee: any) => [
-          employee.employeeId,
-          employee.name,
-        ] as [string, string]),
+        ...reportingEmployees.map(
+          (employee: any) =>
+            [employee.employeeId, employee.name] as [string, string],
+        ),
       ]),
       roleNameById: new Map(
         roles.map((role) => [
@@ -698,7 +700,10 @@ export class EmployeeService extends MongoRepository<Employee> {
   }
 
   private escapePdfText(value: string) {
-    return value.replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)');
+    return value
+      .replace(/\\/g, '\\\\')
+      .replace(/\(/g, '\\(')
+      .replace(/\)/g, '\\)');
   }
 
   private buildPdfBuffer(title: string, rows: string[][]) {
@@ -733,7 +738,9 @@ export class EmployeeService extends MongoRepository<Employee> {
     const textLimit = (width: number, size: number) =>
       Math.max(6, Math.floor(width / (size * 0.52)));
     const truncate = (value: string, limit: number) => {
-      const cleanValue = String(value ?? '').replace(/\s+/g, ' ').trim();
+      const cleanValue = String(value ?? '')
+        .replace(/\s+/g, ' ')
+        .trim();
       return cleanValue.length > limit
         ? `${cleanValue.slice(0, Math.max(0, limit - 3))}...`
         : cleanValue;
@@ -754,7 +761,8 @@ export class EmployeeService extends MongoRepository<Employee> {
     let nextObjectId = 4;
 
     objects[1] = '<< /Type /Catalog /Pages 2 0 R >>';
-    objects[fontObjectId] = '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>';
+    objects[fontObjectId] =
+      '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>';
 
     for (const [pageIndex, rowsForPage] of pageRows.entries()) {
       const pageObjectId = nextObjectId;
@@ -795,10 +803,16 @@ export class EmployeeService extends MongoRepository<Employee> {
         const y = headerY - (rowIndex + 1) * rowHeight;
 
         if (rowIndex % 2 === 0) {
-          commands.push('0.96 0.98 1 rg', rect(margin, y, tableWidth, rowHeight, 'f'));
+          commands.push(
+            '0.96 0.98 1 rg',
+            rect(margin, y, tableWidth, rowHeight, 'f'),
+          );
         }
 
-        commands.push('0.85 0.89 0.94 RG', rect(margin, y, tableWidth, rowHeight));
+        commands.push(
+          '0.85 0.89 0.94 RG',
+          rect(margin, y, tableWidth, rowHeight),
+        );
         commands.push('0.08 0.13 0.2 rg');
 
         row.forEach((value, columnIndex) => {
@@ -825,8 +839,7 @@ export class EmployeeService extends MongoRepository<Employee> {
         `<< /Length ${Buffer.byteLength(content)} >>\nstream\n${content}\nendstream`;
     }
 
-    objects[2] =
-      `<< /Type /Pages /Kids [${pageObjectIds.map((id) => `${id} 0 R`).join(' ')}] /Count ${pageObjectIds.length} >>`;
+    objects[2] = `<< /Type /Pages /Kids [${pageObjectIds.map((id) => `${id} 0 R`).join(' ')}] /Count ${pageObjectIds.length} >>`;
 
     let pdf = '%PDF-1.4\n';
     const offsets = [0];
@@ -869,7 +882,10 @@ export class EmployeeService extends MongoRepository<Employee> {
       employees.map((employee: any) => [employee.employeeId, employee.name]),
     );
     const roleNameById = new Map(
-      roles.map((role) => [role.roleId, role.displayName || role.name || role.roleId]),
+      roles.map((role) => [
+        role.roleId,
+        role.displayName || role.name || role.roleId,
+      ]),
     );
     const designationNameById = new Map(
       designations.map((designation) => [
@@ -912,7 +928,10 @@ export class EmployeeService extends MongoRepository<Employee> {
 
     if (query.fileType === 'pdf') {
       return {
-        buffer: this.buildPdfBuffer('Employee Listing', [headerRow, ...exportRows]),
+        buffer: this.buildPdfBuffer('Employee Listing', [
+          headerRow,
+          ...exportRows,
+        ]),
         fileName: 'employee-listing.pdf',
         mimeType: 'application/pdf',
       };
@@ -991,12 +1010,13 @@ export class EmployeeService extends MongoRepository<Employee> {
       );
       const maps = await this.getEmployeeListingMaps(allItems);
       const direction = sortOrder === 'desc' ? -1 : 1;
-      const sortedItems = allItems.sort((first: any, second: any) =>
-        this.getEmployeeListingValue(first, maps, sortBy).localeCompare(
-          this.getEmployeeListingValue(second, maps, sortBy),
-          undefined,
-          { numeric: true, sensitivity: 'base' },
-        ) * direction,
+      const sortedItems = allItems.sort(
+        (first: any, second: any) =>
+          this.getEmployeeListingValue(first, maps, sortBy).localeCompare(
+            this.getEmployeeListingValue(second, maps, sortBy),
+            undefined,
+            { numeric: true, sensitivity: 'base' },
+          ) * direction,
       );
       const safePage = Math.max(1, page);
       const safeLimit = Math.max(1, limit);
@@ -1109,6 +1129,14 @@ export class EmployeeService extends MongoRepository<Employee> {
         resolvedAssignedVanIds,
         session,
       );
+
+      if (employeeDto.status && employeeDto.status !== existing.status) {
+        await this.userService.updateUserStatus(
+          employeeId,
+          employeeDto.status,
+          session,
+        );
+      }
 
       return this.findOne({ employeeId }, { session, lean: true });
     });
@@ -1876,7 +1904,6 @@ export class EmployeeService extends MongoRepository<Employee> {
         {
           $match: {
             userId: employeeId,
-            status: TargetStatus.ACTIVE,
             startDate: { $lte: endDate },
             endDate: { $gte: startDate },
           },
@@ -1894,7 +1921,7 @@ export class EmployeeService extends MongoRepository<Employee> {
       this.saleModal.aggregate([
         {
           $match: {
-            employeeId,
+            'employees.employeeId': employeeId,
             status: SaleStatus.COMPLETED,
             date: {
               $gte: startDate,
@@ -1919,7 +1946,6 @@ export class EmployeeService extends MongoRepository<Employee> {
         {
           $match: {
             userId: employeeId,
-            status: TargetStatus.ACTIVE,
             startDate: { $lte: lmtdDate },
             endDate: { $gte: lmtdStartDate },
           },
@@ -1937,7 +1963,7 @@ export class EmployeeService extends MongoRepository<Employee> {
       this.saleModal.aggregate([
         {
           $match: {
-            employeeId,
+            'employees.employeeId': employeeId,
             status: SaleStatus.COMPLETED,
             date: {
               $gte: lmtdStartDate,
@@ -2086,6 +2112,7 @@ export class EmployeeService extends MongoRepository<Employee> {
       visitDaySummary,
       salesDaySummary,
       leaveDaySummary,
+      workSessionDaySummary,
     ] = await Promise.all([
       this.activityModel.aggregate([
         {
@@ -2173,7 +2200,7 @@ export class EmployeeService extends MongoRepository<Employee> {
       this.saleModal.aggregate([
         {
           $match: {
-            employeeId,
+            'employees.employeeId': employeeId,
             status: SaleStatus.COMPLETED,
             date: {
               $gte: startDate,
@@ -2219,6 +2246,42 @@ export class EmployeeService extends MongoRepository<Employee> {
               },
             },
             leave: { $sum: 1 },
+          },
+        },
+      ]),
+      this.workSessionModel.aggregate([
+        {
+          $addFields: {
+            normalizedDayStartTime: {
+              $convert: {
+                input: '$dayStartTime',
+                to: 'date',
+                onError: '$createdAt',
+                onNull: '$createdAt',
+              },
+            },
+          },
+        },
+        {
+          $match: {
+            userId: employeeId,
+            normalizedDayStartTime: { $gte: startDate, $lte: endDate },
+          },
+        },
+        {
+          $group: {
+            _id: {
+              $dateToString: {
+                format: '%Y-%m-%d',
+                date: '$normalizedDayStartTime',
+                timezone: REPORT_TIMEZONE,
+              },
+            },
+            dayStarted: { $sum: 1 },
+            dayCompleted: {
+              $sum: { $cond: [{ $eq: ['$status', 'COMPLETED'] }, 1, 0] },
+            },
+            latestStatus: { $last: '$status' },
           },
         },
       ]),
@@ -2314,6 +2377,7 @@ export class EmployeeService extends MongoRepository<Employee> {
     const visitDayMap = toMap(visitDaySummary);
     const salesDayMap = toMap(salesDaySummary);
     const leaveDayMap = toMap(leaveDaySummary);
+    const workSessionDayMap = toMap(workSessionDaySummary);
     const avgFirstCallTime = formatAverageTime(
       visitDaySummary.map((item) => item.firstCallTime),
     );
@@ -2335,13 +2399,16 @@ export class EmployeeService extends MongoRepository<Employee> {
       const visits = visitDayMap.get(dayKey) || {};
       const daySales = salesDayMap.get(dayKey) || {};
       const leave = leaveDayMap.get(dayKey) || {};
+      const workSession = workSessionDayMap.get(dayKey) || {};
       const retailing = Number(activity.retailing || 0);
       const officialWork = Number(activity.officialWork || 0);
       const leaveCount = Number(leave.leave || 0);
       const totalActivities = Number(activity.totalActivities || 0);
       const tcCount = Number(visits.tc || 0);
       const pcCount = Number(daySales.pc || 0);
-      const hasWorkRecord = totalActivities > 0 || tcCount > 0 || pcCount > 0;
+      const dayStarted = Number(workSession.dayStarted || 0) > 0;
+      const hasWorkRecord =
+        dayStarted || totalActivities > 0 || tcCount > 0 || pcCount > 0;
       const absent = leaveCount > 0 || hasWorkRecord ? 0 : 1;
       const dayStatus =
         leaveCount > 0
@@ -2350,12 +2417,17 @@ export class EmployeeService extends MongoRepository<Employee> {
             ? 'Retailing'
             : officialWork > 0
               ? 'Official Work'
-              : 'Absent';
+              : dayStarted
+                ? 'Official Work'
+                : 'Absent';
 
       dayWiseSummary.push({
         date: dayKey,
         label: formatDayLabel(dayCursor),
         dayStatus,
+        workSessionStatus: workSession.latestStatus ?? null,
+        dayStarted,
+        dayCompleted: Number(workSession.dayCompleted || 0) > 0,
         retailing,
         officialWork,
         leave: leaveCount,
@@ -2972,7 +3044,6 @@ export class EmployeeService extends MongoRepository<Employee> {
             userId: {
               $in: employeeIds,
             },
-            status: TargetStatus.ACTIVE,
             startDate: {
               $lte: endDate,
             },
@@ -3130,7 +3201,6 @@ export class EmployeeService extends MongoRepository<Employee> {
         {
           $match: {
             userId: { $in: employeeIds },
-            status: TargetStatus.ACTIVE,
             startDate: { $lte: endDate },
             endDate: { $gte: startDate },
           },
@@ -3274,7 +3344,6 @@ export class EmployeeService extends MongoRepository<Employee> {
         {
           $match: {
             userId: query.employeeId,
-            status: TargetStatus.ACTIVE,
             startDate: { $lte: endDate },
             endDate: { $gte: startDate },
           },
@@ -5148,12 +5217,25 @@ export class EmployeeService extends MongoRepository<Employee> {
     };
   }
 
-  async getManagerLiveLocations(date?: string) {
+  async getManagerLiveLocations(
+    query: {
+      date?: string;
+      startDate?: string;
+      endDate?: string;
+    } = {},
+  ) {
     const managerId = RequestContextStore.getStore()?.userId;
-    const selectedDate = date ? parseCalendarDate(date) : new Date();
-    const startOfDay = new Date(selectedDate);
+    const selectedStart = parseCalendarDate(query.startDate || query.date);
+    const selectedEnd = parseCalendarDate(
+      query.endDate || query.startDate || query.date,
+    );
+    const startOfDay = new Date(
+      Math.min(selectedStart.getTime(), selectedEnd.getTime()),
+    );
     startOfDay.setHours(0, 0, 0, 0);
-    const endOfDay = new Date(selectedDate);
+    const endOfDay = new Date(
+      Math.max(selectedStart.getTime(), selectedEnd.getTime()),
+    );
     endOfDay.setHours(23, 59, 59, 999);
 
     const employees = await this.find({
@@ -5168,18 +5250,21 @@ export class EmployeeService extends MongoRepository<Employee> {
             userId: { $in: employeeIds },
             dayStartTime: { $gte: startOfDay, $lte: endOfDay },
           })
-          .sort({ dayStartTime: -1 })
+          .sort({ dayStartTime: 1 })
           .lean()
       : [];
-    const sessionByUser = new Map<string, any>();
+    const sessionsByUser = new Map<string, any[]>();
     for (const session of sessions) {
-      if (!sessionByUser.has(session.userId)) sessionByUser.set(session.userId, session);
+      const userSessions = sessionsByUser.get(session.userId) || [];
+      userSessions.push(session);
+      sessionsByUser.set(session.userId, userSessions);
     }
 
     const normalizeLocation = (value?: any) => {
       const latitude = Number(value?.latitude);
       const longitude = Number(value?.longitude);
-      if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
+      if (!Number.isFinite(latitude) || !Number.isFinite(longitude))
+        return null;
       return {
         latitude,
         longitude,
@@ -5190,26 +5275,40 @@ export class EmployeeService extends MongoRepository<Employee> {
     };
 
     const data = employees.map((employee) => {
-      const session = sessionByUser.get(employee.employeeId);
-      const backgroundLocation = [...(session?.backgroundLocations || [])]
-        .reverse()
-        .map(normalizeLocation)
-        .find(Boolean);
-      const location =
-        normalizeLocation(session?.dayEndLocation) ||
-        backgroundLocation ||
-        normalizeLocation(session?.dayStartLocation);
+      const userSessions = sessionsByUser.get(employee.employeeId) || [];
+      const latestSession = userSessions.at(-1);
+      const routePaths = userSessions
+        .map((session) => {
+          const backgroundLocations = (session.backgroundLocations || [])
+            .map(normalizeLocation)
+            .filter(Boolean)
+            .sort(
+              (first: any, second: any) =>
+                new Date(first.capturedAt || 0).getTime() -
+                new Date(second.capturedAt || 0).getTime(),
+            );
+          return [
+            normalizeLocation(session.dayStartLocation),
+            ...backgroundLocations,
+            normalizeLocation(session.dayEndLocation),
+          ].filter(Boolean);
+        })
+        .filter((path) => path.length);
+      const routePath = routePaths.flat();
+      const location = routePath.at(-1) || null;
 
       return {
         employeeId: employee.employeeId,
         employeeName: employee.name,
         mobile: employee.mobile || '',
-        status: session?.status || 'OFFLINE',
-        vanId: session?.vanId || null,
-        vanName: session?.vanName || null,
-        dayStartTime: session?.dayStartTime || null,
-        dayEndTime: session?.dayEndTime || null,
+        status: latestSession?.status || 'OFFLINE',
+        vanId: latestSession?.vanId || null,
+        vanName: latestSession?.vanName || null,
+        dayStartTime: userSessions[0]?.dayStartTime || null,
+        dayEndTime: latestSession?.dayEndTime || null,
         location,
+        routePath,
+        routePaths,
       };
     });
 

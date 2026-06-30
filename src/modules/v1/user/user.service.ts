@@ -44,7 +44,9 @@ import { USER } from './user.constants';
 import { jwtConfig } from 'src/core/config/jwt.config';
 import { Employee } from 'src/core/database/mongo/schema/employee.schema';
 import { UserDevice } from 'src/core/database/mongo/schema/device.schema';
+import { Role } from 'src/core/database/mongo/schema/role.schema';
 import { VanService } from '../van/van.service';
+import { UpdateOwnProfileDto } from './dto/login.dto';
 
 @Injectable()
 export class UserService extends MongoRepository<User> {
@@ -57,6 +59,8 @@ export class UserService extends MongoRepository<User> {
     private readonly employeeModel: Model<Employee>,
     @InjectModel(UserDevice.name)
     private readonly userDeviceModel: Model<UserDevice>,
+    @InjectModel(Role.name)
+    private readonly roleModel: Model<Role>,
   ) {
     super(mongo.getModel(User.name, UserSchema));
   }
@@ -79,6 +83,7 @@ export class UserService extends MongoRepository<User> {
       email?: string;
       password: string;
       loginId: string;
+      status?: UserStatus;
     },
     session?: any,
   ) {
@@ -91,7 +96,7 @@ export class UserService extends MongoRepository<User> {
           mobile: data.mobile,
           email: data.email?.toLowerCase(),
           password: hashedPassword,
-          status: UserStatus.ACTIVE,
+          status: data.status ?? UserStatus.ACTIVE,
           loginId: data.loginId,
         },
         { session },
@@ -174,6 +179,15 @@ export class UserService extends MongoRepository<User> {
       throw new ForbiddenException(USER.PROFILE_NOT_FOUND);
     }
 
+    const role = await this.roleModel.findOne({
+      roleId: profile.roleId,
+      isDeleted: false,
+    });
+
+    if (!role) {
+      throw new ForbiddenException('Role not found');
+    }
+
     /* ---------- DEVICE UPSERT ---------- */
     await this.userDeviceModel.findOneAndUpdate(
       { userId: user.profileId, deviceId },
@@ -200,7 +214,8 @@ export class UserService extends MongoRepository<User> {
       {
         type: 'USER',
         profileId: user.profileId,
-        role: user.role,
+        role: role.name,
+        roleId: profile.roleId,
         deviceId,
         createdAt: new Date().toISOString(),
       },
@@ -230,7 +245,8 @@ export class UserService extends MongoRepository<User> {
     const accessToken = this.jwtService.sign(
       {
         sub: user.profileId,
-        role: user.role,
+        role: role.name,
+        roleId: profile.roleId,
         sid: sessionId,
         // deviceId,
         name: profile?.name,
@@ -262,6 +278,8 @@ export class UserService extends MongoRepository<User> {
       user: {
         profileId: user.profileId,
         profile,
+        role: role.name,
+        roleId: profile.roleId,
         vanId,
       },
       message: USER.LOGIN,
@@ -315,6 +333,7 @@ export class UserService extends MongoRepository<User> {
       {
         sub: session.profileId,
         role: session.role,
+        roleId: session.roleId,
         sid: sessionId,
         deviceId,
       },
@@ -449,6 +468,73 @@ export class UserService extends MongoRepository<User> {
       message: 'Password changed successfully',
       data: { updated: true },
     };
+  }
+
+  async updateUserStatus(profileId: string, status: UserStatus, session?: ClientSession) {
+    return this.updateOne({ profileId }, { status }, { session });
+  }
+
+  private resolveProfileId(accessToken?: string) {
+    if (!accessToken) throw new UnauthorizedException(USER.SESSION_EXPIRED);
+    try {
+      const payload: any = this.jwtService.verify(accessToken, {
+        issuer: jwtConfig.issuer,
+        audience: jwtConfig.audience,
+      });
+      if (!payload?.sub) throw new UnauthorizedException(USER.SESSION_EXPIRED);
+      return String(payload.sub);
+    } catch {
+      throw new UnauthorizedException(USER.SESSION_EXPIRED);
+    }
+  }
+
+  async getCurrentProfile(accessToken?: string) {
+    const profileId = this.resolveProfileId(accessToken);
+    const profile: any = await this.employeeModel.findOne({ employeeId: profileId }).lean();
+    if (!profile) throw new NotFoundException('Profile not found');
+    const role: any = profile.roleId
+      ? await this.roleModel.findOne({ roleId: profile.roleId }).lean()
+      : null;
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'Profile fetched successfully',
+      data: {
+        employeeId: profile.employeeId,
+        name: profile.name,
+        email: profile.email || '',
+        mobile: profile.mobile || '',
+        roleId: profile.roleId,
+        roleName: role?.displayName || role?.name || profile.roleId,
+        designationId: profile.designationId,
+        status: profile.status,
+        createdAt: profile.createdAt,
+        updatedAt: profile.updatedAt,
+      },
+    };
+  }
+
+  async updateCurrentProfile(accessToken: string | undefined, dto: UpdateOwnProfileDto) {
+    const profileId = this.resolveProfileId(accessToken);
+    try {
+      const profile: any = await this.employeeModel.findOneAndUpdate(
+        { employeeId: profileId },
+        { $set: { name: dto.name.trim(), email: dto.email?.trim().toLowerCase() || undefined, mobile: dto.mobile?.trim() || undefined } },
+        { new: true, runValidators: true },
+      ).lean();
+      if (!profile) throw new NotFoundException('Profile not found');
+      await this.updateOne(
+        { profileId },
+        { email: profile.email, mobile: profile.mobile },
+      );
+      return {
+        statusCode: HttpStatus.OK,
+        message: 'Profile updated successfully',
+        data: profile,
+      };
+    } catch (error: any) {
+      if (error?.code === 11000) throw new BadRequestException('Email or mobile number is already in use');
+      throw error;
+    }
   }
 
   /* ======================================================

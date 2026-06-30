@@ -6,6 +6,7 @@ import {
   MaxLength,
   IsNumber,
   IsDate,
+  IsIn,
 } from 'class-validator';
 import { PaginationDto } from 'src/shared/dto/pagination.dto';
 
@@ -35,22 +36,22 @@ export class TargetQueryDto extends PaginationDto {
   @ApiPropertyOptional({ type: String })
   @IsOptional()
   @IsString()
-  categoryId?: string;
+  parentCategoryId?: string;
 
   @ApiPropertyOptional({ type: String })
+  @IsOptional()
+  @IsString()
+  parentCategory?: string;
+
+  @ApiPropertyOptional({ type: String, description: 'Child category ID' })
+  @IsOptional()
+  @IsString()
+  categoryId?: string;
+
+  @ApiPropertyOptional({ type: String, description: 'Child category name' })
   @IsOptional()
   @IsString()
   category?: string;
-
-  @ApiPropertyOptional({ type: String })
-  @IsOptional()
-  @IsString()
-  subCategoryId?: string;
-
-  @ApiPropertyOptional({ type: String })
-  @IsOptional()
-  @IsString()
-  subCategory?: string;
 
   @ApiPropertyOptional({ type: String })
   @IsOptional()
@@ -65,27 +66,12 @@ export class TargetQueryDto extends PaginationDto {
   @ApiPropertyOptional({ type: Number })
   @IsOptional()
   @IsNumber()
-  achievedCases?: number;
-
-  @ApiPropertyOptional({ type: Number })
-  @IsOptional()
-  @IsNumber()
   targetTonnage?: number;
 
   @ApiPropertyOptional({ type: Number })
   @IsOptional()
   @IsNumber()
-  achievedTonnage?: number;
-
-  @ApiPropertyOptional({ type: Number })
-  @IsOptional()
-  @IsNumber()
   targetValue?: number;
-
-  @ApiPropertyOptional({ type: Number })
-  @IsOptional()
-  @IsNumber()
-  achievedValue?: number;
 
   @ApiPropertyOptional({ type: Date })
   @IsOptional()
@@ -97,8 +83,14 @@ export class TargetQueryDto extends PaginationDto {
   @IsDate()
   endDate?: Date;
 
-  @ApiPropertyOptional({ type: String })
+  @ApiPropertyOptional({ enum: ['excel', 'pdf'] })
+  @IsOptional()
+  @IsIn(['excel', 'pdf'])
+  fileType?: 'excel' | 'pdf';
+
+  @ApiPropertyOptional({ description: 'Comma-separated export column keys' })
   @IsOptional()
   @IsString()
-  status?: string;
+  columns?: string;
+
 }

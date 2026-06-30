@@ -33,6 +33,7 @@ import { Market } from 'src/core/database/mongo/schema/market.schema';
 import { Route } from 'src/core/database/mongo/schema/route.schema';
 import { RouteCustomerMapping } from 'src/core/database/mongo/schema/route-customer-mapping.schema';
 import { Van } from 'src/core/database/mongo/schema/van.schema';
+import { CustomerStatus } from 'src/shared/enums/customer.enums';
 
 const REPORT_TIMEZONE =
   process.env.APP_TIMEZONE || process.env.TZ || 'Asia/Kolkata';
@@ -396,12 +397,7 @@ export class CustomerService extends MongoRepository<Customer> {
     try {
       return await this.withTransaction(async (session) => {
         const filter: FilterQuery<Customer> = {
-          mobile: payload.phoneNumber, // or any unique field
-        };
-
-        payload.geoTag = {
-          lat: 21.867313, // default latitude
-          lng: 77.8164907, // default longitude
+          phoneNumber: payload.phoneNumber,
         };
 
         const existing = await this.findOne(filter, {
@@ -422,7 +418,7 @@ export class CustomerService extends MongoRepository<Customer> {
             existing._id.toString(),
             {
               ...payload,
-              status: 'ACTIVE',
+              status: CustomerStatus.VERIFICATION_PENDING,
               isDeleted: false,
             },
             { session },
@@ -435,6 +431,7 @@ export class CustomerService extends MongoRepository<Customer> {
             {
               customerId: IdGenerator.generateRandomNumber(12),
               ...payload,
+              status: CustomerStatus.VERIFICATION_PENDING,
             },
             { session },
           );
@@ -490,10 +487,52 @@ export class CustomerService extends MongoRepository<Customer> {
       lean: true,
     });
 
+    const customerIds = result.items.map((customer) => customer.customerId);
+    const routeByCustomerId = new Map<string, string>();
+    const routeNameByRouteId = new Map<string, string>();
+
+    if (customerIds.length) {
+      const activeMappings = await this.routeCustomerMappingModel
+        .find({
+          customerId: { $in: customerIds },
+          status: RouteCustomerMappingStatus.ACTIVE,
+          isDeleted: { $ne: true },
+        })
+        .select({ customerId: 1, routeId: 1, effectiveFrom: 1 })
+        .sort({ effectiveFrom: -1 })
+        .lean();
+
+      for (const mapping of activeMappings) {
+        if (!routeByCustomerId.has(mapping.customerId)) {
+          routeByCustomerId.set(mapping.customerId, mapping.routeId);
+        }
+      }
+
+      const routeIds = [...new Set(routeByCustomerId.values())];
+      const routes = await this.routeModel
+        .find({ routeId: { $in: routeIds }, isDeleted: { $ne: true } })
+        .select({ routeId: 1, name: 1 })
+        .lean();
+
+      for (const route of routes) {
+        routeNameByRouteId.set(route.routeId, route.name);
+      }
+    }
+
+    const customers = result.items.map((customer) => {
+      const routeId = routeByCustomerId.get(customer.customerId);
+
+      return {
+        ...customer.toObject(),
+        routeId,
+        routeName: routeId ? routeNameByRouteId.get(routeId) : undefined,
+      };
+    });
+
     return {
       statusCode: HttpStatus.OK,
       message: CUSTOMER.FETCHED,
-      data: result.items,
+      data: customers,
       meta: result.meta,
     };
   }

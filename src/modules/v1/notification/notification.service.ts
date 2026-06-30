@@ -17,7 +17,7 @@ import {
 
 import { CreateNotificationDto } from './dto/create-notification.dto';
 import { NotificationQueryDto } from './dto/notification.query.dto';
-import { NotificationDeliveryStatus } from 'src/shared/enums/notification.enums';
+import { NotificationDeliveryStatus, NotificationPlatform } from 'src/shared/enums/notification.enums';
 import { NOTIFICATION } from './notification.constants';
 import {
   UserDevice,
@@ -25,10 +25,13 @@ import {
 } from 'src/core/database/mongo/schema/device.schema';
 import { NotificationsService } from 'src/shared/notifications/notifications.service';
 import { RequestContextStore } from 'src/core/context/request-context';
+import { Employee, EmployeeSchema } from 'src/core/database/mongo/schema/employee.schema';
+import { UserStatus } from '../user/user.enum';
 
 @Injectable()
 export class NotificationService extends MongoRepository<Notification> {
   private readonly deviceModel: Model<UserDevice>;
+  private readonly employeeModel: Model<Employee>;
 
   constructor(
     mongo: MongoService,
@@ -37,24 +40,54 @@ export class NotificationService extends MongoRepository<Notification> {
     super(mongo.getModel(Notification.name, NotificationSchema));
 
     this.deviceModel = mongo.getModel(UserDevice.name, UserDeviceSchema);
+    this.employeeModel = mongo.getModel(Employee.name, EmployeeSchema);
   }
 
   async create(payload: CreateNotificationDto) {
+    const recipientIds = payload.sendToAll
+      ? await this.employeeModel.distinct('employeeId', { status: UserStatus.ACTIVE, isDeleted: { $ne: true } })
+      : payload.recipientId ? [payload.recipientId] : [];
+    const platforms = payload.platforms?.length
+      ? payload.platforms
+      : payload.platform ? [payload.platform] : [];
+    const notifications: any[] = [];
+
+    for (const recipientId of recipientIds) {
+      notifications.push(await this.createForRecipient(payload, recipientId, platforms));
+    }
+
+    return {
+      statusCode: HttpStatus.CREATED,
+      message: NOTIFICATION.CREATED,
+      data: {
+        totalRecipients: recipientIds.length,
+        notifications,
+      },
+    };
+  }
+
+  private async createForRecipient(
+    payload: CreateNotificationDto,
+    recipientId: string,
+    platforms: NotificationPlatform[],
+  ) {
     const notification = await this.save({
-      recipientId: payload.recipientId,
+      recipientId,
       title: payload.title,
       body: payload.body,
       data: payload.data,
       platform: payload.platform,
+      platforms,
       category: payload.category,
       deliveryStatus: NotificationDeliveryStatus.PENDING,
     });
 
     try {
       const devices = await this.deviceModel.find({
-        userId: payload.recipientId,
+        userId: recipientId,
         isActive: true,
         fcmToken: { $exists: true, $ne: null },
+        ...(platforms.length ? { deviceType: { $in: platforms } } : {}),
       });
       const tokens: string[] = devices
         .map((d) => d.fcmToken)
@@ -66,11 +99,7 @@ export class NotificationService extends MongoRepository<Notification> {
           deliveryError: 'No active device push tokens found',
         });
 
-        return {
-          statusCode: HttpStatus.CREATED,
-          message: NOTIFICATION.CREATED,
-          data: notification,
-        };
+        return notification;
       }
 
       const response = await this.pushService.sendToMultiple(
@@ -95,11 +124,7 @@ export class NotificationService extends MongoRepository<Notification> {
             .join('; '),
         });
 
-        return {
-          statusCode: HttpStatus.CREATED,
-          message: NOTIFICATION.CREATED,
-          data: notification,
-        };
+        return notification;
       }
 
       await this.updateById(notification._id.toString(), {
@@ -113,15 +138,11 @@ export class NotificationService extends MongoRepository<Notification> {
       });
     }
 
-    return {
-      statusCode: HttpStatus.CREATED,
-      message: NOTIFICATION.CREATED,
-      data: notification,
-    };
+    return notification;
   }
 
   async findAll(query: NotificationQueryDto) {
-    const { deliveryStatus, isRead, platform, page = 1, limit = 20 } = query;
+    const { deliveryStatus, isRead, platform, searchText, category, page = 1, limit = 20 } = query;
     const userId = RequestContextStore.getStore()?.userId;
 
     const filter: Record<string, any> = {
@@ -131,7 +152,12 @@ export class NotificationService extends MongoRepository<Notification> {
     if (userId) filter.recipientId = userId;
     if (deliveryStatus) filter.deliveryStatus = deliveryStatus;
     if (isRead !== undefined) filter.isRead = isRead;
-    if (platform) filter.platform = platform;
+    if (platform) filter.$or = [{ platform }, { platforms: platform }];
+    if (category) filter.category = category;
+    if (searchText) {
+      const regex = new RegExp(searchText, 'i');
+      filter.$or = [{ title: regex }, { body: regex }, { category: regex }];
+    }
 
     const result = await this.paginate(filter, {
       page,
@@ -148,7 +174,8 @@ export class NotificationService extends MongoRepository<Notification> {
   }
 
   async findNotificationById(_id: string) {
-    const notification = await super.findById(_id);
+    const userId = RequestContextStore.getStore()?.userId;
+    const notification = await this.findOne({ _id, ...(userId ? { recipientId: userId } : {}) } as any);
 
     if (!notification) {
       throw new NotFoundException(NOTIFICATION.NOT_FOUND);
@@ -162,6 +189,9 @@ export class NotificationService extends MongoRepository<Notification> {
   }
 
   async markAsRead(notificationId: string) {
+    const userId = RequestContextStore.getStore()?.userId;
+    const existing = await this.findOne({ _id: notificationId, ...(userId ? { recipientId: userId } : {}) } as any);
+    if (!existing) throw new NotFoundException(NOTIFICATION.NOT_FOUND);
     const updated = await this.updateById(notificationId, {
       isRead: true,
       readAt: new Date(),
@@ -175,6 +205,19 @@ export class NotificationService extends MongoRepository<Notification> {
       statusCode: HttpStatus.OK,
       message: NOTIFICATION.READ,
     };
+  }
+
+  async getUnreadCount() {
+    const userId = RequestContextStore.getStore()?.userId;
+    const count = await this.countDocuments({ isRead: false, ...(userId ? { recipientId: userId } : {}) } as any);
+    return { statusCode: HttpStatus.OK, message: NOTIFICATION.FETCHED, data: { count } };
+  }
+
+  async markAllAsRead() {
+    const userId = RequestContextStore.getStore()?.userId;
+    const filter = { isRead: false, ...(userId ? { recipientId: userId } : {}) } as any;
+    const result = await this.model.updateMany(filter, { $set: { isRead: true, readAt: new Date() } });
+    return { statusCode: HttpStatus.OK, message: NOTIFICATION.READ, data: { updated: result.modifiedCount } };
   }
 
   async markVanChangeRequestResolved(
@@ -205,9 +248,11 @@ export class NotificationService extends MongoRepository<Notification> {
       throw new NotFoundException('Invalid notification ID');
     }
 
+    const userId = RequestContextStore.getStore()?.userId;
     const deleted = await this.softDelete({
       // ✅ Correct ObjectId usage
       _id: new Types.ObjectId(notificationId),
+      ...(userId ? { recipientId: userId } : {}),
     });
 
     if (!deleted) {

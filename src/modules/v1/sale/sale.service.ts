@@ -575,14 +575,6 @@ export class SaleService extends MongoRepository<Sale> {
       { $match: match },
       { $sort: { createdAt: -1 } },
       {
-        $lookup: {
-          from: 'sale_items',
-          localField: 'saleId',
-          foreignField: 'saleId',
-          as: 'items',
-        },
-      },
-      {
         $facet: {
           items: [{ $skip: skip }, { $limit: limitNumber }],
           meta: [{ $count: 'total' }],

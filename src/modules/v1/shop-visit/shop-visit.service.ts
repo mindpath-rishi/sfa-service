@@ -34,6 +34,7 @@ import {
   PaymentSchema,
 } from 'src/core/database/mongo/schema/payment.schema';
 import { PaymentStatus } from 'src/shared/enums/payment.enums';
+import { CustomerStatus } from 'src/shared/enums/customer.enums';
 
 @Injectable()
 export class ShopVisitService extends MongoRepository<ShopVisit> {
@@ -54,6 +55,21 @@ export class ShopVisitService extends MongoRepository<ShopVisit> {
     try {
       return await this.withTransaction(async (session) => {
         const { outletId, routeSessionId, vanId, workSessionId } = payload;
+        const customer = await this.customerService.findOne(
+          { customerId: outletId },
+          { session },
+        );
+
+        if (!customer) {
+          throw new NotFoundException('Customer not found');
+        }
+
+        if (customer.status !== CustomerStatus.ACTIVE) {
+          throw new ConflictException(
+            'Visits can only be created for verified, active customers',
+          );
+        }
+
         const filter: FilterQuery<ShopVisit> = {
           outletId,
           routeSessionId,

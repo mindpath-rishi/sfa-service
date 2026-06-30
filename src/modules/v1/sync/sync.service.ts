@@ -1,0 +1,1061 @@
+import { Injectable } from '@nestjs/common';
+import { InjectConnection } from '@nestjs/mongoose';
+import { Connection, Types } from 'mongoose';
+
+import { SyncOperationDto } from './dto/sync.dto';
+import { IdGenerator } from 'src/shared/utils/id-generator.utils';
+
+const COLLECTIONS = {
+  customers: 'customer_master',
+  outlets: 'customer_master',
+  products: 'product_master',
+  categories: 'productcategories',
+  priceLists: 'price_master',
+  vans: 'vans',
+  routes: 'route_master',
+  routeSessions: 'route_sessions',
+  salesmen: 'employees',
+  stock: 'inventories',
+  promotions: 'promotions',
+  orders: 'sales',
+  orderItems: 'sale_items',
+  collections: 'payments',
+  attendance: 'work_sessions',
+  activities: 'activities',
+  visits: 'shop_visits',
+  nonSales: 'non_sale',
+  leaves: 'leaves',
+  surveys: 'surveys',
+  expenses: 'expenses',
+  returns: 'returns',
+  complaints: 'complaints',
+  targets: 'targets',
+  vanDailyStock: 'van_daily_stock',
+} as const;
+
+const ENTITY_ID_FIELDS: Record<keyof typeof COLLECTIONS, string> = {
+  customers: 'customerId',
+  outlets: 'customerId',
+  products: 'productId',
+  categories: 'categoryId',
+  priceLists: 'priceId',
+  vans: 'vanId',
+  routes: 'routeId',
+  routeSessions: 'routeSessionId',
+  salesmen: 'employeeId',
+  stock: 'inventoryId',
+  promotions: 'promotionId',
+  orders: 'saleId',
+  orderItems: 'saleItemId',
+  collections: 'paymentId',
+  attendance: 'workSessionId',
+  activities: 'activityId',
+  visits: 'visitId',
+  nonSales: 'nonSaleId',
+  leaves: 'leaveId',
+  surveys: 'surveyId',
+  expenses: 'expenseId',
+  returns: 'returnId',
+  complaints: 'complaintId',
+  targets: '_id',
+  vanDailyStock: 'vanDailyStockId',
+};
+
+const MASTER_ENTITIES = new Set([
+  'products',
+  'categories',
+  'priceLists',
+  'vans',
+  'routes',
+  'salesmen',
+  'stock',
+  'promotions',
+  'targets',
+  'vanDailyStock',
+]);
+const GLOBAL_MASTER_ENTITIES = new Set([
+  'products',
+  'categories',
+  'priceLists',
+  'promotions',
+]);
+
+const ENTITY_DATE_FIELDS: Partial<Record<keyof typeof COLLECTIONS, string[]>> =
+  {
+    orders: ['date'],
+    collections: ['date'],
+    attendance: ['dayStartTime', 'dayEndTime'],
+    activities: ['startTime', 'endTime'],
+    visits: ['checkInTime', 'checkOutTime'],
+    routeSessions: ['sessionDate', 'startTime', 'endTime'],
+    targets: ['startDate', 'endDate'],
+    vanDailyStock: ['date'],
+  };
+type SyncScope = {
+  vanId?: string;
+  routeIds: string[];
+  routeAssignments: Record<
+    string,
+    { day?: string; fromDate?: unknown; toDate?: unknown; isActive: boolean }
+  >;
+  customerIds: string[];
+  customerRouteIds: Record<string, string[]>;
+  saleIds: string[];
+};
+
+const cleanPayload = (payload: Record<string, unknown>) =>
+  Object.fromEntries(
+    Object.entries(payload).filter(
+      ([key]) =>
+        ![
+          '_id',
+          'uuid',
+          'version',
+          'ownerId',
+          'createdAt',
+          'updatedAt',
+          'deletedAt',
+          'syncStatus',
+          'serverId',
+        ].includes(key) &&
+        !key.startsWith('$') &&
+        !key.includes('.'),
+    ),
+  );
+
+const toFiniteNumber = (value: unknown, fallback = 0) => {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : fallback;
+};
+
+const toFixed4 = (value: number) => Number((value || 0).toFixed(4));
+
+const calculateOfflineSaleItem = (value: unknown) => {
+  const item = { ...((value ?? {}) as Record<string, unknown>) };
+  const caseQty = toFiniteNumber(item.caseQty);
+  const pieceQty = toFiniteNumber(item.pieceQty);
+  const unitQtyInCase = Math.max(toFiniteNumber(item.unitQtyInCase, 1), 1);
+  const casePrice = toFiniteNumber(item.casePrice);
+  const piecePrice = toFiniteNumber(
+    item.piecePrice,
+    casePrice / unitQtyInCase,
+  );
+  const pieceNetWeight = toFiniteNumber(item.pieceNetWeight);
+  const quantity = caseQty * unitQtyInCase + pieceQty;
+
+  return {
+    ...item,
+    caseQty,
+    pieceQty,
+    unitQtyInCase,
+    casePrice: toFixed4(casePrice),
+    piecePrice: toFixed4(piecePrice),
+    quantity,
+    netCases: toFixed4(quantity / unitQtyInCase),
+    totalNetWeight: toFixed4(quantity * pieceNetWeight),
+    totalValue: toFixed4(caseQty * casePrice + pieceQty * piecePrice),
+  };
+};
+
+const normalizeOfflinePayload = (
+  entity: keyof typeof COLLECTIONS,
+  payload: Record<string, unknown>,
+) => {
+  for (const field of ENTITY_DATE_FIELDS[entity] ?? []) {
+    const value = payload[field];
+    if (value === undefined || value === null || value instanceof Date)
+      continue;
+
+    const parsed = new Date(String(value));
+    if (!Number.isNaN(parsed.getTime())) payload[field] = parsed;
+  }
+
+  if (entity === 'orderItems') {
+    Object.assign(payload, calculateOfflineSaleItem(payload));
+  }
+
+  if (entity === 'orders') {
+    payload.status ??= 'COMPLETED';
+    const items = Array.isArray(payload.items)
+      ? payload.items.map(calculateOfflineSaleItem)
+      : [];
+
+    if (items.length) {
+      payload.totalCases = items.reduce(
+        (sum, item) => sum + toFiniteNumber(item.caseQty),
+        0,
+      );
+      payload.totalPieces = items.reduce(
+        (sum, item) => sum + toFiniteNumber(item.pieceQty),
+        0,
+      );
+      payload.totalQty = items.reduce(
+        (sum, item) => sum + toFiniteNumber(item.quantity),
+        0,
+      );
+      payload.totalWeight = toFixed4(
+        items.reduce(
+          (sum, item) => sum + toFiniteNumber(item.totalNetWeight),
+          0,
+        ),
+      );
+      payload.totalValue = toFixed4(
+        items.reduce(
+          (sum, item) => sum + toFiniteNumber(item.totalValue),
+          0,
+        ),
+      );
+      payload.netCases = toFixed4(
+        items.reduce(
+          (sum, item) => sum + toFiniteNumber(item.netCases),
+          0,
+        ),
+      );
+      const paidAmount = toFixed4(toFiniteNumber(payload.paidAmount));
+      const pendingAmount = toFixed4(
+        toFiniteNumber(payload.totalValue) - paidAmount,
+      );
+      payload.paidAmount = paidAmount;
+      payload.pendingAmount = pendingAmount;
+      payload.paymentStatus =
+        pendingAmount <= 0 ? 'PAID' : paidAmount > 0 ? 'PARTIAL' : 'UNPAID';
+    }
+
+    // Line items belong in sale_items and are uploaded as orderItems.
+    delete payload.items;
+  }
+  if (entity === 'collections') payload.status ??= 'SUCCESS';
+  if (entity === 'visits') payload.status ??= 'COMPLETED';
+
+  return payload;
+};
+
+@Injectable()
+export class SyncService {
+  constructor(@InjectConnection() private readonly connection: Connection) {}
+
+  private async syncCustomerRouteMapping(
+    customerIdValue: unknown,
+    routeIdValue: unknown,
+    remove = false,
+  ) {
+    const customerId = String(customerIdValue ?? '');
+    const routeId = String(routeIdValue ?? '');
+    if (!customerId || (!routeId && !remove)) return;
+
+    const mappings = this.connection.collection('route_customer_mappings');
+    const current = await mappings.findOne(
+      {
+        customerId,
+        status: 'ACTIVE',
+        isDeleted: { $ne: true },
+      },
+      { sort: { effectiveFrom: -1 } },
+    );
+
+    if (!remove && current?.routeId === routeId) return;
+
+    const now = new Date();
+    if (current) {
+      await mappings.updateMany(
+        {
+          customerId,
+          status: 'ACTIVE',
+          isDeleted: { $ne: true },
+        },
+        {
+          $set: {
+            status: 'INACTIVE',
+            effectiveTo: now,
+            updatedAt: now,
+          },
+        },
+      );
+    }
+
+    if (!remove) {
+      const lastMapping = await mappings.findOne(
+        { routeId, status: 'ACTIVE', isDeleted: { $ne: true } },
+        { sort: { sequence: -1 }, projection: { sequence: 1 } },
+      );
+
+      await mappings.insertOne({
+        mappingId: IdGenerator.generate('ROUT', 8),
+        routeId,
+        customerId,
+        sequence: Number(lastMapping?.sequence ?? 0) + 1,
+        status: 'ACTIVE',
+        effectiveFrom: now,
+        effectiveTo: null,
+        isDeleted: false,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+
+    const affectedRouteIds = new Set(
+      [String(current?.routeId ?? ''), routeId].filter(Boolean),
+    );
+    for (const affectedRouteId of affectedRouteIds) {
+      const outletCount = await mappings.countDocuments({
+        routeId: affectedRouteId,
+        status: 'ACTIVE',
+        isDeleted: { $ne: true },
+      });
+      await this.connection
+        .collection('route_master')
+        .updateOne(
+          { routeId: affectedRouteId },
+          { $set: { outletCount, updatedAt: now } },
+        );
+    }
+  }
+
+  private async getScope(
+    ownerId: string,
+    requestedVanId?: string,
+  ): Promise<SyncScope> {
+    const vans = this.connection.collection('vans');
+    let van = requestedVanId
+      ? await vans.findOne({
+          vanId: requestedVanId,
+          associatedUsers: ownerId,
+          isDeleted: { $ne: true },
+        })
+      : null;
+
+    // The token may contain the van that was assigned when the user logged in.
+    // Fall back to the latest current assignment when that token value is stale.
+    van ??= await vans.findOne(
+      { associatedUsers: ownerId, isDeleted: { $ne: true } },
+      { sort: { updatedAt: -1 } },
+    );
+
+    const vanId = String(van?.vanId ?? '') || undefined;
+    const associatedRoutes: Array<{
+      routeId?: unknown;
+      day?: string;
+      fromDate?: unknown;
+      toDate?: unknown;
+    }> = Array.isArray(van?.associatedRoutes) ? van.associatedRoutes : [];
+    const routeIds = Array.from(
+      new Set(
+        associatedRoutes
+          .map((route) => String(route?.routeId ?? ''))
+          .filter(Boolean),
+      ),
+    );
+    const now = Date.now();
+    const routeAssignments = Object.fromEntries(
+      associatedRoutes
+        .filter((route) => route.routeId)
+        .map((route) => {
+          const fromTime = route.fromDate
+            ? new Date(String(route.fromDate)).getTime()
+            : 0;
+          const toTime = route.toDate
+            ? new Date(String(route.toDate)).getTime()
+            : Number.POSITIVE_INFINITY;
+          return [
+            String(route.routeId),
+            {
+              day: route.day,
+              fromDate: route.fromDate,
+              toDate: route.toDate,
+              isActive: fromTime <= now && toTime >= now,
+            },
+          ];
+        }),
+    );
+    const mappings = routeIds.length
+      ? await this.connection
+          .collection('route_customer_mappings')
+          .find({ routeId: { $in: routeIds }, status: { $ne: 'INACTIVE' } })
+          .project({ customerId: 1, routeId: 1 })
+          .toArray()
+      : [];
+    const customerIds = Array.from(
+      new Set(
+        mappings
+          .map((mapping) => String(mapping.customerId ?? ''))
+          .filter(Boolean),
+      ),
+    );
+    const customerRouteIds = mappings.reduce<Record<string, string[]>>(
+      (result, mapping) => {
+        const customerId = String(mapping.customerId ?? '');
+        const routeId = String(mapping.routeId ?? '');
+        if (!customerId || !routeId) return result;
+        result[customerId] ??= [];
+        if (!result[customerId].includes(routeId))
+          result[customerId].push(routeId);
+        return result;
+      },
+      {},
+    );
+    const threeMonthsAgo = new Date();
+    threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
+    threeMonthsAgo.setHours(0, 0, 0, 0);
+    const sales = await this.connection
+      .collection('sales')
+      .find({
+        $or: [{ employeeId: ownerId }, { 'employees.employeeId': ownerId }],
+        date: { $gte: threeMonthsAgo },
+      })
+      .project({ saleId: 1 })
+      .toArray();
+    const saleIds = sales
+      .map((sale) => String(sale.saleId ?? ''))
+      .filter(Boolean);
+
+    return {
+      vanId,
+      routeIds,
+      routeAssignments,
+      customerIds,
+      customerRouteIds,
+      saleIds,
+    };
+  }
+
+  private ownershipFilter(entity: string, ownerId: string, scope: SyncScope) {
+    if (GLOBAL_MASTER_ENTITIES.has(entity)) return {};
+
+    switch (entity) {
+      case 'customers':
+      case 'outlets':
+        return { customerId: { $in: scope.customerIds } };
+      case 'routes':
+        return { routeId: { $in: scope.routeIds } };
+      case 'vans':
+        return scope.vanId
+          ? { vanId: scope.vanId, associatedUsers: ownerId }
+          : { _id: { $in: [] } };
+      case 'routeSessions':
+      case 'leaves':
+        return {
+          userId: ownerId,
+          ...this.lastThreeMonthsFilter(
+            entity === 'routeSessions' ? 'sessionDate' : 'createdAt',
+          ),
+        };
+      case 'activities':
+        return {
+          userId: ownerId,
+          ...this.lastThreeMonthsFilter('startTime'),
+        };
+      case 'nonSales':
+        return { employeeId: ownerId };
+      case 'salesmen':
+        return { employeeId: ownerId };
+      case 'stock':
+        return scope.vanId ? { vanId: scope.vanId } : { _id: { $in: [] } };
+      case 'orders':
+        return {
+          $or: [{ employeeId: ownerId }, { 'employees.employeeId': ownerId }],
+          ...this.lastThreeMonthsFilter('date'),
+        };
+      case 'orderItems':
+        return { saleId: { $in: scope.saleIds } };
+      case 'collections':
+        return {
+          employeeId: ownerId,
+          ...this.lastThreeMonthsFilter('date'),
+        };
+      case 'attendance':
+        return {
+          userId: ownerId,
+          ...this.lastThreeMonthsFilter('dayStartTime'),
+        };
+      case 'visits':
+        return {
+          employeeId: ownerId,
+          ...this.lastThreeMonthsFilter('checkInTime'),
+        };
+      case 'targets': {
+        const { start, end } = this.lastThreeMonthsRange();
+        return {
+          userId: ownerId,
+          startDate: { $lte: end },
+          endDate: { $gte: start },
+        };
+      }
+      case 'vanDailyStock':
+        return {
+          employeeId: ownerId,
+          ...this.lastThreeMonthsFilter('date'),
+        };
+      default:
+        return {
+          $or: [
+            { employeeId: ownerId },
+            { userId: ownerId },
+            { createdBy: ownerId },
+            { salesmanId: ownerId },
+          ],
+        };
+    }
+  }
+
+  private lastThreeMonthsRange() {
+    const end = new Date();
+    end.setHours(23, 59, 59, 999);
+    const start = new Date(end);
+    start.setMonth(start.getMonth() - 3);
+    start.setHours(0, 0, 0, 0);
+    return { start, end };
+  }
+
+  private lastThreeMonthsFilter(field: string) {
+    const { start, end } = this.lastThreeMonthsRange();
+    return {
+      $expr: {
+        $and: [
+          {
+            $gte: [
+              {
+                $convert: {
+                  input: `$${field}`,
+                  to: 'date',
+                  onError: '$createdAt',
+                  onNull: '$createdAt',
+                },
+              },
+              start,
+            ],
+          },
+          {
+            $lte: [
+              {
+                $convert: {
+                  input: `$${field}`,
+                  to: 'date',
+                  onError: '$createdAt',
+                  onNull: '$createdAt',
+                },
+              },
+              end,
+            ],
+          },
+        ],
+      },
+    };
+  }
+
+  private uploadOwnershipFilter(entity: string, ownerId: string) {
+    if (
+      ['attendance', 'activities', 'routeSessions', 'leaves'].includes(entity)
+    ) {
+      return { userId: ownerId };
+    }
+    if (['visits', 'nonSales', 'collections'].includes(entity)) {
+      return { employeeId: ownerId };
+    }
+    if (entity === 'orders') {
+      return {
+        $or: [{ employeeId: ownerId }, { 'employees.employeeId': ownerId }],
+      };
+    }
+    return {
+      $or: [
+        { userId: ownerId },
+        { employeeId: ownerId },
+        { createdBy: ownerId },
+        { salesmanId: ownerId },
+      ],
+    };
+  }
+
+  async upload(operations: SyncOperationDto[], ownerId: string) {
+    const results = [] as Record<string, unknown>[];
+    for (const operation of operations) {
+      try {
+        const collectionName =
+          COLLECTIONS[operation.entity as keyof typeof COLLECTIONS];
+        if (!collectionName)
+          throw new Error(`Unsupported sync entity: ${operation.entity}`);
+        if (MASTER_ENTITIES.has(operation.entity))
+          throw new Error('Master data is read-only');
+        const collection = this.connection.collection(collectionName);
+        const payload = normalizeOfflinePayload(
+          operation.entity as keyof typeof COLLECTIONS,
+          cleanPayload(operation.payload),
+        );
+        const idField =
+          ENTITY_ID_FIELDS[operation.entity as keyof typeof COLLECTIONS];
+        if (idField && !payload[idField]) payload[idField] = operation.localId;
+        const isCustomerOperation = ['customers', 'outlets'].includes(
+          operation.entity,
+        );
+        if (isCustomerOperation) {
+          payload.customerId = String(payload.customerId ?? operation.localId);
+        }
+        if (
+          ['attendance', 'activities', 'routeSessions', 'leaves'].includes(
+            operation.entity,
+          )
+        ) {
+          payload.userId = ownerId;
+        }
+        if (
+          ['visits', 'nonSales', 'collections'].includes(operation.entity) &&
+          !payload.employeeId
+        ) {
+          payload.employeeId = ownerId;
+        }
+        if (operation.entity === 'orders') {
+          // Dashboard queries use the canonical top-level employeeId, while
+          // older sales records use the employees array. Persist both so an
+          // offline-created order is visible through either API path.
+          payload.employeeId = ownerId;
+          const employees = Array.isArray(payload.employees)
+            ? payload.employees
+            : [];
+          if (
+            !employees.some(
+              (employee) =>
+                String(
+                  (employee as Record<string, unknown>)?.employeeId ?? '',
+                ) === ownerId,
+            )
+          ) {
+            employees.push({ employeeId: ownerId });
+          }
+          payload.employees = employees;
+        }
+        const businessId = idField
+          ? (payload[idField] ?? operation.localId)
+          : operation.localId;
+        const serverId = String(operation.payload.serverId ?? '');
+        const serverObjectId = Types.ObjectId.isValid(serverId)
+          ? new Types.ObjectId(serverId)
+          : null;
+        const existing = await collection.findOne({
+          $or: [
+            ...(serverObjectId
+              ? [
+                  {
+                    _id: serverObjectId,
+                    ...this.uploadOwnershipFilter(operation.entity, ownerId),
+                  },
+                ]
+              : []),
+            {
+              $and: [
+                { uuid: operation.localId },
+                this.uploadOwnershipFilter(operation.entity, ownerId),
+              ],
+            },
+            ...(operation.entity === 'attendance'
+              ? [{ workSessionId: businessId, userId: ownerId }]
+              : []),
+            ...(operation.entity === 'activities'
+              ? [{ activityId: businessId, userId: ownerId }]
+              : []),
+            ...(operation.entity === 'routeSessions'
+              ? [{ routeSessionId: businessId, userId: ownerId }]
+              : []),
+          ],
+        });
+        const clientVersion = Number(operation.payload.version ?? 0);
+
+        if (operation.operation === 'CREATE') {
+          if (existing) {
+            const wasCreatedByOfflineSync =
+              existing.createdOffline === true ||
+              existing.uuid === operation.localId;
+            const shouldMergeOfflineChanges =
+              operation.entity === 'attendance' || wasCreatedByOfflineSync;
+            const existingRecordChanges = shouldMergeOfflineChanges
+              ? Object.fromEntries(
+                  Object.entries(payload).filter(
+                    ([key]) => key !== 'backgroundLocations',
+                  ),
+                )
+              : {};
+            await collection.updateOne(
+              { _id: existing._id },
+              {
+                $set: {
+                  ...existingRecordChanges,
+                  ...(operation.entity === 'attendance'
+                    ? { userId: ownerId }
+                    : {}),
+                  uuid: existing.uuid ?? operation.localId,
+                  isDeleted: false,
+                  deletedAt: null,
+                  ...(wasCreatedByOfflineSync
+                    ? {
+                        createdOffline: true,
+                        syncSource: 'OFFLINE',
+                      }
+                    : {}),
+                  lastSyncSource: 'OFFLINE',
+                  lastSyncedAt: new Date(),
+                  updatedAt: new Date(),
+                },
+                $unset: { ownerId: '' },
+              },
+            );
+            // A work session may have been created online before connectivity
+            // was lost. Merge locally captured background locations into that
+            // server record instead of treating the queued fallback as a no-op.
+            if (
+              operation.entity === 'attendance' &&
+              Array.isArray(payload.backgroundLocations)
+            ) {
+              await collection.updateOne({ _id: existing._id }, {
+                $push: {
+                  backgroundLocations: {
+                    $each: payload.backgroundLocations,
+                    $slice: -1000,
+                  },
+                },
+                $set: { updatedAt: new Date() },
+              } as any);
+            }
+            if (isCustomerOperation) {
+              await this.syncCustomerRouteMapping(
+                existing.customerId ?? businessId,
+                payload.routeId,
+              );
+            }
+            results.push({
+              queueId: operation.queueId,
+              localId: operation.localId,
+              success: true,
+              serverId: String(existing._id),
+              version: existing.version ?? 1,
+            });
+            continue;
+          }
+          const now = new Date();
+          if (operation.entity === 'routeSessions') {
+            await collection.updateMany(
+              { userId: ownerId, status: 'ACTIVE' },
+              {
+                $set: {
+                  status: 'COMPLETED',
+                  isActive: false,
+                  endTime: now,
+                  updatedAt: now,
+                },
+              },
+            );
+          }
+          const inserted = await collection.insertOne({
+            ...payload,
+            uuid: operation.localId,
+            version: 1,
+            isDeleted: false,
+            createdOffline: true,
+            syncSource: 'OFFLINE',
+            syncedAt: now,
+            lastSyncSource: 'OFFLINE',
+            lastSyncedAt: now,
+            createdAt: now,
+            updatedAt: now,
+            deletedAt: null,
+          });
+
+          if (isCustomerOperation) {
+            await this.syncCustomerRouteMapping(
+              payload.customerId,
+              payload.routeId,
+            );
+          }
+
+          // Older app versions queued only the work-session record for an
+          // offline Day Start. Recreate the activity/route side effects that
+          // the normal WorkSession endpoint performs, unless this upload batch
+          // already contains their dedicated local operations.
+          if (operation.entity === 'attendance') {
+            const workSessionId = String(
+              payload.workSessionId ?? operation.localId,
+            );
+            const hasActivityOperation = operations.some(
+              (item) =>
+                item.entity === 'activities' &&
+                String(item.payload?.workSessionId ?? '') === workSessionId,
+            );
+            const hasRouteOperation = operations.some(
+              (item) =>
+                item.entity === 'routeSessions' &&
+                String(item.payload?.workSessionId ?? '') === workSessionId,
+            );
+
+            if (payload.activityName && !hasActivityOperation) {
+              await this.connection.collection('activities').insertOne({
+                activityId: IdGenerator.generate('ACTI', 8),
+                userId: ownerId,
+                userName: payload.userName,
+                vanId: payload.vanId,
+                vanName: payload.vanName,
+                name: payload.activityName,
+                description: payload.description ?? '',
+                workSessionId,
+                startTime: payload.startTime ?? payload.dayStartTime ?? now,
+                status: 'ACTIVE',
+                createdOffline: true,
+                syncSource: 'OFFLINE',
+                syncedAt: now,
+                lastSyncSource: 'OFFLINE',
+                lastSyncedAt: now,
+                createdAt: now,
+                updatedAt: now,
+                isDeleted: false,
+              });
+            }
+
+            if (payload.routeId && !hasRouteOperation) {
+              await this.connection.collection('route_sessions').insertOne({
+                routeSessionId: IdGenerator.generate('ROUT', 8),
+                workSessionId,
+                userId: ownerId,
+                userName: payload.userName,
+                vanId: payload.vanId,
+                vanName: payload.vanName,
+                routeId: payload.routeId,
+                routeName: payload.routeName,
+                customerCategoryId: payload.customerCategoryId,
+                totalShops: Number(payload.totalShops ?? 0),
+                visitedShops: 0,
+                status: 'ACTIVE',
+                isActive: true,
+                createdOffline: true,
+                syncSource: 'OFFLINE',
+                syncedAt: now,
+                lastSyncSource: 'OFFLINE',
+                lastSyncedAt: now,
+                startTime: payload.startTime ?? payload.dayStartTime ?? now,
+                sessionDate: now,
+                createdAt: now,
+                updatedAt: now,
+                isDeleted: false,
+              });
+            }
+          }
+          results.push({
+            queueId: operation.queueId,
+            localId: operation.localId,
+            success: true,
+            serverId: String(inserted.insertedId),
+            version: 1,
+          });
+          continue;
+        }
+
+        if (
+          !existing &&
+          ['attendance', 'activities'].includes(operation.entity)
+        ) {
+          // A locally cached session/activity can be changed before it has a
+          // stable server mapping. Recover the orphaned UPDATE as an insert so
+          // activity CREATE and UPDATE queues cannot remain permanently stuck.
+          const now = new Date();
+          const inserted = await collection.insertOne({
+            ...payload,
+            ...(idField ? { [idField]: businessId } : {}),
+            userId: ownerId,
+            uuid: operation.localId,
+            version: 1,
+            isDeleted: false,
+            createdOffline: true,
+            syncSource: 'OFFLINE',
+            syncedAt: now,
+            lastSyncSource: 'OFFLINE',
+            lastSyncedAt: now,
+            createdAt: now,
+            updatedAt: now,
+            deletedAt: null,
+          });
+          results.push({
+            queueId: operation.queueId,
+            localId: operation.localId,
+            success: true,
+            serverId: String(inserted.insertedId),
+            version: 1,
+          });
+          continue;
+        }
+
+        if (!existing) throw new Error('Server record not found');
+        if (clientVersion && Number(existing.version ?? 1) > clientVersion) {
+          results.push({
+            queueId: operation.queueId,
+            localId: operation.localId,
+            success: false,
+            conflict: true,
+            error: 'VERSION_CONFLICT',
+          });
+          continue;
+        }
+        const version = Number(existing.version ?? 1) + 1;
+        const changes =
+          operation.operation === 'DELETE'
+            ? {
+                isDeleted: true,
+                deletedAt: new Date(),
+                lastSyncSource: 'OFFLINE',
+                lastSyncedAt: new Date(),
+                updatedAt: new Date(),
+                version,
+              }
+            : {
+                ...payload,
+                isDeleted: false,
+                deletedAt: null,
+                lastSyncSource: 'OFFLINE',
+                lastSyncedAt: new Date(),
+                updatedAt: new Date(),
+                version,
+              };
+        await collection.updateOne(
+          { _id: existing._id },
+          { $set: changes, $unset: { ownerId: '' } },
+        );
+        if (isCustomerOperation) {
+          await this.syncCustomerRouteMapping(
+            existing.customerId ?? businessId,
+            payload.routeId,
+            operation.operation === 'DELETE',
+          );
+        }
+        results.push({
+          queueId: operation.queueId,
+          localId: operation.localId,
+          success: true,
+          serverId: String(existing._id),
+          version,
+        });
+      } catch (error) {
+        results.push({
+          queueId: operation.queueId,
+          localId: operation.localId,
+          success: false,
+          error:
+            error instanceof Error ? error.message : 'Sync operation failed',
+        });
+      }
+    }
+    return { results };
+  }
+
+  async download(
+    ownerId: string,
+    lastSync?: string,
+    cursor?: string,
+    vanId?: string,
+  ) {
+    const since = lastSync ? new Date(lastSync) : new Date(0);
+    const entries = Object.entries(COLLECTIONS);
+    const scope = await this.getScope(ownerId, vanId);
+    const [rawIndex, rawOffset] = (cursor ?? '0:0').split(':');
+    let entityIndex = Math.max(0, Number(rawIndex));
+    let offset = Math.max(0, Number(rawOffset));
+    const pageSize = 500;
+
+    while (entityIndex < entries.length) {
+      const [entity, collectionName] = entries[entityIndex];
+      const ownership = this.ownershipFilter(entity, ownerId, scope);
+      const collection = this.connection.collection(collectionName);
+
+      // Older generic sync inserts omitted the soft-delete flag, making those
+      // documents invisible to normal repositories that require
+      // `isDeleted: false`. Repair records in the current user's scope.
+      if (!GLOBAL_MASTER_ENTITIES.has(entity)) {
+        await collection.updateMany(
+          { ...ownership, ownerId: { $exists: true } },
+          { $unset: { ownerId: '' } },
+        );
+        await collection.updateMany(
+          { ...ownership, isDeleted: { $exists: false } },
+          { $set: { isDeleted: false, updatedAt: new Date() } },
+        );
+      }
+      // Membership of these collections is controlled by van/route mappings.
+      // A mapping can change without touching the underlying route/customer,
+      // so filtering only by updatedAt would omit newly assigned offline data.
+      const scopeSensitive = [
+        'routes',
+        'vans',
+        'customers',
+        'outlets',
+        // Targets can be reassigned or edited and legacy target documents do
+        // not have updatedAt. Always refresh the logged-in user's 3-month set.
+        'targets',
+      ].includes(entity);
+      const changed =
+        lastSync && !scopeSensitive ? { updatedAt: { $gt: since } } : {};
+      const documents = await collection
+        .find({ ...ownership, ...changed })
+        .sort({ updatedAt: 1, _id: 1 })
+        .skip(offset)
+        .limit(pageSize + 1)
+        .toArray();
+      const hasMoreInEntity = documents.length > pageSize;
+      const records = documents.slice(0, pageSize).map((document) => {
+        const {
+          _id,
+          uuid,
+          ownerId: _ownerId,
+          version,
+          updatedAt,
+          deletedAt,
+          isDeleted,
+          ...payload
+        } = document;
+        const idField = ENTITY_ID_FIELDS[entity as keyof typeof COLLECTIONS];
+        const businessId = document[idField];
+        const assignment =
+          entity === 'routes'
+            ? scope.routeAssignments[String(businessId ?? '')]
+            : undefined;
+        const routeIds =
+          entity === 'customers' || entity === 'outlets'
+            ? scope.customerRouteIds[String(businessId ?? '')]
+            : undefined;
+        const effectiveDeletedAt =
+          deletedAt ?? (isDeleted ? (updatedAt ?? new Date()) : null);
+        return {
+          entity,
+          uuid: String(uuid ?? businessId ?? _id),
+          id: String(_id),
+          version: version ?? 1,
+          updatedAt: updatedAt?.toISOString?.() ?? new Date().toISOString(),
+          deletedAt:
+            effectiveDeletedAt?.toISOString?.() ?? effectiveDeletedAt ?? null,
+          payload: {
+            ...payload,
+            [idField]: businessId,
+            isDeleted: Boolean(isDeleted),
+            ...(assignment ? { assignment } : {}),
+            ...(routeIds ? { routeIds } : {}),
+          },
+        };
+      });
+
+      if (records.length || hasMoreInEntity) {
+        const nextCursor = hasMoreInEntity
+          ? `${entityIndex}:${offset + pageSize}`
+          : entityIndex + 1 < entries.length
+            ? `${entityIndex + 1}:0`
+            : undefined;
+        return {
+          records,
+          hasMore: Boolean(nextCursor),
+          cursor: nextCursor,
+          serverTime: new Date().toISOString(),
+        };
+      }
+      entityIndex += 1;
+      offset = 0;
+    }
+    return {
+      records: [],
+      hasMore: false,
+      cursor: undefined,
+      serverTime: new Date().toISOString(),
+    };
+  }
+}

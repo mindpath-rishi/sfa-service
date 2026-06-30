@@ -29,7 +29,10 @@ export class DesignationService extends MongoRepository<Designation> {
     try {
       return await this.withTransaction(async (session) => {
         if (payload.name) {
-          payload.name = TextNormalizer.normalize(payload.name, NormalizeType.TITLE);
+          payload.name = TextNormalizer.normalize(
+            payload.name,
+            NormalizeType.TITLE,
+          );
         }
 
         const existing = await this.findOne(
@@ -79,10 +82,20 @@ export class DesignationService extends MongoRepository<Designation> {
   }
 
   async findAll(query: DesignationQueryDto) {
-    const { searchText, status, countryId, provinceId, marketId, page = 1, limit = 20 } = query;
+    const {
+      searchText,
+      status,
+      parentCategoryId,
+      countryId,
+      provinceId,
+      marketId,
+      page = 1,
+      limit = 20,
+    } = query;
     const filter: FilterQuery<Designation> = {};
 
     if (status) filter.status = status;
+    if (parentCategoryId) filter.parentCategoryId = parentCategoryId;
     if (countryId) filter.countryId = countryId;
     if (provinceId) filter.provinceId = provinceId;
     if (marketId) filter.marketId = marketId;
@@ -92,6 +105,7 @@ export class DesignationService extends MongoRepository<Designation> {
       filter.$or = [
         { designationId: regex },
         { name: regex },
+        { parentCategoryId: regex },
         { countryId: regex },
         { provinceId: regex },
         { marketId: regex },

@@ -344,6 +344,8 @@ export class WorkSessionService extends MongoRepository<WorkSession> {
           userId: 1,
           activityName: 1,
           status: 1,
+          dayStartTime: 1,
+          dayEndTime: 1,
           routeId: 1,
           totalShops: 1,
           isActiveActivity: 1,
@@ -592,23 +594,25 @@ export class WorkSessionService extends MongoRepository<WorkSession> {
       throw new BadRequestException('Location is required');
     }
 
-    const doc = await this.model.findOneAndUpdate(
-      { ...filter, isDeleted: false } as any,
-      {
-        $push: {
-          backgroundLocations: {
-            $each: [
-              {
-                ...location,
-                capturedAt: location.capturedAt || new Date(),
-              },
-            ],
-            $slice: -1000,
+    const doc = await this.model
+      .findOneAndUpdate(
+        { ...filter, isDeleted: false } as any,
+        {
+          $push: {
+            backgroundLocations: {
+              $each: [
+                {
+                  ...location,
+                  capturedAt: location.capturedAt || new Date(),
+                },
+              ],
+              $slice: -1000,
+            },
           },
-        },
-      } as any,
-      { new: true },
-    ).exec();
+        } as any,
+        { new: true },
+      )
+      .exec();
 
     if (!doc) {
       throw new NotFoundException(WORK_SESSION.NOT_FOUND);
@@ -657,13 +661,13 @@ export class WorkSessionService extends MongoRepository<WorkSession> {
         /* ======================================================
          * 3. COMPLETE ACTIVITY + ROUTE
          * ====================================================== */
-        await this.activityService.updateOne(
+        await this.activityService.updateMany(
           { workSessionId, status: ActivityStatus.ACTIVE },
           { endTime: new Date(), status: ActivityStatus.COMPLETED },
           { session },
         );
 
-        await this.routeSessionService.updateOne(
+        await this.routeSessionService.updateMany(
           { workSessionId, status: RouteSessionStatus.ACTIVE },
           { endTime: new Date(), status: RouteSessionStatus.COMPLETED },
           { session },
@@ -693,8 +697,15 @@ export class WorkSessionService extends MongoRepository<WorkSession> {
            * 5. CHECK EXISTING STOCK COUNT
            * ====================================================== */
           const existing = await this.stockCountService.findOne(
-            { vanId, date: today },
-            { session },
+            {
+              $or: [{ workSessionId }, { vanId, date: today }],
+            },
+            {
+              session,
+              // Unique indexes still include soft-deleted records. Excluding
+              // them here causes the subsequent insert to fail with E11000.
+              includeDeleted: true,
+            },
           );
 
           if (!existing) {
@@ -729,7 +740,28 @@ export class WorkSessionService extends MongoRepository<WorkSession> {
             /* ======================================================
              * 7. CREATE STOCK COUNT ITEMS
              * ====================================================== */
-            const items = products.map((p) => {
+            const productsById = new Map<string, any>();
+            for (const product of products) {
+              const productId = String(product?.productId ?? '');
+              if (!productId) continue;
+
+              const current = productsById.get(productId);
+              if (!current) {
+                productsById.set(productId, { ...product });
+                continue;
+              }
+
+              current.closingQty =
+                (current.closingQty || 0) + (product.closingQty || 0);
+              current.closingCases =
+                (current.closingCases || 0) + (product.closingCases || 0);
+              current.closingPieces =
+                (current.closingPieces || 0) + (product.closingPieces || 0);
+              current.closingValue =
+                (current.closingValue || 0) + (product.closingValue || 0);
+            }
+
+            const items = Array.from(productsById.values()).map((p) => {
               const closingQty = p.closingQty || 0;
               const closingValue = p.closingValue || 0;
 
@@ -763,7 +795,7 @@ export class WorkSessionService extends MongoRepository<WorkSession> {
               };
             });
 
-            await this.stockCountItemService.bulkCreate(items, session);
+            await this.stockCountItemService.bulkCreate(items, { session });
           }
           const carryForward = payload?.carryForwardStock === true;
 
@@ -809,7 +841,7 @@ export class WorkSessionService extends MongoRepository<WorkSession> {
             if (transactions.length) {
               await this.inventoryTransactionService.bulkCreate(
                 transactions as any,
-                session,
+                { session },
               );
             }
 
@@ -999,9 +1031,35 @@ export class WorkSessionService extends MongoRepository<WorkSession> {
       {
         $match: {
           userId: ctx?.userId,
-          createdAt: {
-            $gte: todayStart,
-            $lte: todayEnd,
+          $expr: {
+            $and: [
+              {
+                $gte: [
+                  {
+                    $convert: {
+                      input: '$dayStartTime',
+                      to: 'date',
+                      onError: '$createdAt',
+                      onNull: '$createdAt',
+                    },
+                  },
+                  todayStart,
+                ],
+              },
+              {
+                $lte: [
+                  {
+                    $convert: {
+                      input: '$dayStartTime',
+                      to: 'date',
+                      onError: '$createdAt',
+                      onNull: '$createdAt',
+                    },
+                  },
+                  todayEnd,
+                ],
+              },
+            ],
           },
         },
       },
@@ -1037,7 +1095,7 @@ export class WorkSessionService extends MongoRepository<WorkSession> {
         },
       },
 
-      /* ===== 5. GET TODAY ACTIVITIES ===== */
+      /* ===== 5. GET ALL LOGGED-IN USER ACTIVITIES FOR TODAY ===== */
       {
         $lookup: {
           from: 'activities',
@@ -1045,14 +1103,40 @@ export class WorkSessionService extends MongoRepository<WorkSession> {
           pipeline: [
             {
               $match: {
-                $expr: { $eq: ['$userId', '$$userId'] },
-                createdAt: {
-                  $gte: todayStart,
-                  $lte: todayEnd,
+                $expr: {
+                  $and: [
+                    { $eq: ['$userId', '$$userId'] },
+                    {
+                      $gte: [
+                        {
+                          $convert: {
+                            input: '$startTime',
+                            to: 'date',
+                            onError: '$createdAt',
+                            onNull: '$createdAt',
+                          },
+                        },
+                        todayStart,
+                      ],
+                    },
+                    {
+                      $lte: [
+                        {
+                          $convert: {
+                            input: '$startTime',
+                            to: 'date',
+                            onError: '$createdAt',
+                            onNull: '$createdAt',
+                          },
+                        },
+                        todayEnd,
+                      ],
+                    },
+                  ],
                 },
               },
             },
-            { $sort: { createdAt: -1 } },
+            { $sort: { startTime: -1, createdAt: -1 } },
           ],
           as: 'todayAllActivities',
         },
@@ -1094,7 +1178,9 @@ export class WorkSessionService extends MongoRepository<WorkSession> {
                                 null,
                               ],
                             },
-                            { $gte: ['$$act.startTime', '$vanChangeApprovedAt'] },
+                            {
+                              $gte: ['$$act.startTime', '$vanChangeApprovedAt'],
+                            },
                           ],
                         },
                       ],
@@ -1340,7 +1426,9 @@ export class WorkSessionService extends MongoRepository<WorkSession> {
 
     if (!workSession) throw new NotFoundException(WORK_SESSION.NOT_FOUND);
     if (workSession.userId !== ctx?.userId) {
-      throw new BadRequestException('You can only cancel your own van change request');
+      throw new BadRequestException(
+        'You can only cancel your own van change request',
+      );
     }
     if (
       workSession.vanChangeStatus !== 'PENDING' ||
@@ -1389,7 +1477,9 @@ export class WorkSessionService extends MongoRepository<WorkSession> {
 
     if (!workSession) throw new NotFoundException(WORK_SESSION.NOT_FOUND);
     if (workSession.userId !== ctx?.userId) {
-      throw new BadRequestException('You can only request van change for your own session');
+      throw new BadRequestException(
+        'You can only request van change for your own session',
+      );
     }
     if (workSession.status !== WorkSessionStatus.ACTIVE) {
       throw new BadRequestException('No active work session found');
@@ -1483,7 +1573,14 @@ export class WorkSessionService extends MongoRepository<WorkSession> {
 
   private handleDuplicateError(error: any): never {
     if (error?.code === 11000 || error?.code === 11001) {
-      throw new ConflictException(WORK_SESSION.DUPLICATE);
+      const collection = error?.message?.match(/collection: ([^ ]+)/)?.[1];
+      const index = error?.message?.match(/index: ([^ ]+)/)?.[1];
+      const key = error?.keyValue ? JSON.stringify(error.keyValue) : undefined;
+      const source = [collection, index].filter(Boolean).join(' / ');
+
+      throw new ConflictException(
+        `Duplicate record${source ? ` in ${source}` : ''}${key ? `: ${key}` : ''}`,
+      );
     }
     throw error;
   }

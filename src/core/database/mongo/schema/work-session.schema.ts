@@ -96,11 +96,11 @@ export class WorkSession {
    * ====================================================== */
 
   // Day start time
-  @Prop({ required: true, type: String })
+  @Prop({ required: true, type: Date })
   dayStartTime!: Date;
 
   // Day end time
-  @Prop({ type: String })
+  @Prop({ type: Date })
   dayEndTime!: Date;
 
   @Prop({ type: String })

@@ -21,6 +21,9 @@ export class Designation {
   @Prop({ required: true, unique: true, trim: true, type: String })
   name!: string;
 
+  @Prop({ ref: 'ProductCategory', index: true, type: [String] })
+  parentCategoryId?: string[];
+
   @Prop({ required: true, ref: 'country_master', index: true, type: String })
   countryId!: string;
 

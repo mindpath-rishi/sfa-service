@@ -1,5 +1,12 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEnum, IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import {
+  ArrayUnique,
+  IsArray,
+  IsEnum,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+} from 'class-validator';
 import { DesignationStatus } from 'src/shared/enums/designation.enums';
 
 export class CreateDesignationDto {
@@ -7,6 +14,13 @@ export class CreateDesignationDto {
   @IsNotEmpty()
   @IsString()
   name!: string;
+
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @ArrayUnique()
+  @IsString({ each: true })
+  parentCategoryId?: string[];
 
   @ApiProperty()
   @IsNotEmpty()
@@ -23,7 +37,10 @@ export class CreateDesignationDto {
   @IsString()
   marketId!: string;
 
-  @ApiPropertyOptional({ example: DesignationStatus.ACTIVE, enum: DesignationStatus })
+  @ApiPropertyOptional({
+    example: DesignationStatus.ACTIVE,
+    enum: DesignationStatus,
+  })
   @IsOptional()
   @IsEnum(DesignationStatus)
   status?: DesignationStatus;

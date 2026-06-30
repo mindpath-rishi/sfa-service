@@ -10,10 +10,18 @@ export class DesignationQueryDto extends PaginationDto {
   @MaxLength(50)
   searchText?: string;
 
-  @ApiPropertyOptional({ example: DesignationStatus.ACTIVE, enum: DesignationStatus })
+  @ApiPropertyOptional({
+    example: DesignationStatus.ACTIVE,
+    enum: DesignationStatus,
+  })
   @IsOptional()
   @IsEnum(DesignationStatus)
   status?: DesignationStatus;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  parentCategoryId?: string;
 
   @ApiPropertyOptional()
   @IsOptional()

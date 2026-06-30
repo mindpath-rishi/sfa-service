@@ -25,6 +25,7 @@ import {
   IsOptional,
   IsIn,
   ValidateIf,
+  IsEmail,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
@@ -249,4 +250,23 @@ export class ChangePasswordDto {
   @IsNotEmpty()
   @MinLength(6, { message: 'New password must be at least 6 characters' })
   newPassword!: string;
+}
+
+export class UpdateOwnProfileDto {
+  @ApiProperty({ example: 'John Doe' })
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(100)
+  name!: string;
+
+  @ApiProperty({ example: 'john@example.com', required: false })
+  @IsOptional()
+  @IsEmail()
+  email?: string;
+
+  @ApiProperty({ example: '9876543210', required: false })
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  mobile?: string;
 }

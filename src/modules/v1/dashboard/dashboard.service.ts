@@ -12,6 +12,10 @@ import { CustomerStatus } from 'src/shared/enums/customer.enums';
 import { PaymentStatus } from 'src/shared/enums/payment.enums';
 import { RouteSessionStatus } from 'src/shared/enums/route-session.enums';
 import { DashboardQueryDto } from './dto/dashboard-query.dto';
+import { RequestContextStore } from 'src/core/context/request-context';
+import { SaleStatus } from 'src/shared/enums/sale.enums';
+import { Van } from 'src/core/database/mongo/schema/van.schema';
+import { RouteCustomerMapping } from 'src/core/database/mongo/schema/route-customer-mapping.schema';
 
 type DashboardTone = 'success' | 'warning' | 'danger' | 'neutral';
 
@@ -26,15 +30,25 @@ export class DashboardService {
     @InjectModel(Sale.name) private readonly saleModel: Model<Sale>,
     @InjectModel(Payment.name) private readonly paymentModel: Model<Payment>,
     @InjectModel(Customer.name) private readonly customerModel: Model<Customer>,
-    @InjectModel(RouteSession.name) private readonly routeSessionModel: Model<RouteSession>,
-    @InjectModel(WorkSession.name) private readonly workSessionModel: Model<WorkSession>,
-    @InjectModel(VanDailyStock.name) private readonly vanDailyStockModel: Model<VanDailyStock>,
+    @InjectModel(RouteSession.name)
+    private readonly routeSessionModel: Model<RouteSession>,
+    @InjectModel(WorkSession.name)
+    private readonly workSessionModel: Model<WorkSession>,
+    @InjectModel(VanDailyStock.name)
+    private readonly vanDailyStockModel: Model<VanDailyStock>,
+    @InjectModel(Van.name) private readonly vanModel: Model<Van>,
+    @InjectModel(RouteCustomerMapping.name)
+    private readonly routeCustomerMappingModel: Model<RouteCustomerMapping>,
   ) {}
 
   async getSummary(query: DashboardQueryDto) {
     const { currentRange } = this.getDateRanges(query);
     const saleFilter = this.buildScopedFilter(query, 'date', currentRange);
-    const routeFilter = this.buildScopedFilter(query, 'sessionDate', currentRange);
+    const routeFilter = this.buildScopedFilter(
+      query,
+      'sessionDate',
+      currentRange,
+    );
 
     const [plannedRoutes, completedRoutes, exceptions] = await Promise.all([
       this.routeSessionModel.countDocuments(routeFilter),
@@ -53,22 +67,58 @@ export class DashboardService {
       data: {
         id: 'dashboard-summary',
         title: 'MIS Dashboard',
-        description: 'National sales, collections, coverage and operational health',
+        description:
+          'National sales, collections, coverage and operational health',
         planned: plannedRoutes,
         completed: completedRoutes,
         exceptions,
-        status: this.getSummaryStatus(plannedRoutes, completedRoutes, exceptions),
+        status: this.getSummaryStatus(
+          plannedRoutes,
+          completedRoutes,
+          exceptions,
+        ),
       },
     };
   }
 
   async getExecutive(query: DashboardQueryDto) {
+    query = this.withLoggedInSalesmanScope(query);
     const { currentRange, previousRange } = this.getDateRanges(query);
-    const currentSaleFilter = this.buildScopedFilter(query, 'date', currentRange);
-    const previousSaleFilter = this.buildScopedFilter(query, 'date', previousRange);
-    const currentPaymentFilter = this.buildScopedFilter(query, 'date', currentRange);
-    const routeFilter = this.buildScopedFilter(query, 'sessionDate', currentRange);
-    const workSessionFilter = this.buildScopedFilter(query, 'dayStartTime', currentRange, 'userId');
+    const customerScope = await this.getCustomerScope(query);
+    const currentSaleFilter = {
+      ...this.buildScopedFilter(
+        query,
+        'date',
+        currentRange,
+        'employees.employeeId',
+      ),
+      status: SaleStatus.COMPLETED,
+    };
+    const previousSaleFilter = {
+      ...this.buildScopedFilter(
+        query,
+        'date',
+        previousRange,
+        'employees.employeeId',
+      ),
+      status: SaleStatus.COMPLETED,
+    };
+    const currentPaymentFilter = this.buildScopedFilter(
+      query,
+      'date',
+      currentRange,
+    );
+    const routeFilter = this.buildScopedFilter(
+      query,
+      'sessionDate',
+      currentRange,
+    );
+    const workSessionFilter = this.buildScopedFilter(
+      query,
+      'dayStartTime',
+      currentRange,
+      'userId',
+    );
     const stockFilter = this.buildScopedFilter(query, 'date', currentRange);
 
     const [
@@ -88,18 +138,36 @@ export class DashboardService {
       this.sum(this.saleModel, currentSaleFilter, 'totalValue'),
       this.sum(this.saleModel, previousSaleFilter, 'totalValue'),
       this.saleModel.countDocuments(currentSaleFilter),
-      this.sum(this.paymentModel, { ...currentPaymentFilter, status: PaymentStatus.SUCCESS }, 'amount'),
-      this.sum(this.saleModel, { ...currentSaleFilter, pendingAmount: { $gt: 0 } }, 'pendingAmount'),
-      this.customerModel.countDocuments({ status: CustomerStatus.ACTIVE }),
-      this.customerModel.countDocuments({ createdAt: currentRange }),
+      this.sum(
+        this.paymentModel,
+        { ...currentPaymentFilter, status: PaymentStatus.SUCCESS },
+        'amount',
+      ),
+      this.sum(
+        this.saleModel,
+        { ...currentSaleFilter, pendingAmount: { $gt: 0 } },
+        'pendingAmount',
+      ),
+      this.customerModel.countDocuments({
+        ...customerScope,
+        status: CustomerStatus.ACTIVE,
+      }),
+      this.customerModel.countDocuments({
+        ...customerScope,
+        createdAt: currentRange,
+      }),
       this.getRouteCoverage(routeFilter),
       this.getAttendanceCompliance(workSessionFilter),
       this.getStockAccuracy(stockFilter),
       this.getSalesTrend(currentSaleFilter, currentRange),
-      this.routeSessionModel.find({
-        ...routeFilter,
-        status: { $ne: RouteSessionStatus.COMPLETED },
-      }).sort({ sessionDate: -1 }).limit(3).lean(),
+      this.routeSessionModel
+        .find({
+          ...routeFilter,
+          status: { $ne: RouteSessionStatus.COMPLETED },
+        })
+        .sort({ sessionDate: -1 })
+        .limit(3)
+        .lean(),
     ]);
 
     const growth = this.getPercentageChange(sales, previousSales);
@@ -142,7 +210,8 @@ export class DashboardService {
         salesTrend,
         focus: {
           outletCoverage: routeCoverage,
-          collectionSla: sales > 0 ? Math.round((successfulPayments / sales) * 100) : 0,
+          collectionSla:
+            sales > 0 ? Math.round((successfulPayments / sales) * 100) : 0,
           inventoryHygiene: stockAccuracy,
         },
         alerts: pendingRouteSessions.map((session, index) => ({
@@ -190,7 +259,58 @@ export class DashboardService {
     return filter;
   }
 
-  private async sum(model: Model<any>, match: Record<string, unknown>, field: string) {
+  private withLoggedInSalesmanScope(query: DashboardQueryDto) {
+    const context = RequestContextStore.getStore();
+    const role = String(context?.role ?? '')
+      .trim()
+      .toUpperCase();
+    const isSalesman = ['SALESMAN', 'SALES', 'SALES_EXECUTIVE'].includes(role);
+
+    if (!isSalesman) return query;
+
+    return {
+      ...query,
+      employeeId: context?.userId,
+      vanId: context?.vanId ?? query.vanId,
+    };
+  }
+
+  private async getCustomerScope(query: DashboardQueryDto) {
+    if (!query.vanId) return {};
+
+    const van = await this.vanModel
+      .findOne({
+        vanId: query.vanId,
+        ...(query.employeeId ? { associatedUsers: query.employeeId } : {}),
+        isDeleted: { $ne: true },
+      })
+      .lean();
+    const routeIds = Array.from(
+      new Set(
+        (van?.associatedRoutes ?? [])
+          .map((route) => String(route?.routeId ?? ''))
+          .filter(Boolean),
+      ),
+    );
+    if (!routeIds.length) return { customerId: { $in: [] } };
+
+    const customerIds = await this.routeCustomerMappingModel.distinct(
+      'customerId',
+      {
+        routeId: { $in: routeIds },
+        status: { $ne: 'INACTIVE' },
+        isDeleted: { $ne: true },
+      },
+    );
+
+    return { customerId: { $in: customerIds } };
+  }
+
+  private async sum(
+    model: Model<any>,
+    match: Record<string, unknown>,
+    field: string,
+  ) {
     const [result] = await model.aggregate([
       { $match: match },
       { $group: { _id: null, total: { $sum: `$${field}` } } },
@@ -221,7 +341,9 @@ export class DashboardService {
         $group: {
           _id: null,
           started: { $sum: 1 },
-          ended: { $sum: { $cond: [{ $ifNull: ['$dayEndTime', false] }, 1, 0] } },
+          ended: {
+            $sum: { $cond: [{ $ifNull: ['$dayEndTime', false] }, 1, 0] },
+          },
         },
       },
     ]);
@@ -248,7 +370,10 @@ export class DashboardService {
     return this.toPercent(result?.accurate ?? 0, result?.total ?? 0);
   }
 
-  private async getSalesTrend(match: Record<string, unknown>, range: { $gte: Date; $lte: Date }) {
+  private async getSalesTrend(
+    match: Record<string, unknown>,
+    range: { $gte: Date; $lte: Date },
+  ) {
     const rows = await this.saleModel.aggregate([
       { $match: match },
       {
@@ -260,7 +385,9 @@ export class DashboardService {
       { $sort: { _id: 1 } },
     ]);
 
-    const values = new Map<string, number>(rows.map((row) => [row._id, Number(row.value ?? 0)]));
+    const values = new Map<string, number>(
+      rows.map((row) => [row._id, Number(row.value ?? 0)]),
+    );
     const points: SalesSeriesPoint[] = [];
     const cursor = new Date(range.$gte);
 
@@ -300,16 +427,24 @@ export class DashboardService {
     return Math.min(100, Math.round((value / total) * 100));
   }
 
-  private getSummaryStatus(planned: number, completed: number, exceptions: number): 'on-track' | 'watch' | 'blocked' {
+  private getSummaryStatus(
+    planned: number,
+    completed: number,
+    exceptions: number,
+  ): 'on-track' | 'watch' | 'blocked' {
     if (exceptions > completed) return 'blocked';
-    if (planned === 0 || this.toPercent(completed, planned) < 70) return 'watch';
+    if (planned === 0 || this.toPercent(completed, planned) < 70)
+      return 'watch';
     return 'on-track';
   }
 
   private formatAge(value?: Date | string) {
     if (!value) return 'n/a';
     const date = new Date(value);
-    const minutes = Math.max(0, Math.floor((Date.now() - date.getTime()) / 60000));
+    const minutes = Math.max(
+      0,
+      Math.floor((Date.now() - date.getTime()) / 60000),
+    );
     if (minutes < 60) return `${minutes}m`;
     const hours = Math.floor(minutes / 60);
     if (hours < 24) return `${hours}h ${minutes % 60}m`;

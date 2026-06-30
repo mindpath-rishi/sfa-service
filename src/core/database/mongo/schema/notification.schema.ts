@@ -22,7 +22,7 @@ import {
   NotificationPlatform,
 } from 'src/shared/enums/notification.enums';
 
-@Schema()
+@Schema({ timestamps: true })
 export class Notification {
   /* ======================================================
    * RECEIVER
@@ -92,6 +92,10 @@ export class Notification {
     index: true,
   })
   platform?: NotificationPlatform;
+
+  // Delivery can target more than one platform in a single notification.
+  @Prop({ type: [String], enum: NotificationPlatform, default: [] })
+  platforms!: NotificationPlatform[];
 
   // Category/type (order, payment, system, etc.)
   @Prop({ index: true, type: String })

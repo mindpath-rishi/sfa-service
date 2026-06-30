@@ -62,6 +62,8 @@ import { PriceModule } from './modules/v1/price/price.module';
 import { VanErpClosingModule } from './modules/v1/van-erp-closing/van-erp-closing.module';
 import { DashboardModule } from './modules/v1/dashboard/dashboard.module';
 import { ChannelModule } from './modules/v1/channel/channel.module';
+import { SyncModule } from './modules/v1/sync/sync.module';
+import { SegmentationModule } from './modules/v1/segmentation/segmentation.module';
 
 @Global()
 @Module({
@@ -136,7 +138,10 @@ import { ChannelModule } from './modules/v1/channel/channel.module';
     PriceModule,
     DashboardModule,
     VanErpClosingModule,
-    ChannelModule,],
+    ChannelModule,
+    SegmentationModule,
+    SyncModule,
+  ],
   providers: [
     AppControlService,
     MongoService,

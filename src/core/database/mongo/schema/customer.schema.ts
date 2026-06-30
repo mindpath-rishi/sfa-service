@@ -164,7 +164,7 @@ export class Customer {
   @Prop({
     type: String,
     enum: CustomerStatus,
-    default: CustomerStatus.ACTIVE,
+    default: CustomerStatus.VERIFICATION_PENDING,
     index: true,
   })
   status!: CustomerStatus;
