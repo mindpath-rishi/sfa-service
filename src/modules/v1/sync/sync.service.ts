@@ -626,6 +626,14 @@ export class SyncService {
           operation.entity as keyof typeof COLLECTIONS,
           cleanPayload(operation.payload),
         );
+        const legacyLocationField = ['background', 'Locations'].join('');
+        const offlineLocations =
+          operation.entity === 'attendance' &&
+          Array.isArray(payload[legacyLocationField])
+            ? (payload[legacyLocationField] as Record<string, unknown>[])
+            : [];
+        // High-frequency points belong exclusively to live_location_tracking.
+        delete payload[legacyLocationField];
         const idField =
           ENTITY_ID_FIELDS[operation.entity as keyof typeof COLLECTIONS];
         if (idField && !payload[idField]) payload[idField] = operation.localId;
@@ -672,6 +680,26 @@ export class SyncService {
         const businessId = idField
           ? (payload[idField] ?? operation.localId)
           : operation.localId;
+        const persistOfflineLocations = async () => {
+          if (!offlineLocations.length) return;
+          const now = new Date();
+          await this.connection.collection('live_location_tracking').insertMany(
+            offlineLocations.map((location) => ({
+              locationId: IdGenerator.generate('LOC', 10),
+              userId: ownerId,
+              workSessionId: String(businessId),
+              vanId: payload.vanId,
+              source: 'OFFLINE',
+              ...location,
+              capturedAt: location.capturedAt
+                ? new Date(String(location.capturedAt))
+                : now,
+              isDeleted: false,
+              createdAt: now,
+              updatedAt: now,
+            })),
+          );
+        };
         const serverId = String(operation.payload.serverId ?? '');
         const serverObjectId = Types.ObjectId.isValid(serverId)
           ? new Types.ObjectId(serverId)
@@ -713,11 +741,7 @@ export class SyncService {
             const shouldMergeOfflineChanges =
               operation.entity === 'attendance' || wasCreatedByOfflineSync;
             const existingRecordChanges = shouldMergeOfflineChanges
-              ? Object.fromEntries(
-                  Object.entries(payload).filter(
-                    ([key]) => key !== 'backgroundLocations',
-                  ),
-                )
+              ? payload
               : {};
             await collection.updateOne(
               { _id: existing._id },
@@ -743,23 +767,7 @@ export class SyncService {
                 $unset: { ownerId: '' },
               },
             );
-            // A work session may have been created online before connectivity
-            // was lost. Merge locally captured background locations into that
-            // server record instead of treating the queued fallback as a no-op.
-            if (
-              operation.entity === 'attendance' &&
-              Array.isArray(payload.backgroundLocations)
-            ) {
-              await collection.updateOne({ _id: existing._id }, {
-                $push: {
-                  backgroundLocations: {
-                    $each: payload.backgroundLocations,
-                    $slice: -1000,
-                  },
-                },
-                $set: { updatedAt: new Date() },
-              } as any);
-            }
+            await persistOfflineLocations();
             if (isCustomerOperation) {
               await this.syncCustomerRouteMapping(
                 existing.customerId ?? businessId,
@@ -803,6 +811,7 @@ export class SyncService {
             updatedAt: now,
             deletedAt: null,
           });
+          await persistOfflineLocations();
 
           if (isCustomerOperation) {
             await this.syncCustomerRouteMapping(
@@ -916,6 +925,7 @@ export class SyncService {
             updatedAt: now,
             deletedAt: null,
           });
+          await persistOfflineLocations();
           results.push({
             queueId: operation.queueId,
             localId: operation.localId,
@@ -961,6 +971,7 @@ export class SyncService {
           { _id: existing._id },
           { $set: changes, $unset: { ownerId: '' } },
         );
+        if (operation.operation !== 'DELETE') await persistOfflineLocations();
         if (isCustomerOperation) {
           await this.syncCustomerRouteMapping(
             existing.customerId ?? businessId,

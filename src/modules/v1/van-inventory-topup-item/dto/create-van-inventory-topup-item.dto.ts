@@ -22,6 +22,11 @@ export class CreateVanInventoryTopupItemDto {
   @IsString()
   productName!: string;
 
+  @ApiPropertyOptional({ type: String })
+  @IsOptional()
+  @IsString()
+  compCode?: string;
+
   @ApiPropertyOptional({ type: Number, default: 0 })
   @IsOptional()
   @IsNumber()

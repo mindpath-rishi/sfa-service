@@ -28,6 +28,11 @@ export class LocationPointDto {
   @IsNumber()
   speed?: number;
 
+  @ApiPropertyOptional({ type: Number, description: 'Direction in degrees from true north' })
+  @IsOptional()
+  @IsNumber()
+  heading?: number;
+
   @ApiPropertyOptional({ type: Date })
   @IsOptional()
   @Type(() => Date)

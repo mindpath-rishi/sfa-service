@@ -328,6 +328,7 @@ export class VanInventoryTopupService extends MongoRepository<VanInventoryTopup>
             vanInventoryTopupId: '',
             productId: item.productId,
             productName: product.name,
+            compCode: product.compCode || item.compCode,
 
             requestedQty,
             requestedWeight,

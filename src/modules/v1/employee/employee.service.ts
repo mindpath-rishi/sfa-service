@@ -75,6 +75,7 @@ import { Designation } from 'src/core/database/mongo/schema/designation.schema';
 import * as XLSX from 'xlsx';
 import { User } from 'src/core/database/mongo/schema/user.schema';
 import { FocusedPackTarget } from 'src/core/database/mongo/schema/focused-pack-target.schema';
+import { LiveLocationService } from '../live-location/live-location.service';
 
 const REPORT_TIMEZONE =
   process.env.APP_TIMEZONE || process.env.TZ || 'Asia/Kolkata';
@@ -130,6 +131,7 @@ export class EmployeeService extends MongoRepository<Employee> {
     private readonly saleItemModel: Model<SaleItem>,
     @InjectModel(WorkSession.name)
     private readonly workSessionModel: Model<WorkSession>,
+    private readonly liveLocationService: LiveLocationService,
     @InjectModel(RouteSession.name)
     private readonly routeSessionModel: Model<RouteSession>,
     @InjectModel(VanDailyStock.name)
@@ -5732,6 +5734,20 @@ export class EmployeeService extends MongoRepository<Employee> {
       sessionsByUser.set(session.userId, userSessions);
     }
 
+    const sessionIds = sessions.map((session) => session.workSessionId);
+    const trackedLocations = await this.liveLocationService.findForSessions(
+      sessionIds,
+      startOfDay,
+      endOfDay,
+    );
+    const trackedLocationsBySession = new Map<string, any[]>();
+    for (const location of trackedLocations) {
+      const points =
+        trackedLocationsBySession.get(location.workSessionId) || [];
+      points.push(location);
+      trackedLocationsBySession.set(location.workSessionId, points);
+    }
+
     const normalizeLocation = (value?: any) => {
       const latitude = Number(value?.latitude);
       const longitude = Number(value?.longitude);
@@ -5742,6 +5758,7 @@ export class EmployeeService extends MongoRepository<Employee> {
         longitude,
         accuracy: value?.accuracy ?? null,
         speed: value?.speed ?? null,
+        heading: value?.heading ?? null,
         capturedAt: value?.capturedAt ?? null,
       };
     };
@@ -5751,7 +5768,9 @@ export class EmployeeService extends MongoRepository<Employee> {
       const latestSession = userSessions.at(-1);
       const routePaths = userSessions
         .map((session) => {
-          const backgroundLocations = (session.backgroundLocations || [])
+          const dedicatedLocations =
+            trackedLocationsBySession.get(session.workSessionId) || [];
+          const trackedPath = dedicatedLocations
             .map(normalizeLocation)
             .filter(Boolean)
             .sort(
@@ -5761,7 +5780,7 @@ export class EmployeeService extends MongoRepository<Employee> {
             );
           return [
             normalizeLocation(session.dayStartLocation),
-            ...backgroundLocations,
+            ...trackedPath,
             normalizeLocation(session.dayEndLocation),
           ].filter(Boolean);
         })
@@ -6010,22 +6029,15 @@ export class EmployeeService extends MongoRepository<Employee> {
       };
     };
 
-    const latestBackgroundLocation = (workSession?.backgroundLocations || [])
-      .map((location, index) => ({
-        location: normalizeLocation(location),
-        index,
-      }))
-      .filter((item) => item.location)
-      .sort(
-        (first: any, second: any) =>
-          new Date(second.location.capturedAt || 0).getTime() -
-            new Date(first.location.capturedAt || 0).getTime() ||
-          second.index - first.index,
-      )[0]?.location;
+    const latestTrackedLocation = normalizeLocation(
+      await this.liveLocationService.findLatestForSession(
+        workSession?.workSessionId,
+      ),
+    );
     const dayStartLocation = normalizeLocation(workSession?.dayStartLocation);
     const dayEndLocation = normalizeLocation(workSession?.dayEndLocation);
     const currentLocation =
-      dayEndLocation || latestBackgroundLocation || dayStartLocation || null;
+      dayEndLocation || latestTrackedLocation || dayStartLocation || null;
 
     const buildOrderDetail = (sale: any) => {
       const items = itemsBySaleId.get(sale.saleId) || [];

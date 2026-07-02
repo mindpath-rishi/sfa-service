@@ -542,6 +542,7 @@ export class ProductService extends MongoRepository<Product> {
       limit = 20,
       isFocusedPack,
       customerCategoryId,
+      includeUnpricedProducts,
     } = query;
 
     /**
@@ -846,13 +847,17 @@ export class ProductService extends MongoRepository<Product> {
       /**
        * 7. If price does not exist, do not show product
        */
-      {
-        $match: {
-          customerPrice: {
-            $ne: null,
-          },
-        },
-      },
+      ...(includeUnpricedProducts === 'true'
+        ? []
+        : [
+            {
+              $match: {
+                customerPrice: {
+                  $ne: null,
+                },
+              },
+            },
+          ]),
 
       /**
        * 8. Add final price fields from price_master
@@ -865,16 +870,28 @@ export class ProductService extends MongoRepository<Product> {
           priceEffectiveDate: '$customerPrice.effectiveDate',
           priceFlag: '$customerPrice.priceFlag',
 
-          casePriceExclVat: '$customerPrice.casePriceExclVat',
-          casePriceInclVat: '$customerPrice.casePriceInclVat',
-          piecePriceExclVat: '$customerPrice.piecePriceExclVat',
-          piecePriceInclVat: '$customerPrice.piecePriceInclVat',
+          casePriceExclVat: {
+            $ifNull: ['$customerPrice.casePriceExclVat', '$casePrice'],
+          },
+          casePriceInclVat: {
+            $ifNull: ['$customerPrice.casePriceInclVat', '$casePrice'],
+          },
+          piecePriceExclVat: {
+            $ifNull: ['$customerPrice.piecePriceExclVat', '$piecePrice'],
+          },
+          piecePriceInclVat: {
+            $ifNull: ['$customerPrice.piecePriceInclVat', '$piecePrice'],
+          },
 
           /**
            * App compatibility fields
            */
-          casePrice: '$customerPrice.casePriceInclVat',
-          piecePrice: '$customerPrice.piecePriceInclVat',
+          casePrice: {
+            $ifNull: ['$customerPrice.casePriceInclVat', '$casePrice'],
+          },
+          piecePrice: {
+            $ifNull: ['$customerPrice.piecePriceInclVat', '$piecePrice'],
+          },
         },
       },
 

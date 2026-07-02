@@ -44,6 +44,14 @@ export class ProductQueryDto extends PaginationDto {
   @IsString()
   customerCategoryId?: string;
 
+  @ApiPropertyOptional({
+    description: 'Keep products that do not have a price for the requested customer category',
+    example: 'true',
+  })
+  @IsOptional()
+  @IsIn(['true', 'false'])
+  includeUnpricedProducts?: string;
+
   /**
    * Category IDs
    * -------------

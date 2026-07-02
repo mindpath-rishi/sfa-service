@@ -139,7 +139,6 @@ export class WorkSessionService extends MongoRepository<WorkSession> {
           dayStartImageMediaId: payload.dayStartImageMediaId,
           dayStartImageUrl: payload.dayStartImageUrl,
           dayStartLocation,
-          backgroundLocations: dayStartLocation ? [dayStartLocation] : [],
           status: WorkSessionStatus.ACTIVE,
         };
 
@@ -576,54 +575,6 @@ export class WorkSessionService extends MongoRepository<WorkSession> {
   //   }
   // }
 
-  async trackLocation(payload: any) {
-    const ctx = RequestContextStore.getStore();
-
-    const filter: FilterQuery<WorkSession> = {
-      userId: ctx?.userId,
-      status: WorkSessionStatus.ACTIVE,
-    };
-
-    if (payload.workSessionId) {
-      filter.workSessionId = payload.workSessionId;
-    }
-
-    const location = this.normalizeLocation(payload.location);
-
-    if (!location) {
-      throw new BadRequestException('Location is required');
-    }
-
-    const doc = await this.model
-      .findOneAndUpdate(
-        { ...filter, isDeleted: false } as any,
-        {
-          $push: {
-            backgroundLocations: {
-              $each: [
-                {
-                  ...location,
-                },
-              ],
-              $slice: -1000,
-            },
-          },
-        } as any,
-        { new: true },
-      )
-      .exec();
-
-    if (!doc) {
-      throw new NotFoundException(WORK_SESSION.NOT_FOUND);
-    }
-
-    return {
-      statusCode: HttpStatus.OK,
-      message: WORK_SESSION.UPDATED,
-      data: { workSessionId: doc.workSessionId },
-    };
-  }
-
   async complete(payload: any) {
     try {
       return await this.withTransaction(async (session) => {
@@ -654,12 +605,6 @@ export class WorkSessionService extends MongoRepository<WorkSession> {
         workSession.dayEndTime = new Date();
         const dayEndLocation = this.normalizeLocation(payload.dayEndLocation);
         workSession.dayEndLocation = dayEndLocation;
-        if (dayEndLocation) {
-          workSession.backgroundLocations = [
-            ...(workSession.backgroundLocations ?? []),
-            dayEndLocation,
-          ].slice(-1000) as any;
-        }
         workSession.status = WorkSessionStatus.COMPLETED;
 
         await workSession.save({ session });

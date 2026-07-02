@@ -16,6 +16,9 @@ export class VanInventoryTopupItem {
   @Prop({ type: String, required: true })
   productName!: string;
 
+  @Prop({ type: String, index: true })
+  compCode?: string;
+
   /* ================= REQUESTED ================= */
 
   @Prop({ type: Number, default: 0 })

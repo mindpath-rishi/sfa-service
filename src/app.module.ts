@@ -64,6 +64,7 @@ import { DashboardModule } from './modules/v1/dashboard/dashboard.module';
 import { ChannelModule } from './modules/v1/channel/channel.module';
 import { SyncModule } from './modules/v1/sync/sync.module';
 import { SegmentationModule } from './modules/v1/segmentation/segmentation.module';
+import { LiveLocationModule } from './modules/v1/live-location/live-location.module';
 
 @Global()
 @Module({
@@ -125,6 +126,7 @@ import { SegmentationModule } from './modules/v1/segmentation/segmentation.modul
     VanInventoryTopupItemModule,
     ActivityModule,
     WorkSessionModule,
+    LiveLocationModule,
     RouteSessionModule,
     ShopVisitModule,
     RouteCustomerMappingModule,

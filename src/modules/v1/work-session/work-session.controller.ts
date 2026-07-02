@@ -51,10 +51,7 @@ import { CreateWorkSessionDto } from './dto/create-work-session.dto';
 import { UpdateWorkSessionDto } from './dto/update-work-session.dto';
 import { WorkSessionQueryDto } from './dto/work-session-query.dto';
 import { WORK_SESSION } from './work-session.constants';
-import {
-  CompleteWorkSessionDto,
-  TrackLocationDto,
-} from './dto/track-location.dto';
+import { CompleteWorkSessionDto } from './dto/complete-work-session.dto';
 import { VanChangeApprovalDto } from './dto/van-change-approval.dto';
 
 @ApiTags('Work-session')
@@ -100,11 +97,6 @@ export class WorkSessionController {
     return this.service.complete(payload);
   }
 
-  @Permissions('WORK_SESSION_CREATE')
-  @Post('location')
-  async trackLocation(@Body() payload: TrackLocationDto) {
-    return this.service.trackLocation(payload);
-  }
   /**
    * Get Today Active Work Session
    * ---------------------

@@ -72,6 +72,7 @@ import {
   FocusedPackTarget,
   FocusedPackTargetSchema,
 } from 'src/core/database/mongo/schema/focused-pack-target.schema';
+import { LiveLocationModule } from '../live-location/live-location.module';
 
 @Module({
   imports: [
@@ -98,6 +99,7 @@ import {
       { name: User.name, schema: UserSchema },
     ]),
     UserModule,
+    LiveLocationModule,
   ],
   controllers: [EmployeeController],
   providers: [EmployeeService],

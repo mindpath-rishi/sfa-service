@@ -115,9 +115,6 @@ export class WorkSession {
   @Prop({ type: Object })
   dayEndLocation?: LocationPoint;
 
-  @Prop({ type: [Object], default: [] })
-  backgroundLocations?: LocationPoint[];
-
   // Activity status
   @Prop({
     type: String,
