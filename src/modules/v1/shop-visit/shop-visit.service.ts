@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   ConflictException,
+  ForbiddenException,
   HttpStatus,
 } from '@nestjs/common';
 
@@ -23,7 +24,10 @@ import {
 } from './dto/shop-visit-query.dto';
 import { IdGenerator } from 'src/shared/utils/id-generator.utils';
 import { RequestContextStore } from 'src/core/context/request-context';
-import { ShopVisitStatus } from 'src/shared/enums/shop-visit.enums';
+import {
+  ShopVisitStatus,
+  ShopVisitType,
+} from 'src/shared/enums/shop-visit.enums';
 import { ClientSession, Model } from 'mongoose';
 import { CustomerService } from '../customer/customer.service';
 import { RouteSessionService } from '../route-session/route-session.service';
@@ -35,26 +39,200 @@ import {
 } from 'src/core/database/mongo/schema/payment.schema';
 import { PaymentStatus } from 'src/shared/enums/payment.enums';
 import { CustomerStatus } from 'src/shared/enums/customer.enums';
+import {
+  InteractionLog,
+  InteractionLogSchema,
+  InteractionAbandonReason,
+  InteractionStatus,
+} from 'src/core/database/mongo/schema/interaction-log.schema';
+import { CreateInteractionDto } from './dto/create-interaction.dto';
+import { ConfigService } from '@nestjs/config';
 
 @Injectable()
 export class ShopVisitService extends MongoRepository<ShopVisit> {
   private readonly saleModel: Model<Sale>;
   private readonly paymentModel: Model<Payment>;
+  private readonly interactionModel: Model<InteractionLog>;
 
   constructor(
     mongo: MongoService,
     private readonly customerService: CustomerService,
     private readonly routeSessionService: RouteSessionService,
+    private readonly configService: ConfigService,
   ) {
     super(mongo.getModel(ShopVisit.name, ShopVisitSchema));
     this.saleModel = mongo.getModel(Sale.name, SaleSchema);
     this.paymentModel = mongo.getModel(Payment.name, PaymentSchema);
+    this.interactionModel = mongo.getModel(
+      InteractionLog.name,
+      InteractionLogSchema,
+    );
+  }
+
+  async createInteraction(payload: CreateInteractionDto) {
+    const ctx = RequestContextStore.getStore();
+    const employeeId = String(ctx?.userId ?? '');
+    const role = String(ctx?.role ?? '')
+      .trim()
+      .toUpperCase();
+    if (
+      !employeeId ||
+      !['SALESMAN', 'SALES', 'SALES_EXECUTIVE'].includes(role)
+    ) {
+      throw new ForbiddenException('Only a salesman can start an interaction');
+    }
+    const customer = await this.customerService.findOne({
+      customerId: payload.customerId,
+    });
+    if (!customer || customer.status !== CustomerStatus.ACTIVE) {
+      throw new ConflictException(
+        'Interactions require a verified, active customer',
+      );
+    }
+    if (!customer.geoTag) {
+      throw new ConflictException(
+        'Customer does not have a registered GPS location',
+      );
+    }
+
+    await this.expireTimedOutInteractions(employeeId);
+    const existing = await this.interactionModel.findOne({
+      employeeId,
+      status: InteractionStatus.ARRIVED,
+    });
+
+    if (existing?.customerId === payload.customerId) {
+      return {
+        statusCode: HttpStatus.OK,
+        message: 'Interaction already arrived',
+        data: existing,
+      };
+    }
+
+    if (existing) {
+      await this.interactionModel.updateOne(
+        { _id: existing._id, status: InteractionStatus.ARRIVED },
+        {
+          status: InteractionStatus.ABANDONED,
+          abandonedAt: new Date(),
+          abandonReason: InteractionAbandonReason.CUSTOMER_CHANGED,
+        },
+      );
+    }
+
+    const customerLat = Number(customer.geoTag.lat);
+    const customerLng = Number(customer.geoTag.lng);
+    const salesmanLat = Number(payload.salesmanLocation.latitude);
+    const salesmanLng = Number(payload.salesmanLocation.longitude);
+    if (![salesmanLat, salesmanLng].every(Number.isFinite)) {
+      throw new ConflictException(
+        'A valid current salesman GPS location is required',
+      );
+    }
+    const toRadians = (value: number) => (value * Math.PI) / 180;
+    const dLat = toRadians(salesmanLat - customerLat);
+    const dLng = toRadians(salesmanLng - customerLng);
+    const a =
+      Math.sin(dLat / 2) ** 2 +
+      Math.cos(toRadians(customerLat)) *
+        Math.cos(toRadians(salesmanLat)) *
+        Math.sin(dLng / 2) ** 2;
+    const distanceMeters =
+      6371000 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    const radius = this.configService.get<number>(
+      'CUSTOMER_GEOFENCE_RADIUS_METERS',
+      100,
+    );
+    const arrivalTime = new Date();
+    const visitType =
+      distanceMeters <= radius ? ShopVisitType.ON_SITE : ShopVisitType.OFF_SITE;
+
+    const doc = await this.interactionModel.create({
+      interactionId: IdGenerator.generate('InteractionLog', 10),
+      customerId: payload.customerId,
+      employeeId,
+      routeSessionId: payload.routeSessionId,
+      workSessionId: payload.workSessionId,
+      vanId: payload.vanId,
+      customerLocation: { latitude: customerLat, longitude: customerLng },
+      arrivalLocation: payload.salesmanLocation,
+      distanceMeters: Number(distanceMeters.toFixed(2)),
+      configuredRadiusMeters: radius,
+      visitType,
+      arrivalTime,
+      status: InteractionStatus.ARRIVED,
+    });
+
+    return {
+      statusCode: HttpStatus.CREATED,
+      message: 'Interaction arrived',
+      data: doc,
+    };
+  }
+
+  async getInteraction(interactionId: string) {
+    const employeeId = String(RequestContextStore.getStore()?.userId ?? '');
+    await this.expireTimedOutInteractions(employeeId);
+    const doc = await this.interactionModel.findOne({
+      interactionId,
+      employeeId,
+    });
+    if (!doc) throw new NotFoundException('Interaction not found');
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'Interaction loaded',
+      data: doc,
+    };
+  }
+
+  private async expireTimedOutInteractions(employeeId: string) {
+    if (!employeeId) return;
+    const timeoutBefore = new Date(Date.now() - 30 * 60 * 1000);
+    await this.interactionModel.updateMany(
+      {
+        employeeId,
+        status: InteractionStatus.ARRIVED,
+        arrivalTime: { $lte: timeoutBefore },
+      },
+      {
+        status: InteractionStatus.ABANDONED,
+        abandonedAt: new Date(),
+        abandonReason: InteractionAbandonReason.TIMEOUT,
+      },
+    );
   }
 
   async create(payload: CreateShopVisitDto) {
+    const ctx = RequestContextStore.getStore();
+    const role = String(ctx?.role ?? '')
+      .trim()
+      .toUpperCase();
+
+    if (!['SALESMAN', 'SALES', 'SALES_EXECUTIVE'].includes(role)) {
+      throw new ForbiddenException('Only a salesman can start a visit');
+    }
+
     try {
       return await this.withTransaction(async (session) => {
         const { outletId, routeSessionId, vanId, workSessionId } = payload;
+        const employeeId = String(ctx?.userId ?? '');
+        await this.expireTimedOutInteractions(employeeId);
+        const interaction = payload.interactionId
+          ? await this.interactionModel
+              .findOne({
+                interactionId: payload.interactionId,
+                customerId: outletId,
+                employeeId,
+                status: InteractionStatus.ARRIVED,
+              })
+              .session(session)
+          : null;
+
+        if (!payload.interactionId || !interaction) {
+          throw new ConflictException(
+            'A valid arrived interaction is required',
+          );
+        }
         const customer = await this.customerService.findOne(
           { customerId: outletId },
           { session },
@@ -70,6 +248,20 @@ export class ShopVisitService extends MongoRepository<ShopVisit> {
           );
         }
 
+        const activeVisit = await this.findOne(
+          {
+            outletId,
+            status: ShopVisitStatus.ACTIVE,
+          },
+          { session },
+        );
+
+        if (activeVisit) {
+          throw new ConflictException(
+            `An active visit already exists for this customer (${activeVisit.visitId})`,
+          );
+        }
+
         const filter: FilterQuery<ShopVisit> = {
           outletId,
           routeSessionId,
@@ -81,14 +273,6 @@ export class ShopVisitService extends MongoRepository<ShopVisit> {
           session,
           includeDeleted: true,
         });
-
-        if (
-          existing &&
-          !existing.isDeleted &&
-          existing[ShopVisitStatus.ACTIVE]
-        ) {
-          throw new ConflictException(SHOP_VISIT.DUPLICATE);
-        }
 
         if (existing?.isDeleted) {
           await this.updateById(
@@ -108,17 +292,30 @@ export class ShopVisitService extends MongoRepository<ShopVisit> {
           };
         }
 
-        const ctx = RequestContextStore.getStore();
-
         const doc = await this.save(
           {
             visitId: IdGenerator.generate('SHOP', 8),
             employeeId: ctx?.userId,
-            checkInTime: new Date(),
             ...payload,
+            checkInTime: interaction?.arrivalTime ?? new Date(),
+            checkInLocation:
+              interaction?.arrivalLocation ?? payload.checkInLocation,
+            visitType: interaction!.visitType,
+            interactionId: interaction?.interactionId,
+            customerLocation: interaction?.customerLocation,
+            distanceMeters: interaction?.distanceMeters,
+            configuredRadiusMeters: interaction?.configuredRadiusMeters,
           },
           { session },
         );
+
+        if (interaction) {
+          await this.interactionModel.updateOne(
+            { _id: interaction._id, status: InteractionStatus.ARRIVED },
+            { status: InteractionStatus.CONVERTED, visitId: doc.visitId },
+            { session },
+          );
+        }
 
         /**Updated Last visit date */
         await this.customerService.update(outletId, {
@@ -190,7 +387,9 @@ export class ShopVisitService extends MongoRepository<ShopVisit> {
     const baseItems = result.items.map((visit: any) =>
       typeof visit.toObject === 'function' ? visit.toObject() : visit,
     );
-    const visitIds = baseItems.map((visit: any) => visit.visitId).filter(Boolean);
+    const visitIds = baseItems
+      .map((visit: any) => visit.visitId)
+      .filter(Boolean);
     let items = baseItems;
 
     if (visitIds.length) {
@@ -366,10 +565,36 @@ export class ShopVisitService extends MongoRepository<ShopVisit> {
   ) {
     try {
       return await this.withTransaction(async (session) => {
-        const doc = await this.updateOne({ visitId }, dto, {
-          session,
-          new: true,
-        });
+        const existing = await this.findOne({ visitId }, { session });
+        if (!existing) throw new NotFoundException(SHOP_VISIT.NOT_FOUND);
+        const completion = dto.status === ShopVisitStatus.COMPLETED;
+        const checkOutTime = completion
+          ? (dto.checkOutTime ?? new Date())
+          : dto.checkOutTime;
+        const durationSeconds = completion
+          ? Math.max(
+              0,
+              Math.round(
+                (checkOutTime!.getTime() - existing.checkInTime.getTime()) /
+                  1000,
+              ),
+            )
+          : existing.durationSeconds;
+        const doc = await this.updateOne(
+          { visitId },
+          {
+            ...dto,
+            ...(completion && {
+              checkOutTime,
+              durationSeconds,
+              outcome: existing.outcome ?? 'BUSINESS_COMPLETED',
+            }),
+          },
+          {
+            session,
+            new: true,
+          },
+        );
 
         if (!doc) throw new NotFoundException(SHOP_VISIT.NOT_FOUND);
 

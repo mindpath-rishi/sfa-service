@@ -32,7 +32,7 @@ export class VanDailyStock {
   @Prop({ required: true, unique: true, index: true, type: String })
   vanDailyStockId!: string;
 
-  @Prop({ required: true, unique: true, index: true, type: String })
+  @Prop({ required: true, index: true, type: String })
   workSessionId!: string;
 
   /* ======================================================

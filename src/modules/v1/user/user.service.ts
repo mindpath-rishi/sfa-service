@@ -179,6 +179,16 @@ export class UserService extends MongoRepository<User> {
       throw new ForbiddenException(USER.PROFILE_NOT_FOUND);
     }
 
+    const reportingEmployee = profile.reportingEmployeeId
+      ? await this.employeeModel
+          .findOne({
+            employeeId: profile.reportingEmployeeId,
+            isDeleted: { $ne: true },
+          })
+          .select({ employeeId: 1, name: 1 })
+          .lean()
+      : null;
+
     const role = await this.roleModel.findOne({
       roleId: profile.roleId,
       isDeleted: false,
@@ -277,7 +287,12 @@ export class UserService extends MongoRepository<User> {
       sessionId,
       user: {
         profileId: user.profileId,
-        profile,
+        profile: {
+          ...profile.toObject(),
+          manager: reportingEmployee?.name,
+          managerName: reportingEmployee?.name,
+          reportingEmployeeName: reportingEmployee?.name,
+        },
         role: role.name,
         roleId: profile.roleId,
         vanId,
@@ -424,7 +439,9 @@ export class UserService extends MongoRepository<User> {
     newPassword: string,
     accessToken?: string,
   ) {
-    const session = sessionId ? await this.redis.getJson<any>(`session:${sessionId}`) : null;
+    const session = sessionId
+      ? await this.redis.getJson<any>(`session:${sessionId}`)
+      : null;
     let profileId = session?.type === 'USER' ? session.profileId : null;
 
     if (!profileId && accessToken) {
@@ -456,7 +473,9 @@ export class UserService extends MongoRepository<User> {
 
     const samePassword = await bcrypt.compare(newPassword, user.password);
     if (samePassword) {
-      throw new BadRequestException('New password must be different from current password');
+      throw new BadRequestException(
+        'New password must be different from current password',
+      );
     }
 
     await this.updateById(user._id.toString(), {
@@ -470,7 +489,11 @@ export class UserService extends MongoRepository<User> {
     };
   }
 
-  async updateUserStatus(profileId: string, status: UserStatus, session?: ClientSession) {
+  async updateUserStatus(
+    profileId: string,
+    status: UserStatus,
+    session?: ClientSession,
+  ) {
     return this.updateOne({ profileId }, { status }, { session });
   }
 
@@ -490,7 +513,9 @@ export class UserService extends MongoRepository<User> {
 
   async getCurrentProfile(accessToken?: string) {
     const profileId = this.resolveProfileId(accessToken);
-    const profile: any = await this.employeeModel.findOne({ employeeId: profileId }).lean();
+    const profile: any = await this.employeeModel
+      .findOne({ employeeId: profileId })
+      .lean();
     if (!profile) throw new NotFoundException('Profile not found');
     const role: any = profile.roleId
       ? await this.roleModel.findOne({ roleId: profile.roleId }).lean()
@@ -513,14 +538,25 @@ export class UserService extends MongoRepository<User> {
     };
   }
 
-  async updateCurrentProfile(accessToken: string | undefined, dto: UpdateOwnProfileDto) {
+  async updateCurrentProfile(
+    accessToken: string | undefined,
+    dto: UpdateOwnProfileDto,
+  ) {
     const profileId = this.resolveProfileId(accessToken);
     try {
-      const profile: any = await this.employeeModel.findOneAndUpdate(
-        { employeeId: profileId },
-        { $set: { name: dto.name.trim(), email: dto.email?.trim().toLowerCase() || undefined, mobile: dto.mobile?.trim() || undefined } },
-        { new: true, runValidators: true },
-      ).lean();
+      const profile: any = await this.employeeModel
+        .findOneAndUpdate(
+          { employeeId: profileId },
+          {
+            $set: {
+              name: dto.name.trim(),
+              email: dto.email?.trim().toLowerCase() || undefined,
+              mobile: dto.mobile?.trim() || undefined,
+            },
+          },
+          { new: true, runValidators: true },
+        )
+        .lean();
       if (!profile) throw new NotFoundException('Profile not found');
       await this.updateOne(
         { profileId },
@@ -532,7 +568,10 @@ export class UserService extends MongoRepository<User> {
         data: profile,
       };
     } catch (error: any) {
-      if (error?.code === 11000) throw new BadRequestException('Email or mobile number is already in use');
+      if (error?.code === 11000)
+        throw new BadRequestException(
+          'Email or mobile number is already in use',
+        );
       throw error;
     }
   }

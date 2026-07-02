@@ -4,12 +4,17 @@ import { Connection, Types } from 'mongoose';
 
 import { SyncOperationDto } from './dto/sync.dto';
 import { IdGenerator } from 'src/shared/utils/id-generator.utils';
+import { NotificationService } from '../notification/notification.service';
 
 const COLLECTIONS = {
   customers: 'customer_master',
   outlets: 'customer_master',
   products: 'product_master',
   categories: 'productcategories',
+  customerCategories: 'customer_category_master',
+  channels: 'channel_master',
+  outletTypes: 'outlet_type_master',
+  segmentations: 'segmentation_master',
   priceLists: 'price_master',
   vans: 'vans',
   routes: 'route_master',
@@ -23,6 +28,7 @@ const COLLECTIONS = {
   attendance: 'work_sessions',
   activities: 'activities',
   visits: 'shop_visits',
+  interactions: 'interaction_logs',
   nonSales: 'non_sale',
   leaves: 'leaves',
   surveys: 'surveys',
@@ -38,6 +44,10 @@ const ENTITY_ID_FIELDS: Record<keyof typeof COLLECTIONS, string> = {
   outlets: 'customerId',
   products: 'productId',
   categories: 'categoryId',
+  customerCategories: 'customerCategoryId',
+  channels: 'channelId',
+  outletTypes: 'outletTypeId',
+  segmentations: 'segmentationId',
   priceLists: 'priceId',
   vans: 'vanId',
   routes: 'routeId',
@@ -51,6 +61,7 @@ const ENTITY_ID_FIELDS: Record<keyof typeof COLLECTIONS, string> = {
   attendance: 'workSessionId',
   activities: 'activityId',
   visits: 'visitId',
+  interactions: 'interactionId',
   nonSales: 'nonSaleId',
   leaves: 'leaveId',
   surveys: 'surveyId',
@@ -64,6 +75,10 @@ const ENTITY_ID_FIELDS: Record<keyof typeof COLLECTIONS, string> = {
 const MASTER_ENTITIES = new Set([
   'products',
   'categories',
+  'customerCategories',
+  'channels',
+  'outletTypes',
+  'segmentations',
   'priceLists',
   'vans',
   'routes',
@@ -76,6 +91,10 @@ const MASTER_ENTITIES = new Set([
 const GLOBAL_MASTER_ENTITIES = new Set([
   'products',
   'categories',
+  'customerCategories',
+  'channels',
+  'outletTypes',
+  'segmentations',
   'priceLists',
   'promotions',
 ]);
@@ -136,10 +155,7 @@ const calculateOfflineSaleItem = (value: unknown) => {
   const pieceQty = toFiniteNumber(item.pieceQty);
   const unitQtyInCase = Math.max(toFiniteNumber(item.unitQtyInCase, 1), 1);
   const casePrice = toFiniteNumber(item.casePrice);
-  const piecePrice = toFiniteNumber(
-    item.piecePrice,
-    casePrice / unitQtyInCase,
-  );
+  const piecePrice = toFiniteNumber(item.piecePrice, casePrice / unitQtyInCase);
   const pieceNetWeight = toFiniteNumber(item.pieceNetWeight);
   const quantity = caseQty * unitQtyInCase + pieceQty;
 
@@ -200,16 +216,10 @@ const normalizeOfflinePayload = (
         ),
       );
       payload.totalValue = toFixed4(
-        items.reduce(
-          (sum, item) => sum + toFiniteNumber(item.totalValue),
-          0,
-        ),
+        items.reduce((sum, item) => sum + toFiniteNumber(item.totalValue), 0),
       );
       payload.netCases = toFixed4(
-        items.reduce(
-          (sum, item) => sum + toFiniteNumber(item.netCases),
-          0,
-        ),
+        items.reduce((sum, item) => sum + toFiniteNumber(item.netCases), 0),
       );
       const paidAmount = toFixed4(toFiniteNumber(payload.paidAmount));
       const pendingAmount = toFixed4(
@@ -232,7 +242,42 @@ const normalizeOfflinePayload = (
 
 @Injectable()
 export class SyncService {
-  constructor(@InjectConnection() private readonly connection: Connection) {}
+  constructor(
+    @InjectConnection() private readonly connection: Connection,
+    private readonly notificationService: NotificationService,
+  ) {}
+
+  private async notifyManagerOfOfflineOutlet(
+    payload: Record<string, unknown>,
+    ownerId: string,
+  ) {
+    const creator = await this.connection
+      .collection('employees')
+      .findOne({ employeeId: ownerId, isDeleted: { $ne: true } });
+    const recipientId = String(creator?.reportingEmployeeId ?? '');
+    const customerId = String(payload.customerId ?? '');
+    if (!recipientId || !customerId) return;
+    await this.notificationService.create({
+      recipientId,
+      title: 'New outlet awaiting approval',
+      body: `${String(creator?.name ?? 'An executive')} created ${String(payload.name ?? 'a new outlet')}`,
+      category: 'outlet_approval',
+      data: {
+        category: 'outlet_approval',
+        action: 'APPROVAL_REQUIRED',
+        status: 'PENDING',
+        customerId,
+        outletName: payload.name,
+        ownerName: payload.ownerName,
+        phoneNumber: payload.phoneNumber,
+        address: payload.address,
+        geoTag: payload.geoTag,
+        createdByEmployeeId: ownerId,
+        createdByName: creator?.name,
+        route: '/notifications',
+      },
+    });
+  }
 
   private async syncCustomerRouteMapping(
     customerIdValue: unknown,
@@ -589,6 +634,7 @@ export class SyncService {
         );
         if (isCustomerOperation) {
           payload.customerId = String(payload.customerId ?? operation.localId);
+          payload.createdByEmployeeId ??= ownerId;
         }
         if (
           ['attendance', 'activities', 'routeSessions', 'leaves'].includes(
@@ -763,6 +809,7 @@ export class SyncService {
               payload.customerId,
               payload.routeId,
             );
+            await this.notifyManagerOfOfflineOutlet(payload, ownerId);
           }
 
           // Older app versions queued only the work-session record for an

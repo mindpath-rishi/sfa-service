@@ -1,4 +1,3 @@
-
 /**
  * Customer Controller
  * --------------------
@@ -54,7 +53,6 @@ import { CreateCustomerDto } from './dto/create-customer.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
 import { CustomerQueryDto } from './dto/customer-query.dto';
 import { CUSTOMER } from './customer.constants';
-import { Public } from 'src/core/decorators/public.decorator';
 
 @ApiTags('Customer')
 @FeatureFlag(API_MODULE_ENABLE_KEYS.CUSTOMER)
@@ -65,7 +63,6 @@ import { Public } from 'src/core/decorators/public.decorator';
   path: API_MODULE.CUSTOMER,
   version: V1,
 })
-@Public()
 export class CustomerController {
   constructor(private readonly service: CustomerService) {}
 
@@ -140,6 +137,19 @@ export class CustomerController {
     @Body() dto: UpdateCustomerDto,
   ) {
     return this.service.update(customerId, dto);
+  }
+
+  @Patch(':customerId/approve')
+  async approve(@Param('customerId') customerId: string) {
+    return this.service.reviewOutlet(customerId, true);
+  }
+
+  @Patch(':customerId/reject')
+  async reject(
+    @Param('customerId') customerId: string,
+    @Body() body: { reason?: string },
+  ) {
+    return this.service.reviewOutlet(customerId, false, body.reason);
   }
 
   /**

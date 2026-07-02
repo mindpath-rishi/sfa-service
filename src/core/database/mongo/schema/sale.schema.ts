@@ -6,6 +6,7 @@ import {
   SaleStatus,
   SaleType,
 } from 'src/shared/enums/sale.enums';
+import { ErpSyncStatus } from 'src/shared/enums/stock-sales.enums';
 
 export type SaleDocument = HydratedDocument<Sale>;
 
@@ -141,6 +142,26 @@ export class Sale {
 
   @Prop({ type: String })
   remark?: string;
+
+  @Prop({
+    type: String,
+    enum: ErpSyncStatus,
+    default: ErpSyncStatus.PENDING,
+    index: true,
+  })
+  erpSyncStatus!: ErpSyncStatus;
+
+  @Prop({ type: Number, default: 0 })
+  erpSyncAttempts!: number;
+
+  @Prop({ type: Date })
+  erpSyncedAt?: Date;
+
+  @Prop({ type: Date })
+  erpLastSyncAttemptAt?: Date;
+
+  @Prop({ type: String })
+  erpSyncError?: string;
 
   /* ======================================================
    * STATUS

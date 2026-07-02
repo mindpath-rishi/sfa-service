@@ -70,6 +70,9 @@ export class Target {
   @Prop({ type: Number, default: 0 })
   targetValue!: number;
 
+  @Prop({ type: Number, default: 0, min: 0 })
+  uboTarget!: number;
+
   /* ======================================================
    * TARGET PERIOD
    * ====================================================== */
@@ -89,3 +92,4 @@ TargetSchema.index({ userId: 1 });
 TargetSchema.index({ parentCategoryId: 1 });
 TargetSchema.index({ categoryId: 1 });
 TargetSchema.index({ startDate: 1, endDate: 1 });
+TargetSchema.index({ userId: 1, uboTarget: 1, startDate: 1, endDate: 1 });

@@ -38,6 +38,7 @@ import { CustomerService } from '../customer/customer.service';
 import { VanDailyStockService } from '../van-daily-stock/van-daily-stock.service';
 import { OracleRepository } from 'src/core/database/oracle/oracle.repository';
 import { RequestContextStore } from 'src/core/context/request-context';
+import { ErpSyncStatus } from 'src/shared/enums/stock-sales.enums';
 
 @Injectable()
 export class SaleService extends MongoRepository<Sale> {
@@ -325,7 +326,7 @@ export class SaleService extends MongoRepository<Sale> {
          * CREATE SALES HEADER
          * ====================================================== */
 
-        const saleId = IdGenerator.generate('OR', 6);
+        const saleId = IdGenerator.generate('Sale', 8);
 
         const doc = await this.save(
           {
@@ -397,12 +398,27 @@ export class SaleService extends MongoRepository<Sale> {
             { session },
           );
 
-          await this.vanDailyStockService.updateOne(
+          const stockDayStart = new Date();
+          stockDayStart.setHours(0, 0, 0, 0);
+          const stockDayEnd = new Date(stockDayStart);
+          stockDayEnd.setHours(23, 59, 59, 999);
+          const currentDailyStock = await this.vanDailyStockService.findOne(
             {
               productId: inventory.productId,
               vanId: inventory.vanId,
-              date: { $gte: new Date().setHours(0, 0, 0, 0) } as any,
+              date: { $gte: stockDayStart, $lte: stockDayEnd },
             },
+            { session, sort: { createdAt: -1 } },
+          );
+
+          if (!currentDailyStock) {
+            throw new BadRequestException(
+              `Daily stock not initialized for product: ${productId}`,
+            );
+          }
+
+          await this.vanDailyStockService.updateById(
+            currentDailyStock._id.toString(),
             {
               $inc: {
                 outQty: quantity,
@@ -481,10 +497,11 @@ export class SaleService extends MongoRepository<Sale> {
          * EXPORT SALE TO ERP SFA_ORDER
          * ====================================================== */
 
-        await this.exportSaleToErpSfaOrder({
+        await this.syncSaleToERP({
           sale: doc,
           items: processedItems,
           saleId,
+          session,
         });
 
         return {
@@ -1179,7 +1196,7 @@ export class SaleService extends MongoRepository<Sale> {
     saleId: string;
   }): Promise<void> {
     if (!this.oracleRepository.isEnabled()) {
-      return;
+      throw new Error('OracleDB is disabled');
     }
 
     const { sale, items, saleId } = params;
@@ -1285,7 +1302,19 @@ export class SaleService extends MongoRepository<Sale> {
     await this.oracleRepository.transaction(async (connection) => {
       for (const item of exportItems) {
         await connection.execute(
-          `INSERT INTO ORDER_SFA (
+          `MERGE INTO ORDER_SFA target
+          USING (
+            SELECT :orderNoSfa AS VC_ORDER_NO_SFA,
+                   :compCode AS VC_COMP_CODE,
+                   :itemCode AS VC_ITEM_CODE
+            FROM DUAL
+          ) source
+          ON (
+            target.VC_ORDER_NO_SFA = source.VC_ORDER_NO_SFA
+            AND target.VC_COMP_CODE = source.VC_COMP_CODE
+            AND target.VC_ITEM_CODE = source.VC_ITEM_CODE
+          )
+          WHEN NOT MATCHED THEN INSERT (
           VC_COMP_CODE,
           VC_ORDER_NO,
           DT_ORDER_DATE,
@@ -1296,7 +1325,7 @@ export class SaleService extends MongoRepository<Sale> {
           DT_ORDER_DATE_SFA,
           VC_STORE_CODE,
           DT_MOD_DATE
-        ) VALUES (
+          ) VALUES (
           :compCode,
           :orderNo,
           :orderDate,
@@ -1329,6 +1358,82 @@ export class SaleService extends MongoRepository<Sale> {
 
       return true;
     });
+  }
+
+  private async syncSaleToERP(params: {
+    sale: any;
+    items: any[];
+    saleId: string;
+    session?: any;
+  }) {
+    const { sale, items, saleId, session } = params;
+
+    try {
+      await this.exportSaleToErpSfaOrder({ sale, items, saleId });
+      await this.updateOne(
+        { saleId },
+        {
+          $set: {
+            erpSyncStatus: ErpSyncStatus.SYNCED,
+            erpSyncedAt: new Date(),
+            erpLastSyncAttemptAt: new Date(),
+            erpSyncError: null,
+          },
+          $inc: { erpSyncAttempts: 1 },
+        },
+        { session },
+      );
+      return true;
+    } catch (error) {
+      await this.updateOne(
+        { saleId },
+        {
+          $set: {
+            erpSyncStatus: ErpSyncStatus.FAILED,
+            erpLastSyncAttemptAt: new Date(),
+            erpSyncError:
+              error instanceof Error ? error.message : String(error),
+          },
+          $inc: { erpSyncAttempts: 1 },
+        },
+        { session },
+      );
+      return false;
+    }
+  }
+
+  async syncPendingSalesToERP() {
+    const sales = await this.find({
+      $or: [
+        {
+          erpSyncStatus: {
+            $in: [ErpSyncStatus.PENDING, ErpSyncStatus.FAILED],
+          },
+        },
+        { erpSyncStatus: { $exists: false } },
+      ],
+    });
+    let synced = 0;
+    let failed = 0;
+
+    for (const sale of sales) {
+      const items = await this.saleItemService.findLean({
+        saleId: sale.saleId,
+      });
+      const success = await this.syncSaleToERP({
+        sale,
+        items,
+        saleId: sale.saleId,
+      });
+      if (success) synced += 1;
+      else failed += 1;
+    }
+
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'Sale ERP synchronization completed',
+      data: { checked: sales.length, synced, failed },
+    };
   }
 
   private handleDuplicateError(error: any): never {

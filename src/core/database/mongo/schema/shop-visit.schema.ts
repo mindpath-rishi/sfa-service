@@ -104,6 +104,24 @@ export class ShopVisit {
   @Prop({ type: Object })
   checkOutLocation?: LocationPoint;
 
+  @Prop({ index: true })
+  interactionId?: string;
+
+  @Prop({ type: Object })
+  customerLocation?: LocationPoint;
+
+  @Prop({ type: Number })
+  distanceMeters?: number;
+
+  @Prop({ type: Number })
+  configuredRadiusMeters?: number;
+
+  @Prop({ type: Number })
+  durationSeconds?: number;
+
+  @Prop()
+  outcome?: string;
+
   // Visit Type
   @Prop({
     type: String,
@@ -129,9 +147,14 @@ export const ShopVisitSchema = SchemaFactory.createForClass(ShopVisit);
 
 ShopVisitSchema.index({ routeSessionId: 1 });
 
-// // Prevent duplicate active visit
-// ShopVisitSchema.index({
-//   routeSessionId: 1,
-//   outletId: 1,
-//   status: 1,
-// });
+// A customer can have only one active, non-deleted visit at a time.
+ShopVisitSchema.index(
+  { outletId: 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      status: ShopVisitStatus.ACTIVE,
+      isDeleted: false,
+    },
+  },
+);

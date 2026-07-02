@@ -100,5 +100,10 @@ export class CreateVanInventoryTopupItemDto {
   @ApiPropertyOptional({ type: String })
   @IsOptional()
   @IsString()
+  unitType?: string;
+
+  @ApiPropertyOptional({ type: String })
+  @IsOptional()
+  @IsString()
   remark?: string;
 }

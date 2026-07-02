@@ -29,7 +29,12 @@ export class VanDailyStockService extends MongoRepository<VanDailyStock> {
   async create(payload: CreateVanDailyStockDto) {
     try {
       return await this.withTransaction(async (session) => {
-        const filter: FilterQuery<VanDailyStock> = {};
+        const filter: FilterQuery<VanDailyStock> = {
+          date: payload.date,
+          vanId: payload.vanId,
+          productId: payload.productId,
+          workSessionId: payload.workSessionId,
+        };
 
         const existing = await this.findOne(filter, {
           session,

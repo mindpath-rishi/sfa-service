@@ -74,6 +74,7 @@ import { Role } from 'src/core/database/mongo/schema/role.schema';
 import { Designation } from 'src/core/database/mongo/schema/designation.schema';
 import * as XLSX from 'xlsx';
 import { User } from 'src/core/database/mongo/schema/user.schema';
+import { FocusedPackTarget } from 'src/core/database/mongo/schema/focused-pack-target.schema';
 
 const REPORT_TIMEZONE =
   process.env.APP_TIMEZONE || process.env.TZ || 'Asia/Kolkata';
@@ -113,6 +114,8 @@ export class EmployeeService extends MongoRepository<Employee> {
     private readonly leaveModel: Model<Leave>,
     @InjectModel(Target.name)
     private readonly targetModel: Model<Target>,
+    @InjectModel(FocusedPackTarget.name)
+    private readonly focusedPackTargetModel: Model<FocusedPackTarget>,
     @InjectModel(Customer.name)
     private readonly customerModel: Model<Customer>,
     @InjectModel(RouteCustomerMapping.name)
@@ -3519,6 +3522,352 @@ export class EmployeeService extends MongoRepository<Employee> {
     };
   }
 
+  async getSpecialTargetSummary(
+    targetType: 'UBO' | 'FOCUSED_PACK',
+    date?: string,
+  ) {
+    const managerId = RequestContextStore.getStore()?.userId;
+    const now = date ? parseCalendarDate(date) : new Date();
+    const startDate = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      1,
+      0,
+      0,
+      0,
+      0,
+    );
+    const endDate = now;
+    const monthEndDate = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    const employees = await this.find({
+      $or: [{ reportingEmployeeId: managerId }, { hierarchyPath: managerId }],
+      status: UserStatus.ACTIVE,
+    });
+    const employeeIds = employees.map((employee) => employee.employeeId);
+
+    if (!employeeIds.length) {
+      return {
+        statusCode: HttpStatus.OK,
+        message: `${targetType} target summary fetched successfully`,
+        data: [],
+      };
+    }
+
+    const achievementPipeline: any[] = [
+      {
+        $match: {
+          status: SaleStatus.COMPLETED,
+          date: { $gte: startDate, $lte: endDate },
+          'employees.employeeId': { $in: employeeIds },
+        },
+      },
+      { $unwind: '$employees' },
+      { $match: { 'employees.employeeId': { $in: employeeIds } } },
+      {
+        $lookup: {
+          from: 'sale_items',
+          localField: 'saleId',
+          foreignField: 'saleId',
+          as: 'items',
+        },
+      },
+      { $unwind: '$items' },
+      {
+        $lookup: {
+          from: 'product_master',
+          localField: 'items.productId',
+          foreignField: 'productId',
+          as: 'product',
+        },
+      },
+      { $unwind: { path: '$product', preserveNullAndEmptyArrays: true } },
+    ];
+
+    if (targetType === 'FOCUSED_PACK') {
+      achievementPipeline.push({ $match: { 'product.isFocusedPack': 'Y' } });
+    }
+
+    achievementPipeline.push({
+      $group: {
+        _id: {
+          employeeId: '$employees.employeeId',
+          dimensionId:
+            targetType === 'FOCUSED_PACK'
+              ? '$product.productId'
+              : { $ifNull: ['$product.categoryId', '$items.categoryId'] },
+        },
+        achievementCases: { $sum: { $ifNull: ['$items.netCases', 0] } },
+        achievementTonnage: { $sum: { $ifNull: ['$items.totalNetWeight', 0] } },
+        achievementValue: { $sum: { $ifNull: ['$items.totalValue', 0] } },
+      },
+    });
+
+    const specialTargetModel =
+      targetType === 'FOCUSED_PACK'
+        ? this.focusedPackTargetModel
+        : this.targetModel;
+    const dimensionField =
+      targetType === 'FOCUSED_PACK' ? '$productId' : '$categoryId';
+    const targetCasesField =
+      targetType === 'FOCUSED_PACK' ? '$targetCases' : '$uboTarget';
+    const specialTargetMatch = {
+      userId: { $in: employeeIds },
+      startDate: { $lte: endDate },
+      endDate: { $gte: startDate },
+      ...(targetType === 'UBO' ? { uboTarget: { $gt: 0 } } : {}),
+    };
+
+    const [targets, achievements] = await Promise.all([
+      specialTargetModel.aggregate([
+        {
+          $match: specialTargetMatch,
+        },
+        {
+          $group: {
+            _id: { userId: '$userId', dimensionId: dimensionField },
+            targetCases: { $sum: targetCasesField },
+            targetTonnage: {
+              $sum: targetType === 'FOCUSED_PACK' ? '$targetTonnage' : 0,
+            },
+            targetValue: {
+              $sum: targetType === 'FOCUSED_PACK' ? '$targetValue' : 0,
+            },
+          },
+        },
+      ]),
+      this.saleModal.aggregate(achievementPipeline),
+    ]);
+
+    const targetsByUser = new Map<string, any>();
+    for (const target of targets) {
+      const current = targetsByUser.get(target._id.userId) || {
+        categories: new Set<string>(),
+        targetCases: 0,
+        targetTonnage: 0,
+        targetValue: 0,
+      };
+      current.categories.add(target._id.dimensionId);
+      current.targetCases += Number(target.targetCases || 0);
+      current.targetTonnage += Number(target.targetTonnage || 0);
+      current.targetValue += Number(target.targetValue || 0);
+      targetsByUser.set(target._id.userId, current);
+    }
+
+    const achievementsByUser = new Map<string, any>();
+    for (const achievement of achievements) {
+      const target = targetsByUser.get(achievement._id.employeeId);
+      if (!target?.categories.has(achievement._id.dimensionId)) continue;
+      const current = achievementsByUser.get(achievement._id.employeeId) || {
+        achievementCases: 0,
+        achievementTonnage: 0,
+        achievementValue: 0,
+      };
+      current.achievementCases += Number(achievement.achievementCases || 0);
+      current.achievementTonnage += Number(achievement.achievementTonnage || 0);
+      current.achievementValue += Number(achievement.achievementValue || 0);
+      achievementsByUser.set(achievement._id.employeeId, current);
+    }
+
+    const elapsedDays = Math.max(
+      Math.floor((endDate.getTime() - startDate.getTime()) / 86400000) + 1,
+      1,
+    );
+    const remainingDays = Math.max(monthEndDate.getDate() - elapsedDays, 1);
+    const round = (value: number) => Number(value.toFixed(2));
+
+    const data = employees.map((employee) => {
+      const target = targetsByUser.get(employee.employeeId) || {};
+      const achievement = achievementsByUser.get(employee.employeeId) || {};
+      const targetCases = Number(target.targetCases || 0);
+      const targetTonnage = Number(target.targetTonnage || 0);
+      const targetValue = Number(target.targetValue || 0);
+      const achievementCases = Number(achievement.achievementCases || 0);
+      const achievementTonnage = Number(achievement.achievementTonnage || 0);
+      const achievementValue = Number(achievement.achievementValue || 0);
+      const remainingCases = Math.max(targetCases - achievementCases, 0);
+
+      return {
+        employeeId: employee.employeeId,
+        employeeName: employee.name,
+        targetCases: round(targetCases),
+        achievementCases: round(achievementCases),
+        remainingCases: round(remainingCases),
+        targetTonnage: round(targetTonnage),
+        achievementTonnage: round(achievementTonnage),
+        remainingTonnage: round(
+          Math.max(targetTonnage - achievementTonnage, 0),
+        ),
+        targetValue: round(targetValue),
+        achievementValue: round(achievementValue),
+        remainingValue: round(Math.max(targetValue - achievementValue, 0)),
+        achievementPercentage:
+          targetCases > 0 ? round((achievementCases / targetCases) * 100) : 0,
+        rrr: round(remainingCases / remainingDays),
+        crr: round(achievementCases / elapsedDays),
+        hasTarget: targetCases > 0 || targetTonnage > 0 || targetValue > 0,
+      };
+    });
+
+    return {
+      statusCode: HttpStatus.OK,
+      message: `${targetType} target summary fetched successfully`,
+      data: data.sort((a, b) => b.achievementCases - a.achievementCases),
+    };
+  }
+
+  async getUserUboTargetBreakdown(query: {
+    employeeId: string;
+    date?: string;
+  }) {
+    const now = query.date ? parseCalendarDate(query.date) : new Date();
+    const startDate = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      1,
+      0,
+      0,
+      0,
+      0,
+    );
+    const primaryResponse = await this.getUserPrimaryCategoryTarget(query);
+    const achievements = new Map(
+      (primaryResponse.data || []).map((item: any) => [item.categoryId, item]),
+    );
+    const targets = await this.targetModel.aggregate([
+      {
+        $match: {
+          userId: query.employeeId,
+          uboTarget: { $gt: 0 },
+          startDate: { $lte: now },
+          endDate: { $gte: startDate },
+        },
+      },
+      {
+        $group: {
+          _id: '$categoryId',
+          category: { $first: '$category' },
+          target: { $sum: '$uboTarget' },
+        },
+      },
+    ]);
+
+    const data = targets.map((target) => ({
+      categoryId: target._id,
+      category: target.category,
+      target: Number(Number(target.target || 0).toFixed(2)),
+      achievement: Number(
+        Number(
+          (achievements.get(target._id) as any)?.achievementCases || 0,
+        ).toFixed(2),
+      ),
+    }));
+
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'User UBO target breakdown fetched successfully',
+      data,
+    };
+  }
+
+  async getUserFocusedPackTargetBreakdown(query: {
+    employeeId: string;
+    date?: string;
+  }) {
+    const now = query.date ? parseCalendarDate(query.date) : new Date();
+    const startDate = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      1,
+      0,
+      0,
+      0,
+      0,
+    );
+    const [targets, achievements] = await Promise.all([
+      this.focusedPackTargetModel.aggregate([
+        {
+          $match: {
+            userId: query.employeeId,
+            startDate: { $lte: now },
+            endDate: { $gte: startDate },
+          },
+        },
+        {
+          $group: {
+            _id: '$productId',
+            productName: { $first: '$productName' },
+            targetCases: { $sum: '$targetCases' },
+            targetTonnage: { $sum: '$targetTonnage' },
+            targetValue: { $sum: '$targetValue' },
+          },
+        },
+      ]),
+      this.saleModal.aggregate([
+        {
+          $match: {
+            status: SaleStatus.COMPLETED,
+            date: { $gte: startDate, $lte: now },
+            'employees.employeeId': query.employeeId,
+          },
+        },
+        { $unwind: '$employees' },
+        { $match: { 'employees.employeeId': query.employeeId } },
+        {
+          $lookup: {
+            from: 'sale_items',
+            localField: 'saleId',
+            foreignField: 'saleId',
+            as: 'items',
+          },
+        },
+        { $unwind: '$items' },
+        {
+          $lookup: {
+            from: 'product_master',
+            localField: 'items.productId',
+            foreignField: 'productId',
+            as: 'product',
+          },
+        },
+        { $unwind: '$product' },
+        { $match: { 'product.isFocusedPack': 'Y' } },
+        {
+          $group: {
+            _id: '$product.productId',
+            achievementCases: { $sum: { $ifNull: ['$items.netCases', 0] } },
+            achievementTonnage: {
+              $sum: { $ifNull: ['$items.totalNetWeight', 0] },
+            },
+            achievementValue: { $sum: { $ifNull: ['$items.totalValue', 0] } },
+          },
+        },
+      ]),
+    ]);
+    const achievementMap = new Map(
+      achievements.map((item) => [item._id, item]),
+    );
+    const round = (value: unknown) => Number(Number(value || 0).toFixed(2));
+    const data = targets.map((target) => {
+      const achievement = achievementMap.get(target._id) || {};
+      return {
+        productId: target._id,
+        productName: target.productName,
+        targetCases: round(target.targetCases),
+        achievementCases: round(achievement.achievementCases),
+        targetTonnage: round(target.targetTonnage),
+        achievementTonnage: round(achievement.achievementTonnage),
+        targetValue: round(target.targetValue),
+        achievementValue: round(achievement.achievementValue),
+      };
+    });
+
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'User Focused Pack target breakdown fetched successfully',
+      data,
+    };
+  }
+
   // async getManagerOrderSummary() {
   //   const managerId = RequestContextStore.getStore()?.userId;
 
@@ -3813,22 +4162,28 @@ export class EmployeeService extends MongoRepository<Employee> {
   //   };
   // }
 
-  async getManagerOrderSummary() {
+  async getManagerOrderSummary(query?: {
+    date?: string;
+    startDate?: string;
+    endDate?: string;
+  }) {
     const managerId = RequestContextStore.getStore()?.userId;
 
     const now = new Date();
 
-    const startDate = new Date(
-      now.getFullYear(),
-      now.getMonth(),
-      1,
-      0,
-      0,
-      0,
-      0,
-    );
+    const startDate = query?.startDate
+      ? parseCalendarDate(query.startDate)
+      : query?.date
+        ? parseCalendarDate(query.date)
+        : new Date(now.getFullYear(), now.getMonth(), 1);
+    startDate.setHours(0, 0, 0, 0);
 
-    const endDate = now;
+    const endDate = query?.endDate
+      ? parseCalendarDate(query.endDate)
+      : query?.date
+        ? parseCalendarDate(query.date)
+        : now;
+    endDate.setHours(23, 59, 59, 999);
 
     /* ==========================================
      * TEAM MEMBERS
@@ -3864,6 +4219,10 @@ export class EmployeeService extends MongoRepository<Employee> {
           },
 
           outletSummary: {
+            utc: {
+              count: 0,
+              percentage: 0,
+            },
             upc: {
               count: 0,
               percentage: 0,
@@ -3887,6 +4246,10 @@ export class EmployeeService extends MongoRepository<Employee> {
             productivity: {
               pc: 0,
               tc: 0,
+              percentage: 0,
+            },
+            ordered: {
+              count: 0,
               percentage: 0,
             },
           },
@@ -4295,6 +4658,13 @@ export class EmployeeService extends MongoRepository<Employee> {
         },
 
         outletSummary: {
+          utc: {
+            count: tc,
+            percentage:
+              totalAssignedOutlets > 0
+                ? Number(((tc / totalAssignedOutlets) * 100).toFixed(2))
+                : 0,
+          },
           upc: {
             count: upc,
             percentage:
@@ -4328,6 +4698,13 @@ export class EmployeeService extends MongoRepository<Employee> {
             pc: productiveCalls,
             tc: totalCalls,
             percentage: productivity,
+          },
+          ordered: {
+            count: upc,
+            percentage:
+              totalAssignedOutlets > 0
+                ? Number(((upc / totalAssignedOutlets) * 100).toFixed(2))
+                : 0,
           },
         },
       },
@@ -4543,9 +4920,33 @@ export class EmployeeService extends MongoRepository<Employee> {
           upc: 0,
           utc: 0,
           uic: 0,
+          userList: [],
+          vanList: [],
+          outletList: [],
+          plannedOutletList: [],
         },
       };
     }
+
+    const teamEmployeeIds = employeeIds.filter(
+      (employeeId: string) => employeeId !== managerId,
+    );
+
+    const users = teamEmployeeIds.length
+      ? await this.model.find(
+          {
+            employeeId: { $in: teamEmployeeIds },
+            status: UserStatus.ACTIVE,
+          },
+          {
+            employeeId: 1,
+            name: 1,
+            mobile: 1,
+            designationId: 1,
+          },
+          { lean: true },
+        )
+      : [];
 
     /* ==========================================
      * ASSIGNED VANS
@@ -4557,7 +4958,12 @@ export class EmployeeService extends MongoRepository<Employee> {
       },
       {
         vanId: 1,
+        name: 1,
+        vanNumber: 1,
+        driverName: 1,
+        capacity: 1,
         warehouseId: 1,
+        associatedUsers: 1,
         associatedRoutes: 1,
       },
       { lean: true },
@@ -4597,6 +5003,23 @@ export class EmployeeService extends MongoRepository<Employee> {
 
     const outlets = assignedCustomerIds.length;
 
+    const assignedOutlets = assignedCustomerIds.length
+      ? await this.customerModel.find(
+          {
+            customerId: { $in: assignedCustomerIds },
+          },
+          {
+            customerId: 1,
+            name: 1,
+            ownerName: 1,
+            phoneNumber: 1,
+            marketId: 1,
+            segmentation: 1,
+          },
+          { lean: true },
+        )
+      : [];
+
     /* ==========================================
      * VISITED ROUTES (MTD)
      * ========================================== */
@@ -4625,6 +5048,23 @@ export class EmployeeService extends MongoRepository<Employee> {
         : [];
 
     const outletsPlanned = plannedCustomerIds.length;
+
+    const plannedOutlets = plannedCustomerIds.length
+      ? await this.customerModel.find(
+          {
+            customerId: { $in: plannedCustomerIds },
+          },
+          {
+            customerId: 1,
+            name: 1,
+            ownerName: 1,
+            phoneNumber: 1,
+            marketId: 1,
+            segmentation: 1,
+          },
+          { lean: true },
+        )
+      : [];
 
     /* ==========================================
      * UNIQUE VISITED OUTLETS (UTC)
@@ -4678,6 +5118,38 @@ export class EmployeeService extends MongoRepository<Employee> {
         upc,
         utc,
         uic,
+        userList: users.map((user: any) => ({
+          employeeId: user.employeeId,
+          name: user.name,
+          mobile: user.mobile,
+          designationId: user.designationId,
+        })),
+        vanList: vans.map((van: any) => ({
+          vanId: van.vanId,
+          name: van.name,
+          vanNumber: van.vanNumber,
+          driverName: van.driverName,
+          capacity: van.capacity,
+          warehouseId: van.warehouseId,
+          associatedUsers: van.associatedUsers || [],
+          routeCount: (van.associatedRoutes || []).length,
+        })),
+        outletList: assignedOutlets.map((outlet: any) => ({
+          customerId: outlet.customerId,
+          name: outlet.name,
+          ownerName: outlet.ownerName,
+          phoneNumber: outlet.phoneNumber,
+          marketId: outlet.marketId,
+          segmentation: outlet.segmentation,
+        })),
+        plannedOutletList: plannedOutlets.map((outlet: any) => ({
+          customerId: outlet.customerId,
+          name: outlet.name,
+          ownerName: outlet.ownerName,
+          phoneNumber: outlet.phoneNumber,
+          marketId: outlet.marketId,
+          segmentation: outlet.segmentation,
+        })),
       },
     };
   }

@@ -76,6 +76,11 @@ import { CustomerController } from './customer.controller';
 
 import { CustomerService } from './customer.service';
 import { Van, VanSchema } from 'src/core/database/mongo/schema/van.schema';
+import {
+  Employee,
+  EmployeeSchema,
+} from 'src/core/database/mongo/schema/employee.schema';
+import { NotificationModule } from '../notification/notification.module';
 
 @Module({
   imports: [
@@ -88,6 +93,7 @@ import { Van, VanSchema } from 'src/core/database/mongo/schema/van.schema';
         name: Customer.name,
         schema: CustomerSchema,
       },
+      { name: Employee.name, schema: EmployeeSchema },
 
       /* ======================================================
        * SHOP VISIT
@@ -159,6 +165,7 @@ import { Van, VanSchema } from 'src/core/database/mongo/schema/van.schema';
     ]),
 
     RouteCustomerMappingModule,
+    NotificationModule,
   ],
 
   controllers: [CustomerController],

@@ -28,7 +28,11 @@
     "docker:redis": "sudo docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d redis",
     "docker:redis:down": "sudo docker compose -f docker-compose.yml -f docker-compose.dev.yml stop redis",
     "docker:redis:logs": "sudo docker compose -f docker-compose.yml -f docker-compose.dev.yml logs -f redis",
-    "module:generate": "node module-builder/index.js"
+    "module:generate": "node module-builder/index.js",
+    "sync:topup-erp": "ts-node -r tsconfig-paths/register scripts/sync-topup-erp.ts both",
+    "sync:topup-requests": "ts-node -r tsconfig-paths/register scripts/sync-topup-erp.ts requests",
+    "sync:topup-stock-take": "ts-node -r tsconfig-paths/register scripts/sync-topup-erp.ts stock-take",
+    "sync:sales-erp": "ts-node -r tsconfig-paths/register scripts/sync-sales-erp.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",

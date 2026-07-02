@@ -136,6 +136,15 @@ export class VanInventoryTopup {
   @Prop({ type: String })
   declinedReason?: string;
 
+  @Prop({ type: String, index: true })
+  erpRequestNo?: string;
+
+  @Prop({ type: Date })
+  erpRequestedAt?: Date;
+
+  @Prop({ type: Date })
+  erpApprovedAt?: Date;
+
   /* ======================================================
    * STATUS
    * ====================================================== */

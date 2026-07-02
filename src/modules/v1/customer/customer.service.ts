@@ -34,6 +34,10 @@ import { Route } from 'src/core/database/mongo/schema/route.schema';
 import { RouteCustomerMapping } from 'src/core/database/mongo/schema/route-customer-mapping.schema';
 import { Van } from 'src/core/database/mongo/schema/van.schema';
 import { CustomerStatus } from 'src/shared/enums/customer.enums';
+import { Employee } from 'src/core/database/mongo/schema/employee.schema';
+import { NotificationService } from '../notification/notification.service';
+import { RequestContextStore } from 'src/core/context/request-context';
+import { ForbiddenException, BadRequestException } from '@nestjs/common';
 
 const REPORT_TIMEZONE =
   process.env.APP_TIMEZONE || process.env.TZ || 'Asia/Kolkata';
@@ -64,6 +68,9 @@ export class CustomerService extends MongoRepository<Customer> {
 
     @InjectModel(RouteCustomerMapping.name)
     private readonly routeCustomerMappingModel: Model<RouteCustomerMapping>,
+    @InjectModel(Employee.name)
+    private readonly employeeModel: Model<Employee>,
+    private readonly notificationService: NotificationService,
   ) {
     super(mongo.getModel(Customer.name, CustomerSchema));
   }
@@ -191,7 +198,10 @@ export class CustomerService extends MongoRepository<Customer> {
   }
 
   private escapePdfText(value: string) {
-    return String(value ?? '').replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)');
+    return String(value ?? '')
+      .replace(/\\/g, '\\\\')
+      .replace(/\(/g, '\\(')
+      .replace(/\)/g, '\\)');
   }
 
   private buildPdfBuffer(title: string, rows: string[][]) {
@@ -226,7 +236,9 @@ export class CustomerService extends MongoRepository<Customer> {
     const textLimit = (width: number, size: number) =>
       Math.max(6, Math.floor(width / (size * 0.52)));
     const truncate = (value: string, limit: number) => {
-      const cleanValue = String(value ?? '').replace(/\s+/g, ' ').trim();
+      const cleanValue = String(value ?? '')
+        .replace(/\s+/g, ' ')
+        .trim();
       return cleanValue.length > limit
         ? `${cleanValue.slice(0, Math.max(0, limit - 3))}...`
         : cleanValue;
@@ -247,7 +259,8 @@ export class CustomerService extends MongoRepository<Customer> {
     let nextObjectId = 4;
 
     objects[1] = '<< /Type /Catalog /Pages 2 0 R >>';
-    objects[fontObjectId] = '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>';
+    objects[fontObjectId] =
+      '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>';
 
     for (const [pageIndex, rowsForPage] of pageRows.entries()) {
       const pageObjectId = nextObjectId;
@@ -288,10 +301,16 @@ export class CustomerService extends MongoRepository<Customer> {
         const y = headerY - (rowIndex + 1) * rowHeight;
 
         if (rowIndex % 2 === 0) {
-          commands.push('0.95 0.99 0.99 rg', rect(margin, y, tableWidth, rowHeight, 'f'));
+          commands.push(
+            '0.95 0.99 0.99 rg',
+            rect(margin, y, tableWidth, rowHeight, 'f'),
+          );
         }
 
-        commands.push('0.85 0.89 0.94 RG', rect(margin, y, tableWidth, rowHeight));
+        commands.push(
+          '0.85 0.89 0.94 RG',
+          rect(margin, y, tableWidth, rowHeight),
+        );
         commands.push('0.08 0.13 0.2 rg');
 
         row.forEach((value, columnIndex) => {
@@ -318,8 +337,7 @@ export class CustomerService extends MongoRepository<Customer> {
         `<< /Length ${Buffer.byteLength(content)} >>\nstream\n${content}\nendstream`;
     }
 
-    objects[2] =
-      `<< /Type /Pages /Kids [${pageObjectIds.map((id) => `${id} 0 R`).join(' ')}] /Count ${pageObjectIds.length} >>`;
+    objects[2] = `<< /Type /Pages /Kids [${pageObjectIds.map((id) => `${id} 0 R`).join(' ')}] /Count ${pageObjectIds.length} >>`;
 
     let pdf = '%PDF-1.4\n';
     const offsets = [0];
@@ -395,7 +413,8 @@ export class CustomerService extends MongoRepository<Customer> {
 
   async create(payload: CreateCustomerDto) {
     try {
-      return await this.withTransaction(async (session) => {
+      const creatorId = String(RequestContextStore.getStore()?.userId ?? '');
+      const result = await this.withTransaction(async (session) => {
         const filter: FilterQuery<Customer> = {
           phoneNumber: payload.phoneNumber,
         };
@@ -419,6 +438,7 @@ export class CustomerService extends MongoRepository<Customer> {
             {
               ...payload,
               status: CustomerStatus.VERIFICATION_PENDING,
+              createdByEmployeeId: creatorId || undefined,
               isDeleted: false,
             },
             { session },
@@ -432,6 +452,7 @@ export class CustomerService extends MongoRepository<Customer> {
               customerId: IdGenerator.generateRandomNumber(12),
               ...payload,
               status: CustomerStatus.VERIFICATION_PENDING,
+              createdByEmployeeId: creatorId || undefined,
             },
             { session },
           );
@@ -472,9 +493,103 @@ export class CustomerService extends MongoRepository<Customer> {
           data: { customerId },
         };
       });
+      if (creatorId)
+        await this.notifyReportingManager(result.data.customerId, creatorId);
+      return result;
     } catch (error) {
       this.handleDuplicateError(error);
     }
+  }
+
+  private async notifyReportingManager(customerId: string, creatorId: string) {
+    const [creator, customer] = await Promise.all([
+      this.employeeModel
+        .findOne({ employeeId: creatorId, isDeleted: { $ne: true } })
+        .lean(),
+      this.findOne({ customerId }),
+    ]);
+    if (!creator?.reportingEmployeeId || !customer) return;
+
+    await this.notificationService.create({
+      recipientId: creator.reportingEmployeeId,
+      title: 'New outlet awaiting approval',
+      body: `${creator.name || 'An executive'} created ${customer.name}`,
+      category: 'outlet_approval',
+      data: {
+        category: 'outlet_approval',
+        action: 'APPROVAL_REQUIRED',
+        status: 'PENDING',
+        customerId,
+        outletName: customer.name,
+        ownerName: customer.ownerName,
+        phoneNumber: customer.phoneNumber,
+        address: customer.address,
+        geoTag: customer.geoTag,
+        createdByEmployeeId: creatorId,
+        createdByName: creator.name,
+        route: '/notifications',
+      },
+    });
+  }
+
+  async reviewOutlet(customerId: string, approve: boolean, reason?: string) {
+    const reviewerId = String(RequestContextStore.getStore()?.userId ?? '');
+    if (!reviewerId)
+      throw new ForbiddenException('Authenticated reviewer is required');
+    const customer = await this.findOne({ customerId });
+    if (!customer) throw new NotFoundException(CUSTOMER.NOT_FOUND);
+    if (customer.status !== CustomerStatus.VERIFICATION_PENDING) {
+      throw new BadRequestException(
+        'Outlet approval has already been resolved',
+      );
+    }
+    const creator = customer.createdByEmployeeId
+      ? await this.employeeModel
+          .findOne({ employeeId: customer.createdByEmployeeId })
+          .lean()
+      : null;
+    if (!creator || creator.reportingEmployeeId !== reviewerId) {
+      throw new ForbiddenException(
+        'Only the executive’s reporting manager can review this outlet',
+      );
+    }
+
+    const status = approve ? CustomerStatus.ACTIVE : CustomerStatus.REJECTED;
+    await this.updateOne(
+      { customerId, status: CustomerStatus.VERIFICATION_PENDING },
+      {
+        status,
+        reviewedByEmployeeId: reviewerId,
+        reviewedAt: new Date(),
+        rejectionReason: approve
+          ? undefined
+          : reason || 'Rejected by reporting manager',
+      },
+    );
+    await this.notificationService.markOutletApprovalResolved(
+      customerId,
+      status,
+    );
+    await this.notificationService.create({
+      recipientId: customer.createdByEmployeeId!,
+      title: approve ? 'Outlet approved' : 'Outlet rejected',
+      body: `${customer.name} has been ${approve ? 'approved' : 'rejected'}`,
+      category: 'outlet_approval_result',
+      data: {
+        category: 'outlet_approval_result',
+        action: status,
+        customerId,
+        outletName: customer.name,
+        status,
+        reason: approve ? undefined : reason || 'Rejected by reporting manager',
+        route: '/route',
+      },
+    });
+    return {
+      statusCode: HttpStatus.OK,
+      message: `Outlet ${approve ? 'approved' : 'rejected'}`,
+      data: { customerId, status },
+    };
   }
 
   async findAll(query: CustomerQueryDto) {
@@ -567,7 +682,10 @@ export class CustomerService extends MongoRepository<Customer> {
 
     if (query.fileType === 'pdf') {
       return {
-        buffer: this.buildPdfBuffer('Outlet Listing', [headerRow, ...exportRows]),
+        buffer: this.buildPdfBuffer('Outlet Listing', [
+          headerRow,
+          ...exportRows,
+        ]),
         fileName: 'outlet-listing.pdf',
         mimeType: 'application/pdf',
       };
@@ -1878,7 +1996,7 @@ export class CustomerService extends MongoRepository<Customer> {
               }
 
               customer = await this.save({
-                customerId: IdGenerator.generate('CUST', 8),
+                customerId: IdGenerator.generateRandomNumber(12),
 
                 name: customerName,
 

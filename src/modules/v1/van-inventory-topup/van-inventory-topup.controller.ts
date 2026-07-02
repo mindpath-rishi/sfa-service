@@ -84,6 +84,20 @@ export class VanInventoryTopupController {
     return this.service.create(dto);
   }
 
+  @Permissions('VAN_INVENTORY_TOPUP_UPDATE')
+  @Post('sync-erp/requests')
+  @ApiOperation({ summary: 'Retry unsynced top-up requests to ERP' })
+  async syncErpRequests() {
+    return this.service.syncTopupRequestsToERP();
+  }
+
+  @Permissions('VAN_INVENTORY_TOPUP_UPDATE')
+  @Post('sync-erp/stock-take')
+  @ApiOperation({ summary: 'Sync top-up approvals from ERP stock take' })
+  async syncErpApprovals() {
+    return this.service.syncTopupApprovalsFromERP();
+  }
+
   /**
    * Get VanInventoryTopups
    * ----------------------

@@ -190,6 +190,25 @@ export class EmployeeController {
     return this.employeeService.getUserWiseTargetSummary(query?.date);
   }
 
+  @Get('/manager/ubo-target')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Get user-wise UBO target and achievement' })
+  async getUboTargetSummary(@Query() query: { date?: string }) {
+    return this.employeeService.getSpecialTargetSummary('UBO', query?.date);
+  }
+
+  @Get('/manager/focused-pack-target')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Get user-wise Focused Pack target and achievement',
+  })
+  async getFocusedPackTargetSummary(@Query() query: { date?: string }) {
+    return this.employeeService.getSpecialTargetSummary(
+      'FOCUSED_PACK',
+      query?.date,
+    );
+  }
+
   @Get('/manager/user-primary-category-target')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Get user primary category targets' })
@@ -197,6 +216,26 @@ export class EmployeeController {
     @Query() query: UserPrimaryCategoryTargetQueryDto,
   ) {
     return this.employeeService.getUserPrimaryCategoryTarget(query);
+  }
+
+  @Get('/manager/user-ubo-target')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Get category-wise UBO target and achievement for a user',
+  })
+  async getUserUboTarget(@Query() query: UserPrimaryCategoryTargetQueryDto) {
+    return this.employeeService.getUserUboTargetBreakdown(query);
+  }
+
+  @Get('/manager/user-focused-pack-target')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Get product-wise Focused Pack target and achievement for a user',
+  })
+  async getUserFocusedPackTarget(
+    @Query() query: UserPrimaryCategoryTargetQueryDto,
+  ) {
+    return this.employeeService.getUserFocusedPackTargetBreakdown(query);
   }
 
   @Get('/manager/order-summary')
@@ -220,8 +259,10 @@ export class EmployeeController {
     },
     EMPLOYEE.FETCHED,
   )
-  async getManagerOrderSummary() {
-    return this.employeeService.getManagerOrderSummary();
+  async getManagerOrderSummary(
+    @Query() query: { date?: string; startDate?: string; endDate?: string },
+  ) {
+    return this.employeeService.getManagerOrderSummary(query);
   }
 
   @Get('/manager/team-coverage')

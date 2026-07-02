@@ -30,6 +30,8 @@ import { CreateRouteSessionDto } from '../route-session/dto/create-route-session
 import { VanInventoryService } from '../van-inventory/van-inventory.service';
 import { VanDailyStockStatus } from 'src/shared/enums/van-daily-stock.enums';
 import { VanDailyStockService } from '../van-daily-stock/van-daily-stock.service';
+import { VanErpClosingService } from '../van-erp-closing/van-erp-closing.service';
+import { VanInventoryStatus } from 'src/shared/enums/van-inventory.enums';
 
 @Injectable()
 export class ActivityService extends MongoRepository<Activity> {
@@ -38,6 +40,7 @@ export class ActivityService extends MongoRepository<Activity> {
     private readonly routeSessionService: RouteSessionService,
     private readonly inventoryService: VanInventoryService,
     private readonly vanDailyStockService: VanDailyStockService,
+    private readonly vanErpClosingService: VanErpClosingService,
   ) {
     super(mongo.getModel(Activity.name, ActivitySchema));
   }
@@ -109,61 +112,60 @@ export class ActivityService extends MongoRepository<Activity> {
         const vanId: string = payload.vanId;
 
         try {
-          const response = await this.inventoryService.findByVanId(vanId, {});
-          const inventories = response?.data?.products?.filter(
-            (item) => item.quantity > 0,
+          const existingDailyStock = await this.vanDailyStockService.findOne(
+            { workSessionId: payload.workSessionId },
+            { session },
           );
 
-          console.log('Inventories for van daily stock:', response.data);
-          if (inventories?.length) {
-            const today = new Date();
-            today.setHours(0, 0, 0, 0);
+          if (existingDailyStock) {
+            // A route change within the same work session must not reset stock.
+          } else {
+            const erpClosing =
+              await this.vanErpClosingService.getLatestOpeningStock(vanId);
+            const response = erpClosing.length
+              ? null
+              : await this.inventoryService.findByVanId(vanId, {
+                  page: 1,
+                  limit: 10000,
+                });
+            const inventories = erpClosing.length
+              ? erpClosing.map((item: any) => ({
+                  ...item,
+                  quantity:
+                    Number(item.closingCases || 0) *
+                    Number(item.unitQtyInCase || 1),
+                }))
+              : response?.data?.products?.filter((item) => item.quantity > 0) ||
+                [];
 
-            const dailyStocks = inventories.map((inv) => ({
-              vanDailyStockId: IdGenerator.generate('VDS', 8),
-
-              date: today,
-              vanId: vanId,
-              employeeId: ctx?.userId,
-
-              productId: inv.productId,
-              unitQtyInCase: inv.unitQtyInCase || 1,
-
-              openingQty: inv.quantity || 0,
-              inQty: 0,
-              outQty: 0,
-              adjustmentQty: 0,
-              closingQty: inv.quantity || 0,
-              pieceNetWeight: inv.pieceNetWeight,
-              piecePrice: inv.piecePrice,
-              workSessionId: payload.workSessionId,
-              status: VanDailyStockStatus.DRAFT,
-            }));
-
-            const result = await this.vanDailyStockService.bulkCreate(dailyStocks, {
-              session,
-            }); 
-
-            console.log('Van daily stock created:', result);
-          }
-        } catch (error) {
-          console.error('Van daily stock error:', error);
-          // throw error;
-        }
-
-        try {
-          setImmediate(async () => {
-            try {
-              const response = await this.inventoryService.findByVanId(vanId, {
-                page: 1,
-                limit: 10000,
-              });
-              const inventories = response?.data?.products?.filter(
-                (item) => item.quantity > 0,
+            if (erpClosing.length) {
+              await this.inventoryService.updateMany(
+                { vanId },
+                { $set: { quantity: 0, reservedQuantity: 0 } },
+                { session },
               );
+              await this.inventoryService.bulkUpdate(
+                inventories.map((item: any) => ({
+                  filter: { vanId, productId: item.productId },
+                  update: {
+                    $set: {
+                      quantity: item.quantity,
+                      reservedQuantity: 0,
+                      status: VanInventoryStatus.ACTIVE,
+                      isDeleted: false,
+                    },
+                    $setOnInsert: {
+                      inventoryId: IdGenerator.generate('VAN_', 8),
+                      vanId,
+                      productId: item.productId,
+                    },
+                  },
+                })),
+                { session, upsert: true, includeDeleted: true },
+              );
+            }
 
-              if (!inventories?.length) return;
-
+            if (inventories.length) {
               const today = new Date();
               today.setHours(0, 0, 0, 0);
 
@@ -171,7 +173,7 @@ export class ActivityService extends MongoRepository<Activity> {
                 vanDailyStockId: IdGenerator.generate('VDS', 8),
 
                 date: today,
-                vanId,
+                vanId: vanId,
                 employeeId: ctx?.userId,
 
                 productId: inv.productId,
@@ -182,21 +184,29 @@ export class ActivityService extends MongoRepository<Activity> {
                 outQty: 0,
                 adjustmentQty: 0,
                 closingQty: inv.quantity || 0,
-
                 pieceNetWeight: inv.pieceNetWeight,
                 piecePrice: inv.piecePrice,
-
                 workSessionId: payload.workSessionId,
                 status: VanDailyStockStatus.DRAFT,
               }));
 
-              await this.vanDailyStockService.bulkCreate(dailyStocks); // ❌ NO SESSION
-            } catch (err) {
-              console.error('Van daily stock async error:', err);
+              await this.vanDailyStockService.bulkUpdate(
+                dailyStocks.map((stock) => ({
+                  filter: {
+                    date: stock.date,
+                    vanId: stock.vanId,
+                    productId: stock.productId,
+                    workSessionId: stock.workSessionId,
+                  },
+                  update: { $setOnInsert: stock },
+                })),
+                { session, upsert: true },
+              );
             }
-          });
+          }
         } catch (error) {
-          console.error('Wrapper error:', error);
+          console.error('Van daily stock error:', error);
+          throw error;
         }
       }
 

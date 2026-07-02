@@ -1,33 +1,25 @@
-import { randomUUID } from 'crypto';
-
 export class IdGenerator {
   /**
-   * Generate prefixed unique ID
-   * Example: CID-1A2B3C4D
+   * Generate an ID using the first letter of the schema name.
+   * Example: Sale -> SID12345678
    */
-  static generate(
-    prefix: string,
-    length: number = 8,
-  ): string {
-    return `${prefix}-${randomUUID()
-      .replace(/-/g, '')
-      .slice(0, length)
-      .toUpperCase()}`;
+  static generate(schemaName: string, length: number = 8): string {
+    const schemaInitial = schemaName.trim().charAt(0).toUpperCase();
+
+    return `${schemaInitial}ID${this.generateRandomNumber(length)}`;
   }
 
   static generateRandomNumber(length: number = 8): string {
-  const min = Math.pow(10, length - 1);
-  const max = Math.pow(10, length) - 1;
+    const min = Math.pow(10, length - 1);
+    const max = Math.pow(10, length) - 1;
 
-  return Math.floor(
-    min + Math.random() * (max - min + 1),
-  ).toString();
-}
+    return Math.floor(min + Math.random() * (max - min + 1)).toString();
+  }
 
   /* ================= CONVENIENCE METHODS ================= */
 
   static customerId(): string {
-    return this.generate('CID');
+    return this.generateRandomNumber(12);
   }
 
   static employeeId(): string {

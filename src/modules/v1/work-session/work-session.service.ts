@@ -588,9 +588,9 @@ export class WorkSessionService extends MongoRepository<WorkSession> {
       filter.workSessionId = payload.workSessionId;
     }
 
-    const location = payload.location;
+    const location = this.normalizeLocation(payload.location);
 
-    if (location?.latitude === undefined || location?.longitude === undefined) {
+    if (!location) {
       throw new BadRequestException('Location is required');
     }
 
@@ -603,7 +603,6 @@ export class WorkSessionService extends MongoRepository<WorkSession> {
               $each: [
                 {
                   ...location,
-                  capturedAt: location.capturedAt || new Date(),
                 },
               ],
               $slice: -1000,
@@ -653,7 +652,14 @@ export class WorkSessionService extends MongoRepository<WorkSession> {
          * 2. COMPLETE WORK SESSION
          * ====================================================== */
         workSession.dayEndTime = new Date();
-        workSession.dayEndLocation = payload.dayEndLocation;
+        const dayEndLocation = this.normalizeLocation(payload.dayEndLocation);
+        workSession.dayEndLocation = dayEndLocation;
+        if (dayEndLocation) {
+          workSession.backgroundLocations = [
+            ...(workSession.backgroundLocations ?? []),
+            dayEndLocation,
+          ].slice(-1000) as any;
+        }
         workSession.status = WorkSessionStatus.COMPLETED;
 
         await workSession.save({ session });
@@ -818,7 +824,10 @@ export class WorkSessionService extends MongoRepository<WorkSession> {
             const transactions = inventories
               .filter((inv) => inv.quantity > 0)
               .map((inv) => ({
-                transactionId: IdGenerator.generate('TRX', 12),
+                transactionId: IdGenerator.generate(
+                  'INVENTORY_TRANSACTION',
+                  12,
+                ),
                 productId: inv.productId,
                 vanId: inv.vanId,
                 employeeId: ctx?.userId,

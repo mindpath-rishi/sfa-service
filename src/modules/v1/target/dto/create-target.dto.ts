@@ -68,6 +68,12 @@ export class CreateTargetDto {
   @Min(0)
   targetValue?: number;
 
+  @ApiPropertyOptional({ type: Number, default: 0 })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  uboTarget?: number;
+
   @ApiProperty({ type: Date })
   @IsNotEmpty()
   @IsDate()
@@ -79,5 +85,4 @@ export class CreateTargetDto {
   @IsDate()
   @Type(() => Date)
   endDate!: Date;
-
 }

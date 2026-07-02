@@ -73,6 +73,11 @@ export class TargetQueryDto extends PaginationDto {
   @IsNumber()
   targetValue?: number;
 
+  @ApiPropertyOptional({ type: Number })
+  @IsOptional()
+  @IsNumber()
+  uboTarget?: number;
+
   @ApiPropertyOptional({ type: Date })
   @IsOptional()
   @IsDate()
@@ -92,5 +97,4 @@ export class TargetQueryDto extends PaginationDto {
   @IsOptional()
   @IsString()
   columns?: string;
-
 }

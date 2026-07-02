@@ -68,6 +68,10 @@ import {
   DesignationSchema,
 } from 'src/core/database/mongo/schema/designation.schema';
 import { User, UserSchema } from 'src/core/database/mongo/schema/user.schema';
+import {
+  FocusedPackTarget,
+  FocusedPackTargetSchema,
+} from 'src/core/database/mongo/schema/focused-pack-target.schema';
 
 @Module({
   imports: [
@@ -79,6 +83,7 @@ import { User, UserSchema } from 'src/core/database/mongo/schema/user.schema';
       { name: Activity.name, schema: ActivitySchema },
       { name: Leave.name, schema: LeaveSchema },
       { name: Target.name, schema: TargetSchema },
+      { name: FocusedPackTarget.name, schema: FocusedPackTargetSchema },
       { name: RouteCustomerMapping.name, schema: RouteCustomerMappingSchema },
       { name: Route.name, schema: RouteSchema },
       { name: Customer.name, schema: CustomerSchema },

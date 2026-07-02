@@ -31,10 +31,60 @@ export class VanErpClosingService extends MongoRepository<VanErpClosing> {
     super(mongo.getModel(VanErpClosing.name, VanErpClosingSchema));
   }
 
+  async getLatestOpeningStock(vanId: string, asOf = new Date()) {
+    const endOfDay = new Date(asOf);
+    endOfDay.setHours(23, 59, 59, 999);
+
+    return this.model.aggregate([
+      {
+        $match: {
+          vanId,
+          date: { $lte: endOfDay },
+          isDeleted: { $ne: true },
+        },
+      },
+      { $sort: { date: -1, modifiedDate: -1, updatedAt: -1 } },
+      {
+        $group: {
+          _id: '$date',
+          rows: { $push: '$$ROOT' },
+        },
+      },
+      { $sort: { _id: -1 } },
+      { $limit: 1 },
+      { $unwind: '$rows' },
+      { $replaceRoot: { newRoot: '$rows' } },
+      {
+        $lookup: {
+          from: 'product_master',
+          localField: 'productId',
+          foreignField: 'productId',
+          as: 'product',
+        },
+      },
+      { $unwind: { path: '$product', preserveNullAndEmptyArrays: false } },
+      {
+        $project: {
+          _id: 0,
+          productId: 1,
+          erpClosingDate: '$date',
+          closingCases: { $ifNull: ['$qtyInCase', '$qty'] },
+          unitQtyInCase: { $ifNull: ['$product.unitQtyInCase', 1] },
+          piecePrice: { $ifNull: ['$product.piecePrice', 0] },
+          pieceNetWeight: { $ifNull: ['$product.pieceNetWeight', 0] },
+        },
+      },
+    ]);
+  }
+
   async create(payload: CreateVanErpClosingDto) {
     try {
       return await this.withTransaction(async (session) => {
-        const filter: FilterQuery<VanErpClosing> = {};
+        const filter: FilterQuery<VanErpClosing> = {
+          date: payload.date,
+          vanId: payload.vanId,
+          productId: payload.productId,
+        };
 
         const existing = await this.findOne(filter, {
           session,
@@ -159,7 +209,7 @@ export class VanErpClosingService extends MongoRepository<VanErpClosing> {
      * Mongo unique index:
      * { date: 1, vanId: 1, productId: 1 }
      *
-     * So deduplicate ERP rows using:
+     * Deduplicate ERP rows using:
      * date + vanId + productId
      */
     const uniqueRowsMap = new Map<string, any>();
@@ -185,18 +235,34 @@ export class VanErpClosingService extends MongoRepository<VanErpClosing> {
 
     const uniqueRows = Array.from(uniqueRowsMap.values());
 
-    const operations = uniqueRows.map((row) => {
+    const operations: any = uniqueRows.map((row) => {
       const date = row.date as Date;
+
+      const compCode = toStringSafe(row.compCode);
+      const vanCode = toStringSafe(row.vanCode);
+      const itemCode = toStringSafe(row.itemCode);
+
       const vanId = toStringSafe(row.vanId);
       const productId = toStringSafe(row.productId);
 
-      const qtyInCase = toNumberSafe(row.qty, 0);
+      const qty = toNumberSafe(row.qty, 0);
+      const qtyInCase = qty;
 
+      const closeDate = toDateSafe(row.closeDate);
+      const modifiedDate = toDateSafe(row.modifiedDate);
+      const createdDate = toDateSafe(row.createdDate);
+
+      const syncStatus = toStringSafe(row.syncStatus);
       const erpStockId = toStringSafe(row.erpStockId);
+      const time = toStringSafe(row.time);
+      const epochTime = toNumberSafe(row.epochTime, 0);
 
       const stockId =
         erpStockId ||
-        `VCS-${date.toISOString().slice(0, 10).replace(/-/g, '')}-${vanId}-${productId}`;
+        `VCS-${date
+          .toISOString()
+          .slice(0, 10)
+          .replace(/-/g, '')}-${vanId}-${productId}`;
 
       return {
         updateOne: {
@@ -204,16 +270,40 @@ export class VanErpClosingService extends MongoRepository<VanErpClosing> {
             date,
             vanId,
             productId,
+            stockId,
           },
           update: {
             $set: {
-              stockId,
+              /**
+               * Normalized app fields
+               */
               date,
               vanId,
               productId,
               qtyInCase,
               status: VanErpClosingStatus.SYNCED,
-              isDeleted: false,
+
+              /**
+               * ERP original columns
+               */
+              compCode,
+              vanCode,
+              itemCode,
+              qty,
+              closeDate,
+              syncStatus,
+              modifiedDate,
+              epochTime,
+              erpStockId,
+              time,
+              createdDate,
+            },
+
+            /**
+             * Do not overwrite Mongo createdAt every sync
+             */
+            $setOnInsert: {
+              createdAt: createdDate || new Date(),
             },
           },
           upsert: true,
