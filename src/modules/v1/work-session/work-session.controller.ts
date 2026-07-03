@@ -52,7 +52,6 @@ import { UpdateWorkSessionDto } from './dto/update-work-session.dto';
 import { WorkSessionQueryDto } from './dto/work-session-query.dto';
 import { WORK_SESSION } from './work-session.constants';
 import { CompleteWorkSessionDto } from './dto/complete-work-session.dto';
-import { VanChangeApprovalDto } from './dto/van-change-approval.dto';
 
 @ApiTags('Work-session')
 @FeatureFlag(API_MODULE_ENABLE_KEYS.WORK_SESSION)
@@ -105,48 +104,6 @@ export class WorkSessionController {
   @Get('today-activity')
   async todayActivity() {
     return this.service.todayActivity();
-  }
-
-  @Permissions('VAN_CHANGE')
-  @Patch('van-change/:workSessionId/approve')
-  @ApiParam({ name: 'workSessionId', description: 'WorkSession workSessionId' })
-  async approveVanChange(
-    @Param('workSessionId') workSessionId: string,
-    @Body() _dto: VanChangeApprovalDto,
-  ) {
-    return this.service.approveVanChange(workSessionId);
-  }
-
-  @Permissions('VAN_CHANGE')
-  @Patch('van-change/:workSessionId/reject')
-  @ApiParam({ name: 'workSessionId', description: 'WorkSession workSessionId' })
-  async rejectVanChange(
-    @Param('workSessionId') workSessionId: string,
-    @Body() _dto: VanChangeApprovalDto,
-  ) {
-    return this.service.rejectVanChange(workSessionId);
-  }
-
-  @Permissions('WORK_SESSION_CREATE')
-  @Patch('van-change/:workSessionId/request')
-  @ApiParam({ name: 'workSessionId', description: 'WorkSession workSessionId' })
-  async requestVanChange(
-    @Param('workSessionId') workSessionId: string,
-    @Body()
-    payload: {
-      requestedVanId: string;
-      requestedVanName?: string;
-      vanChangeReason?: string;
-    },
-  ) {
-    return this.service.requestVanChange(workSessionId, payload);
-  }
-
-  @Permissions('WORK_SESSION_CREATE')
-  @Patch('van-change/:workSessionId/cancel')
-  @ApiParam({ name: 'workSessionId', description: 'WorkSession workSessionId' })
-  async cancelVanChange(@Param('workSessionId') workSessionId: string) {
-    return this.service.cancelVanChange(workSessionId);
   }
 
   /**

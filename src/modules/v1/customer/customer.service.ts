@@ -38,6 +38,7 @@ import { Employee } from 'src/core/database/mongo/schema/employee.schema';
 import { NotificationService } from '../notification/notification.service';
 import { RequestContextStore } from 'src/core/context/request-context';
 import { ForbiddenException, BadRequestException } from '@nestjs/common';
+import { OutletVerificationService } from '../outlet-verification/outlet-verification.service';
 
 const REPORT_TIMEZONE =
   process.env.APP_TIMEZONE || process.env.TZ || 'Asia/Kolkata';
@@ -71,6 +72,7 @@ export class CustomerService extends MongoRepository<Customer> {
     @InjectModel(Employee.name)
     private readonly employeeModel: Model<Employee>,
     private readonly notificationService: NotificationService,
+    private readonly outletVerificationService: OutletVerificationService,
   ) {
     super(mongo.getModel(Customer.name, CustomerSchema));
   }
@@ -460,6 +462,12 @@ export class CustomerService extends MongoRepository<Customer> {
           customerId = doc.customerId;
         }
 
+        await this.outletVerificationService.createForOutlet(
+          customerId,
+          creatorId,
+          session,
+        );
+
         // =====================================================
         // ✅ CREATE ROUTE CUSTOMER MAPPING
         // =====================================================
@@ -533,63 +541,11 @@ export class CustomerService extends MongoRepository<Customer> {
   }
 
   async reviewOutlet(customerId: string, approve: boolean, reason?: string) {
-    const reviewerId = String(RequestContextStore.getStore()?.userId ?? '');
-    if (!reviewerId)
-      throw new ForbiddenException('Authenticated reviewer is required');
-    const customer = await this.findOne({ customerId });
-    if (!customer) throw new NotFoundException(CUSTOMER.NOT_FOUND);
-    if (customer.status !== CustomerStatus.VERIFICATION_PENDING) {
-      throw new BadRequestException(
-        'Outlet approval has already been resolved',
-      );
-    }
-    const creator = customer.createdByEmployeeId
-      ? await this.employeeModel
-          .findOne({ employeeId: customer.createdByEmployeeId })
-          .lean()
-      : null;
-    if (!creator || creator.reportingEmployeeId !== reviewerId) {
-      throw new ForbiddenException(
-        'Only the executive’s reporting manager can review this outlet',
-      );
-    }
-
-    const status = approve ? CustomerStatus.ACTIVE : CustomerStatus.REJECTED;
-    await this.updateOne(
-      { customerId, status: CustomerStatus.VERIFICATION_PENDING },
-      {
-        status,
-        reviewedByEmployeeId: reviewerId,
-        reviewedAt: new Date(),
-        rejectionReason: approve
-          ? undefined
-          : reason || 'Rejected by reporting manager',
-      },
-    );
-    await this.notificationService.markOutletApprovalResolved(
+    return this.outletVerificationService.reviewByCustomerId(
       customerId,
-      status,
+      approve,
+      reason,
     );
-    await this.notificationService.create({
-      recipientId: customer.createdByEmployeeId!,
-      title: approve ? 'Outlet approved' : 'Outlet rejected',
-      body: `${customer.name} has been ${approve ? 'approved' : 'rejected'}`,
-      category: 'outlet_approval_result',
-      data: {
-        category: 'outlet_approval_result',
-        action: status,
-        customerId,
-        outletName: customer.name,
-        status,
-        reason: approve ? undefined : reason || 'Rejected by reporting manager',
-        route: '/route',
-      },
-    });
-    return {
-      statusCode: HttpStatus.OK,
-      message: `Outlet ${approve ? 'approved' : 'rejected'}`,
-      data: { customerId, status },
-    };
   }
 
   async findAll(query: CustomerQueryDto) {

@@ -81,6 +81,7 @@ import {
   EmployeeSchema,
 } from 'src/core/database/mongo/schema/employee.schema';
 import { NotificationModule } from '../notification/notification.module';
+import { OutletVerificationModule } from '../outlet-verification/outlet-verification.module';
 
 @Module({
   imports: [
@@ -166,6 +167,7 @@ import { NotificationModule } from '../notification/notification.module';
 
     RouteCustomerMappingModule,
     NotificationModule,
+    OutletVerificationModule,
   ],
 
   controllers: [CustomerController],

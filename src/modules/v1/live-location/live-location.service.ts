@@ -34,14 +34,15 @@ export class LiveLocationService extends MongoRepository<LiveLocation> {
     this.workSessionModel = mongo.getModel(WorkSession.name, WorkSessionSchema);
   }
 
-  async track(payload: TrackLiveLocationDto) {
+  async track(payload: TrackLiveLocationDto, authenticatedUserId?: string) {
     const latitude = Number(payload.location?.latitude);
     const longitude = Number(payload.location?.longitude);
     if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
       throw new BadRequestException('Location is required');
     }
 
-    const userId = RequestContextStore.getStore()?.userId;
+    const userId =
+      authenticatedUserId || RequestContextStore.getStore()?.userId;
     const workSession = await this.workSessionModel
       .findOne({
         userId,
@@ -74,6 +75,17 @@ export class LiveLocationService extends MongoRepository<LiveLocation> {
       data: {
         locationId: point.locationId,
         workSessionId: point.workSessionId,
+        employeeId: point.userId,
+        vanId: point.vanId,
+        location: {
+          latitude: point.latitude,
+          longitude: point.longitude,
+          accuracy: point.accuracy ?? null,
+          altitude: point.altitude ?? null,
+          speed: point.speed ?? null,
+          heading: point.heading ?? null,
+          capturedAt: point.capturedAt,
+        },
       },
     };
   }

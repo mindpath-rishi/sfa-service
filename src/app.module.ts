@@ -65,6 +65,8 @@ import { ChannelModule } from './modules/v1/channel/channel.module';
 import { SyncModule } from './modules/v1/sync/sync.module';
 import { SegmentationModule } from './modules/v1/segmentation/segmentation.module';
 import { LiveLocationModule } from './modules/v1/live-location/live-location.module';
+import { VanChangeRequestModule } from './modules/v1/van-change-request/van-change-request.module';
+import { OutletVerificationModule } from './modules/v1/outlet-verification/outlet-verification.module';
 
 @Global()
 @Module({
@@ -126,6 +128,8 @@ import { LiveLocationModule } from './modules/v1/live-location/live-location.mod
     VanInventoryTopupItemModule,
     ActivityModule,
     WorkSessionModule,
+    VanChangeRequestModule,
+    OutletVerificationModule,
     LiveLocationModule,
     RouteSessionModule,
     ShopVisitModule,

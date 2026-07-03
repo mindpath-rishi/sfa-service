@@ -172,15 +172,6 @@ export class Customer {
   @Prop({ type: String, index: true })
   createdByEmployeeId?: string;
 
-  @Prop({ type: String })
-  reviewedByEmployeeId?: string;
-
-  @Prop({ type: Date })
-  reviewedAt?: Date;
-
-  @Prop({ type: String })
-  rejectionReason?: string;
-
   @Prop({
     type: Date,
   })

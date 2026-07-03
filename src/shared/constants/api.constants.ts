@@ -7,7 +7,8 @@ export const API_METHOD = {
   GET: 'get',
   FETCH: 'fetch',
 };
-export const API_MODULE = {USER: 'user',
+export const API_MODULE = {
+  USER: 'user',
   DASHBOARD: 'dashboard',
   EMPLOYEE: 'employee',
   CUSTOMER: 'customer',
@@ -54,6 +55,8 @@ export const API_MODULE = {USER: 'user',
   CUSTOMER_SALES_ITEM: 'customer-sales-item',
   ACTIVITY: 'activity',
   WORK_SESSION: 'work-session',
+  VAN_CHANGE_REQUEST: 'van-change-request',
+  OUTLET_VERIFICATION: 'outlet-verification',
   ROUTE_SESSION: 'route-session',
   SHOP_VISIT: 'shop-visit',
   ROUTE_CUSTOMER_MAPPING: 'route-customer-mapping',
@@ -67,7 +70,8 @@ export const API_MODULE = {USER: 'user',
   VAN_ERP_CLOSING: 'van-erp-closing',
 };
 
-export const API_MODULE_ENABLE_KEYS = {ADDRESS: 'ENABLE_ADDRESS_MODULE',
+export const API_MODULE_ENABLE_KEYS = {
+  ADDRESS: 'ENABLE_ADDRESS_MODULE',
   DASHBOARD: 'ENABLE_DASHBOARD_MODULE',
   AUDIT_LOGS: 'ENABLE_AUDIT_LOGS',
   CART: 'ENABLE_CART_MODULE',

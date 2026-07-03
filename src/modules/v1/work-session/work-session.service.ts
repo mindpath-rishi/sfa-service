@@ -5,7 +5,6 @@ import {
   HttpStatus,
   BadRequestException,
 } from '@nestjs/common';
-import { Model } from 'mongoose';
 
 import { MongoService } from 'src/core/database/mongo/mongo.service';
 import { MongoRepository } from 'src/core/database/mongo/mongo.repository';
@@ -38,19 +37,10 @@ import { Van } from 'src/core/database/mongo/schema/van.schema';
 import { VanInventoryService } from '../van-inventory/van-inventory.service';
 import { InventoryTransaction } from 'src/core/database/mongo/schema/inventory-transaction.schema';
 import { InventoryTransactionService } from '../inventory-transaction/inventory-transaction.service';
-import { VanService } from '../van/van.service';
 import { LeaveService } from '../leave/leave.service';
-import {
-  Employee,
-  EmployeeSchema,
-} from 'src/core/database/mongo/schema/employee.schema';
-import { NotificationPlatform } from 'src/shared/enums/notification.enums';
-import { NotificationService } from '../notification/notification.service';
 
 @Injectable()
 export class WorkSessionService extends MongoRepository<WorkSession> {
-  private readonly employeeModel: Model<Employee>;
-
   constructor(
     mongo: MongoService,
     private readonly activityService: ActivityService,
@@ -60,12 +50,9 @@ export class WorkSessionService extends MongoRepository<WorkSession> {
     private readonly stockCountItemService: StockCountItemService,
     private readonly inventoryService: VanInventoryService,
     private readonly inventoryTransactionService: InventoryTransactionService,
-    private readonly vanService: VanService,
     private readonly leaveService: LeaveService,
-    private readonly notificationService: NotificationService,
   ) {
     super(mongo.getModel(WorkSession.name, WorkSessionSchema));
-    this.employeeModel = mongo.getModel(Employee.name, EmployeeSchema);
   }
 
   private normalizeLocation(location?: any) {
@@ -89,7 +76,6 @@ export class WorkSessionService extends MongoRepository<WorkSession> {
   async create(payload: CreateWorkSessionDto) {
     try {
       return await this.withTransaction(async (session) => {
-        const requestedVanId = payload.requestedVanId;
         const ctx = RequestContextStore.getStore();
 
         /* ======================================================
@@ -115,17 +101,6 @@ export class WorkSessionService extends MongoRepository<WorkSession> {
          * CREATE WORK SESSION
          * ====================================================== */
 
-        const requestedVan = requestedVanId
-          ? await this.vanService.findOne(
-              { vanId: requestedVanId },
-              { session },
-            )
-          : null;
-
-        if (requestedVanId && !requestedVan) {
-          throw new BadRequestException('Requested van not found');
-        }
-
         const dayStartLocation = this.normalizeLocation(
           payload.dayStartLocation || (payload as any).startLocation,
         );
@@ -141,16 +116,6 @@ export class WorkSessionService extends MongoRepository<WorkSession> {
           dayStartLocation,
           status: WorkSessionStatus.ACTIVE,
         };
-
-        if (requestedVanId) {
-          newWork.requestedVanId = requestedVanId;
-          newWork.requestedVanName =
-            payload.requestedVanName ||
-            (requestedVan as any)?.name ||
-            (requestedVan as any)?.vanName;
-          newWork.vanChangeReason = payload.vanChangeReason;
-          newWork.vanChangeStatus = 'PENDING';
-        }
 
         // if (payl.routeId) {
         //   payload['routeId'] = reqBody.routeId;
@@ -168,24 +133,20 @@ export class WorkSessionService extends MongoRepository<WorkSession> {
          * CREATE ACTIVITY (SAME TRANSACTION)
          * ====================================================== */
 
-        if (requestedVanId) {
-          await this.notifyManagerForVanChange(workSessionDoc);
-        } else {
-          const activityPayload: CreateActivityDto & {
-            vanId: any;
-          } = {
-            name: payload.activityName || 'Work Session',
-            description: payload.description || '',
-            workSessionId: workSessionDoc.workSessionId,
-            routeId: payload.routeId,
-            totalShops: payload.totalShops,
-            routeName: payload.routeName,
-            customerCategoryId: payload.customerCategoryId,
-            vanId: payload?.vanId,
-          };
+        const activityPayload: CreateActivityDto & {
+          vanId: any;
+        } = {
+          name: payload.activityName || 'Work Session',
+          description: payload.description || '',
+          workSessionId: workSessionDoc.workSessionId,
+          routeId: payload.routeId,
+          totalShops: payload.totalShops,
+          routeName: payload.routeName,
+          customerCategoryId: payload.customerCategoryId,
+          vanId: payload?.vanId,
+        };
 
-          await this.activityService.create(activityPayload, { session });
-        }
+        await this.activityService.create(activityPayload, { session });
 
         // if (payload.routeId) {
         //   const newRouteSession: CreateRouteSessionDto = {
@@ -580,17 +541,16 @@ export class WorkSessionService extends MongoRepository<WorkSession> {
       return await this.withTransaction(async (session) => {
         const ctx = RequestContextStore.getStore();
 
-        const startOfDay = new Date();
-        startOfDay.setHours(0, 0, 0, 0);
-
         /* ======================================================
          * 1. FIND ACTIVE WORK SESSION
          * ====================================================== */
-        const workSession = await this.findOne({
-          userId: ctx?.userId,
-          createdAt: { $gte: startOfDay },
-          status: WorkSessionStatus.ACTIVE,
-        });
+        const workSession = await this.findOne(
+          {
+            userId: ctx?.userId,
+            status: WorkSessionStatus.ACTIVE,
+          },
+          { sort: { createdAt: -1 } },
+        );
 
         if (!workSession) {
           throw new NotFoundException(WORK_SESSION.NOT_FOUND);
@@ -1112,42 +1072,6 @@ export class WorkSessionService extends MongoRepository<WorkSession> {
           },
         },
       },
-      {
-        $addFields: {
-          vanChangeActionTaken: {
-            $gt: [
-              {
-                $size: {
-                  $filter: {
-                    input: '$activities',
-                    as: 'act',
-                    cond: {
-                      $and: [
-                        { $eq: ['$$act.name', 'Retailing'] },
-                        {
-                          $or: [
-                            {
-                              $eq: [
-                                { $ifNull: ['$vanChangeApprovedAt', null] },
-                                null,
-                              ],
-                            },
-                            {
-                              $gte: ['$$act.startTime', '$vanChangeApprovedAt'],
-                            },
-                          ],
-                        },
-                      ],
-                    },
-                  },
-                },
-              },
-              0,
-            ],
-          },
-        },
-      },
-
       /* ===== 7. ROUTE ===== */
       {
         $lookup: {
@@ -1191,19 +1115,6 @@ export class WorkSessionService extends MongoRepository<WorkSession> {
           createdAt: 1,
           vanId: 1,
           vanName: 1,
-          requestedVanId: 1,
-          requestedVanName: 1,
-          vanChangeReason: 1,
-          vanChangeStatus: 1,
-          vanChangeApprovedAt: 1,
-          vanChangeRejectedAt: 1,
-          vanChangeActionTaken: 1,
-          vanChangeRequiresAction: {
-            $and: [
-              { $eq: ['$vanChangeStatus', 'APPROVED'] },
-              { $eq: ['$vanChangeActionTaken', false] },
-            ],
-          },
         },
       },
     ];
@@ -1259,270 +1170,6 @@ export class WorkSessionService extends MongoRepository<WorkSession> {
       message: WORK_SESSION.DELETED,
       data: existing,
     };
-  }
-
-  async approveVanChange(workSessionId: string) {
-    const ctx = RequestContextStore.getStore();
-    const workSession = await this.findOne({ workSessionId });
-
-    if (!workSession) throw new NotFoundException(WORK_SESSION.NOT_FOUND);
-    if (
-      workSession.vanChangeStatus !== 'PENDING' ||
-      !workSession.requestedVanId
-    ) {
-      throw new BadRequestException('No pending van change request found');
-    }
-
-    await this.vanService.changeVan({
-      oldVanId: workSession.vanId,
-      employeeId: workSession.userId,
-      vanId: workSession.requestedVanId,
-    });
-
-    await this.updateOne(
-      { workSessionId },
-      {
-        vanId: workSession.requestedVanId,
-        vanName: workSession.requestedVanName || workSession.vanName,
-        vanChangeStatus: 'APPROVED',
-        vanChangeApprovedBy: ctx?.userId,
-        vanChangeApprovedAt: new Date(),
-      },
-      { new: true },
-    );
-
-    const updated = await this.findOne({ workSessionId });
-
-    await this.notificationService.markVanChangeRequestResolved(
-      workSessionId,
-      'APPROVED',
-    );
-
-    await this.notificationService.create({
-      recipientId: workSession.userId,
-      title: 'Van Change Approved',
-      body: 'Your manager approved the van change. Please select a route to start retailing.',
-      category: 'van_change',
-      platform: NotificationPlatform.ANDROID,
-      data: {
-        category: 'van_change',
-        action: 'APPROVED',
-        workSessionId,
-        vanId: workSession.requestedVanId,
-        reason: workSession.vanChangeReason,
-        vanChangeReason: workSession.vanChangeReason,
-        route: '/(drawer)/(tabs)/home',
-      },
-    });
-
-    return {
-      statusCode: HttpStatus.OK,
-      message: 'Van change request approved',
-      data: updated,
-    };
-  }
-
-  async rejectVanChange(workSessionId: string) {
-    const ctx = RequestContextStore.getStore();
-    const workSession = await this.findOne({ workSessionId });
-
-    if (!workSession) throw new NotFoundException(WORK_SESSION.NOT_FOUND);
-    if (
-      workSession.vanChangeStatus !== 'PENDING' ||
-      !workSession.requestedVanId
-    ) {
-      throw new BadRequestException('No pending van change request found');
-    }
-
-    await this.updateOne(
-      { workSessionId },
-      {
-        vanChangeStatus: 'REJECTED',
-        vanChangeRejectedBy: ctx?.userId,
-        vanChangeRejectedAt: new Date(),
-      },
-      { new: true },
-    );
-
-    const updated = await this.findOne({ workSessionId });
-
-    await this.notificationService.markVanChangeRequestResolved(
-      workSessionId,
-      'REJECTED',
-    );
-
-    await this.notificationService.create({
-      recipientId: workSession.userId,
-      title: 'Van Change Rejected',
-      body: 'Your manager rejected the van change request. Continue with your currently mapped van.',
-      category: 'van_change',
-      platform: NotificationPlatform.ANDROID,
-      data: {
-        category: 'van_change',
-        action: 'REJECTED',
-        workSessionId,
-        reason: workSession.vanChangeReason,
-        vanChangeReason: workSession.vanChangeReason,
-        route: '/(drawer)/(tabs)/home',
-      },
-    });
-
-    return {
-      statusCode: HttpStatus.OK,
-      message: 'Van change request rejected',
-      data: updated,
-    };
-  }
-
-  async cancelVanChange(workSessionId: string) {
-    const ctx = RequestContextStore.getStore();
-    const workSession = await this.findOne({ workSessionId });
-
-    if (!workSession) throw new NotFoundException(WORK_SESSION.NOT_FOUND);
-    if (workSession.userId !== ctx?.userId) {
-      throw new BadRequestException(
-        'You can only cancel your own van change request',
-      );
-    }
-    if (
-      workSession.vanChangeStatus !== 'PENDING' ||
-      !workSession.requestedVanId
-    ) {
-      throw new BadRequestException('No pending van change request found');
-    }
-
-    await this.updateOne(
-      { workSessionId },
-      {
-        $unset: {
-          requestedVanId: '',
-          requestedVanName: '',
-          vanChangeReason: '',
-          vanChangeStatus: '',
-        },
-      },
-      { new: true },
-    );
-
-    const updated = await this.findOne({ workSessionId });
-
-    await this.notificationService.markVanChangeRequestResolved(
-      workSessionId,
-      'CANCELLED',
-    );
-
-    return {
-      statusCode: HttpStatus.OK,
-      message: 'Van change request cancelled',
-      data: updated,
-    };
-  }
-
-  async requestVanChange(
-    workSessionId: string,
-    payload: {
-      requestedVanId: string;
-      requestedVanName?: string;
-      vanChangeReason?: string;
-    },
-  ) {
-    const ctx = RequestContextStore.getStore();
-    const workSession = await this.findOne({ workSessionId });
-
-    if (!workSession) throw new NotFoundException(WORK_SESSION.NOT_FOUND);
-    if (workSession.userId !== ctx?.userId) {
-      throw new BadRequestException(
-        'You can only request van change for your own session',
-      );
-    }
-    if (workSession.status !== WorkSessionStatus.ACTIVE) {
-      throw new BadRequestException('No active work session found');
-    }
-    if (!payload.requestedVanId) {
-      throw new BadRequestException('requestedVanId is required');
-    }
-    if (workSession.vanChangeStatus === 'PENDING') {
-      throw new BadRequestException('Van change request already pending');
-    }
-
-    const requestedVan = await this.vanService.findOne({
-      vanId: payload.requestedVanId,
-    });
-
-    if (!requestedVan) {
-      throw new BadRequestException('Requested van not found');
-    }
-
-    await this.updateOne(
-      { workSessionId },
-      {
-        $set: {
-          requestedVanId: payload.requestedVanId,
-          requestedVanName:
-            payload.requestedVanName ||
-            (requestedVan as any)?.name ||
-            (requestedVan as any)?.vanName,
-          vanChangeReason: payload.vanChangeReason,
-          vanChangeStatus: 'PENDING',
-        },
-        $unset: {
-          vanChangeApprovedBy: '',
-          vanChangeApprovedAt: '',
-          vanChangeRejectedBy: '',
-          vanChangeRejectedAt: '',
-        },
-      },
-      { new: true },
-    );
-
-    const updated = await this.findOne({ workSessionId });
-
-    if (updated) {
-      await this.notifyManagerForVanChange(updated);
-    }
-
-    return {
-      statusCode: HttpStatus.OK,
-      message: 'Van change request submitted',
-      data: updated,
-    };
-  }
-
-  private async notifyManagerForVanChange(workSession: WorkSession) {
-    const employee = await this.employeeModel
-      .findOne({ employeeId: workSession.userId })
-      .lean();
-
-    const hierarchyPath = employee?.hierarchyPath || [];
-    const managerId =
-      employee?.reportingEmployeeId || hierarchyPath[hierarchyPath.length - 1];
-
-    if (!managerId) return;
-
-    await this.notificationService.create({
-      recipientId: managerId,
-      title: 'Van Change Approval Required',
-      body: `${workSession.userName || 'Salesman'} requested ${workSession.requestedVanName || workSession.requestedVanId} for today.`,
-      category: 'van_change',
-      platform: NotificationPlatform.ANDROID,
-      data: {
-        category: 'van_change',
-        action: 'APPROVAL_REQUIRED',
-        workSessionId: workSession.workSessionId,
-        salesmanId: workSession.userId,
-        salesmanName: workSession.userName,
-        currentVanId: workSession.vanId,
-        currentVan: workSession.vanName,
-        oldVanId: workSession.vanId,
-        oldVanName: workSession.vanName,
-        requestedVanId: workSession.requestedVanId,
-        requestedVan: workSession.requestedVanName,
-        requestedVanName: workSession.requestedVanName,
-        reason: workSession.vanChangeReason,
-        vanChangeReason: workSession.vanChangeReason,
-        route: '/notifications',
-      },
-    });
   }
 
   private handleDuplicateError(error: any): never {

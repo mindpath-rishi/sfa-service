@@ -14,9 +14,7 @@ import { StockCountItemModule } from '../stock-count-item/stock-count-item.modul
 import { VanDailyStockModule } from '../van-daily-stock/van-daily-stock.module';
 import { InventoryTransactionModule } from '../inventory-transaction/inventory-transaction.module';
 import { VanInventoryModule } from '../van-inventory/van-inventory.module';
-import { VanModule } from '../van/van.module';
 import { LeaveModule } from '../leave/leave.module';
-import { NotificationModule } from '../notification/notification.module';
 
 @Module({
   imports: [
@@ -30,9 +28,7 @@ import { NotificationModule } from '../notification/notification.module';
     VanDailyStockModule,
     InventoryTransactionModule,
     VanInventoryModule,
-    VanModule,
     LeaveModule,
-    NotificationModule,
   ],
   controllers: [WorkSessionController],
   providers: [WorkSessionService],
