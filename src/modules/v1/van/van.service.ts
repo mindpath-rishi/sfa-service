@@ -129,9 +129,7 @@ export class VanService extends MongoRepository<Van> {
         $match: {
           isDeleted: false,
           associatedUsers: { $in: employeeIds },
-          ...(excludedVanIds.length
-            ? { vanId: { $nin: excludedVanIds } }
-            : {}),
+          ...(excludedVanIds.length ? { vanId: { $nin: excludedVanIds } } : {}),
         },
       },
       { $unwind: '$associatedUsers' },
@@ -252,7 +250,10 @@ export class VanService extends MongoRepository<Van> {
   }
 
   private escapePdfText(value: string) {
-    return value.replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)');
+    return value
+      .replace(/\\/g, '\\\\')
+      .replace(/\(/g, '\\(')
+      .replace(/\)/g, '\\)');
   }
 
   private buildPdfBuffer(title: string, rows: string[][]) {
@@ -287,7 +288,9 @@ export class VanService extends MongoRepository<Van> {
     const textLimit = (width: number, size: number) =>
       Math.max(6, Math.floor(width / (size * 0.52)));
     const truncate = (value: string, limit: number) => {
-      const cleanValue = String(value ?? '').replace(/\s+/g, ' ').trim();
+      const cleanValue = String(value ?? '')
+        .replace(/\s+/g, ' ')
+        .trim();
       return cleanValue.length > limit
         ? `${cleanValue.slice(0, Math.max(0, limit - 3))}...`
         : cleanValue;
@@ -308,7 +311,8 @@ export class VanService extends MongoRepository<Van> {
     let nextObjectId = 4;
 
     objects[1] = '<< /Type /Catalog /Pages 2 0 R >>';
-    objects[fontObjectId] = '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>';
+    objects[fontObjectId] =
+      '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>';
 
     for (const [pageIndex, rowsForPage] of pageRows.entries()) {
       const pageObjectId = nextObjectId;
@@ -349,10 +353,16 @@ export class VanService extends MongoRepository<Van> {
         const y = headerY - (rowIndex + 1) * rowHeight;
 
         if (rowIndex % 2 === 0) {
-          commands.push('0.96 0.98 1 rg', rect(margin, y, tableWidth, rowHeight, 'f'));
+          commands.push(
+            '0.96 0.98 1 rg',
+            rect(margin, y, tableWidth, rowHeight, 'f'),
+          );
         }
 
-        commands.push('0.85 0.89 0.94 RG', rect(margin, y, tableWidth, rowHeight));
+        commands.push(
+          '0.85 0.89 0.94 RG',
+          rect(margin, y, tableWidth, rowHeight),
+        );
         commands.push('0.08 0.13 0.2 rg');
 
         row.forEach((value, columnIndex) => {
@@ -379,8 +389,7 @@ export class VanService extends MongoRepository<Van> {
         `<< /Length ${Buffer.byteLength(content)} >>\nstream\n${content}\nendstream`;
     }
 
-    objects[2] =
-      `<< /Type /Pages /Kids [${pageObjectIds.map((id) => `${id} 0 R`).join(' ')}] /Count ${pageObjectIds.length} >>`;
+    objects[2] = `<< /Type /Pages /Kids [${pageObjectIds.map((id) => `${id} 0 R`).join(' ')}] /Count ${pageObjectIds.length} >>`;
 
     let pdf = '%PDF-1.4\n';
     const offsets = [0];
@@ -454,10 +463,9 @@ export class VanService extends MongoRepository<Van> {
       }
 
       // Create new van
-      const van = await this.save(
-        this.normalizeVanPayload(payload),
-        { session },
-      );
+      const van = await this.save(this.normalizeVanPayload(payload), {
+        session,
+      });
 
       return {
         statusCode: HttpStatus.CREATED,
@@ -646,7 +654,10 @@ export class VanService extends MongoRepository<Van> {
               ? new Date(route.toDate).toISOString().slice(0, 10)
               : '';
 
-            return [route.routeId, fromDate && toDate ? `${fromDate} to ${toDate}` : '']
+            return [
+              route.routeId,
+              fromDate && toDate ? `${fromDate} to ${toDate}` : '',
+            ]
               .filter(Boolean)
               .join(' ');
           })
@@ -823,7 +834,7 @@ export class VanService extends MongoRepository<Van> {
           associatedUsers: 1,
           status: 1,
           activeRoute: 1,
-          routes: 1
+          routes: 1,
         },
       },
     ];
@@ -869,16 +880,10 @@ export class VanService extends MongoRepository<Van> {
         }
       }
 
-      await this.validateAssociatedUsers(
-        dto.associatedUsers,
-        [vanId],
+      await this.validateAssociatedUsers(dto.associatedUsers, [vanId], session);
+      await this.updateOne({ vanId }, this.normalizeVanPayload(dto), {
         session,
-      );
-      await this.updateOne(
-        { vanId },
-        this.normalizeVanPayload(dto),
-        { session },
-      );
+      });
     });
     const updated = await this.findByVanId(vanId);
 
@@ -949,7 +954,7 @@ export class VanService extends MongoRepository<Van> {
           path: '$associatedRoutes',
           // A user can be assigned to a van before routes are assigned to it.
           // Keep that van in the result and return an empty routes array.
-          preserveNullAndEmptyArrays: true,
+          preserveNullAndEmptyArrays: false,
         },
       },
 
@@ -1015,7 +1020,7 @@ export class VanService extends MongoRepository<Van> {
             provinceId: '$route.provinceId',
             marketId: '$route.marketId',
             countryId: '$route.countryId',
-            customerCategoryId: '$route.customerCategoryId'
+            customerCategoryId: '$route.customerCategoryId',
           },
         },
       },
