@@ -67,6 +67,12 @@ export class Employee {
   })
   email?: string;
 
+  @Prop({ required: false, type: String })
+  profileImageMediaId?: string;
+
+  @Prop({ required: false, type: String })
+  profileImageUrl?: string;
+
   /* ======================================================
    * AUTHORIZATION
    * ====================================================== */

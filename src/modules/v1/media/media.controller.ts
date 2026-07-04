@@ -76,11 +76,13 @@ export class MediaController {
    *
    * Notes:
    * - Duplicate detection is handled in service
-   * - Upload limits are enforced in service
+   * - Send mediaId to replace an existing media file
    */
   @Post('upload')
   @HttpCode(HttpStatus.CREATED)
-  @ApiOperation({ summary: 'Upload file and create media record' })
+  @ApiOperation({
+    summary: 'Upload media, or replace it when mediaId is provided',
+  })
   @ApiConsumes('multipart/form-data')
   @ApiBody({ type: UploadMediaDto })
   @UseInterceptors(FileInterceptor('file'))
@@ -156,12 +158,7 @@ export class MediaController {
     @Body() dto: UpdateMediaDto,
     @Req() req: any,
   ) {
-    return this.mediaService.updateMedia(
-      mediaId,
-      dto,
-      file,
-      req.user,
-    );
+    return this.mediaService.updateMedia(mediaId, dto, file, req.user);
   }
 
   /**

@@ -11,7 +11,6 @@
  *
  * Notes:
  * - All fields are optional
- * - Upload limits are validated at service layer
  */
 
 import { ApiPropertyOptional } from '@nestjs/swagger';

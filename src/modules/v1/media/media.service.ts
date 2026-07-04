@@ -8,7 +8,6 @@
  * - Media creation & updates
  * - File upload & replacement
  * - Duplicate detection using checksum
- * - Upload limit enforcement
  * - Storage cleanup (hard delete / replace)
  *
  * Notes:
@@ -20,7 +19,6 @@
 import {
   Injectable,
   NotFoundException,
-  ForbiddenException,
   BadRequestException,
   HttpStatus,
   Inject,
@@ -123,6 +121,24 @@ export class MediaService extends MongoRepository<Media> {
     body: UploadMediaDto,
     user?: any,
   ) {
+    if (body.mediaId) {
+      const {
+        mediaId,
+        file: _file,
+        ownerType: _ownerType,
+        ownerId: _ownerId,
+        subOwnerId: _subOwnerId,
+        ...updates
+      } = body;
+      return this.updateMedia(mediaId, updates, file, user);
+    }
+
+    if (!body.ownerType || !body.ownerId) {
+      throw new BadRequestException(
+        'ownerType and ownerId are required when creating media',
+      );
+    }
+
     const ownerType = body.ownerType;
     const ownerId = body.ownerId;
     const subOwnerId = body.subOwnerId ?? null;
@@ -150,16 +166,6 @@ export class MediaService extends MongoRepository<Media> {
         data: duplicate,
       });
     }
-
-    // limit validation
-    await MediaUtil.validateLimit({
-      mediaService: this,
-      ownerType,
-      ownerId,
-      subOwnerId,
-      purpose,
-      mediaType,
-    });
 
     // upload to storage
     const uploaded = await this.storage.upload({
@@ -197,46 +203,46 @@ export class MediaService extends MongoRepository<Media> {
    * - Search by text
    * - Owner / type / purpose filtering
    */
- async findAll(query: MediaQueryDto) {
-  const { page = 1, limit = 20, searchText, ...rest } = query;
+  async findAll(query: MediaQueryDto) {
+    const { page = 1, limit = 20, searchText, ...rest } = query;
 
-  const cleanRest = Object.fromEntries(
-    Object.entries(rest).filter(([_, value]) => {
-      return value !== undefined && value !== null && value !== '';
-    }),
-  );
+    const cleanRest = Object.fromEntries(
+      Object.entries(rest).filter(([_, value]) => {
+        return value !== undefined && value !== null && value !== '';
+      }),
+    );
 
-  const filter: any = {
-    isDeleted: false,
-    ...cleanRest,
-  };
+    const filter: any = {
+      isDeleted: false,
+      ...cleanRest,
+    };
 
-  console.log(cleanRest, '===================cleanRest============');
+    console.log(cleanRest, '===================cleanRest============');
 
-  if (searchText) {
-    const regex = new RegExp(searchText, 'i');
-    filter.$or = [
-      { mediaId: regex },
-      { storageKey: regex },
-      { url: regex },
-      { 'meta.fileName': regex },
-    ];
+    if (searchText) {
+      const regex = new RegExp(searchText, 'i');
+      filter.$or = [
+        { mediaId: regex },
+        { storageKey: regex },
+        { url: regex },
+        { 'meta.fileName': regex },
+      ];
+    }
+
+    const result = await this.paginate(filter, {
+      page: Number(page),
+      limit: Number(limit),
+      sort: { isPrimary: -1, sortOrder: 1 },
+      lean: true,
+    });
+
+    return {
+      statusCode: HttpStatus.OK,
+      message: MEDIA.FETCHED,
+      data: result.items,
+      meta: result.meta,
+    };
   }
-
-  const result = await this.paginate(filter, {
-    page: Number(page),
-    limit: Number(limit),
-    sort: { isPrimary: -1, sortOrder: 1 },
-    lean: true,
-  });
-
-  return {
-    statusCode: HttpStatus.OK,
-    message: MEDIA.FETCHED,
-    data: result.items,
-    meta: result.meta,
-  };
-}
   /**
    * Get Media by ID
    * ---------------
@@ -282,16 +288,6 @@ export class MediaService extends MongoRepository<Media> {
 
     const nextMediaType = dto.mediaType ?? existing.mediaType;
     const nextPurpose = dto.purpose ?? existing.purpose;
-
-    await MediaUtil.validateLimit({
-      mediaService: this,
-      ownerType: existing.ownerType,
-      ownerId: existing.ownerId,
-      subOwnerId: existing.subOwnerId ?? null,
-      purpose: nextPurpose,
-      mediaType: nextMediaType,
-      ignoreMediaId: mediaId,
-    });
 
     const payload: any = {
       ...dto,
@@ -369,11 +365,12 @@ export class MediaService extends MongoRepository<Media> {
    * Purpose : Prevent duplicate file uploads
    */
   async findDuplicateByChecksum(params: any) {
-    const { checksum, ...rest } = params;
+    const { checksum, ignoreMediaId, ...rest } = params;
 
     return this.findOne(
       {
         ...rest,
+        ...(ignoreMediaId ? { mediaId: { $ne: ignoreMediaId } } : {}),
         isDeleted: false,
         'meta.checksum': checksum,
       },
@@ -411,7 +408,7 @@ export class MediaService extends MongoRepository<Media> {
       mediaType,
       purpose,
       checksum,
-      mediaId,
+      ignoreMediaId: mediaId,
     });
 
     if (duplicate) {

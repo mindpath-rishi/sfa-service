@@ -134,6 +134,16 @@ export class CreateEmployeeDto {
   @IsEmail({}, { message: 'Email must be a valid email address' })
   email?: string;
 
+  @ApiPropertyOptional({ example: 'MID-001' })
+  @IsOptional()
+  @IsString()
+  profileImageMediaId?: string;
+
+  @ApiPropertyOptional({ example: 'https://cdn.example.com/profile.jpg' })
+  @IsOptional()
+  @IsString()
+  profileImageUrl?: string;
+
   /**
    * Password
    * --------
