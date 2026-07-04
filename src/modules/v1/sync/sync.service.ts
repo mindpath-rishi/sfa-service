@@ -250,6 +250,100 @@ export class SyncService {
     private readonly notificationService: NotificationService,
   ) {}
 
+  /**
+   * Apply an offline SALE ledger entry to the server stock snapshots.
+   *
+   * The transaction id is stored on each affected stock document in the same
+   * atomic update as the quantity change. This makes reconnect retries safe:
+   * the same queued transaction can never reduce stock twice.
+   */
+  private async applyOfflineInventoryTransaction(
+    payload: Record<string, unknown>,
+  ) {
+    if (payload.transactionType !== 'SALE' || payload.direction !== 'OUT')
+      return;
+
+    const transactionId = String(payload.transactionId ?? '');
+    const productId = String(payload.productId ?? '');
+    const vanId = String(payload.vanId ?? '');
+    const quantity = toFiniteNumber(payload.quantity);
+    if (!transactionId || !productId || !vanId || quantity <= 0)
+      throw new Error('Offline sale transaction has invalid stock details');
+
+    const inventories = this.connection.collection('inventories');
+    const inventoryResult = await inventories.updateOne(
+      {
+        productId,
+        vanId,
+        status: 'ACTIVE',
+        quantity: { $gte: quantity },
+        appliedOfflineTransactionIds: { $ne: transactionId },
+      },
+      {
+        $inc: { quantity: -quantity },
+        $addToSet: { appliedOfflineTransactionIds: transactionId },
+        $set: { updatedAt: new Date() },
+      },
+    );
+
+    if (!inventoryResult.matchedCount) {
+      const inventory = await inventories.findOne({
+        productId,
+        vanId,
+        status: 'ACTIVE',
+      });
+      const alreadyApplied =
+        Array.isArray(inventory?.appliedOfflineTransactionIds) &&
+        inventory.appliedOfflineTransactionIds.includes(transactionId);
+      if (!alreadyApplied) {
+        if (!inventory)
+          throw new Error(`Inventory not found for product: ${productId}`);
+        throw new Error(
+          `Insufficient stock for product ${productId}. Available: ${toFiniteNumber(inventory.quantity)}, Required: ${quantity}`,
+        );
+      }
+    }
+
+    const transactionDate = payload.transactionDate
+      ? new Date(String(payload.transactionDate))
+      : new Date();
+    if (Number.isNaN(transactionDate.getTime()))
+      throw new Error('Offline sale transaction has an invalid date');
+    const dayStart = new Date(transactionDate);
+    dayStart.setHours(0, 0, 0, 0);
+    const dayEnd = new Date(transactionDate);
+    dayEnd.setHours(23, 59, 59, 999);
+
+    const dailyStock = this.connection.collection('van_daily_stock');
+    const dailyResult = await dailyStock.updateOne(
+      {
+        productId,
+        vanId,
+        date: { $gte: dayStart, $lte: dayEnd },
+        appliedOfflineTransactionIds: { $ne: transactionId },
+      },
+      {
+        $inc: { outQty: quantity, closingQty: -quantity },
+        $addToSet: { appliedOfflineTransactionIds: transactionId },
+        $set: { updatedAt: new Date() },
+      },
+    );
+    if (!dailyResult.matchedCount) {
+      const existingDailyStock = await dailyStock.findOne({
+        productId,
+        vanId,
+        date: { $gte: dayStart, $lte: dayEnd },
+      });
+      const alreadyApplied =
+        Array.isArray(existingDailyStock?.appliedOfflineTransactionIds) &&
+        existingDailyStock.appliedOfflineTransactionIds.includes(transactionId);
+      if (!alreadyApplied)
+        throw new Error(
+          `Daily stock not initialized for product: ${productId}`,
+        );
+    }
+  }
+
   async hasOfflineAccess(employeeId: string) {
     const employee = await this.connection
       .collection('employees')
@@ -796,6 +890,8 @@ export class SyncService {
                 $unset: { ownerId: '' },
               },
             );
+            if (operation.entity === 'inventoryTransactions')
+              await this.applyOfflineInventoryTransaction(payload);
             await persistOfflineLocations();
             if (isCustomerOperation) {
               await this.syncCustomerRouteMapping(
@@ -840,6 +936,8 @@ export class SyncService {
             updatedAt: now,
             deletedAt: null,
           });
+          if (operation.entity === 'inventoryTransactions')
+            await this.applyOfflineInventoryTransaction(payload);
           await persistOfflineLocations();
 
           if (isCustomerOperation) {
