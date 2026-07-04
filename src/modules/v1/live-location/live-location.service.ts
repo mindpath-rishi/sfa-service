@@ -6,7 +6,6 @@ import {
 } from '@nestjs/common';
 import { Model } from 'mongoose';
 import { RequestContextStore } from 'src/core/context/request-context';
-import { FilterQuery } from 'src/core/database/mongo/mongo.interface';
 import { MongoRepository } from 'src/core/database/mongo/mongo.repository';
 import { MongoService } from 'src/core/database/mongo/mongo.service';
 import {
@@ -25,92 +24,189 @@ import { UpdateLiveLocationDto } from './dto/update-live-location.dto';
 import { TrackLiveLocationDto } from './dto/track-live-location.dto';
 import { LIVE_LOCATION } from './live-location.constants';
 
+const DATABASE_SAMPLE_INTERVAL_MS = 5 * 60 * 1000;
+
+export type LiveLocationUpdate = {
+  workSessionId: string;
+  employeeId: string;
+  vanId?: string;
+  location: {
+    latitude: number;
+    longitude: number;
+    accuracy: number | null;
+    altitude: number | null;
+    speed: number | null;
+    heading: number | null;
+    capturedAt: Date;
+    source: string;
+  };
+};
+
 @Injectable()
 export class LiveLocationService extends MongoRepository<LiveLocation> {
   private readonly workSessionModel: Model<WorkSession>;
+  private readonly lastPersistedAt = new Map<string, number>();
+  private readonly persistenceInFlight = new Map<string, Promise<boolean>>();
 
   constructor(mongo: MongoService) {
     super(mongo.getModel(LiveLocation.name, LiveLocationSchema));
     this.workSessionModel = mongo.getModel(WorkSession.name, WorkSessionSchema);
   }
 
-  async track(payload: TrackLiveLocationDto, authenticatedUserId?: string) {
+  /** Build the real-time socket payload without waiting for MongoDB. */
+  createRealtimeUpdate(
+    payload: TrackLiveLocationDto,
+    authenticatedUserId: string,
+    authenticatedVanId?: string,
+  ): LiveLocationUpdate {
     const latitude = Number(payload.location?.latitude);
     const longitude = Number(payload.location?.longitude);
     if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
       throw new BadRequestException('Location is required');
     }
+    if (!payload.workSessionId) {
+      throw new BadRequestException('workSessionId is required');
+    }
 
-    const userId =
-      authenticatedUserId || RequestContextStore.getStore()?.userId;
-    const workSession = await this.workSessionModel
-      .findOne({
-        userId,
-        status: WorkSessionStatus.ACTIVE,
-        isDeleted: false,
-        ...(payload.workSessionId
-          ? { workSessionId: payload.workSessionId }
-          : {}),
-      })
-      .lean();
-    if (!workSession) throw new NotFoundException('Work session not found');
-
-    const point = await this.createTrackedLocation({
-      userId: workSession.userId,
-      workSessionId: workSession.workSessionId,
-      vanId: workSession.vanId,
-      source: payload.source || 'BACKGROUND',
-      latitude,
-      longitude,
-      accuracy: payload.location?.accuracy ?? undefined,
-      altitude: payload.location?.altitude ?? undefined,
-      speed: payload.location?.speed ?? undefined,
-      heading: payload.location?.heading ?? undefined,
-      capturedAt: payload.location?.capturedAt,
-    });
+    const capturedAt = payload.location?.capturedAt
+      ? new Date(payload.location.capturedAt)
+      : new Date();
+    if (Number.isNaN(capturedAt.getTime())) {
+      throw new BadRequestException('capturedAt must be a valid date');
+    }
 
     return {
-      statusCode: HttpStatus.CREATED,
-      message: LIVE_LOCATION.CREATED,
-      data: {
-        locationId: point.locationId,
-        workSessionId: point.workSessionId,
-        employeeId: point.userId,
-        vanId: point.vanId,
-        location: {
-          latitude: point.latitude,
-          longitude: point.longitude,
-          accuracy: point.accuracy ?? null,
-          altitude: point.altitude ?? null,
-          speed: point.speed ?? null,
-          heading: point.heading ?? null,
-          capturedAt: point.capturedAt,
-        },
+      workSessionId: payload.workSessionId,
+      employeeId: authenticatedUserId,
+      vanId: authenticatedVanId,
+      location: {
+        latitude,
+        longitude,
+        accuracy: payload.location?.accuracy ?? null,
+        altitude: payload.location?.altitude ?? null,
+        speed: payload.location?.speed ?? null,
+        heading: payload.location?.heading ?? null,
+        capturedAt,
+        source: payload.source || 'BACKGROUND',
       },
     };
   }
 
-  async create(payload: CreateLiveLocationDto) {
-    const doc = await this.createTrackedLocation(payload);
+  /**
+   * Persist at most one point every five minutes for each work session/van.
+   * Socket broadcasting does not await this method.
+   */
+  persistThrottled(update: LiveLocationUpdate): Promise<boolean> {
+    const key = `${update.workSessionId}:${update.vanId || ''}`;
+    const now = Date.now();
+    if (
+      now - (this.lastPersistedAt.get(key) || 0) <
+      DATABASE_SAMPLE_INTERVAL_MS
+    ) {
+      return Promise.resolve(false);
+    }
+    const existing = this.persistenceInFlight.get(key);
+    if (existing) return existing;
+
+    this.lastPersistedAt.set(key, now);
+    const operation = this.persistUpdate(update)
+      .then(() => true)
+      .catch((error) => {
+        this.lastPersistedAt.delete(key);
+        throw error;
+      })
+      .finally(() => this.persistenceInFlight.delete(key));
+    this.persistenceInFlight.set(key, operation);
+    return operation;
+  }
+
+  private async persistUpdate(update: LiveLocationUpdate) {
+    const workSession = await this.workSessionModel
+      .findOne({
+        workSessionId: update.workSessionId,
+        userId: update.employeeId,
+        status: WorkSessionStatus.ACTIVE,
+        isDeleted: false,
+      })
+      .lean();
+    if (!workSession) throw new NotFoundException('Work session not found');
+    if (!workSession.vanId)
+      throw new BadRequestException('Work session has no van');
+
+    const date = this.utcStartOfDay(update.location.capturedAt);
+    const point = {
+      source: update.location.source,
+      latitude: update.location.latitude,
+      longitude: update.location.longitude,
+      accuracy: update.location.accuracy ?? undefined,
+      altitude: update.location.altitude ?? undefined,
+      speed: update.location.speed ?? undefined,
+      heading: update.location.heading ?? undefined,
+      capturedAt: update.location.capturedAt,
+    };
+
+    await this.model.updateOne(
+      {
+        workSessionId: workSession.workSessionId,
+        vanId: workSession.vanId,
+        date,
+      } as any,
+      {
+        $setOnInsert: {
+          locationId: IdGenerator.generate('LOC', 10),
+          userId: workSession.userId,
+          workSessionId: workSession.workSessionId,
+          vanId: workSession.vanId,
+          date,
+        },
+        $push: { locations: point },
+      },
+      { upsert: true },
+    );
+  }
+
+  async track(payload: TrackLiveLocationDto, authenticatedUserId?: string) {
+    const userId =
+      authenticatedUserId || RequestContextStore.getStore()?.userId;
+    if (!userId)
+      throw new BadRequestException('Authenticated user is required');
+    const update = this.createRealtimeUpdate(
+      payload,
+      userId,
+      RequestContextStore.getStore()?.vanId,
+    );
+    const persisted = await this.persistThrottled(update);
     return {
-      statusCode: HttpStatus.CREATED,
-      message: LIVE_LOCATION.CREATED,
-      data: doc,
+      statusCode: HttpStatus.OK,
+      message: persisted ? LIVE_LOCATION.CREATED : 'Location received',
+      data: update,
     };
   }
 
-  async createTrackedLocation(
-    payload: Omit<CreateLiveLocationDto, 'capturedAt'> & {
-      capturedAt?: string | Date;
-    },
-  ) {
-    return this.save({
-      locationId: IdGenerator.generate('LOC', 10),
-      ...payload,
-      capturedAt: payload.capturedAt
-        ? new Date(payload.capturedAt)
-        : new Date(),
-    });
+  async create(payload: CreateLiveLocationDto) {
+    const update: LiveLocationUpdate = {
+      workSessionId: payload.workSessionId,
+      employeeId: payload.userId,
+      vanId: payload.vanId,
+      location: {
+        latitude: payload.latitude,
+        longitude: payload.longitude,
+        accuracy: payload.accuracy ?? null,
+        altitude: payload.altitude ?? null,
+        speed: payload.speed ?? null,
+        heading: payload.heading ?? null,
+        capturedAt: payload.capturedAt
+          ? new Date(payload.capturedAt)
+          : new Date(),
+        source: payload.source || 'BACKGROUND',
+      },
+    };
+    await this.persistUpdate(update);
+    return {
+      statusCode: HttpStatus.CREATED,
+      message: LIVE_LOCATION.CREATED,
+      data: update,
+    };
   }
 
   async findAll(query: LiveLocationQueryDto) {
@@ -122,31 +218,44 @@ export class LiveLocationService extends MongoRepository<LiveLocation> {
       page = 1,
       limit = 20,
     } = query;
-    const filter: FilterQuery<LiveLocation> = {};
-    if (userId) filter.userId = userId;
-    if (workSessionId) filter.workSessionId = workSessionId;
+    const match: Record<string, unknown> = {};
+    if (userId) match.userId = userId;
+    if (workSessionId) match.workSessionId = workSessionId;
     if (startDate || endDate) {
-      filter.capturedAt = {
+      match['locations.capturedAt'] = {
         ...(startDate ? { $gte: new Date(startDate) } : {}),
         ...(endDate ? { $lte: new Date(endDate) } : {}),
       };
     }
-    const result = await this.paginate(filter, {
-      page,
-      limit,
-      sort: { capturedAt: -1 },
-      lean: true,
-    });
+    const [result] = await this.model.aggregate([
+      { $match: match },
+      { $unwind: '$locations' },
+      ...(startDate || endDate
+        ? [
+            {
+              $match: { 'locations.capturedAt': match['locations.capturedAt'] },
+            },
+          ]
+        : []),
+      { $sort: { 'locations.capturedAt': -1 } },
+      {
+        $facet: {
+          items: [{ $skip: (page - 1) * limit }, { $limit: limit }],
+          total: [{ $count: 'count' }],
+        },
+      },
+    ]);
+    const total = result?.total?.[0]?.count || 0;
     return {
       statusCode: HttpStatus.OK,
       message: LIVE_LOCATION.FETCHED,
-      data: result.items,
-      meta: result.meta,
+      data: (result?.items || []).map((item: any) => this.flattenPoint(item)),
+      meta: { page, limit, total, totalPages: Math.ceil(total / limit) },
     };
   }
 
   async findByLocationId(locationId: string) {
-    const doc = await this.findOne({ locationId }, { lean: true });
+    const doc = await this.model.findOne({ locationId }).lean();
     if (!doc) throw new NotFoundException(LIVE_LOCATION.NOT_FOUND);
     return {
       statusCode: HttpStatus.OK,
@@ -156,7 +265,11 @@ export class LiveLocationService extends MongoRepository<LiveLocation> {
   }
 
   async updateLocation(locationId: string, payload: UpdateLiveLocationDto) {
-    const doc = await this.updateOne({ locationId }, payload, { new: true });
+    const doc = await this.model.findOneAndUpdate(
+      { locationId },
+      { $set: payload },
+      { new: true },
+    );
     if (!doc) throw new NotFoundException(LIVE_LOCATION.NOT_FOUND);
     return {
       statusCode: HttpStatus.OK,
@@ -166,9 +279,8 @@ export class LiveLocationService extends MongoRepository<LiveLocation> {
   }
 
   async deleteLocation(locationId: string) {
-    const doc = await this.findOne({ locationId });
+    const doc = await this.model.findOneAndDelete({ locationId });
     if (!doc) throw new NotFoundException(LIVE_LOCATION.NOT_FOUND);
-    await this.softDelete({ locationId });
     return {
       statusCode: HttpStatus.OK,
       message: LIVE_LOCATION.DELETED,
@@ -182,21 +294,42 @@ export class LiveLocationService extends MongoRepository<LiveLocation> {
     endDate: Date,
   ) {
     if (!workSessionIds.length) return [];
-    return this.model
-      .find({
-        workSessionId: { $in: workSessionIds },
-        capturedAt: { $gte: startDate, $lte: endDate },
-        isDeleted: { $ne: true },
-      } as any)
-      .sort({ capturedAt: 1 })
-      .lean();
+    const docs = await this.model.aggregate([
+      { $match: { workSessionId: { $in: workSessionIds } } },
+      { $unwind: '$locations' },
+      {
+        $match: { 'locations.capturedAt': { $gte: startDate, $lte: endDate } },
+      },
+      { $sort: { 'locations.capturedAt': 1 } },
+    ]);
+    return docs.map((doc: any) => this.flattenPoint(doc));
   }
 
   async findLatestForSession(workSessionId?: string) {
     if (!workSessionId) return null;
-    return this.model
-      .findOne({ workSessionId, isDeleted: { $ne: true } } as any)
-      .sort({ capturedAt: -1 })
-      .lean();
+    const [latest] = await this.model.aggregate([
+      { $match: { workSessionId } },
+      { $unwind: '$locations' },
+      { $sort: { 'locations.capturedAt': -1 } },
+      { $limit: 1 },
+    ]);
+    return latest ? this.flattenPoint(latest) : null;
+  }
+
+  private flattenPoint(doc: any) {
+    return {
+      locationId: doc.locationId,
+      userId: doc.userId,
+      workSessionId: doc.workSessionId,
+      vanId: doc.vanId,
+      date: doc.date,
+      ...doc.locations,
+    };
+  }
+
+  private utcStartOfDay(value: Date) {
+    return new Date(
+      Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate()),
+    );
   }
 }

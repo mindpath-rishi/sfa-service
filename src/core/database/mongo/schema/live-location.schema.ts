@@ -3,20 +3,8 @@ import { HydratedDocument } from 'mongoose';
 
 export type LiveLocationDocument = HydratedDocument<LiveLocation>;
 
-@Schema({ timestamps: true, collection: 'live_location_tracking' })
-export class LiveLocation {
-  @Prop({ required: true, unique: true, type: String })
-  locationId!: string;
-
-  @Prop({ required: true, type: String })
-  userId!: string;
-
-  @Prop({ required: true, type: String })
-  workSessionId!: string;
-
-  @Prop({ type: String })
-  vanId?: string;
-
+@Schema({ _id: false })
+export class LiveLocationPoint {
   @Prop({ type: String, default: 'BACKGROUND' })
   source?: string;
 
@@ -42,8 +30,40 @@ export class LiveLocation {
   capturedAt!: Date;
 }
 
+export const LiveLocationPointSchema =
+  SchemaFactory.createForClass(LiveLocationPoint);
+
+@Schema({ timestamps: true, collection: 'live_location_tracking' })
+export class LiveLocation {
+  @Prop({ required: true, unique: true, type: String })
+  locationId!: string;
+
+  @Prop({ required: true, type: String })
+  userId!: string;
+
+  @Prop({ required: true, type: String })
+  workSessionId!: string;
+
+  @Prop({ required: true, type: String })
+  vanId!: string;
+
+  /** UTC start-of-day used as the daily aggregate key. */
+  @Prop({ required: true, type: Date })
+  date!: Date;
+
+  @Prop({ type: [LiveLocationPointSchema], default: [] })
+  locations!: LiveLocationPoint[];
+}
+
 export const LiveLocationSchema = SchemaFactory.createForClass(LiveLocation);
 
-LiveLocationSchema.index({ userId: 1, capturedAt: -1 });
-LiveLocationSchema.index({ workSessionId: 1, capturedAt: 1 });
-LiveLocationSchema.index({ locationId: 1 }, { unique: true });
+LiveLocationSchema.index(
+  { workSessionId: 1, vanId: 1, date: 1 },
+  {
+    unique: true,
+    // Existing installations can still contain the previous point-per-document
+    // records, which have no `date`. Excluding them keeps rollout/index creation safe.
+    partialFilterExpression: { date: { $type: 'date' } },
+  },
+);
+LiveLocationSchema.index({ userId: 1, date: -1 });

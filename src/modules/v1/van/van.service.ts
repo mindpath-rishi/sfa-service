@@ -823,13 +823,7 @@ export class VanService extends MongoRepository<Van> {
           associatedUsers: 1,
           status: 1,
           activeRoute: 1,
-          routes: {
-            $filter: {
-              input: '$routes',
-              as: 'route',
-              cond: { $ne: ['$$route.routeId', null] },
-            },
-          },
+          routes: 1
         },
       },
     ];

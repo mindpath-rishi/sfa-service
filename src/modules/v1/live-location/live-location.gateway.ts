@@ -8,7 +8,6 @@ import {
   WebSocketServer,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
-import { RequestContextStore } from 'src/core/context/request-context';
 import { Public } from 'src/core/decorators/public.decorator';
 import { JwtPayload } from 'src/shared/interfaces/jwt-payload.interface';
 import { TrackLiveLocationDto } from './dto/track-live-location.dto';
@@ -64,18 +63,26 @@ export class LiveLocationGateway implements OnGatewayConnection {
     if (!auth?.sub) return { success: false, statusCode: 401 };
 
     try {
-      const result = await RequestContextStore.run(
-        {
-          userId: auth.sub,
-          role: auth.role,
-          roleId: auth.roleId,
-          name: auth.name,
-          vanId: auth.vanId,
-        },
-        () => this.liveLocationService.track(payload, auth.sub),
+      // Real-time delivery must not wait for MongoDB.  Persistence is sampled
+      // independently every five minutes by the service.
+      const data = this.liveLocationService.createRealtimeUpdate(
+        payload,
+        auth.sub,
+        auth.vanId,
       );
-      this.server.to(MANAGER_ROOM).emit('live-location:update', result.data);
-      return { success: true, ...result };
+      this.server.to(MANAGER_ROOM).emit('live-location:update', data);
+      void this.liveLocationService.persistThrottled(data).catch((error) => {
+        console.error(
+          '[LiveLocation] Failed to persist sampled location',
+          error,
+        );
+      });
+      return {
+        success: true,
+        statusCode: 200,
+        message: 'Location broadcast',
+        data,
+      };
     } catch (error) {
       const statusCode =
         typeof (error as { getStatus?: () => number })?.getStatus === 'function'
