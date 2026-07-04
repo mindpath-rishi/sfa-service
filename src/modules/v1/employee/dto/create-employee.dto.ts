@@ -26,6 +26,7 @@ import {
   IsArray,
   ArrayUnique,
   IsEnum,
+  IsBoolean,
 } from 'class-validator';
 import { UserStatus } from '../../user/user.enum';
 
@@ -237,4 +238,12 @@ export class CreateEmployeeDto {
   })
   @IsOptional()
   permissionOverrides?: PermissionOverridesDto;
+
+  @ApiPropertyOptional({
+    example: false,
+    description: 'Allow this salesman to use offline mode and synchronization',
+  })
+  @IsOptional()
+  @IsBoolean()
+  offlineAccessAllowed?: boolean;
 }

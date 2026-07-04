@@ -294,6 +294,31 @@ export class WorkSessionService extends MongoRepository<WorkSession> {
         },
       },
 
+      /** Latest request is the source of truth for van-change dashboard state. */
+      {
+        $lookup: {
+          from: 'van_change_requests',
+          let: { wsId: '$workSessionId' },
+          pipeline: [
+            {
+              $match: {
+                $expr: { $eq: ['$workSessionId', '$$wsId'] },
+                isDeleted: { $ne: true },
+              },
+            },
+            { $sort: { createdAt: -1 } },
+            { $limit: 1 },
+          ],
+          as: 'vanChangeRequest',
+        },
+      },
+      {
+        $unwind: {
+          path: '$vanChangeRequest',
+          preserveNullAndEmptyArrays: true,
+        },
+      },
+
       /**
        * ✅ Final response
        */
@@ -310,6 +335,10 @@ export class WorkSessionService extends MongoRepository<WorkSession> {
           totalShops: 1,
           isActiveActivity: 1,
           activeActivity: 1,
+          vanChangeRequestId: '$vanChangeRequest.vanChangeRequestId',
+          vanChangeStatus: '$vanChangeRequest.status',
+          requestedVanId: '$vanChangeRequest.requestedVanId',
+          requestedVanName: '$vanChangeRequest.requestedVanName',
 
           // // ✅ activity details
           // activeActivity: {
@@ -1100,7 +1129,32 @@ export class WorkSessionService extends MongoRepository<WorkSession> {
         },
       },
 
-      /* ===== 8. FINAL RESPONSE ===== */
+      /* ===== 8. LATEST VAN CHANGE REQUEST ===== */
+      {
+        $lookup: {
+          from: 'van_change_requests',
+          let: { wsId: '$workSessionId' },
+          pipeline: [
+            {
+              $match: {
+                $expr: { $eq: ['$workSessionId', '$$wsId'] },
+                isDeleted: { $ne: true },
+              },
+            },
+            { $sort: { createdAt: -1 } },
+            { $limit: 1 },
+          ],
+          as: 'vanChangeRequest',
+        },
+      },
+      {
+        $unwind: {
+          path: '$vanChangeRequest',
+          preserveNullAndEmptyArrays: true,
+        },
+      },
+
+      /* ===== 9. FINAL RESPONSE ===== */
       {
         $project: {
           _id: 0,
@@ -1115,6 +1169,10 @@ export class WorkSessionService extends MongoRepository<WorkSession> {
           createdAt: 1,
           vanId: 1,
           vanName: 1,
+          vanChangeRequestId: '$vanChangeRequest.vanChangeRequestId',
+          vanChangeStatus: '$vanChangeRequest.status',
+          requestedVanId: '$vanChangeRequest.requestedVanId',
+          requestedVanName: '$vanChangeRequest.requestedVanName',
         },
       },
     ];

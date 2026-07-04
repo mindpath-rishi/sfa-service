@@ -89,11 +89,40 @@ export class InventoryTransactionService extends MongoRepository<InventoryTransa
   }
 
   async findAll(query: InventoryTransactionQueryDto) {
-    const { searchText, status, page = 1, limit = 20 } = query;
+    const {
+      searchText,
+      status,
+      page = 1,
+      limit = 20,
+      transactionId,
+      productId,
+      vanId,
+      employeeId,
+      warehouseId,
+      transactionType,
+      quantity,
+      cases,
+      pieces,
+      referenceNo,
+      remark,
+      transactionDate,
+    } = query;
 
     const filter: FilterQuery<InventoryTransaction> = {};
 
     if (status) filter.status = status;
+    if (transactionId) filter.transactionId = transactionId;
+    if (productId) filter.productId = productId;
+    if (vanId) filter.vanId = vanId;
+    if (employeeId) filter.employeeId = employeeId;
+    if (warehouseId) filter.warehouseId = warehouseId;
+    if (transactionType) filter.transactionType = transactionType;
+    if (quantity !== undefined) filter.quantity = quantity;
+    if (cases !== undefined) filter.cases = cases;
+    if (pieces !== undefined) filter.pieces = pieces;
+    if (referenceNo) filter.referenceNo = referenceNo;
+    if (remark) filter.remark = remark;
+    if (transactionDate) filter.transactionDate = transactionDate;
 
     if (searchText) {
       const regex = new RegExp(searchText, 'i');

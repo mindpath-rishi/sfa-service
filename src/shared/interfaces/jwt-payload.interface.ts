@@ -9,4 +9,5 @@ export interface JwtPayload {
   deviceId: string;
   vanId?: string; // optional but useful
   vanName?: string; // optional but useful
+  offlineAccessAllowed?: boolean;
 }

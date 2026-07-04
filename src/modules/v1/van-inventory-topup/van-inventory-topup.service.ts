@@ -309,20 +309,31 @@ export class VanInventoryTopupService extends MongoRepository<VanInventoryTopup>
 
           const unitQtyInCase = product.unitQtyInCase || 1;
           const unitType = product.unitType || 'CS';
-          const casePrice = product.casePrice || 0;
-          const piecePrice = casePrice / unitQtyInCase;
-          const pieceWeight = product.pieceNetWeight || 0;
-
-          const requestedQty = item.requestedQty || 0;
+          // The mobile cart carries the applicable category-aware price.
+          // Product master `casePrice` can legitimately be 0 when prices are
+          // maintained only in price_master, so discarding item prices made
+          // otherwise valid top-up requests show a value of zero.
+          const casePrice = Number(item.casePrice ?? product.casePrice ?? 0);
+          const piecePrice = Number(
+            item.piecePrice ?? product.piecePrice ?? casePrice / unitQtyInCase,
+          );
+          const pieceWeight = Number(
+            item.pieceNetWeight ?? product.pieceNetWeight ?? 0,
+          );
+          const requestedCaseQty = Number(item.requestedCaseQty || 0);
+          const requestedPieceQty = Number(item.requestedPieceQty || 0);
+          const requestedQty =
+            requestedCaseQty * unitQtyInCase + requestedPieceQty;
 
           const requestedWeight = requestedQty * pieceWeight;
-          const requestedValue = requestedQty * piecePrice;
+          const requestedValue =
+            requestedCaseQty * casePrice + requestedPieceQty * piecePrice;
 
           totalRequestedQty += requestedQty;
           totalRequestedWeight += requestedWeight;
           totalRequestedValue += requestedValue;
-          totalRequestedCases += item.requestedCaseQty || 0;
-          totalRequestedPieces += item.requestedPieceQty || 0;
+          totalRequestedCases += requestedCaseQty;
+          totalRequestedPieces += requestedPieceQty;
 
           processedItems.push({
             vanInventoryTopupId: '',
@@ -333,8 +344,8 @@ export class VanInventoryTopupService extends MongoRepository<VanInventoryTopup>
             requestedQty,
             requestedWeight,
             requestedValue,
-            requestedCaseQty: item.requestedCaseQty || 0,
-            requestedPieceQty: item.requestedPieceQty || 0,
+            requestedCaseQty,
+            requestedPieceQty,
 
             approvedQty: 0,
             approvedWeight: 0,

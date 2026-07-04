@@ -226,6 +226,7 @@ export class UserService extends MongoRepository<User> {
         profileId: user.profileId,
         role: role.name,
         roleId: profile.roleId,
+        offlineAccessAllowed: profile.offlineAccessAllowed === true,
         deviceId,
         createdAt: new Date().toISOString(),
       },
@@ -261,6 +262,7 @@ export class UserService extends MongoRepository<User> {
         // deviceId,
         name: profile?.name,
         vanId,
+        offlineAccessAllowed: profile.offlineAccessAllowed === true,
       },
       {
         expiresIn,
@@ -349,6 +351,7 @@ export class UserService extends MongoRepository<User> {
         sub: session.profileId,
         role: session.role,
         roleId: session.roleId,
+        offlineAccessAllowed: session.offlineAccessAllowed === true,
         sid: sessionId,
         deviceId,
       },

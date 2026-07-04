@@ -37,6 +37,7 @@ const COLLECTIONS = {
   complaints: 'complaints',
   targets: 'targets',
   vanDailyStock: 'van_daily_stock',
+  inventoryTransactions: 'inventory_transactions',
 } as const;
 
 const ENTITY_ID_FIELDS: Record<keyof typeof COLLECTIONS, string> = {
@@ -70,6 +71,7 @@ const ENTITY_ID_FIELDS: Record<keyof typeof COLLECTIONS, string> = {
   complaints: 'complaintId',
   targets: '_id',
   vanDailyStock: 'vanDailyStockId',
+  inventoryTransactions: 'transactionId',
 };
 
 const MASTER_ENTITIES = new Set([
@@ -109,6 +111,7 @@ const ENTITY_DATE_FIELDS: Partial<Record<keyof typeof COLLECTIONS, string[]>> =
     routeSessions: ['sessionDate', 'startTime', 'endTime'],
     targets: ['startDate', 'endDate'],
     vanDailyStock: ['date'],
+    inventoryTransactions: ['transactionDate'],
   };
 type SyncScope = {
   vanId?: string;
@@ -246,6 +249,18 @@ export class SyncService {
     @InjectConnection() private readonly connection: Connection,
     private readonly notificationService: NotificationService,
   ) {}
+
+  async hasOfflineAccess(employeeId: string) {
+    const employee = await this.connection
+      .collection('employees')
+      .findOne(
+        { employeeId, isDeleted: { $ne: true } },
+        { projection: { offlineAccessAllowed: 1, status: 1 } },
+      );
+    return (
+      employee?.status === 'ACTIVE' && employee.offlineAccessAllowed === true
+    );
+  }
 
   private async notifyManagerOfOfflineOutlet(
     payload: Record<string, unknown>,
@@ -507,6 +522,11 @@ export class SyncService {
           employeeId: ownerId,
           ...this.lastThreeMonthsFilter('date'),
         };
+      case 'inventoryTransactions':
+        return {
+          employeeId: ownerId,
+          ...this.lastThreeMonthsFilter('transactionDate'),
+        };
       case 'attendance':
         return {
           userId: ownerId,
@@ -593,7 +613,11 @@ export class SyncService {
     ) {
       return { userId: ownerId };
     }
-    if (['visits', 'nonSales', 'collections'].includes(entity)) {
+    if (
+      ['visits', 'nonSales', 'collections', 'inventoryTransactions'].includes(
+        entity,
+      )
+    ) {
       return { employeeId: ownerId };
     }
     if (entity === 'orders') {
@@ -652,7 +676,12 @@ export class SyncService {
           payload.userId = ownerId;
         }
         if (
-          ['visits', 'nonSales', 'collections'].includes(operation.entity) &&
+          [
+            'visits',
+            'nonSales',
+            'collections',
+            'inventoryTransactions',
+          ].includes(operation.entity) &&
           !payload.employeeId
         ) {
           payload.employeeId = ownerId;

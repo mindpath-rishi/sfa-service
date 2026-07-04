@@ -165,6 +165,18 @@ export class EmployeeService extends MongoRepository<Employee> {
     }
   }
 
+  private async normalizeOfflineAccess(roleId: string, requested: boolean) {
+    if (!requested) return false;
+    const role = await this.roleModel.findOne({ roleId }).lean();
+    const roleName = String(role?.name ?? '').trim().toUpperCase();
+    if (!['SALESMAN', 'SALES', 'SALES_EXECUTIVE'].includes(roleName)) {
+      throw new BadRequestException(
+        'Offline access can only be granted to a salesman role.',
+      );
+    }
+    return true;
+  }
+
   private async buildHierarchyPath(reportingEmployeeId?: string) {
     if (!reportingEmployeeId) return [];
 
@@ -309,6 +321,10 @@ export class EmployeeService extends MongoRepository<Employee> {
     const initialStatus = payload.status ?? UserStatus.ACTIVE;
     const assignedVanIds = await this.resolveVanIds(payload.assignedVanIds);
     await this.validateAssignedVansForRole(payload.roleId, assignedVanIds);
+    const offlineAccessAllowed = await this.normalizeOfflineAccess(
+      payload.roleId,
+      payload.offlineAccessAllowed === true,
+    );
     const hierarchyPath = await this.buildHierarchyPath(
       payload.reportingEmployeeId,
     );
@@ -347,6 +363,7 @@ export class EmployeeService extends MongoRepository<Employee> {
                   deny: payload.permissionOverrides.deny || [],
                 }
               : undefined,
+            offlineAccessAllowed,
             status: initialStatus,
             isDeleted: false,
           },
@@ -410,6 +427,7 @@ export class EmployeeService extends MongoRepository<Employee> {
                 deny: payload.permissionOverrides.deny || [],
               }
             : undefined,
+          offlineAccessAllowed,
           status: initialStatus,
         },
         { session },
@@ -1101,6 +1119,10 @@ export class EmployeeService extends MongoRepository<Employee> {
       throw new NotFoundException(EMPLOYEE.NOT_FOUND);
     }
     const { assignedVanIds, ...employeeDto } = dto;
+    employeeDto.offlineAccessAllowed = await this.normalizeOfflineAccess(
+      employeeDto.roleId ?? existing.roleId,
+      employeeDto.offlineAccessAllowed ?? existing.offlineAccessAllowed ?? false,
+    );
     const resolvedAssignedVanIds = await this.resolveVanIds(assignedVanIds);
     await this.validateAssignedVansForRole(
       employeeDto.roleId ?? existing.roleId,

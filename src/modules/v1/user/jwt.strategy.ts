@@ -41,6 +41,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       store.roleId = payload.roleId;
       store.name = payload.name;
       store.vanId = payload.vanId; // ✅ FIX: SET VAN ID
+      store.offlineAccessAllowed = payload.offlineAccessAllowed === true;
     }
 
     /**
@@ -53,6 +54,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       sessionId: payload.sid,
       name: payload.name,
       vanId: payload.vanId, // optional but useful
+      offlineAccessAllowed: payload.offlineAccessAllowed === true,
     };
   }
 }

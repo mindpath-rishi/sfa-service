@@ -7,6 +7,7 @@ export interface RequestContext {
   roleId?: string;
   vanId?: string;
   vanName?: string;
+  offlineAccessAllowed?: boolean;
 }
 
 export const RequestContextStore =

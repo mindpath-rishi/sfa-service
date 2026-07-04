@@ -144,6 +144,10 @@ export class Employee {
     deny: string[];
   };
 
+  // Explicitly granted by MIS for field salesmen who may work without internet.
+  @Prop({ type: Boolean, default: false, index: true })
+  offlineAccessAllowed!: boolean;
+
   /* ======================================================
    * STATUS
    * ====================================================== */

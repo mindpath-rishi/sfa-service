@@ -19,14 +19,16 @@ export class SyncController {
   constructor(private readonly syncService: SyncService) {}
 
   @Post('upload')
-  upload(@Body() body: SyncUploadDto) {
+  async upload(@Body() body: SyncUploadDto) {
     const user = this.salesman();
+    await this.assertOfflineAccess(user.id);
     return this.syncService.upload(body.operations, user.id);
   }
 
   @Get('download')
-  download(@Query() query: SyncDownloadDto) {
+  async download(@Query() query: SyncDownloadDto) {
     const user = this.salesman();
+    await this.assertOfflineAccess(user.id);
     return this.syncService.download(
       user.id,
       query.lastSync,
@@ -50,7 +52,14 @@ export class SyncController {
         'Offline synchronization is available only to SALESMAN',
       );
     }
-
     return { id, vanId: context.vanId };
+  }
+
+  private async assertOfflineAccess(employeeId: string) {
+    if (!(await this.syncService.hasOfflineAccess(employeeId))) {
+      throw new ForbiddenException(
+        'Offline access has not been enabled for this salesman',
+      );
+    }
   }
 }

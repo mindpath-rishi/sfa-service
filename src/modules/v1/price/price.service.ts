@@ -284,9 +284,24 @@ export class PriceService extends MongoRepository<Price> {
   }
 
   async findAll(query: PriceQueryDto) {
-    const { searchText, page = 1, limit = 20 } = query;
+    const {
+      searchText,
+      page = 1,
+      limit = 20,
+      productId,
+      categoryName,
+      categoryCode,
+      priceFlag,
+      effectiveDate,
+    } = query;
 
     const filter: FilterQuery<Price> = {};
+
+    if (productId) filter.productId = productId;
+    if (categoryName) filter.categoryName = categoryName;
+    if (categoryCode) filter.categoryCode = categoryCode;
+    if (priceFlag) filter.priceFlag = priceFlag;
+    if (effectiveDate) filter.effectiveDate = effectiveDate;
 
     if (searchText) {
       const regex = new RegExp(searchText, 'i');
@@ -296,7 +311,7 @@ export class PriceService extends MongoRepository<Price> {
     const result = await this.paginate(filter, {
       page,
       limit,
-      sort: { createdAt: -1 },
+      sort: { effectiveDate: -1, createdAt: -1 },
       lean: true,
     });
 
