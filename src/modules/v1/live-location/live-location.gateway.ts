@@ -63,15 +63,15 @@ export class LiveLocationGateway implements OnGatewayConnection {
     if (!auth?.sub) return { success: false, statusCode: 401 };
 
     try {
-      // Real-time delivery must not wait for MongoDB.  Persistence is sampled
-      // independently every five minutes by the service.
+      // Real-time delivery must not wait for MongoDB. Persistence is sampled
+      // independently whenever the user moves at least five metres.
       const data = this.liveLocationService.createRealtimeUpdate(
         payload,
         auth.sub,
         auth.vanId,
       );
       this.server.to(MANAGER_ROOM).emit('live-location:update', data);
-      void this.liveLocationService.persistThrottled(data).catch((error) => {
+      void this.liveLocationService.persistByDistance(data).catch((error) => {
         console.error(
           '[LiveLocation] Failed to persist sampled location',
           error,

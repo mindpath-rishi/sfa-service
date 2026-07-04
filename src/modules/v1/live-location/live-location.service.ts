@@ -24,7 +24,7 @@ import { UpdateLiveLocationDto } from './dto/update-live-location.dto';
 import { TrackLiveLocationDto } from './dto/track-live-location.dto';
 import { LIVE_LOCATION } from './live-location.constants';
 
-const DATABASE_SAMPLE_INTERVAL_MS = 5 * 60 * 1000;
+const DATABASE_SAMPLE_DISTANCE_METERS = 5;
 
 export type LiveLocationUpdate = {
   workSessionId: string;
@@ -45,7 +45,10 @@ export type LiveLocationUpdate = {
 @Injectable()
 export class LiveLocationService extends MongoRepository<LiveLocation> {
   private readonly workSessionModel: Model<WorkSession>;
-  private readonly lastPersistedAt = new Map<string, number>();
+  private readonly lastPersistedLocation = new Map<
+    string,
+    { latitude: number; longitude: number }
+  >();
   private readonly persistenceInFlight = new Map<string, Promise<boolean>>();
 
   constructor(mongo: MongoService) {
@@ -92,27 +95,29 @@ export class LiveLocationService extends MongoRepository<LiveLocation> {
     };
   }
 
-  /**
-   * Persist at most one point every five minutes for each work session/van.
-   * Socket broadcasting does not await this method.
-   */
-  persistThrottled(update: LiveLocationUpdate): Promise<boolean> {
+  /** Persist the first point, then points at least five metres apart. */
+  persistByDistance(update: LiveLocationUpdate): Promise<boolean> {
     const key = `${update.workSessionId}:${update.vanId || ''}`;
-    const now = Date.now();
+    const previous = this.lastPersistedLocation.get(key);
     if (
-      now - (this.lastPersistedAt.get(key) || 0) <
-      DATABASE_SAMPLE_INTERVAL_MS
+      previous &&
+      this.distanceInMeters(previous, update.location) <
+        DATABASE_SAMPLE_DISTANCE_METERS
     ) {
       return Promise.resolve(false);
     }
     const existing = this.persistenceInFlight.get(key);
     if (existing) return existing;
 
-    this.lastPersistedAt.set(key, now);
+    this.lastPersistedLocation.set(key, {
+      latitude: update.location.latitude,
+      longitude: update.location.longitude,
+    });
     const operation = this.persistUpdate(update)
       .then(() => true)
       .catch((error) => {
-        this.lastPersistedAt.delete(key);
+        if (previous) this.lastPersistedLocation.set(key, previous);
+        else this.lastPersistedLocation.delete(key);
         throw error;
       })
       .finally(() => this.persistenceInFlight.delete(key));
@@ -175,7 +180,7 @@ export class LiveLocationService extends MongoRepository<LiveLocation> {
       userId,
       RequestContextStore.getStore()?.vanId,
     );
-    const persisted = await this.persistThrottled(update);
+    const persisted = await this.persistByDistance(update);
     return {
       statusCode: HttpStatus.OK,
       message: persisted ? LIVE_LOCATION.CREATED : 'Location received',
@@ -330,6 +335,29 @@ export class LiveLocationService extends MongoRepository<LiveLocation> {
   private utcStartOfDay(value: Date) {
     return new Date(
       Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate()),
+    );
+  }
+
+  private distanceInMeters(
+    from: { latitude: number; longitude: number },
+    to: { latitude: number; longitude: number },
+  ) {
+    const earthRadius = 6_371_000;
+    const radians = (degrees: number) => (degrees * Math.PI) / 180;
+    const latitudeDelta = radians(to.latitude - from.latitude);
+    const longitudeDelta = radians(to.longitude - from.longitude);
+    const fromLatitude = radians(from.latitude);
+    const toLatitude = radians(to.latitude);
+    const haversine =
+      Math.sin(latitudeDelta / 2) ** 2 +
+      Math.cos(fromLatitude) *
+        Math.cos(toLatitude) *
+        Math.sin(longitudeDelta / 2) ** 2;
+
+    return (
+      earthRadius *
+      2 *
+      Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine))
     );
   }
 }

@@ -1209,10 +1209,21 @@ export class WorkSessionService extends MongoRepository<WorkSession> {
       };
     }
 
+    // A leave can be marked after a work session was created. Include it in
+    // day status as well, otherwise the app assumes the user is available and
+    // shows Quick Actions again.
+    const leave = await this.leaveService.findOne({
+      userId: ctx?.userId,
+      createdAt: {
+        $gte: todayStart,
+        $lte: todayEnd,
+      },
+    });
+
     return {
       statusCode: HttpStatus.OK,
       message: WORK_SESSION.FETCHED,
-      data: doc,
+      data: leave ? { ...doc, type: 'LEAVE', leave } : doc,
     };
   }
 
