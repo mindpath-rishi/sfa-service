@@ -1,6 +1,12 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsOptional, IsString, ValidateNested } from 'class-validator';
+import {
+  ArrayMaxSize,
+  IsArray,
+  IsOptional,
+  IsString,
+  ValidateNested,
+} from 'class-validator';
 import { LocationPointDto } from 'src/shared/dto/location-point.dto';
 
 export class TrackLiveLocationDto {
@@ -19,4 +25,12 @@ export class TrackLiveLocationDto {
   @ValidateNested()
   @Type(() => LocationPointDto)
   location?: LocationPointDto;
+
+  @ApiPropertyOptional({ type: [LocationPointDto], maxItems: 1000 })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(1000)
+  @ValidateNested({ each: true })
+  @Type(() => LocationPointDto)
+  locations?: LocationPointDto[];
 }

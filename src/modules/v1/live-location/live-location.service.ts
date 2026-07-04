@@ -175,16 +175,35 @@ export class LiveLocationService extends MongoRepository<LiveLocation> {
       authenticatedUserId || RequestContextStore.getStore()?.userId;
     if (!userId)
       throw new BadRequestException('Authenticated user is required');
-    const update = this.createRealtimeUpdate(
-      payload,
-      userId,
-      RequestContextStore.getStore()?.vanId,
-    );
-    const persisted = await this.persistByDistance(update);
+    const locations = payload.locations?.length
+      ? payload.locations
+      : payload.location
+        ? [payload.location]
+        : [];
+    if (!locations.length)
+      throw new BadRequestException('Location is required');
+
+    const updates: LiveLocationUpdate[] = [];
+    let persistedCount = 0;
+    // Keep batch persistence sequential. Concurrent points for the same work
+    // session intentionally share an in-flight guard and would otherwise be
+    // collapsed into the first write.
+    for (const location of locations) {
+      const update = this.createRealtimeUpdate(
+        { ...payload, locations: undefined, location },
+        userId,
+        RequestContextStore.getStore()?.vanId,
+      );
+      updates.push(update);
+      if (await this.persistByDistance(update)) persistedCount += 1;
+    }
+
     return {
       statusCode: HttpStatus.OK,
-      message: persisted ? LIVE_LOCATION.CREATED : 'Location received',
-      data: update,
+      message: persistedCount ? LIVE_LOCATION.CREATED : 'Location received',
+      data: payload.locations
+        ? { received: updates.length, persisted: persistedCount }
+        : updates[0],
     };
   }
 

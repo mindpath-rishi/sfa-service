@@ -30,14 +30,6 @@ import {
 } from 'src/shared/constants/media.constants';
 
 export class UploadMediaDto {
-  @ApiPropertyOptional({
-    example: 'MID-001',
-    description: 'Provide mediaId to replace an existing media file',
-  })
-  @IsOptional()
-  @IsString()
-  mediaId?: string;
-
   /* ======================================================
    * FILE
    * ====================================================== */
@@ -56,7 +48,7 @@ export class UploadMediaDto {
   @ApiPropertyOptional({
     enum: Object.values(MEDIA_OWNER_TYPE),
     example: MEDIA_OWNER_TYPE.PRODUCT,
-    description: 'Required when creating; ignored when mediaId is provided',
+    description: 'Required when uploading media',
   })
   @IsOptional()
   @IsIn(Object.values(MEDIA_OWNER_TYPE))
@@ -64,7 +56,7 @@ export class UploadMediaDto {
 
   @ApiPropertyOptional({
     example: 'P001',
-    description: 'Required when creating; ignored when mediaId is provided',
+    description: 'Required when uploading media',
   })
   @IsOptional()
   @IsString()

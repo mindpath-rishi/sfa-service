@@ -121,21 +121,9 @@ export class MediaService extends MongoRepository<Media> {
     body: UploadMediaDto,
     user?: any,
   ) {
-    if (body.mediaId) {
-      const {
-        mediaId,
-        file: _file,
-        ownerType: _ownerType,
-        ownerId: _ownerId,
-        subOwnerId: _subOwnerId,
-        ...updates
-      } = body;
-      return this.updateMedia(mediaId, updates, file, user);
-    }
-
     if (!body.ownerType || !body.ownerId) {
       throw new BadRequestException(
-        'ownerType and ownerId are required when creating media',
+        'ownerType and ownerId are required when uploading media',
       );
     }
 
