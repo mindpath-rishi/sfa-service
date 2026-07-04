@@ -269,7 +269,7 @@ export class NotificationService extends MongoRepository<Notification> {
     workSessionId: string,
     status: 'APPROVED' | 'REJECTED' | 'CANCELLED',
   ) {
-    await this.updateOne(
+    await this.model.updateMany(
       {
         category: 'van_change',
         'data.workSessionId': workSessionId,
@@ -288,7 +288,7 @@ export class NotificationService extends MongoRepository<Notification> {
   }
 
   async markOutletApprovalResolved(customerId: string, status: string) {
-    await this.updateOne(
+    await this.model.updateMany(
       { category: 'outlet_approval', 'data.customerId': customerId } as any,
       {
         $set: {

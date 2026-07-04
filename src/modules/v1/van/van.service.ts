@@ -953,7 +953,9 @@ export class VanService extends MongoRepository<Van> {
       {
         $unwind: {
           path: '$associatedRoutes',
-          preserveNullAndEmptyArrays: false,
+          // A user can be assigned to a van before routes are assigned to it.
+          // Keep that van in the result and return an empty routes array.
+          preserveNullAndEmptyArrays: true,
         },
       },
 
@@ -1058,7 +1060,13 @@ export class VanService extends MongoRepository<Van> {
           vanId: 1,
           vanNumber: 1,
           status: 1,
-          routes: 1,
+          routes: {
+            $filter: {
+              input: '$routes',
+              as: 'mappedRoute',
+              cond: { $ne: ['$$mappedRoute.routeId', null] },
+            },
+          },
           associatedUsers: '$associatedUsers',
         },
       },
