@@ -168,7 +168,9 @@ export class EmployeeService extends MongoRepository<Employee> {
   private async normalizeOfflineAccess(roleId: string, requested: boolean) {
     if (!requested) return false;
     const role = await this.roleModel.findOne({ roleId }).lean();
-    const roleName = String(role?.name ?? '').trim().toUpperCase();
+    const roleName = String(role?.name ?? '')
+      .trim()
+      .toUpperCase();
     if (!['SALESMAN', 'SALES', 'SALES_EXECUTIVE'].includes(roleName)) {
       throw new BadRequestException(
         'Offline access can only be granted to a salesman role.',
@@ -1121,7 +1123,9 @@ export class EmployeeService extends MongoRepository<Employee> {
     const { assignedVanIds, ...employeeDto } = dto;
     employeeDto.offlineAccessAllowed = await this.normalizeOfflineAccess(
       employeeDto.roleId ?? existing.roleId,
-      employeeDto.offlineAccessAllowed ?? existing.offlineAccessAllowed ?? false,
+      employeeDto.offlineAccessAllowed ??
+        existing.offlineAccessAllowed ??
+        false,
     );
     const resolvedAssignedVanIds = await this.resolveVanIds(assignedVanIds);
     await this.validateAssignedVansForRole(
@@ -1745,6 +1749,107 @@ export class EmployeeService extends MongoRepository<Employee> {
     };
   }
 
+  // async getEmployeeStats(employeeId: string) {
+  //   // 📅 Get start & end of today
+  //   const startOfDay = new Date();
+  //   startOfDay.setHours(0, 0, 0, 0);
+
+  //   const endOfDay = new Date();
+  //   endOfDay.setHours(23, 59, 59, 999);
+
+  //   const visitDateFilter = {
+  //     checkInTime: {
+  //       $gte: startOfDay,
+  //       $lte: endOfDay,
+  //     },
+  //   };
+
+  //   const saleDateFilter = {
+  //     date: {
+  //       $gte: startOfDay,
+  //       $lte: endOfDay,
+  //     },
+  //   };
+
+  //   const [visitData, salesData, collectionData] = await Promise.all([
+  //     // 🏪 Shop Visits (Today)
+  //     this.shopVisitModel.aggregate([
+  //       {
+  //         $match: {
+  //           employeeId,
+  //           ...visitDateFilter,
+  //           status: ShopVisitStatus.COMPLETED,
+  //         },
+  //       },
+  //       {
+  //         $group: {
+  //           _id: null,
+  //           totalVisits: { $sum: 1 },
+  //         },
+  //       },
+  //     ]),
+
+  //     // 🧾 Sales Orders (Today)
+  //     this.saleModal.aggregate([
+  //       {
+  //         $match: {
+  //           employeeId,
+  //           ...saleDateFilter,
+  //           status: SaleStatus.COMPLETED,
+  //         },
+  //       },
+  //       {
+  //         $group: {
+  //           _id: null,
+  //           totalOrders: { $sum: 1 },
+  //           totalOrderValue: { $sum: '$totalValue' },
+  //           totalCases: { $sum: '$netCases' },
+  //           totalWeight: { $sum: '$totalWeight' },
+  //         },
+  //       },
+  //     ]),
+
+  //     // 💰 Payment Collections (Today)
+  //     this.paymentModel.aggregate([
+  //       {
+  //         $match: {
+  //           employeeId,
+  //           createdAt: { $gte: startOfDay, $lte: endOfDay },
+  //         },
+  //       },
+  //       {
+  //         $group: {
+  //           _id: null,
+  //           totalCollections: { $sum: 1 },
+  //           totalCollectionValue: { $sum: '$amount' },
+  //         },
+  //       },
+  //     ]),
+  //   ]);
+
+  //   return {
+  //     statusCode: 200,
+  //     message: 'Today employee stats fetched successfully',
+  //     data: {
+  //       visits: visitData[0]?.totalVisits || 0,
+  //       tc: visitData[0]?.totalVisits || 0,
+  //       pc: salesData[0]?.totalOrders || 0,
+
+  //       orders: {
+  //         count: salesData[0]?.totalOrders || 0,
+  //         value: salesData[0]?.totalOrderValue || 0,
+  //         cases: salesData[0]?.totalCases || 0,
+  //         weight: salesData[0]?.totalWeight || 0,
+  //       },
+
+  //       collections: {
+  //         count: collectionData[0]?.totalCollections || 0,
+  //         value: collectionData[0]?.totalCollectionValue || 0,
+  //       },
+  //     },
+  //   };
+  // }
+
   async getEmployeeStats(employeeId: string) {
     // 📅 Get start & end of today
     const startOfDay = new Date();
@@ -1768,7 +1873,7 @@ export class EmployeeService extends MongoRepository<Employee> {
     };
 
     const [visitData, salesData, collectionData] = await Promise.all([
-      // 🏪 Shop Visits (Today)
+      // 🏪 Shop Visits Today
       this.shopVisitModel.aggregate([
         {
           $match: {
@@ -1785,11 +1890,11 @@ export class EmployeeService extends MongoRepository<Employee> {
         },
       ]),
 
-      // 🧾 Sales Orders (Today)
+      // 🧾 Sales Orders Today
       this.saleModal.aggregate([
         {
           $match: {
-            employeeId,
+            'employees.employeeId': employeeId,
             ...saleDateFilter,
             status: SaleStatus.COMPLETED,
           },
@@ -1798,44 +1903,62 @@ export class EmployeeService extends MongoRepository<Employee> {
           $group: {
             _id: null,
             totalOrders: { $sum: 1 },
-            totalOrderValue: { $sum: '$totalValue' },
-            totalCases: { $sum: '$netCases' },
-            totalWeight: { $sum: '$totalWeight' },
+            totalOrderValue: { $sum: { $ifNull: ['$totalValue', 0] } },
+            totalCases: { $sum: { $ifNull: ['$netCases', 0] } },
+            totalWeight: { $sum: { $ifNull: ['$totalWeight', 0] } },
+            totalQty: { $sum: { $ifNull: ['$totalQty', 0] } },
+            totalPieces: { $sum: { $ifNull: ['$totalPieces', 0] } },
+            paidAmount: { $sum: { $ifNull: ['$paidAmount', 0] } },
+            pendingAmount: { $sum: { $ifNull: ['$pendingAmount', 0] } },
           },
         },
       ]),
 
-      // 💰 Payment Collections (Today)
+      // 💰 Payment Collections Today
       this.paymentModel.aggregate([
         {
           $match: {
             employeeId,
-            createdAt: { $gte: startOfDay, $lte: endOfDay },
+            createdAt: {
+              $gte: startOfDay,
+              $lte: endOfDay,
+            },
           },
         },
         {
           $group: {
             _id: null,
             totalCollections: { $sum: 1 },
-            totalCollectionValue: { $sum: '$amount' },
+            totalCollectionValue: { $sum: { $ifNull: ['$amount', 0] } },
           },
         },
       ]),
     ]);
 
+    const visits = visitData[0]?.totalVisits || 0;
+    const totalOrders = salesData[0]?.totalOrders || 0;
+
     return {
       statusCode: 200,
       message: 'Today employee stats fetched successfully',
       data: {
-        visits: visitData[0]?.totalVisits || 0,
-        tc: visitData[0]?.totalVisits || 0,
-        pc: salesData[0]?.totalOrders || 0,
+        visits,
+
+        // TC = Total Calls / Total completed visits
+        tc: visits,
+
+        // PC = Productive Calls / Visits where order created
+        pc: totalOrders,
 
         orders: {
-          count: salesData[0]?.totalOrders || 0,
+          count: totalOrders,
           value: salesData[0]?.totalOrderValue || 0,
           cases: salesData[0]?.totalCases || 0,
           weight: salesData[0]?.totalWeight || 0,
+          qty: salesData[0]?.totalQty || 0,
+          pieces: salesData[0]?.totalPieces || 0,
+          paidAmount: salesData[0]?.paidAmount || 0,
+          pendingAmount: salesData[0]?.pendingAmount || 0,
         },
 
         collections: {
