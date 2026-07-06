@@ -11306,157 +11306,157 @@ export class EmployeeService extends MongoRepository<Employee> {
   // }
 
   async getManagerUserMtdSummary(query: { employeeId: string; date?: string }) {
-  const employee = await this.getManagedEmployee(query.employeeId);
+    const employee = await this.getManagedEmployee(query.employeeId);
 
-  const { selectedDate, startOfMonth, endOfDay } = this.getMonthRange(
-    query.date,
-  );
+    const { selectedDate, startOfMonth, endOfDay } = this.getMonthRange(
+      query.date,
+    );
 
-  const [assignedBeatCustomers, visitedOutletIds, billedOutletIds] =
-    await Promise.all([
-      this.getAssignedBeatCustomers(
-        employee.employeeId,
-        startOfMonth,
-        endOfDay,
-      ),
+    const [assignedBeatCustomers, visitedOutletIds, billedOutletIds] =
+      await Promise.all([
+        this.getAssignedBeatCustomers(
+          employee.employeeId,
+          startOfMonth,
+          endOfDay,
+        ),
 
-      this.shopVisitModel.distinct('outletId', {
-        employeeId: employee.employeeId,
-        checkInTime: {
-          $gte: startOfMonth,
-          $lte: endOfDay,
-        },
-        status: ShopVisitStatus.COMPLETED,
-        outletId: {
-          $nin: [null, ''],
-        },
-      }),
+        this.shopVisitModel.distinct('outletId', {
+          employeeId: employee.employeeId,
+          checkInTime: {
+            $gte: startOfMonth,
+            $lte: endOfDay,
+          },
+          status: ShopVisitStatus.COMPLETED,
+          outletId: {
+            $nin: [null, ''],
+          },
+        }),
 
-      /**
-       * IMPORTANT:
-       * Sale schema has employees array.
-       * Do not use employeeId directly.
-       */
-      this.saleModal.distinct('customerId', {
-        'employees.employeeId': employee.employeeId,
-        date: {
-          $gte: startOfMonth,
-          $lte: endOfDay,
-        },
-        status: SaleStatus.COMPLETED,
-        customerId: {
-          $nin: [null, ''],
-        },
-      }),
-    ]);
-
-  /**
-   * ==========================================
-   * ASSIGNED BEAT OUTLETS
-   * ==========================================
-   */
-  const assignedBeatOutletSet = new Set<string>(
-    assignedBeatCustomers
-      .map((mapping: any) => String(mapping.customerId || '').trim())
-      .filter(Boolean),
-  );
-
-  /**
-   * ==========================================
-   * VISITED OUTLETS
-   * ==========================================
-   */
-  const visitedOutletSet = new Set<string>(
-    visitedOutletIds
-      .map((outletId: any) => String(outletId || '').trim())
-      .filter(Boolean),
-  );
-
-  /**
-   * ==========================================
-   * BILLED OUTLETS
-   * ==========================================
-   */
-  const billedOutletSet = new Set<string>(
-    billedOutletIds
-      .map((customerId: any) => String(customerId || '').trim())
-      .filter(Boolean),
-  );
-
-  /**
-   * ==========================================
-   * ONLY COUNT ASSIGNED BEAT OUTLETS
-   * ==========================================
-   */
-  let utc = 0;
-  let upc = 0;
-  let zeroOrder = 0;
-  let notVisited = 0;
-
-  for (const customerId of assignedBeatOutletSet) {
-    const isVisited = visitedOutletSet.has(customerId);
-    const isBilled = billedOutletSet.has(customerId);
-
-    if (isVisited) {
-      utc += 1;
-    }
-
-    if (isBilled) {
-      upc += 1;
-    }
+        /**
+         * IMPORTANT:
+         * Sale schema has employees array.
+         * Do not use employeeId directly.
+         */
+        this.saleModal.distinct('customerId', {
+          'employees.employeeId': employee.employeeId,
+          date: {
+            $gte: startOfMonth,
+            $lte: endOfDay,
+          },
+          status: SaleStatus.COMPLETED,
+          customerId: {
+            $nin: [null, ''],
+          },
+        }),
+      ]);
 
     /**
-     * Zero order = visited but not billed
+     * ==========================================
+     * ASSIGNED BEAT OUTLETS
+     * ==========================================
      */
-    if (isVisited && !isBilled) {
-      zeroOrder += 1;
-    }
+    const assignedBeatOutletSet = new Set<string>(
+      assignedBeatCustomers
+        .map((mapping: any) => String(mapping.customerId || '').trim())
+        .filter(Boolean),
+    );
 
     /**
-     * Not visited = assigned but not visited
+     * ==========================================
+     * VISITED OUTLETS
+     * ==========================================
      */
-    if (!isVisited) {
-      notVisited += 1;
-    }
-  }
+    const visitedOutletSet = new Set<string>(
+      visitedOutletIds
+        .map((outletId: any) => String(outletId || '').trim())
+        .filter(Boolean),
+    );
 
-  const totalAssigned = assignedBeatOutletSet.size;
+    /**
+     * ==========================================
+     * BILLED OUTLETS
+     * ==========================================
+     */
+    const billedOutletSet = new Set<string>(
+      billedOutletIds
+        .map((customerId: any) => String(customerId || '').trim())
+        .filter(Boolean),
+    );
 
-  return {
-    statusCode: HttpStatus.OK,
-    message: 'Manager user MTD summary fetched successfully',
-    data: {
-      employeeId: employee.employeeId,
-      employeeName: employee.name,
-      date: formatCalendarDate(selectedDate),
+    /**
+     * ==========================================
+     * ONLY COUNT ASSIGNED BEAT OUTLETS
+     * ==========================================
+     */
+    let utc = 0;
+    let upc = 0;
+    let zeroOrder = 0;
+    let notVisited = 0;
+
+    for (const customerId of assignedBeatOutletSet) {
+      const isVisited = visitedOutletSet.has(customerId);
+      const isBilled = billedOutletSet.has(customerId);
+
+      if (isVisited) {
+        utc += 1;
+      }
+
+      if (isBilled) {
+        upc += 1;
+      }
 
       /**
-       * UTC = Unique total calls / visited assigned outlets
+       * Zero order = visited but not billed
        */
-      utc,
-
-      /**
-       * UPC = Unique productive calls / billed assigned outlets
-       */
-      upc,
-
-      /**
-       * Zero order = visited but no billing
-       */
-      zeroOrder,
+      if (isVisited && !isBilled) {
+        zeroOrder += 1;
+      }
 
       /**
        * Not visited = assigned but not visited
        */
-      notVisited,
+      if (!isVisited) {
+        notVisited += 1;
+      }
+    }
 
-      /**
-       * Total assigned beat outlets
-       */
-      total: totalAssigned,
-    },
-  };
-}
+    const totalAssigned = assignedBeatOutletSet.size;
+
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'Manager user MTD summary fetched successfully',
+      data: {
+        employeeId: employee.employeeId,
+        employeeName: employee.name,
+        date: formatCalendarDate(selectedDate),
+
+        /**
+         * UTC = Unique total calls / visited assigned outlets
+         */
+        utc,
+
+        /**
+         * UPC = Unique productive calls / billed assigned outlets
+         */
+        upc,
+
+        /**
+         * Zero order = visited but no billing
+         */
+        zeroOrder,
+
+        /**
+         * Not visited = assigned but not visited
+         */
+        notVisited,
+
+        /**
+         * Total assigned beat outlets
+         */
+        total: totalAssigned,
+      },
+    };
+  }
 
   async getManagerUserRoutePlan(query: { employeeId: string; date?: string }) {
     const employee = await this.getManagedEmployee(query.employeeId);
