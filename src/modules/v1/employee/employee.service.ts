@@ -6259,332 +6259,332 @@ export class EmployeeService extends MongoRepository<Employee> {
     };
   }
 
-  async getUserPrimaryCategoryTarget(query: {
-    employeeId: string;
-    date?: string;
-  }) {
-    if (!query.employeeId) {
-      throw new BadRequestException('Employee ID is required');
-    }
+  // async getUserPrimaryCategoryTarget(query: {
+  //   employeeId: string;
+  //   date?: string;
+  // }) {
+  //   if (!query.employeeId) {
+  //     throw new BadRequestException('Employee ID is required');
+  //   }
 
-    const now = query?.date ? parseCalendarDate(query.date) : new Date();
+  //   const now = query?.date ? parseCalendarDate(query.date) : new Date();
 
-    const startDate = new Date(
-      now.getFullYear(),
-      now.getMonth(),
-      1,
-      0,
-      0,
-      0,
-      0,
-    );
+  //   const startDate = new Date(
+  //     now.getFullYear(),
+  //     now.getMonth(),
+  //     1,
+  //     0,
+  //     0,
+  //     0,
+  //     0,
+  //   );
 
-    const endDate = new Date(now);
-    endDate.setHours(23, 59, 59, 999);
+  //   const endDate = new Date(now);
+  //   endDate.setHours(23, 59, 59, 999);
 
-    const [targets, achievements] = await Promise.all([
-      /**
-       * ==========================================
-       * TARGETS BY PRIMARY CATEGORY
-       * ==========================================
-       */
-      this.targetModel.aggregate([
-        {
-          $match: {
-            userId: query.employeeId,
-            startDate: { $lte: endDate },
-            endDate: { $gte: startDate },
-          },
-        },
-        {
-          $group: {
-            _id: '$categoryId',
+  //   const [targets, achievements] = await Promise.all([
+  //     /**
+  //      * ==========================================
+  //      * TARGETS BY PRIMARY CATEGORY
+  //      * ==========================================
+  //      */
+  //     this.targetModel.aggregate([
+  //       {
+  //         $match: {
+  //           userId: query.employeeId,
+  //           startDate: { $lte: endDate },
+  //           endDate: { $gte: startDate },
+  //         },
+  //       },
+  //       {
+  //         $group: {
+  //           _id: '$categoryId',
 
-            category: {
-              $first: '$category',
-            },
+  //           category: {
+  //             $first: '$category',
+  //           },
 
-            targetCases: {
-              $sum: {
-                $ifNull: ['$targetCases', 0],
-              },
-            },
+  //           targetCases: {
+  //             $sum: {
+  //               $ifNull: ['$targetCases', 0],
+  //             },
+  //           },
 
-            targetTonnage: {
-              $sum: {
-                $ifNull: ['$targetTonnage', 0],
-              },
-            },
+  //           targetTonnage: {
+  //             $sum: {
+  //               $ifNull: ['$targetTonnage', 0],
+  //             },
+  //           },
 
-            targetValue: {
-              $sum: {
-                $ifNull: ['$targetValue', 0],
-              },
-            },
-          },
-        },
-      ]),
+  //           targetValue: {
+  //             $sum: {
+  //               $ifNull: ['$targetValue', 0],
+  //             },
+  //           },
+  //         },
+  //       },
+  //     ]),
 
-      /**
-       * ==========================================
-       * ACHIEVEMENTS BY PRIMARY CATEGORY
-       * ==========================================
-       *
-       * Fixes:
-       * 1. Sale schema has employees array, so use employees.employeeId.
-       * 2. sale_items already has parentCategoryId, so no need for product_master lookup.
-       * 3. totalNetWeight is KG, so convert KG to tonnage.
-       */
-      this.saleModal
-        .aggregate([
-          {
-            $match: {
-              'employees.employeeId': query.employeeId,
-              status: SaleStatus.COMPLETED,
-              date: {
-                $gte: startDate,
-                $lte: endDate,
-              },
-            },
-          },
-          {
-            $lookup: {
-              from: 'sale_items',
-              let: {
-                saleId: '$saleId',
-              },
-              pipeline: [
-                {
-                  $match: {
-                    $expr: {
-                      $eq: ['$saleId', '$$saleId'],
-                    },
-                  },
-                },
-                {
-                  $project: {
-                    _id: 0,
-                    parentCategoryId: 1,
-                    caseQty: 1,
-                    pieceQty: 1,
-                    unitQtyInCase: 1,
-                    totalNetWeight: 1,
-                    totalValue: 1,
-                  },
-                },
-              ],
-              as: 'items',
-            },
-          },
-          {
-            $unwind: '$items',
-          },
-          {
-            $lookup: {
-              from: 'productcategories',
-              localField: 'items.parentCategoryId',
-              foreignField: 'categoryId',
-              as: 'category',
-            },
-          },
-          {
-            $unwind: {
-              path: '$category',
-              preserveNullAndEmptyArrays: true,
-            },
-          },
-          {
-            $group: {
-              _id: {
-                $ifNull: ['$items.parentCategoryId', 'UNKNOWN'],
-              },
+  //     /**
+  //      * ==========================================
+  //      * ACHIEVEMENTS BY PRIMARY CATEGORY
+  //      * ==========================================
+  //      *
+  //      * Fixes:
+  //      * 1. Sale schema has employees array, so use employees.employeeId.
+  //      * 2. sale_items already has parentCategoryId, so no need for product_master lookup.
+  //      * 3. totalNetWeight is KG, so convert KG to tonnage.
+  //      */
+  //     this.saleModal
+  //       .aggregate([
+  //         {
+  //           $match: {
+  //             'employees.employeeId': query.employeeId,
+  //             status: SaleStatus.COMPLETED,
+  //             date: {
+  //               $gte: startDate,
+  //               $lte: endDate,
+  //             },
+  //           },
+  //         },
+  //         {
+  //           $lookup: {
+  //             from: 'sale_items',
+  //             let: {
+  //               saleId: '$saleId',
+  //             },
+  //             pipeline: [
+  //               {
+  //                 $match: {
+  //                   $expr: {
+  //                     $eq: ['$saleId', '$$saleId'],
+  //                   },
+  //                 },
+  //               },
+  //               {
+  //                 $project: {
+  //                   _id: 0,
+  //                   parentCategoryId: 1,
+  //                   caseQty: 1,
+  //                   pieceQty: 1,
+  //                   unitQtyInCase: 1,
+  //                   totalNetWeight: 1,
+  //                   totalValue: 1,
+  //                 },
+  //               },
+  //             ],
+  //             as: 'items',
+  //           },
+  //         },
+  //         {
+  //           $unwind: '$items',
+  //         },
+  //         {
+  //           $lookup: {
+  //             from: 'productcategories',
+  //             localField: 'items.parentCategoryId',
+  //             foreignField: 'categoryId',
+  //             as: 'category',
+  //           },
+  //         },
+  //         {
+  //           $unwind: {
+  //             path: '$category',
+  //             preserveNullAndEmptyArrays: true,
+  //           },
+  //         },
+  //         {
+  //           $group: {
+  //             _id: {
+  //               $ifNull: ['$items.parentCategoryId', 'UNKNOWN'],
+  //             },
 
-              category: {
-                $first: {
-                  $ifNull: ['$category.name', 'Unknown'],
-                },
-              },
+  //             category: {
+  //               $first: {
+  //                 $ifNull: ['$category.name', 'Unknown'],
+  //               },
+  //             },
 
-              achievementCases: {
-                $sum: {
-                  $add: [
-                    {
-                      $ifNull: ['$items.caseQty', 0],
-                    },
-                    {
-                      $cond: [
-                        {
-                          $gt: ['$items.unitQtyInCase', 0],
-                        },
-                        {
-                          $divide: [
-                            {
-                              $ifNull: ['$items.pieceQty', 0],
-                            },
-                            '$items.unitQtyInCase',
-                          ],
-                        },
-                        0,
-                      ],
-                    },
-                  ],
-                },
-              },
+  //             achievementCases: {
+  //               $sum: {
+  //                 $add: [
+  //                   {
+  //                     $ifNull: ['$items.caseQty', 0],
+  //                   },
+  //                   {
+  //                     $cond: [
+  //                       {
+  //                         $gt: ['$items.unitQtyInCase', 0],
+  //                       },
+  //                       {
+  //                         $divide: [
+  //                           {
+  //                             $ifNull: ['$items.pieceQty', 0],
+  //                           },
+  //                           '$items.unitQtyInCase',
+  //                         ],
+  //                       },
+  //                       0,
+  //                     ],
+  //                   },
+  //                 ],
+  //               },
+  //             },
 
-              /**
-               * totalNetWeight is KG.
-               * Convert KG to tonnage.
-               */
-              achievementTonnage: {
-                $sum: {
-                  $divide: [
-                    {
-                      $ifNull: ['$items.totalNetWeight', 0],
-                    },
-                    1000,
-                  ],
-                },
-              },
+  //             /**
+  //              * totalNetWeight is KG.
+  //              * Convert KG to tonnage.
+  //              */
+  //             achievementTonnage: {
+  //               $sum: {
+  //                 $divide: [
+  //                   {
+  //                     $ifNull: ['$items.totalNetWeight', 0],
+  //                   },
+  //                   1000,
+  //                 ],
+  //               },
+  //             },
 
-              achievementValue: {
-                $sum: {
-                  $ifNull: ['$items.totalValue', 0],
-                },
-              },
-            },
-          },
-        ])
-        .allowDiskUse(true),
-    ]);
+  //             achievementValue: {
+  //               $sum: {
+  //                 $ifNull: ['$items.totalValue', 0],
+  //               },
+  //             },
+  //           },
+  //         },
+  //       ])
+  //       .allowDiskUse(true),
+  //   ]);
 
-    const categoryMap = new Map<string, any>();
+  //   const categoryMap = new Map<string, any>();
 
-    /**
-     * ==========================================
-     * MAP TARGETS
-     * ==========================================
-     */
-    for (const target of targets) {
-      categoryMap.set(target._id, {
-        categoryId: target._id,
-        category: target.category || 'Unknown',
+  //   /**
+  //    * ==========================================
+  //    * MAP TARGETS
+  //    * ==========================================
+  //    */
+  //   for (const target of targets) {
+  //     categoryMap.set(target._id, {
+  //       categoryId: target._id,
+  //       category: target.category || 'Unknown',
 
-        targetCases: Number(target.targetCases || 0),
-        targetTonnage: Number(target.targetTonnage || 0),
-        targetValue: Number(target.targetValue || 0),
+  //       targetCases: Number(target.targetCases || 0),
+  //       targetTonnage: Number(target.targetTonnage || 0),
+  //       targetValue: Number(target.targetValue || 0),
 
-        achievementCases: 0,
-        achievementTonnage: 0,
-        achievementValue: 0,
-      });
-    }
+  //       achievementCases: 0,
+  //       achievementTonnage: 0,
+  //       achievementValue: 0,
+  //     });
+  //   }
 
-    /**
-     * ==========================================
-     * MAP ACHIEVEMENTS
-     * ==========================================
-     */
-    for (const achievement of achievements) {
-      const current = categoryMap.get(achievement._id) || {
-        categoryId: achievement._id,
-        category: achievement.category || 'Unknown',
+  //   /**
+  //    * ==========================================
+  //    * MAP ACHIEVEMENTS
+  //    * ==========================================
+  //    */
+  //   for (const achievement of achievements) {
+  //     const current = categoryMap.get(achievement._id) || {
+  //       categoryId: achievement._id,
+  //       category: achievement.category || 'Unknown',
 
-        targetCases: 0,
-        targetTonnage: 0,
-        targetValue: 0,
+  //       targetCases: 0,
+  //       targetTonnage: 0,
+  //       targetValue: 0,
 
-        achievementCases: 0,
-        achievementTonnage: 0,
-        achievementValue: 0,
-      };
+  //       achievementCases: 0,
+  //       achievementTonnage: 0,
+  //       achievementValue: 0,
+  //     };
 
-      current.achievementCases = Number(achievement.achievementCases || 0);
+  //     current.achievementCases = Number(achievement.achievementCases || 0);
 
-      /**
-       * Already converted from KG to tonnage in aggregation.
-       */
-      current.achievementTonnage = Number(achievement.achievementTonnage || 0);
+  //     /**
+  //      * Already converted from KG to tonnage in aggregation.
+  //      */
+  //     current.achievementTonnage = Number(achievement.achievementTonnage || 0);
 
-      current.achievementValue = Number(achievement.achievementValue || 0);
+  //     current.achievementValue = Number(achievement.achievementValue || 0);
 
-      categoryMap.set(achievement._id, current);
-    }
+  //     categoryMap.set(achievement._id, current);
+  //   }
 
-    /**
-     * ==========================================
-     * FINAL DATA
-     * ==========================================
-     */
-    const data = Array.from(categoryMap.values()).map((item) => {
-      const remainingCases = Math.max(
-        item.targetCases - item.achievementCases,
-        0,
-      );
+  //   /**
+  //    * ==========================================
+  //    * FINAL DATA
+  //    * ==========================================
+  //    */
+  //   const data = Array.from(categoryMap.values()).map((item) => {
+  //     const remainingCases = Math.max(
+  //       item.targetCases - item.achievementCases,
+  //       0,
+  //     );
 
-      const remainingTonnage = Math.max(
-        item.targetTonnage - item.achievementTonnage,
-        0,
-      );
+  //     const remainingTonnage = Math.max(
+  //       item.targetTonnage - item.achievementTonnage,
+  //       0,
+  //     );
 
-      const remainingValue = Math.max(
-        item.targetValue - item.achievementValue,
-        0,
-      );
+  //     const remainingValue = Math.max(
+  //       item.targetValue - item.achievementValue,
+  //       0,
+  //     );
 
-      const achievementPercentage =
-        item.targetCases > 0
-          ? Number(
-              ((item.achievementCases / item.targetCases) * 100).toFixed(2),
-            )
-          : 0;
+  //     const achievementPercentage =
+  //       item.targetCases > 0
+  //         ? Number(
+  //             ((item.achievementCases / item.targetCases) * 100).toFixed(2),
+  //           )
+  //         : 0;
 
-      const tonnageAchievementPercentage =
-        item.targetTonnage > 0
-          ? Number(
-              ((item.achievementTonnage / item.targetTonnage) * 100).toFixed(2),
-            )
-          : 0;
+  //     const tonnageAchievementPercentage =
+  //       item.targetTonnage > 0
+  //         ? Number(
+  //             ((item.achievementTonnage / item.targetTonnage) * 100).toFixed(2),
+  //           )
+  //         : 0;
 
-      const valueAchievementPercentage =
-        item.targetValue > 0
-          ? Number(
-              ((item.achievementValue / item.targetValue) * 100).toFixed(2),
-            )
-          : 0;
+  //     const valueAchievementPercentage =
+  //       item.targetValue > 0
+  //         ? Number(
+  //             ((item.achievementValue / item.targetValue) * 100).toFixed(2),
+  //           )
+  //         : 0;
 
-      return {
-        categoryId: item.categoryId,
-        category: item.category,
+  //     return {
+  //       categoryId: item.categoryId,
+  //       category: item.category,
 
-        targetCases: Number(item.targetCases.toFixed(2)),
-        achievementCases: Number(item.achievementCases.toFixed(2)),
-        remainingCases: Number(remainingCases.toFixed(2)),
+  //       targetCases: Number(item.targetCases.toFixed(2)),
+  //       achievementCases: Number(item.achievementCases.toFixed(2)),
+  //       remainingCases: Number(remainingCases.toFixed(2)),
 
-        targetTonnage: Number(item.targetTonnage.toFixed(3)),
-        achievementTonnage: Number(item.achievementTonnage.toFixed(3)),
-        remainingTonnage: Number(remainingTonnage.toFixed(3)),
+  //       targetTonnage: Number(item.targetTonnage.toFixed(3)),
+  //       achievementTonnage: Number(item.achievementTonnage.toFixed(3)),
+  //       remainingTonnage: Number(remainingTonnage.toFixed(3)),
 
-        targetValue: Number(item.targetValue.toFixed(2)),
-        achievementValue: Number(item.achievementValue.toFixed(2)),
-        remainingValue: Number(remainingValue.toFixed(2)),
+  //       targetValue: Number(item.targetValue.toFixed(2)),
+  //       achievementValue: Number(item.achievementValue.toFixed(2)),
+  //       remainingValue: Number(remainingValue.toFixed(2)),
 
-        achievementPercentage,
-        tonnageAchievementPercentage,
-        valueAchievementPercentage,
+  //       achievementPercentage,
+  //       tonnageAchievementPercentage,
+  //       valueAchievementPercentage,
 
-        hasTarget:
-          item.targetCases > 0 ||
-          item.targetTonnage > 0 ||
-          item.targetValue > 0,
-      };
-    });
+  //       hasTarget:
+  //         item.targetCases > 0 ||
+  //         item.targetTonnage > 0 ||
+  //         item.targetValue > 0,
+  //     };
+  //   });
 
-    return {
-      statusCode: HttpStatus.OK,
-      message: 'User primary category targets fetched successfully',
-      data: data.sort((a, b) => b.achievementCases - a.achievementCases),
-    };
-  }
+  //   return {
+  //     statusCode: HttpStatus.OK,
+  //     message: 'User primary category targets fetched successfully',
+  //     data: data.sort((a, b) => b.achievementCases - a.achievementCases),
+  //   };
+  // }
 
   // async getSpecialTargetSummary(
   //   targetType: 'UBO' | 'FOCUSED_PACK',
@@ -6778,6 +6778,342 @@ export class EmployeeService extends MongoRepository<Employee> {
   //     data: data.sort((a, b) => b.achievementCases - a.achievementCases),
   //   };
   // }
+
+  async getUserPrimaryCategoryTarget(query: {
+    employeeId: string;
+    date?: string;
+  }) {
+    if (!query.employeeId) {
+      throw new BadRequestException('Employee ID is required');
+    }
+
+    const now = query?.date ? parseCalendarDate(query.date) : new Date();
+
+    const startDate = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      1,
+      0,
+      0,
+      0,
+      0,
+    );
+
+    const endDate = new Date(now);
+    endDate.setHours(23, 59, 59, 999);
+
+    const [targets, achievements] = await Promise.all([
+      /**
+       * ==========================================
+       * TARGETS BY PARENT CATEGORY
+       * ==========================================
+       */
+      this.targetModel.aggregate([
+        {
+          $match: {
+            userId: query.employeeId,
+            startDate: { $lte: endDate },
+            endDate: { $gte: startDate },
+          },
+        },
+        {
+          $group: {
+            /**
+             * IMPORTANT:
+             * Parent category wise grouping
+             */
+            _id: '$parentCategoryId',
+
+            category: {
+              $first: '$parentCategory',
+            },
+
+            targetCases: {
+              $sum: {
+                $ifNull: ['$targetCases', 0],
+              },
+            },
+
+            targetTonnage: {
+              $sum: {
+                $ifNull: ['$targetTonnage', 0],
+              },
+            },
+
+            targetValue: {
+              $sum: {
+                $ifNull: ['$targetValue', 0],
+              },
+            },
+          },
+        },
+      ]),
+
+      /**
+       * ==========================================
+       * ACHIEVEMENTS BY PARENT CATEGORY
+       * ==========================================
+       */
+      this.saleModal
+        .aggregate([
+          {
+            $match: {
+              'employees.employeeId': query.employeeId,
+              status: SaleStatus.COMPLETED,
+              date: {
+                $gte: startDate,
+                $lte: endDate,
+              },
+            },
+          },
+          {
+            $lookup: {
+              from: 'sale_items',
+              let: {
+                saleId: '$saleId',
+              },
+              pipeline: [
+                {
+                  $match: {
+                    $expr: {
+                      $eq: ['$saleId', '$$saleId'],
+                    },
+                  },
+                },
+                {
+                  $project: {
+                    _id: 0,
+                    parentCategoryId: 1,
+                    caseQty: 1,
+                    pieceQty: 1,
+                    unitQtyInCase: 1,
+                    totalNetWeight: 1,
+                    totalValue: 1,
+                  },
+                },
+              ],
+              as: 'items',
+            },
+          },
+          {
+            $unwind: '$items',
+          },
+          {
+            $lookup: {
+              from: 'productcategories',
+              localField: 'items.parentCategoryId',
+              foreignField: 'categoryId',
+              as: 'category',
+            },
+          },
+          {
+            $unwind: {
+              path: '$category',
+              preserveNullAndEmptyArrays: true,
+            },
+          },
+          {
+            $group: {
+              /**
+               * IMPORTANT:
+               * Parent category wise achievement
+               */
+              _id: {
+                $ifNull: ['$items.parentCategoryId', 'UNKNOWN'],
+              },
+
+              category: {
+                $first: {
+                  $ifNull: ['$category.name', 'Unknown'],
+                },
+              },
+
+              achievementCases: {
+                $sum: {
+                  $add: [
+                    {
+                      $ifNull: ['$items.caseQty', 0],
+                    },
+                    {
+                      $cond: [
+                        {
+                          $gt: ['$items.unitQtyInCase', 0],
+                        },
+                        {
+                          $divide: [
+                            {
+                              $ifNull: ['$items.pieceQty', 0],
+                            },
+                            '$items.unitQtyInCase',
+                          ],
+                        },
+                        0,
+                      ],
+                    },
+                  ],
+                },
+              },
+
+              /**
+               * totalNetWeight is KG.
+               * Convert KG to tonnage.
+               */
+              achievementTonnage: {
+                $sum: {
+                  $divide: [
+                    {
+                      $ifNull: ['$items.totalNetWeight', 0],
+                    },
+                    1000,
+                  ],
+                },
+              },
+
+              achievementValue: {
+                $sum: {
+                  $ifNull: ['$items.totalValue', 0],
+                },
+              },
+            },
+          },
+        ])
+        .allowDiskUse(true),
+    ]);
+
+    const categoryMap = new Map<string, any>();
+
+    /**
+     * ==========================================
+     * MAP TARGETS
+     * ==========================================
+     */
+    for (const target of targets) {
+      const categoryId = target._id || 'UNKNOWN';
+
+      categoryMap.set(categoryId, {
+        categoryId,
+        category: target.category || 'Unknown',
+
+        targetCases: Number(target.targetCases || 0),
+        targetTonnage: Number(target.targetTonnage || 0),
+        targetValue: Number(target.targetValue || 0),
+
+        achievementCases: 0,
+        achievementTonnage: 0,
+        achievementValue: 0,
+      });
+    }
+
+    /**
+     * ==========================================
+     * MAP ACHIEVEMENTS
+     * ==========================================
+     */
+    for (const achievement of achievements) {
+      const categoryId = achievement._id || 'UNKNOWN';
+
+      const current = categoryMap.get(categoryId) || {
+        categoryId,
+        category: achievement.category || 'Unknown',
+
+        targetCases: 0,
+        targetTonnage: 0,
+        targetValue: 0,
+
+        achievementCases: 0,
+        achievementTonnage: 0,
+        achievementValue: 0,
+      };
+
+      current.achievementCases = Number(achievement.achievementCases || 0);
+      current.achievementTonnage = Number(achievement.achievementTonnage || 0);
+      current.achievementValue = Number(achievement.achievementValue || 0);
+
+      categoryMap.set(categoryId, current);
+    }
+
+    /**
+     * ==========================================
+     * FINAL DATA
+     * ==========================================
+     */
+    const data = Array.from(categoryMap.values()).map((item) => {
+      const remainingCases = Math.max(
+        item.targetCases - item.achievementCases,
+        0,
+      );
+
+      const remainingTonnage = Math.max(
+        item.targetTonnage - item.achievementTonnage,
+        0,
+      );
+
+      const remainingValue = Math.max(
+        item.targetValue - item.achievementValue,
+        0,
+      );
+
+      const achievementPercentage =
+        item.targetCases > 0
+          ? Number(
+              ((item.achievementCases / item.targetCases) * 100).toFixed(2),
+            )
+          : 0;
+
+      const tonnageAchievementPercentage =
+        item.targetTonnage > 0
+          ? Number(
+              ((item.achievementTonnage / item.targetTonnage) * 100).toFixed(2),
+            )
+          : 0;
+
+      const valueAchievementPercentage =
+        item.targetValue > 0
+          ? Number(
+              ((item.achievementValue / item.targetValue) * 100).toFixed(2),
+            )
+          : 0;
+
+      return {
+        /**
+         * This is parentCategoryId now.
+         */
+        categoryId: item.categoryId,
+
+        /**
+         * This is parentCategory name now.
+         */
+        category: item.category,
+
+        targetCases: Number(item.targetCases.toFixed(2)),
+        achievementCases: Number(item.achievementCases.toFixed(2)),
+        remainingCases: Number(remainingCases.toFixed(2)),
+
+        targetTonnage: Number(item.targetTonnage.toFixed(3)),
+        achievementTonnage: Number(item.achievementTonnage.toFixed(3)),
+        remainingTonnage: Number(remainingTonnage.toFixed(3)),
+
+        targetValue: Number(item.targetValue.toFixed(2)),
+        achievementValue: Number(item.achievementValue.toFixed(2)),
+        remainingValue: Number(remainingValue.toFixed(2)),
+
+        achievementPercentage,
+        tonnageAchievementPercentage,
+        valueAchievementPercentage,
+
+        hasTarget:
+          item.targetCases > 0 ||
+          item.targetTonnage > 0 ||
+          item.targetValue > 0,
+      };
+    });
+
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'User primary category targets fetched successfully',
+      data: data.sort((a, b) => b.achievementCases - a.achievementCases),
+    };
+  }
 
   async getSpecialTargetSummary(
     targetType: 'UBO' | 'FOCUSED_PACK',
