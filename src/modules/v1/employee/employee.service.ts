@@ -10419,15 +10419,21 @@ export class EmployeeService extends MongoRepository<Employee> {
   async getFieldUsersSummary(date?: string) {
     const managerId = RequestContextStore.getStore()?.userId;
 
+    if (!managerId) {
+      throw new NotFoundException(EMPLOYEE.NOT_FOUND);
+    }
+
     const startOfDay = date ? parseCalendarDate(date) : new Date();
     startOfDay.setHours(0, 0, 0, 0);
 
     const endOfDay = date ? parseCalendarDate(date) : new Date();
     endOfDay.setHours(23, 59, 59, 999);
 
-    /* ==========================================
+    /**
+     * ==========================================
      * TEAM MEMBERS
-     * ========================================== */
+     * ==========================================
+     */
     const employees = await this.find({
       $or: [{ reportingEmployeeId: managerId }, { hierarchyPath: managerId }],
       status: UserStatus.ACTIVE,
@@ -10441,15 +10447,35 @@ export class EmployeeService extends MongoRepository<Employee> {
       };
     }
 
-    const result = await Promise.all(
-      employees.map(async (employee) => {
-        /* ==========================================
-         * DATE ACTIVITY
-         * ========================================== */
-        const [activity, leave] = await Promise.all([
-          this.activityModel
-            .findOne({
-              userId: employee.employeeId,
+    const employeeIds = employees
+      .map((employee) => employee.employeeId)
+      .filter(Boolean);
+
+    /**
+     * ==========================================
+     * BATCH FETCH DATA
+     * ==========================================
+     */
+    const [
+      activities,
+      leaves,
+      routeSessions,
+      firstCalls,
+      firstPcs,
+      tcResults,
+      pcResults,
+      saleIdsByEmployee,
+    ] = await Promise.all([
+      /**
+       * Latest activity per employee
+       */
+      this.activityModel
+        .aggregate([
+          {
+            $match: {
+              userId: {
+                $in: employeeIds,
+              },
               status: {
                 $in: [ActivityStatus.ACTIVE, ActivityStatus.COMPLETED],
               },
@@ -10457,37 +10483,67 @@ export class EmployeeService extends MongoRepository<Employee> {
                 $gte: startOfDay,
                 $lte: endOfDay,
               },
-            })
-            .sort({
+            },
+          },
+          {
+            $sort: {
               startTime: -1,
-            })
-            .lean(),
-          this.leaveModel
-            .findOne({
-              userId: employee.employeeId,
+            },
+          },
+          {
+            $group: {
+              _id: '$userId',
+              activity: {
+                $first: '$$ROOT',
+              },
+            },
+          },
+        ])
+        .allowDiskUse(true),
+
+      /**
+       * Latest leave per employee
+       */
+      this.leaveModel
+        .aggregate([
+          {
+            $match: {
+              userId: {
+                $in: employeeIds,
+              },
               status: LeaveStatus.COMPLETED,
               createdAt: {
                 $gte: startOfDay,
                 $lte: endOfDay,
               },
-            })
-            .sort({
+            },
+          },
+          {
+            $sort: {
               createdAt: -1,
-            })
-            .lean(),
-        ]);
-        const activityName = activity?.name || (leave ? 'Leave' : 'Offline');
-        const isOfficialWork =
-          activityName === 'Official Work' || activityName === 'Office Work';
-        const isRetailing = activityName === 'Retailing';
+            },
+          },
+          {
+            $group: {
+              _id: '$userId',
+              leave: {
+                $first: '$$ROOT',
+              },
+            },
+          },
+        ])
+        .allowDiskUse(true),
 
-        /* ==========================================
-         * ROUTE SESSION
-         * ========================================== */
-        const routeSession = await this.routeSessionModel
-          .findOne(
-            {
-              userId: employee.employeeId,
+      /**
+       * Latest route session per employee
+       */
+      this.routeSessionModel
+        .aggregate([
+          {
+            $match: {
+              userId: {
+                $in: employeeIds,
+              },
               status: {
                 $in: [RouteSessionStatus.ACTIVE, RouteSessionStatus.COMPLETED],
               },
@@ -10496,155 +10552,394 @@ export class EmployeeService extends MongoRepository<Employee> {
                 $lte: endOfDay,
               },
             },
+          },
+          {
+            $sort: {
+              startTime: -1,
+            },
+          },
+          {
+            $group: {
+              _id: '$userId',
+              routeSession: {
+                $first: {
+                  routeId: '$routeId',
+                  routeName: '$routeName',
+                  startTime: '$startTime',
+                },
+              },
+            },
+          },
+        ])
+        .allowDiskUse(true),
+
+      /**
+       * First call per employee
+       */
+      this.shopVisitModel
+        .aggregate([
+          {
+            $match: {
+              employeeId: {
+                $in: employeeIds,
+              },
+              status: ShopVisitStatus.COMPLETED,
+              checkInTime: {
+                $gte: startOfDay,
+                $lte: endOfDay,
+              },
+            },
+          },
+          {
+            $sort: {
+              checkInTime: 1,
+            },
+          },
+          {
+            $group: {
+              _id: '$employeeId',
+              firstCallTime: {
+                $first: '$checkInTime',
+              },
+            },
+          },
+        ])
+        .allowDiskUse(true),
+
+      /**
+       * First productive call per employee
+       *
+       * IMPORTANT:
+       * Sale schema has employees array.
+       */
+      this.saleModal
+        .aggregate([
+          {
+            $match: {
+              'employees.employeeId': {
+                $in: employeeIds,
+              },
+              status: SaleStatus.COMPLETED,
+              date: {
+                $gte: startOfDay,
+                $lte: endOfDay,
+              },
+            },
+          },
+          {
+            $unwind: '$employees',
+          },
+          {
+            $match: {
+              'employees.employeeId': {
+                $in: employeeIds,
+              },
+            },
+          },
+          {
+            $sort: {
+              date: 1,
+            },
+          },
+          {
+            $group: {
+              _id: '$employees.employeeId',
+              firstPcTime: {
+                $first: '$date',
+              },
+            },
+          },
+        ])
+        .allowDiskUse(true),
+
+      /**
+       * TC = total completed visits
+       */
+      this.shopVisitModel
+        .aggregate([
+          {
+            $match: {
+              employeeId: {
+                $in: employeeIds,
+              },
+              status: ShopVisitStatus.COMPLETED,
+              checkInTime: {
+                $gte: startOfDay,
+                $lte: endOfDay,
+              },
+            },
+          },
+          {
+            $group: {
+              _id: '$employeeId',
+              tc: {
+                $sum: 1,
+              },
+            },
+          },
+        ])
+        .allowDiskUse(true),
+
+      /**
+       * PC = completed sales count
+       *
+       * IMPORTANT:
+       * Sale schema has employees array.
+       */
+      this.saleModal
+        .aggregate([
+          {
+            $match: {
+              'employees.employeeId': {
+                $in: employeeIds,
+              },
+              status: SaleStatus.COMPLETED,
+              date: {
+                $gte: startOfDay,
+                $lte: endOfDay,
+              },
+            },
+          },
+          {
+            $unwind: '$employees',
+          },
+          {
+            $match: {
+              'employees.employeeId': {
+                $in: employeeIds,
+              },
+            },
+          },
+          {
+            $group: {
+              _id: '$employees.employeeId',
+              pc: {
+                $sum: 1,
+              },
+            },
+          },
+        ])
+        .allowDiskUse(true),
+
+      /**
+       * Sale IDs by employee for LPC calculation
+       */
+      this.saleModal
+        .aggregate([
+          {
+            $match: {
+              'employees.employeeId': {
+                $in: employeeIds,
+              },
+              status: SaleStatus.COMPLETED,
+              date: {
+                $gte: startOfDay,
+                $lte: endOfDay,
+              },
+            },
+          },
+          {
+            $unwind: '$employees',
+          },
+          {
+            $match: {
+              'employees.employeeId': {
+                $in: employeeIds,
+              },
+            },
+          },
+          {
+            $group: {
+              _id: '$employees.employeeId',
+              saleIds: {
+                $addToSet: '$saleId',
+              },
+            },
+          },
+        ])
+        .allowDiskUse(true),
+    ]);
+
+    /**
+     * ==========================================
+     * MAPS
+     * ==========================================
+     */
+    const activityMap = new Map<string, any>(
+      activities.map((item) => [item._id, item.activity]),
+    );
+
+    const leaveMap = new Map<string, any>(
+      leaves.map((item) => [item._id, item.leave]),
+    );
+
+    const routeSessionMap = new Map<string, any>(
+      routeSessions.map((item) => [item._id, item.routeSession]),
+    );
+
+    const firstCallMap = new Map<string, any>(
+      firstCalls.map((item) => [item._id, item.firstCallTime]),
+    );
+
+    const firstPcMap = new Map<string, any>(
+      firstPcs.map((item) => [item._id, item.firstPcTime]),
+    );
+
+    const tcMap = new Map<string, number>(
+      tcResults.map((item) => [item._id, Number(item.tc || 0)]),
+    );
+
+    const pcMap = new Map<string, number>(
+      pcResults.map((item) => [item._id, Number(item.pc || 0)]),
+    );
+
+    const saleIdsMap = new Map<string, string[]>(
+      saleIdsByEmployee.map((item) => [item._id, item.saleIds || []]),
+    );
+
+    /**
+     * ==========================================
+     * LPC CALCULATION
+     * ==========================================
+     */
+    const allSaleIds = Array.from(
+      new Set(
+        saleIdsByEmployee.flatMap((item) => item.saleIds || []).filter(Boolean),
+      ),
+    );
+
+    const saleItemLineResults = allSaleIds.length
+      ? await this.saleItemModel
+          .aggregate([
+            {
+              $match: {
+                saleId: {
+                  $in: allSaleIds,
+                },
+              },
+            },
+            {
+              $group: {
+                _id: '$saleId',
+                lineCount: {
+                  $sum: 1,
+                },
+              },
+            },
+          ])
+          .allowDiskUse(true)
+      : [];
+
+    const saleLineCountMap = new Map<string, number>(
+      saleItemLineResults.map((item) => [
+        item._id,
+        Number(item.lineCount || 0),
+      ]),
+    );
+
+    /**
+     * ==========================================
+     * ROUTE NAME FALLBACK
+     * ==========================================
+     */
+    const missingRouteIds = Array.from(
+      new Set(
+        routeSessions
+          .map((item) => item.routeSession)
+          .filter((session) => session?.routeId && !session?.routeName)
+          .map((session) => session.routeId),
+      ),
+    );
+
+    const routes = missingRouteIds.length
+      ? await this.routeModel
+          .find(
+            {
+              routeId: {
+                $in: missingRouteIds,
+              },
+            },
             {
               routeId: 1,
-              routeName: 1,
-              startTime: 1,
+              name: 1,
             },
           )
-          .sort({ startTime: -1 })
-          .lean();
-        let routeName = '-';
+          .lean()
+      : [];
 
-        if (routeSession?.routeName) {
-          routeName = routeSession.routeName;
-        } else if (routeSession?.routeId) {
-          const route = await this.routeModel
-            .findOne(
-              {
-                routeId: routeSession.routeId,
-              },
-              {
-                name: 1,
-              },
-            )
-            .lean();
-
-          routeName = route?.name || '-';
-        }
-
-        /* ==========================================
-         * FIRST CALL
-         * ========================================== */
-        const firstCall = await this.shopVisitModel
-          .findOne({
-            employeeId: employee.employeeId,
-            status: ShopVisitStatus.COMPLETED,
-            checkInTime: {
-              $gte: startOfDay,
-              $lte: endOfDay,
-            },
-          })
-          .sort({
-            checkInTime: 1,
-          })
-          .lean();
-
-        /* ==========================================
-         * FIRST PRODUCTIVE CALL
-         * ========================================== */
-        const firstPc = await this.saleModal
-          .findOne({
-            employeeId: employee.employeeId,
-            status: SaleStatus.COMPLETED,
-            date: {
-              $gte: startOfDay,
-              $lte: endOfDay,
-            },
-          })
-          .sort({
-            date: 1,
-          })
-          .lean();
-
-        /* ==========================================
-         * TC
-         * ========================================== */
-        const tcCalls = await this.shopVisitModel.countDocuments({
-          employeeId: employee.employeeId,
-          status: ShopVisitStatus.COMPLETED,
-          checkInTime: {
-            $gte: startOfDay,
-            $lte: endOfDay,
-          },
-        });
-
-        /* ==========================================
-         * PC
-         * ========================================== */
-        const pcCalls = await this.saleModal.countDocuments({
-          employeeId: employee.employeeId,
-          status: SaleStatus.COMPLETED,
-          date: {
-            $gte: startOfDay,
-            $lte: endOfDay,
-          },
-        });
-
-        /* ==========================================
-         * LPC
-         * LPC = Order item lines / Productive Calls
-         * ========================================== */
-        const saleIds = await this.saleModal.distinct('saleId', {
-          employeeId: employee.employeeId,
-          status: SaleStatus.COMPLETED,
-          date: {
-            $gte: startOfDay,
-            $lte: endOfDay,
-          },
-        });
-
-        const orderItemLines = saleIds.length
-          ? await this.saleItemModel.countDocuments({
-              saleId: {
-                $in: saleIds,
-              },
-            })
-          : 0;
-
-        const tc = tcCalls;
-
-        const pc = pcCalls;
-
-        const lpc = pc > 0 ? Number((orderItemLines / pc).toFixed(1)) : 0;
-
-        return {
-          employeeId: employee.employeeId,
-
-          employeeName: employee.name,
-
-          mobile: employee.mobile || '',
-
-          activity: {
-            name: activityName,
-            color: isOfficialWork
-              ? '#6D28D9'
-              : isRetailing
-                ? '#22C55E'
-                : leave
-                  ? '#F59E0B'
-                  : '#EF4444',
-          },
-
-          routeName: isOfficialWork ? 'Admin' : isRetailing ? routeName : '-',
-
-          location:
-            isRetailing || isOfficialWork ? activity?.description || '' : '',
-
-          summary: {
-            firstCallTime: firstCall?.checkInTime || null,
-
-            firstPcTime: firstPc?.date || null,
-
-            tc,
-
-            pc,
-
-            lpc,
-          },
-        };
-      }),
+    const routeMap = new Map<string, string>(
+      routes.map((route: any) => [route.routeId, route.name]),
     );
+
+    /**
+     * ==========================================
+     * FINAL RESPONSE
+     * ==========================================
+     */
+    const result = employees.map((employee) => {
+      const employeeId = employee.employeeId;
+
+      const activity = activityMap.get(employeeId);
+      const leave = leaveMap.get(employeeId);
+      const routeSession = routeSessionMap.get(employeeId);
+
+      const activityName = activity?.name || (leave ? 'Leave' : 'Offline');
+
+      const isOfficialWork =
+        activityName === 'Official Work' || activityName === 'Office Work';
+
+      const isRetailing = activityName === 'Retailing';
+
+      let routeName = '-';
+
+      if (routeSession?.routeName) {
+        routeName = routeSession.routeName;
+      } else if (routeSession?.routeId) {
+        routeName = routeMap.get(routeSession.routeId) || '-';
+      }
+
+      const tc = tcMap.get(employeeId) || 0;
+      const pc = pcMap.get(employeeId) || 0;
+
+      const saleIds = saleIdsMap.get(employeeId) || [];
+
+      const orderItemLines = saleIds.reduce(
+        (sum, saleId) => sum + (saleLineCountMap.get(saleId) || 0),
+        0,
+      );
+
+      const lpc = pc > 0 ? Number((orderItemLines / pc).toFixed(1)) : 0;
+
+      return {
+        employeeId,
+        employeeName: employee.name,
+        mobile: employee.mobile || '',
+
+        activity: {
+          name: activityName,
+          color: isOfficialWork
+            ? '#6D28D9'
+            : isRetailing
+              ? '#22C55E'
+              : leave
+                ? '#F59E0B'
+                : '#EF4444',
+        },
+
+        routeName: isOfficialWork ? 'Admin' : isRetailing ? routeName : '-',
+
+        location:
+          isRetailing || isOfficialWork ? activity?.description || '' : '',
+
+        summary: {
+          firstCallTime: firstCallMap.get(employeeId) || null,
+          firstPcTime: firstPcMap.get(employeeId) || null,
+          tc,
+          pc,
+          lpc,
+        },
+      };
+    });
 
     return {
       statusCode: HttpStatus.OK,
@@ -10772,13 +11067,411 @@ export class EmployeeService extends MongoRepository<Employee> {
     };
   }
 
+  // async getManagerUserTimeline(query: { employeeId: string; date?: string }) {
+  //   const managerId = RequestContextStore.getStore()?.userId;
+  //   const selectedDate = query?.date
+  //     ? parseCalendarDate(query.date)
+  //     : new Date();
+  //   const startOfDay = new Date(selectedDate);
+  //   startOfDay.setHours(0, 0, 0, 0);
+  //   const endOfDay = new Date(selectedDate);
+  //   endOfDay.setHours(23, 59, 59, 999);
+
+  //   const employee = await this.findOne({
+  //     employeeId: query.employeeId,
+  //     status: UserStatus.ACTIVE,
+  //     $or: [{ reportingEmployeeId: managerId }, { hierarchyPath: managerId }],
+  //   });
+
+  //   if (!employee) throw new NotFoundException(EMPLOYEE.NOT_FOUND);
+
+  //   const [rawVisits, rawActivities, workSession] = await Promise.all([
+  //     this.shopVisitModel
+  //       .find({
+  //         employeeId: query.employeeId,
+  //         checkInTime: {
+  //           $gte: startOfDay,
+  //           $lte: endOfDay,
+  //         },
+  //       })
+  //       .sort({ checkInTime: 1 })
+  //       .lean(),
+  //     this.activityModel
+  //       .find({
+  //         userId: query.employeeId,
+  //         startTime: {
+  //           $gte: startOfDay,
+  //           $lte: endOfDay,
+  //         },
+  //         status: {
+  //           $in: [ActivityStatus.ACTIVE, ActivityStatus.COMPLETED],
+  //         },
+  //       })
+  //       .sort({ startTime: 1 })
+  //       .lean(),
+  //     this.workSessionModel
+  //       .findOne({
+  //         userId: query.employeeId,
+  //         dayStartTime: {
+  //           $gte: startOfDay,
+  //           $lte: endOfDay,
+  //         },
+  //       })
+  //       .sort({ dayStartTime: 1 })
+  //       .lean(),
+  //   ]);
+
+  //   const uniqueBy = <T>(items: T[], getKey: (item: T) => string) => {
+  //     const seen = new Set<string>();
+
+  //     return items.filter((item) => {
+  //       const key = getKey(item);
+  //       if (!key || seen.has(key)) return false;
+  //       seen.add(key);
+  //       return true;
+  //     });
+  //   };
+
+  //   const visits = uniqueBy(rawVisits, (visit: any) => visit.visitId);
+  //   const activities = uniqueBy(
+  //     rawActivities,
+  //     (activity: any) =>
+  //       activity.activityId ||
+  //       `${activity.name}-${activity.startTime}-${activity.description}`,
+  //   );
+  //   const visitIds = visits.map((visit) => visit.visitId);
+
+  //   const [rawSales, rawNonSales] = await Promise.all([
+  //     visitIds.length
+  //       ? this.saleModal
+  //           .find({
+  //             employeeId: query.employeeId,
+  //             visitId: { $in: visitIds },
+  //             status: SaleStatus.COMPLETED,
+  //           })
+  //           .sort({ date: 1 })
+  //           .lean()
+  //       : [],
+  //     visitIds.length
+  //       ? this.nonSaleModel
+  //           .find({
+  //             employeeId: query.employeeId,
+  //             visitId: { $in: visitIds },
+  //             status: NonSaleStatus.COMPLETED,
+  //           })
+  //           .lean()
+  //       : [],
+  //   ]);
+
+  //   const sales = uniqueBy(rawSales, (sale: any) => sale.saleId);
+  //   const nonSales = uniqueBy(rawNonSales, (nonSale: any) => nonSale.nonSaleId);
+
+  //   const salesByVisit = new Map<string, any>(
+  //     sales.map((sale: any) => [sale.visitId, sale] as [string, any]),
+  //   );
+  //   const nonSalesByVisit = new Map<string, any>(
+  //     nonSales.map(
+  //       (nonSale: any) => [nonSale.visitId, nonSale] as [string, any],
+  //     ),
+  //   );
+  //   const saleIds = sales.map((sale) => sale.saleId);
+  //   const saleItems = saleIds.length
+  //     ? await this.saleItemModel.aggregate([
+  //         {
+  //           $match: {
+  //             saleId: { $in: saleIds },
+  //           },
+  //         },
+  //         {
+  //           $lookup: {
+  //             from: 'product_master',
+  //             localField: 'productId',
+  //             foreignField: 'productId',
+  //             as: 'product',
+  //           },
+  //         },
+  //         {
+  //           $unwind: {
+  //             path: '$product',
+  //             preserveNullAndEmptyArrays: true,
+  //           },
+  //         },
+  //         {
+  //           $lookup: {
+  //             from: 'productcategories',
+  //             localField: 'product.parentCategoryId',
+  //             foreignField: 'categoryId',
+  //             as: 'category',
+  //           },
+  //         },
+  //         {
+  //           $unwind: {
+  //             path: '$category',
+  //             preserveNullAndEmptyArrays: true,
+  //           },
+  //         },
+  //         {
+  //           $project: {
+  //             saleId: 1,
+  //             productId: 1,
+  //             productName: 1,
+  //             caseQty: 1,
+  //             pieceQty: 1,
+  //             quantity: 1,
+  //             casePrice: 1,
+  //             totalValue: 1,
+  //             totalNetWeight: 1,
+  //             categoryId: {
+  //               $ifNull: ['$product.parentCategoryId', 'UNKNOWN'],
+  //             },
+  //             categoryName: {
+  //               $ifNull: ['$category.name', 'Unknown'],
+  //             },
+  //           },
+  //         },
+  //       ])
+  //     : [];
+
+  //   const itemsBySaleId = new Map<string, any[]>();
+  //   for (const item of saleItems) {
+  //     const currentItems = itemsBySaleId.get(item.saleId) || [];
+  //     currentItems.push(item);
+  //     itemsBySaleId.set(item.saleId, currentItems);
+  //   }
+
+  //   const formatNumberValue = (value?: number) =>
+  //     Number(value || 0).toLocaleString('en-US', {
+  //       maximumFractionDigits: 2,
+  //     });
+
+  //   const formatActivityTime = (value?: Date | string | null) => {
+  //     if (!value) return '--';
+  //     const dateValue = new Date(value);
+  //     if (Number.isNaN(dateValue.getTime())) return '--';
+
+  //     return dateValue.toLocaleTimeString('en-US', {
+  //       hour: '2-digit',
+  //       minute: '2-digit',
+  //       hour12: true,
+  //     });
+  //   };
+
+  //   const formatDuration = (
+  //     start?: Date | string | null,
+  //     end?: Date | string | null,
+  //   ) => {
+  //     if (!start || !end) return '< 1 min';
+  //     const diffMs = new Date(end).getTime() - new Date(start).getTime();
+  //     const minutes = Math.max(Math.round(diffMs / 60000), 0);
+  //     if (minutes < 1) return '< 1 min';
+  //     if (minutes === 1) return '1 min';
+  //     return `${minutes} mins`;
+  //   };
+
+  //   const normalizeLocation = (location?: any) => {
+  //     const latitude = Number(location?.latitude);
+  //     const longitude = Number(location?.longitude);
+
+  //     if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+  //       return null;
+  //     }
+
+  //     return {
+  //       latitude,
+  //       longitude,
+  //       accuracy: location?.accuracy,
+  //       altitude: location?.altitude,
+  //       speed: location?.speed,
+  //       capturedAt: location?.capturedAt || null,
+  //     };
+  //   };
+
+  //   const latestTrackedLocation = normalizeLocation(
+  //     await this.liveLocationService.findLatestForSession(
+  //       workSession?.workSessionId,
+  //     ),
+  //   );
+  //   const dayStartLocation = normalizeLocation(workSession?.dayStartLocation);
+  //   const dayEndLocation = normalizeLocation(workSession?.dayEndLocation);
+  //   const currentLocation =
+  //     dayEndLocation || latestTrackedLocation || dayStartLocation || null;
+
+  //   const buildOrderDetail = (sale: any) => {
+  //     const items = itemsBySaleId.get(sale.saleId) || [];
+  //     const categoryMap = new Map<string, any>();
+
+  //     for (const item of items) {
+  //       const categoryId = item.categoryId || 'UNKNOWN';
+  //       const category = categoryMap.get(categoryId) || {
+  //         id: categoryId,
+  //         name: item.categoryName || 'Unknown',
+  //         caseQty: 0,
+  //         pieceQty: 0,
+  //         value: 0,
+  //         lines: [],
+  //       };
+
+  //       category.caseQty += Number(item.caseQty || 0);
+  //       category.pieceQty += Number(item.pieceQty || 0);
+  //       category.value += Number(item.totalValue || 0);
+  //       if (
+  //         !category.lines.some(
+  //           (line) => line.id === `${sale.saleId}-${item.productId}`,
+  //         )
+  //       ) {
+  //         category.lines.push({
+  //           id: `${sale.saleId}-${item.productId}`,
+  //           name: item.productName || item.productId,
+  //           ptr: `ZMW ${formatNumberValue(item.casePrice)}`,
+  //           qty: formatNumberValue(item.quantity),
+  //           unit: `${formatNumberValue(item.caseQty)} Cases ${formatNumberValue(
+  //             item.pieceQty,
+  //           )} Pcs`,
+  //           value: `ZMW ${formatNumberValue(item.totalValue)}`,
+  //         });
+  //       }
+
+  //       categoryMap.set(categoryId, category);
+  //     }
+
+  //     return {
+  //       orderNo: sale.saleId,
+  //       outlet: sale.customerName || sale.customerId,
+  //       quantityCases: formatNumberValue(sale.netCases),
+  //       quantitySuperUnit: formatNumberValue(sale.totalQty),
+  //       totalPieces: formatNumberValue(sale.totalPieces),
+  //       netValue: formatNumberValue(sale.totalValue),
+  //       categories: Array.from(categoryMap.values()).map((category) => ({
+  //         id: category.id,
+  //         name: category.name,
+  //         meta: `${formatNumberValue(category.caseQty)} Cases ${formatNumberValue(
+  //           category.pieceQty,
+  //         )} Pcs`,
+  //         value: formatNumberValue(category.value),
+  //         lines: category.lines,
+  //       })),
+  //       schemeDiscount: '0',
+  //       cashDiscount: '0',
+  //       tax: '0',
+  //       payableAmount: formatNumberValue(sale.totalValue),
+  //     };
+  //   };
+
+  //   const visitActivities = visits.map((visit) => {
+  //     const sale: any = salesByVisit.get(visit.visitId);
+  //     const nonSale: any = nonSalesByVisit.get(visit.visitId);
+  //     const metrics = sale
+  //       ? [
+  //           { label: 'Value(ZMW)', value: formatNumberValue(sale.totalValue) },
+  //           {
+  //             label: 'NetValue(ZMW)',
+  //             value: formatNumberValue(sale.totalValue),
+  //           },
+  //           { label: 'Qty(Cases)', value: formatNumberValue(sale.netCases) },
+  //           { label: 'Tonnage', value: formatNumberValue(sale.totalWeight) },
+  //           { label: 'Pieces', value: formatNumberValue(sale.totalPieces) },
+  //           { label: 'Payment', value: sale.paymentStatus || '--' },
+  //         ]
+  //       : [
+  //           { label: 'Visit Type', value: visit.visitType || '--' },
+  //           { label: 'Status', value: visit.status || '--' },
+  //           { label: 'Reason', value: nonSale?.reasonId || '--' },
+  //           { label: 'Remark', value: nonSale?.remark || '--' },
+  //         ];
+
+  //     return {
+  //       id: sale?.saleId || nonSale?.nonSaleId || visit.visitId,
+  //       source: sale ? 'sale' : nonSale ? 'non-sale' : 'visit',
+  //       type: sale
+  //         ? 'VANSALES ACTIVITY'
+  //         : nonSale
+  //           ? 'NON SALE ACTIVITY'
+  //           : 'SHOP VISIT',
+  //       time: formatActivityTime(visit.checkInTime),
+  //       duration: formatDuration(visit.checkInTime, visit.checkOutTime),
+  //       outlet: visit.outletName || sale?.customerName || visit.outletId,
+  //       owner: sale?.customerName || visit.outletName || visit.outletId,
+  //       metrics,
+  //       location:
+  //         normalizeLocation(visit.checkOutLocation) ||
+  //         normalizeLocation(visit.checkInLocation),
+  //       checkInLocation: normalizeLocation(visit.checkInLocation),
+  //       checkOutLocation: normalizeLocation(visit.checkOutLocation),
+  //       order: sale ? buildOrderDetail(sale) : undefined,
+  //       sortTime: new Date(visit.checkInTime).getTime(),
+  //     };
+  //   });
+
+  //   const workActivities = activities
+  //     .filter((activity) => activity.name !== 'Retailing')
+  //     .map((activity) => ({
+  //       id: activity.activityId,
+  //       source: 'activity',
+  //       type: `${activity.name || 'ACTIVITY'}`.toUpperCase(),
+  //       time: formatActivityTime(activity.startTime),
+  //       duration: formatDuration(activity.startTime, activity.endTime),
+  //       outlet: activity.description || activity.category || activity.name,
+  //       owner: activity.userName || employee.name,
+  //       metrics: [
+  //         { label: 'Status', value: activity.status || '--' },
+  //         { label: 'Category', value: activity.category || '--' },
+  //         { label: 'Sub Category', value: activity.subCategory || '--' },
+  //       ],
+  //       sortTime: new Date(activity.startTime).getTime(),
+  //     }));
+
+  //   const data = uniqueBy(
+  //     [...visitActivities, ...workActivities],
+  //     (activity: any) =>
+  //       `${activity.source}-${activity.id}-${activity.time}-${activity.outlet}`,
+  //   )
+  //     .sort((a, b) => a.sortTime - b.sortTime)
+  //     .map(({ sortTime, ...activity }) => activity);
+  //   const dayStartTime =
+  //     workSession?.dayStartTime ||
+  //     activities[0]?.startTime ||
+  //     visits[0]?.checkInTime ||
+  //     null;
+
+  //   return {
+  //     statusCode: HttpStatus.OK,
+  //     message: 'Manager user timeline fetched successfully',
+  //     data: {
+  //       employeeId: employee.employeeId,
+  //       employeeName: employee.name,
+  //       date: selectedDate,
+  //       dayStartTime: dayStartTime ? formatActivityTime(dayStartTime) : null,
+  //       dayEndTime: workSession?.dayEndTime
+  //         ? formatActivityTime(workSession.dayEndTime)
+  //         : null,
+  //       dayStartImageUrl: workSession?.dayStartImageUrl || null,
+  //       dayStartImageMediaId: workSession?.dayStartImageMediaId || null,
+  //       dayStartLocation,
+  //       dayEndLocation,
+  //       currentLocation,
+  //       activities: data,
+  //     },
+  //   };
+  // }
+
   async getManagerUserTimeline(query: { employeeId: string; date?: string }) {
     const managerId = RequestContextStore.getStore()?.userId;
+
+    if (!managerId) {
+      throw new NotFoundException(EMPLOYEE.NOT_FOUND);
+    }
+
+    if (!query.employeeId) {
+      throw new BadRequestException('Employee ID is required');
+    }
+
     const selectedDate = query?.date
       ? parseCalendarDate(query.date)
       : new Date();
+
     const startOfDay = new Date(selectedDate);
     startOfDay.setHours(0, 0, 0, 0);
+
     const endOfDay = new Date(selectedDate);
     endOfDay.setHours(23, 59, 59, 999);
 
@@ -10788,7 +11481,9 @@ export class EmployeeService extends MongoRepository<Employee> {
       $or: [{ reportingEmployeeId: managerId }, { hierarchyPath: managerId }],
     });
 
-    if (!employee) throw new NotFoundException(EMPLOYEE.NOT_FOUND);
+    if (!employee) {
+      throw new NotFoundException(EMPLOYEE.NOT_FOUND);
+    }
 
     const [rawVisits, rawActivities, workSession] = await Promise.all([
       this.shopVisitModel
@@ -10801,6 +11496,7 @@ export class EmployeeService extends MongoRepository<Employee> {
         })
         .sort({ checkInTime: 1 })
         .lean(),
+
       this.activityModel
         .find({
           userId: query.employeeId,
@@ -10814,6 +11510,7 @@ export class EmployeeService extends MongoRepository<Employee> {
         })
         .sort({ startTime: 1 })
         .lean(),
+
       this.workSessionModel
         .findOne({
           userId: query.employeeId,
@@ -10831,37 +11528,55 @@ export class EmployeeService extends MongoRepository<Employee> {
 
       return items.filter((item) => {
         const key = getKey(item);
+
         if (!key || seen.has(key)) return false;
+
         seen.add(key);
         return true;
       });
     };
 
     const visits = uniqueBy(rawVisits, (visit: any) => visit.visitId);
+
     const activities = uniqueBy(
       rawActivities,
       (activity: any) =>
         activity.activityId ||
         `${activity.name}-${activity.startTime}-${activity.description}`,
     );
-    const visitIds = visits.map((visit) => visit.visitId);
 
+    const visitIds = visits.map((visit: any) => visit.visitId).filter(Boolean);
+
+    /**
+     * ==========================================
+     * SALES / NON SALES
+     * ==========================================
+     *
+     * IMPORTANT:
+     * Sale schema has employees array.
+     * So use employees.employeeId, not employeeId.
+     */
     const [rawSales, rawNonSales] = await Promise.all([
       visitIds.length
         ? this.saleModal
             .find({
-              employeeId: query.employeeId,
-              visitId: { $in: visitIds },
+              'employees.employeeId': query.employeeId,
+              visitId: {
+                $in: visitIds,
+              },
               status: SaleStatus.COMPLETED,
             })
             .sort({ date: 1 })
             .lean()
         : [],
+
       visitIds.length
         ? this.nonSaleModel
             .find({
               employeeId: query.employeeId,
-              visitId: { $in: visitIds },
+              visitId: {
+                $in: visitIds,
+              },
               status: NonSaleStatus.COMPLETED,
             })
             .lean()
@@ -10874,70 +11589,74 @@ export class EmployeeService extends MongoRepository<Employee> {
     const salesByVisit = new Map<string, any>(
       sales.map((sale: any) => [sale.visitId, sale] as [string, any]),
     );
+
     const nonSalesByVisit = new Map<string, any>(
       nonSales.map(
         (nonSale: any) => [nonSale.visitId, nonSale] as [string, any],
       ),
     );
-    const saleIds = sales.map((sale) => sale.saleId);
+
+    const saleIds = sales.map((sale: any) => sale.saleId).filter(Boolean);
+
+    /**
+     * ==========================================
+     * SALE ITEMS
+     * ==========================================
+     *
+     * Use sale_items parentCategoryId directly.
+     * No need product_master lookup if sale_items already stores category IDs.
+     */
     const saleItems = saleIds.length
-      ? await this.saleItemModel.aggregate([
-          {
-            $match: {
-              saleId: { $in: saleIds },
-            },
-          },
-          {
-            $lookup: {
-              from: 'product_master',
-              localField: 'productId',
-              foreignField: 'productId',
-              as: 'product',
-            },
-          },
-          {
-            $unwind: {
-              path: '$product',
-              preserveNullAndEmptyArrays: true,
-            },
-          },
-          {
-            $lookup: {
-              from: 'productcategories',
-              localField: 'product.parentCategoryId',
-              foreignField: 'categoryId',
-              as: 'category',
-            },
-          },
-          {
-            $unwind: {
-              path: '$category',
-              preserveNullAndEmptyArrays: true,
-            },
-          },
-          {
-            $project: {
-              saleId: 1,
-              productId: 1,
-              productName: 1,
-              caseQty: 1,
-              pieceQty: 1,
-              quantity: 1,
-              casePrice: 1,
-              totalValue: 1,
-              totalNetWeight: 1,
-              categoryId: {
-                $ifNull: ['$product.parentCategoryId', 'UNKNOWN'],
-              },
-              categoryName: {
-                $ifNull: ['$category.name', 'Unknown'],
+      ? await this.saleItemModel
+          .aggregate([
+            {
+              $match: {
+                saleId: {
+                  $in: saleIds,
+                },
               },
             },
-          },
-        ])
+            {
+              $lookup: {
+                from: 'productcategories',
+                localField: 'parentCategoryId',
+                foreignField: 'categoryId',
+                as: 'category',
+              },
+            },
+            {
+              $unwind: {
+                path: '$category',
+                preserveNullAndEmptyArrays: true,
+              },
+            },
+            {
+              $project: {
+                saleId: 1,
+                productId: 1,
+                productName: 1,
+                caseQty: 1,
+                pieceQty: 1,
+                quantity: 1,
+                casePrice: 1,
+                totalValue: 1,
+                totalNetWeight: 1,
+
+                categoryId: {
+                  $ifNull: ['$parentCategoryId', 'UNKNOWN'],
+                },
+
+                categoryName: {
+                  $ifNull: ['$category.name', 'Unknown'],
+                },
+              },
+            },
+          ])
+          .allowDiskUse(true)
       : [];
 
     const itemsBySaleId = new Map<string, any[]>();
+
     for (const item of saleItems) {
       const currentItems = itemsBySaleId.get(item.saleId) || [];
       currentItems.push(item);
@@ -10951,7 +11670,9 @@ export class EmployeeService extends MongoRepository<Employee> {
 
     const formatActivityTime = (value?: Date | string | null) => {
       if (!value) return '--';
+
       const dateValue = new Date(value);
+
       if (Number.isNaN(dateValue.getTime())) return '--';
 
       return dateValue.toLocaleTimeString('en-US', {
@@ -10966,10 +11687,13 @@ export class EmployeeService extends MongoRepository<Employee> {
       end?: Date | string | null,
     ) => {
       if (!start || !end) return '< 1 min';
+
       const diffMs = new Date(end).getTime() - new Date(start).getTime();
       const minutes = Math.max(Math.round(diffMs / 60000), 0);
+
       if (minutes < 1) return '< 1 min';
       if (minutes === 1) return '1 min';
+
       return `${minutes} mins`;
     };
 
@@ -10991,13 +11715,17 @@ export class EmployeeService extends MongoRepository<Employee> {
       };
     };
 
-    const latestTrackedLocation = normalizeLocation(
-      await this.liveLocationService.findLatestForSession(
-        workSession?.workSessionId,
-      ),
-    );
+    const latestTrackedLocation = workSession?.workSessionId
+      ? normalizeLocation(
+          await this.liveLocationService.findLatestForSession(
+            workSession.workSessionId,
+          ),
+        )
+      : null;
+
     const dayStartLocation = normalizeLocation(workSession?.dayStartLocation);
     const dayEndLocation = normalizeLocation(workSession?.dayEndLocation);
+
     const currentLocation =
       dayEndLocation || latestTrackedLocation || dayStartLocation || null;
 
@@ -11007,6 +11735,7 @@ export class EmployeeService extends MongoRepository<Employee> {
 
       for (const item of items) {
         const categoryId = item.categoryId || 'UNKNOWN';
+
         const category = categoryMap.get(categoryId) || {
           id: categoryId,
           name: item.categoryName || 'Unknown',
@@ -11019,13 +11748,12 @@ export class EmployeeService extends MongoRepository<Employee> {
         category.caseQty += Number(item.caseQty || 0);
         category.pieceQty += Number(item.pieceQty || 0);
         category.value += Number(item.totalValue || 0);
-        if (
-          !category.lines.some(
-            (line) => line.id === `${sale.saleId}-${item.productId}`,
-          )
-        ) {
+
+        const lineId = `${sale.saleId}-${item.productId}`;
+
+        if (!category.lines.some((line: any) => line.id === lineId)) {
           category.lines.push({
-            id: `${sale.saleId}-${item.productId}`,
+            id: lineId,
             name: item.productName || item.productId,
             ptr: `ZMW ${formatNumberValue(item.casePrice)}`,
             qty: formatNumberValue(item.quantity),
@@ -11042,10 +11770,13 @@ export class EmployeeService extends MongoRepository<Employee> {
       return {
         orderNo: sale.saleId,
         outlet: sale.customerName || sale.customerId,
+
         quantityCases: formatNumberValue(sale.netCases),
         quantitySuperUnit: formatNumberValue(sale.totalQty),
         totalPieces: formatNumberValue(sale.totalPieces),
+
         netValue: formatNumberValue(sale.totalValue),
+
         categories: Array.from(categoryMap.values()).map((category) => ({
           id: category.id,
           name: category.name,
@@ -11055,6 +11786,7 @@ export class EmployeeService extends MongoRepository<Employee> {
           value: formatNumberValue(category.value),
           lines: category.lines,
         })),
+
         schemeDiscount: '0',
         cashDiscount: '0',
         tax: '0',
@@ -11062,26 +11794,57 @@ export class EmployeeService extends MongoRepository<Employee> {
       };
     };
 
-    const visitActivities = visits.map((visit) => {
+    const visitActivities = visits.map((visit: any) => {
       const sale: any = salesByVisit.get(visit.visitId);
       const nonSale: any = nonSalesByVisit.get(visit.visitId);
+
+      const totalWeightKg = Number(sale?.totalWeight || 0);
+      const totalTonnage = totalWeightKg / 1000;
+
       const metrics = sale
         ? [
-            { label: 'Value(ZMW)', value: formatNumberValue(sale.totalValue) },
+            {
+              label: 'Value(ZMW)',
+              value: formatNumberValue(sale.totalValue),
+            },
             {
               label: 'NetValue(ZMW)',
               value: formatNumberValue(sale.totalValue),
             },
-            { label: 'Qty(Cases)', value: formatNumberValue(sale.netCases) },
-            { label: 'Tonnage', value: formatNumberValue(sale.totalWeight) },
-            { label: 'Pieces', value: formatNumberValue(sale.totalPieces) },
-            { label: 'Payment', value: sale.paymentStatus || '--' },
+            {
+              label: 'Qty(Cases)',
+              value: formatNumberValue(sale.netCases),
+            },
+            {
+              label: 'Tonnage',
+              value: formatNumberValue(totalTonnage),
+            },
+            {
+              label: 'Pieces',
+              value: formatNumberValue(sale.totalPieces),
+            },
+            {
+              label: 'Payment',
+              value: sale.paymentStatus || '--',
+            },
           ]
         : [
-            { label: 'Visit Type', value: visit.visitType || '--' },
-            { label: 'Status', value: visit.status || '--' },
-            { label: 'Reason', value: nonSale?.reasonId || '--' },
-            { label: 'Remark', value: nonSale?.remark || '--' },
+            {
+              label: 'Visit Type',
+              value: visit.visitType || '--',
+            },
+            {
+              label: 'Status',
+              value: visit.status || '--',
+            },
+            {
+              label: 'Reason',
+              value: nonSale?.reasonId || '--',
+            },
+            {
+              label: 'Remark',
+              value: nonSale?.remark || '--',
+            },
           ];
 
       return {
@@ -11092,36 +11855,60 @@ export class EmployeeService extends MongoRepository<Employee> {
           : nonSale
             ? 'NON SALE ACTIVITY'
             : 'SHOP VISIT',
+
         time: formatActivityTime(visit.checkInTime),
         duration: formatDuration(visit.checkInTime, visit.checkOutTime),
+
         outlet: visit.outletName || sale?.customerName || visit.outletId,
         owner: sale?.customerName || visit.outletName || visit.outletId,
+
         metrics,
+
         location:
           normalizeLocation(visit.checkOutLocation) ||
           normalizeLocation(visit.checkInLocation),
+
         checkInLocation: normalizeLocation(visit.checkInLocation),
         checkOutLocation: normalizeLocation(visit.checkOutLocation),
+
         order: sale ? buildOrderDetail(sale) : undefined,
+
         sortTime: new Date(visit.checkInTime).getTime(),
       };
     });
 
     const workActivities = activities
-      .filter((activity) => activity.name !== 'Retailing')
-      .map((activity) => ({
-        id: activity.activityId,
+      .filter((activity: any) => activity.name !== 'Retailing')
+      .map((activity: any) => ({
+        id:
+          activity.activityId ||
+          `${activity.name}-${activity.startTime}-${activity.description}`,
+
         source: 'activity',
         type: `${activity.name || 'ACTIVITY'}`.toUpperCase(),
+
         time: formatActivityTime(activity.startTime),
         duration: formatDuration(activity.startTime, activity.endTime),
+
         outlet: activity.description || activity.category || activity.name,
         owner: activity.userName || employee.name,
+
         metrics: [
-          { label: 'Status', value: activity.status || '--' },
-          { label: 'Category', value: activity.category || '--' },
-          { label: 'Sub Category', value: activity.subCategory || '--' },
+          {
+            label: 'Status',
+            value: activity.status || '--',
+          },
+          {
+            label: 'Category',
+            value: activity.category || '--',
+          },
+          {
+            label: 'Sub Category',
+            value: activity.subCategory || '--',
+          },
         ],
+
+        location: normalizeLocation(activity.location),
         sortTime: new Date(activity.startTime).getTime(),
       }));
 
@@ -11130,8 +11917,9 @@ export class EmployeeService extends MongoRepository<Employee> {
       (activity: any) =>
         `${activity.source}-${activity.id}-${activity.time}-${activity.outlet}`,
     )
-      .sort((a, b) => a.sortTime - b.sortTime)
-      .map(({ sortTime, ...activity }) => activity);
+      .sort((a: any, b: any) => a.sortTime - b.sortTime)
+      .map(({ sortTime, ...activity }: any) => activity);
+
     const dayStartTime =
       workSession?.dayStartTime ||
       activities[0]?.startTime ||
@@ -11144,16 +11932,22 @@ export class EmployeeService extends MongoRepository<Employee> {
       data: {
         employeeId: employee.employeeId,
         employeeName: employee.name,
+
         date: selectedDate,
+
         dayStartTime: dayStartTime ? formatActivityTime(dayStartTime) : null,
+
         dayEndTime: workSession?.dayEndTime
           ? formatActivityTime(workSession.dayEndTime)
           : null,
+
         dayStartImageUrl: workSession?.dayStartImageUrl || null,
         dayStartImageMediaId: workSession?.dayStartImageMediaId || null,
+
         dayStartLocation,
         dayEndLocation,
         currentLocation,
+
         activities: data,
       },
     };
@@ -11458,17 +12252,110 @@ export class EmployeeService extends MongoRepository<Employee> {
     };
   }
 
+  // async getManagerUserRoutePlan(query: { employeeId: string; date?: string }) {
+  //   const employee = await this.getManagedEmployee(query.employeeId);
+  //   const { selectedDate, startOfDay, endOfDay } = this.getDayRange(query.date);
+  //   const assignedBeatCustomers = await this.getAssignedBeatCustomers(
+  //     employee.employeeId,
+  //     startOfDay,
+  //     endOfDay,
+  //   );
+  //   const customerIds = [
+  //     ...new Set(
+  //       assignedBeatCustomers.map((mapping: any) => mapping.customerId),
+  //     ),
+  //   ];
+
+  //   const [customers, visitedOutletIds, billedOutletIds] = await Promise.all([
+  //     customerIds.length
+  //       ? this.customerModel
+  //           .find(
+  //             { customerId: { $in: customerIds } },
+  //             { customerId: 1, name: 1, customerTypeId: 1 },
+  //           )
+  //           .lean()
+  //       : [],
+  //     customerIds.length
+  //       ? this.shopVisitModel.distinct('outletId', {
+  //           employeeId: employee.employeeId,
+  //           outletId: { $in: customerIds },
+  //           checkInTime: {
+  //             $gte: startOfDay,
+  //             $lte: endOfDay,
+  //           },
+  //           status: ShopVisitStatus.COMPLETED,
+  //         })
+  //       : [],
+  //     customerIds.length
+  //       ? this.saleModal.distinct('customerId', {
+  //           employeeId: employee.employeeId,
+  //           customerId: { $in: customerIds },
+  //           date: {
+  //             $gte: startOfDay,
+  //             $lte: endOfDay,
+  //           },
+  //           status: SaleStatus.COMPLETED,
+  //         })
+  //       : [],
+  //   ]);
+
+  //   const customersById = new Map<string, any>(
+  //     customers.map(
+  //       (customer: any) => [customer.customerId, customer] as [string, any],
+  //     ),
+  //   );
+  //   const visited = new Set(visitedOutletIds);
+  //   const billed = new Set(billedOutletIds);
+  //   const seen = new Set<string>();
+  //   const stops = assignedBeatCustomers
+  //     .filter((mapping: any) => {
+  //       if (!mapping.customerId || seen.has(mapping.customerId)) return false;
+  //       seen.add(mapping.customerId);
+  //       return true;
+  //     })
+  //     .map((mapping: any, index: number) => {
+  //       const customer = customersById.get(mapping.customerId);
+  //       const isVisited = visited.has(mapping.customerId);
+  //       const isBilled = billed.has(mapping.customerId);
+
+  //       return {
+  //         id: mapping.mappingId || mapping.customerId,
+  //         outletId: mapping.customerId,
+  //         name: customer?.name || mapping.customerId,
+  //         time: `Stop ${index + 1}`,
+  //         status: isBilled ? 'completed' : isVisited ? 'missed' : 'pending',
+  //         type: customer?.customerTypeId || 'Outlet',
+  //       };
+  //     });
+
+  //   return {
+  //     statusCode: HttpStatus.OK,
+  //     message: 'Manager user route plan fetched successfully',
+  //     data: {
+  //       employeeId: employee.employeeId,
+  //       employeeName: employee.name,
+  //       date: formatCalendarDate(selectedDate),
+  //       stops,
+  //     },
+  //   };
+  // }
+
   async getManagerUserRoutePlan(query: { employeeId: string; date?: string }) {
     const employee = await this.getManagedEmployee(query.employeeId);
+
     const { selectedDate, startOfDay, endOfDay } = this.getDayRange(query.date);
+
     const assignedBeatCustomers = await this.getAssignedBeatCustomers(
       employee.employeeId,
       startOfDay,
       endOfDay,
     );
+
     const customerIds = [
       ...new Set(
-        assignedBeatCustomers.map((mapping: any) => mapping.customerId),
+        assignedBeatCustomers
+          .map((mapping: any) => String(mapping.customerId || '').trim())
+          .filter(Boolean),
       ),
     ];
 
@@ -11476,15 +12363,26 @@ export class EmployeeService extends MongoRepository<Employee> {
       customerIds.length
         ? this.customerModel
             .find(
-              { customerId: { $in: customerIds } },
-              { customerId: 1, name: 1, customerTypeId: 1 },
+              {
+                customerId: {
+                  $in: customerIds,
+                },
+              },
+              {
+                customerId: 1,
+                name: 1,
+                customerTypeId: 1,
+              },
             )
             .lean()
         : [],
+
       customerIds.length
         ? this.shopVisitModel.distinct('outletId', {
             employeeId: employee.employeeId,
-            outletId: { $in: customerIds },
+            outletId: {
+              $in: customerIds,
+            },
             checkInTime: {
               $gte: startOfDay,
               $lte: endOfDay,
@@ -11492,10 +12390,18 @@ export class EmployeeService extends MongoRepository<Employee> {
             status: ShopVisitStatus.COMPLETED,
           })
         : [],
+
+      /**
+       * IMPORTANT:
+       * Sale schema has employees array.
+       * Do not use employeeId directly.
+       */
       customerIds.length
         ? this.saleModal.distinct('customerId', {
-            employeeId: employee.employeeId,
-            customerId: { $in: customerIds },
+            'employees.employeeId': employee.employeeId,
+            customerId: {
+              $in: customerIds,
+            },
             date: {
               $gte: startOfDay,
               $lte: endOfDay,
@@ -11506,33 +12412,74 @@ export class EmployeeService extends MongoRepository<Employee> {
     ]);
 
     const customersById = new Map<string, any>(
-      customers.map(
-        (customer: any) => [customer.customerId, customer] as [string, any],
-      ),
+      customers.map((customer: any) => [
+        String(customer.customerId || '').trim(),
+        customer,
+      ]),
     );
-    const visited = new Set(visitedOutletIds);
-    const billed = new Set(billedOutletIds);
+
+    const visited = new Set<string>(
+      visitedOutletIds
+        .map((outletId: any) => String(outletId || '').trim())
+        .filter(Boolean),
+    );
+
+    const billed = new Set<string>(
+      billedOutletIds
+        .map((customerId: any) => String(customerId || '').trim())
+        .filter(Boolean),
+    );
+
     const seen = new Set<string>();
+
     const stops = assignedBeatCustomers
       .filter((mapping: any) => {
-        if (!mapping.customerId || seen.has(mapping.customerId)) return false;
-        seen.add(mapping.customerId);
+        const customerId = String(mapping.customerId || '').trim();
+
+        if (!customerId || seen.has(customerId)) {
+          return false;
+        }
+
+        seen.add(customerId);
         return true;
       })
       .map((mapping: any, index: number) => {
-        const customer = customersById.get(mapping.customerId);
-        const isVisited = visited.has(mapping.customerId);
-        const isBilled = billed.has(mapping.customerId);
+        const customerId = String(mapping.customerId || '').trim();
+
+        const customer = customersById.get(customerId);
+
+        const isVisited = visited.has(customerId);
+        const isBilled = billed.has(customerId);
 
         return {
-          id: mapping.mappingId || mapping.customerId,
-          outletId: mapping.customerId,
-          name: customer?.name || mapping.customerId,
+          id: mapping.mappingId || customerId,
+          outletId: customerId,
+          name: customer?.name || customerId,
+
           time: `Stop ${index + 1}`,
-          status: isBilled ? 'completed' : isVisited ? 'missed' : 'pending',
+
+          /**
+           * completed = billed
+           * zero_order = visited but not billed
+           * pending = not visited
+           */
+          status: isBilled ? 'completed' : isVisited ? 'zero_order' : 'pending',
+
           type: customer?.customerTypeId || 'Outlet',
+
+          isVisited,
+          isBilled,
         };
       });
+
+    const totalStops = stops.length;
+    const completed = stops.filter(
+      (stop) => stop.status === 'completed',
+    ).length;
+    const zeroOrder = stops.filter(
+      (stop) => stop.status === 'zero_order',
+    ).length;
+    const pending = stops.filter((stop) => stop.status === 'pending').length;
 
     return {
       statusCode: HttpStatus.OK,
@@ -11541,6 +12488,14 @@ export class EmployeeService extends MongoRepository<Employee> {
         employeeId: employee.employeeId,
         employeeName: employee.name,
         date: formatCalendarDate(selectedDate),
+
+        summary: {
+          totalStops,
+          completed,
+          zeroOrder,
+          pending,
+        },
+
         stops,
       },
     };
