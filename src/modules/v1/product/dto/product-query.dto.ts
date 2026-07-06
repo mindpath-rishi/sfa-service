@@ -45,7 +45,8 @@ export class ProductQueryDto extends PaginationDto {
   customerCategoryId?: string;
 
   @ApiPropertyOptional({
-    description: 'Keep products that do not have a price for the requested customer category',
+    description:
+      'Keep products that do not have a price for the requested customer category',
     example: 'true',
   })
   @IsOptional()
@@ -75,6 +76,16 @@ export class ProductQueryDto extends PaginationDto {
   @IsOptional()
   @IsString()
   parentCategoryId?: string;
+
+  @ApiPropertyOptional({ description: 'Sort by exact sortBy' })
+  @IsOptional()
+  @IsString()
+  sortBy?: string;
+
+  @ApiPropertyOptional({ description: 'Sort by exact sortOrder' })
+  @IsOptional()
+  @IsString()
+  sortOrder?: string;
 
   /**
    * Brands

@@ -5,4 +5,6 @@ export const LEAVE = {
   DELETED: 'Leave deleted successfully',
   NOT_FOUND: 'Leave not found',
   DUPLICATE: 'Leave already exists',
+  TODAY_WORK_CONFLICT:
+    'You cannot mark leave today because retailing or offline work is already recorded for this day.',
 };

@@ -44,6 +44,11 @@ export class UpdateCustomerDto {
   @ApiPropertyOptional({ type: String, description: 'Reference ID' })
   @IsOptional()
   @IsString()
+  customerTypeId?: string;
+
+  @ApiPropertyOptional({ type: String, description: 'Reference ID' })
+  @IsOptional()
+  @IsString()
   channelId?: string;
 
   @ApiPropertyOptional({ type: String, description: 'Reference ID' })
