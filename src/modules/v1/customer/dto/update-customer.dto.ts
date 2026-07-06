@@ -1,11 +1,13 @@
 import { CustomerStatus } from 'src/shared/enums/customer.enums';
 
-import { ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsEnum,
+  IsNotEmpty,
   IsNumber,
   IsOptional,
   IsString,
+  Length,
   Max,
   Min,
   ValidateNested,
@@ -26,6 +28,20 @@ export class UpdateGeoTagDto {
   @Min(-180)
   @Max(180)
   lng?: number;
+}
+
+class AddressDto {
+  @ApiProperty({ example: '123 Main Street' })
+  @IsNotEmpty()
+  @IsString()
+  @Length(3, 150)
+  line1!: string;
+
+  @ApiProperty({ example: 'Near City Mall', required: false })
+  @IsOptional()
+  @IsString()
+  @Length(0, 150)
+  line2?: string;
 }
 
 export class UpdateCustomerDto {
@@ -96,10 +112,10 @@ export class UpdateCustomerDto {
   @IsString()
   outletName?: string;
 
-  @ApiPropertyOptional({ type: String })
-  @IsOptional()
-  @IsString()
-  address?: string;
+  @ApiPropertyOptional({ type: AddressDto })
+  @ValidateNested()
+  @Type(() => AddressDto)
+  address!: AddressDto;
 
   @ApiPropertyOptional({
     type: () => UpdateGeoTagDto,

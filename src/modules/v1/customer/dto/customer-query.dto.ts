@@ -1,10 +1,31 @@
 import { CustomerStatus } from 'src/shared/enums/customer.enums';
 
-import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsArray, IsEnum, IsOptional, IsString } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import {
+  IsArray,
+  IsEnum,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  Length,
+  ValidateNested,
+} from 'class-validator';
 import { PaginationDto } from 'src/shared/dto/pagination.dto';
 import { Type } from 'class-transformer';
 
+class AddressDto {
+  @ApiProperty({ example: '123 Main Street' })
+  @IsNotEmpty()
+  @IsString()
+  @Length(3, 150)
+  line1!: string;
+
+  @ApiProperty({ example: 'Near City Mall', required: false })
+  @IsOptional()
+  @IsString()
+  @Length(0, 150)
+  line2?: string;
+}
 export class CustomerQueryDto extends PaginationDto {
   /**
    * SearchText
@@ -59,10 +80,10 @@ export class CustomerQueryDto extends PaginationDto {
   @IsString()
   outletName?: string;
 
-  @ApiPropertyOptional({ type: String })
-  @IsOptional()
-  @IsString()
-  address?: string;
+  @ApiPropertyOptional({ type: AddressDto })
+  @ValidateNested()
+  @Type(() => AddressDto)
+  address!: AddressDto;
 
   @ApiPropertyOptional({
     description: 'Sort field',
