@@ -2157,6 +2157,500 @@ export class EmployeeService extends MongoRepository<Employee> {
   //   };
   // }
 
+  // async getManagerStats(query: {
+  //   date?: string;
+  //   startDate?: string;
+  //   endDate?: string;
+  // }) {
+  //   const managerId = RequestContextStore.getStore()?.userId;
+
+  //   if (!managerId) {
+  //     throw new NotFoundException(EMPLOYEE.NOT_FOUND);
+  //   }
+
+  //   const selectedDate = query?.date
+  //     ? parseCalendarDate(query.date)
+  //     : new Date();
+
+  //   const startOfDay = query?.startDate
+  //     ? parseCalendarDate(query.startDate)
+  //     : query?.date
+  //       ? parseCalendarDate(query.date)
+  //       : new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1);
+
+  //   startOfDay.setHours(0, 0, 0, 0);
+
+  //   const endOfDay = query?.endDate
+  //     ? parseCalendarDate(query.endDate)
+  //     : query?.date
+  //       ? parseCalendarDate(query.date)
+  //       : new Date();
+
+  //   endOfDay.setHours(23, 59, 59, 999);
+
+  //   /**
+  //    * =====================================================
+  //    * TEAM MEMBERS
+  //    * =====================================================
+  //    */
+  //   const employees = await this.find({
+  //     $or: [{ reportingEmployeeId: managerId }, { hierarchyPath: managerId }],
+  //     status: UserStatus.ACTIVE,
+  //   });
+
+  //   const employeeIds = employees
+  //     .map((employee) => employee.employeeId)
+  //     .filter(Boolean);
+
+  //   const totalUsers = employeeIds.length;
+
+  //   if (!totalUsers) {
+  //     return {
+  //       statusCode: HttpStatus.OK,
+  //       message: 'Manager stats fetched successfully',
+  //       data: {
+  //         userSummary: {
+  //           retailing: 0,
+  //           officeWork: 0,
+  //           leave: 0,
+  //           absent: 0,
+  //           total: 0,
+  //         },
+  //         callSummary: {
+  //           productivity: 0,
+  //           covered: 0,
+  //           pc: 0,
+  //           tc: 0,
+  //           sc: 0,
+  //           qtyCases: 0,
+  //           qtyTonnage: 0,
+  //           qtyValue: 0,
+  //         },
+  //       },
+  //     };
+  //   }
+
+  //   /**
+  //    * =====================================================
+  //    * ASSOCIATED VANS → ROUTES → DISTINCT ASSIGNED OUTLETS
+  //    * =====================================================
+  //    *
+  //    * SC formula:
+  //    * SC = distinct count of outlets assigned to all active routes/beats
+  //    *      of vans associated with manager's team employees.
+  //    */
+  //   const vans = await this.vanModel
+  //     .find(
+  //       {
+  //         associatedUsers: {
+  //           $in: employeeIds,
+  //         },
+  //         status: VanStatus.ACTIVE,
+  //       },
+  //       {
+  //         vanId: 1,
+  //         associatedUsers: 1,
+  //         associatedRoutes: 1,
+  //         _id: 0,
+  //       },
+  //     )
+  //     .lean();
+
+  //   /**
+  //    * Get all routeIds assigned to associated vans.
+  //    * Only include routes active in selected date range.
+  //    */
+  //   const routeIds = [
+  //     ...new Set(
+  //       vans.flatMap((van) =>
+  //         (van.associatedRoutes || [])
+  //           .filter((route) => {
+  //             const fromDate = route.fromDate ? new Date(route.fromDate) : null;
+  //             const toDate = route.toDate ? new Date(route.toDate) : null;
+
+  //             return (
+  //               route.routeId &&
+  //               (!fromDate || fromDate <= endOfDay) &&
+  //               (!toDate || toDate >= startOfDay)
+  //             );
+  //           })
+  //           .map((route) => route.routeId),
+  //       ),
+  //     ),
+  //   ];
+
+  //   /**
+  //    * Get distinct outlets/customers assigned to those routes.
+  //    */
+  //   const assignedCustomerIds = routeIds.length
+  //     ? await this.routeCustomerMappingModel.distinct('customerId', {
+  //         routeId: {
+  //           $in: routeIds,
+  //         },
+  //         status: RouteCustomerMappingStatus.ACTIVE,
+  //         effectiveFrom: {
+  //           $lte: endOfDay,
+  //         },
+  //         $or: [
+  //           {
+  //             effectiveTo: null,
+  //           },
+  //           {
+  //             effectiveTo: {
+  //               $exists: false,
+  //             },
+  //           },
+  //           {
+  //             effectiveTo: {
+  //               $gte: startOfDay,
+  //             },
+  //           },
+  //         ],
+  //       })
+  //     : [];
+
+  //   /**
+  //    * SC = distinct outlets in assigned routes/beats.
+  //    */
+  //   const sc = assignedCustomerIds.length;
+
+  //   /**
+  //    * =====================================================
+  //    * AGGREGATIONS
+  //    * =====================================================
+  //    */
+  //   const [
+  //     activityUsersSummary,
+  //     leaveUsers,
+  //     salesSummaryResult,
+  //     visitSummaryResult,
+  //   ] = await Promise.all([
+  //     /**
+  //      * =====================================================
+  //      * RETAILING + OFFICE WORK USERS
+  //      * =====================================================
+  //      */
+  //     this.activityModel.aggregate([
+  //       {
+  //         $match: {
+  //           userId: {
+  //             $in: employeeIds,
+  //           },
+  //           status: {
+  //             $in: [ActivityStatus.ACTIVE, ActivityStatus.COMPLETED],
+  //           },
+  //           startTime: {
+  //             $gte: startOfDay,
+  //             $lte: endOfDay,
+  //           },
+  //         },
+  //       },
+  //       {
+  //         $group: {
+  //           _id: null,
+
+  //           retailingUsers: {
+  //             $addToSet: {
+  //               $cond: [
+  //                 {
+  //                   $eq: ['$name', 'Retailing'],
+  //                 },
+  //                 '$userId',
+  //                 '$$REMOVE',
+  //               ],
+  //             },
+  //           },
+
+  //           officeUsers: {
+  //             $addToSet: {
+  //               $cond: [
+  //                 {
+  //                   $in: [
+  //                     '$name',
+  //                     ['Official Work', 'Office Work', 'Meetings'],
+  //                   ],
+  //                 },
+  //                 '$userId',
+  //                 '$$REMOVE',
+  //               ],
+  //             },
+  //           },
+  //         },
+  //       },
+  //     ]),
+
+  //     /**
+  //      * =====================================================
+  //      * LEAVE USERS
+  //      * =====================================================
+  //      */
+  //     this.leaveModel.distinct('userId', {
+  //       userId: {
+  //         $in: employeeIds,
+  //       },
+  //       status: LeaveStatus.COMPLETED,
+  //       createdAt: {
+  //         $gte: startOfDay,
+  //         $lte: endOfDay,
+  //       },
+  //     }),
+
+  //     /**
+  //      * =====================================================
+  //      * SALES SUMMARY
+  //      * =====================================================
+  //      *
+  //      * IMPORTANT:
+  //      * Sale schema has employees array.
+  //      * So use employees.employeeId, not employeeId.
+  //      */
+  //     this.saleModal.aggregate([
+  //       {
+  //         $match: {
+  //           'employees.employeeId': {
+  //             $in: employeeIds,
+  //           },
+  //           date: {
+  //             $gte: startOfDay,
+  //             $lte: endOfDay,
+  //           },
+  //           status: SaleStatus.COMPLETED,
+  //         },
+  //       },
+  //       {
+  //         $group: {
+  //           _id: null,
+
+  //           /**
+  //            * PC = Productive Calls
+  //            */
+  //           pc: {
+  //             $sum: 1,
+  //           },
+
+  //           /**
+  //            * Sales Value
+  //            */
+  //           qtyValue: {
+  //             $sum: {
+  //               $ifNull: ['$totalValue', 0],
+  //             },
+  //           },
+
+  //           /**
+  //            * Total Cases Sold
+  //            */
+  //           qtyCases: {
+  //             $sum: {
+  //               $ifNull: ['$netCases', 0],
+  //             },
+  //           },
+
+  //           /**
+  //            * Total Tonnage Sold
+  //            *
+  //            * totalWeight is stored in KG.
+  //            * Convert KG to tonnage before calculation.
+  //            */
+  //           qtyTonnage: {
+  //             $sum: {
+  //               $divide: [
+  //                 {
+  //                   $ifNull: ['$totalWeight', 0],
+  //                 },
+  //                 1000,
+  //               ],
+  //             },
+  //           },
+  //         },
+  //       },
+  //     ]),
+
+  //     /**
+  //      * =====================================================
+  //      * TC + VISITED OUTLETS
+  //      * =====================================================
+  //      *
+  //      * TC = Total Calls
+  //      * visitedOutletIds = distinct visited outlets
+  //      */
+  //     this.shopVisitModel.aggregate([
+  //       {
+  //         $match: {
+  //           employeeId: {
+  //             $in: employeeIds,
+  //           },
+  //           checkInTime: {
+  //             $gte: startOfDay,
+  //             $lte: endOfDay,
+  //           },
+  //           status: ShopVisitStatus.COMPLETED,
+  //         },
+  //       },
+  //       {
+  //         $group: {
+  //           _id: null,
+
+  //           tc: {
+  //             $sum: 1,
+  //           },
+
+  //           visitedOutletIds: {
+  //             $addToSet: '$outletId',
+  //           },
+  //         },
+  //       },
+  //     ]),
+  //   ]);
+
+  //   /**
+  //    * =====================================================
+  //    * USER SUMMARY
+  //    * =====================================================
+  //    */
+  //   const activitySummary = activityUsersSummary[0] || {
+  //     retailingUsers: [],
+  //     officeUsers: [],
+  //   };
+
+  //   const retailingUserSet = new Set<string>(
+  //     activitySummary.retailingUsers || [],
+  //   );
+
+  //   const officeUserSet = new Set<string>(activitySummary.officeUsers || []);
+
+  //   const leaveUserSet = new Set<string>(leaveUsers || []);
+
+  //   /**
+  //    * Priority:
+  //    * 1. Retailing
+  //    * 2. Office Work
+  //    * 3. Leave
+  //    * 4. Absent
+  //    *
+  //    * This prevents same employee from being counted twice.
+  //    */
+  //   const retailing = retailingUserSet.size;
+
+  //   const officeWork = [...officeUserSet].filter(
+  //     (userId) => !retailingUserSet.has(userId),
+  //   ).length;
+
+  //   const leave = [...leaveUserSet].filter(
+  //     (userId) => !retailingUserSet.has(userId) && !officeUserSet.has(userId),
+  //   ).length;
+
+  //   const activeOrLeaveUsers = new Set<string>([
+  //     ...retailingUserSet,
+  //     ...officeUserSet,
+  //     ...leaveUserSet,
+  //   ]);
+
+  //   const absent = Math.max(totalUsers - activeOrLeaveUsers.size, 0);
+
+  //   /**
+  //    * =====================================================
+  //    * CALL SUMMARY
+  //    * =====================================================
+  //    */
+  //   const salesSummary = salesSummaryResult[0] || {
+  //     pc: 0,
+  //     qtyValue: 0,
+  //     qtyCases: 0,
+  //     qtyTonnage: 0,
+  //   };
+
+  //   const visitSummary = visitSummaryResult[0] || {
+  //     tc: 0,
+  //     visitedOutletIds: [],
+  //   };
+
+  //   /**
+  //    * PC = Productive Calls
+  //    */
+  //   const pc = Number(salesSummary.pc || 0);
+
+  //   /**
+  //    * TC = Total Calls
+  //    */
+  //   const tc = Number(visitSummary.tc || 0);
+
+  //   /**
+  //    * Distinct visited outlets.
+  //    */
+  //   const visitedOutletCount = visitSummary.visitedOutletIds?.length || 0;
+
+  //   /**
+  //    * Covered % = distinct visited outlets / SC * 100
+  //    */
+  //   const covered =
+  //     sc > 0 ? Number(((visitedOutletCount / sc) * 100).toFixed(0)) : 0;
+
+  //   /**
+  //    * Productivity % = PC / TC * 100
+  //    */
+  //   const productivity = tc > 0 ? Number(((pc / tc) * 100).toFixed(0)) : 0;
+
+  //   return {
+  //     statusCode: HttpStatus.OK,
+  //     message: 'Manager stats fetched successfully',
+  //     data: {
+  //       userSummary: {
+  //         retailing,
+  //         officeWork,
+  //         leave,
+  //         absent,
+  //         total: totalUsers,
+  //       },
+
+  //       callSummary: {
+  //         /**
+  //          * Productivity % = PC / TC * 100
+  //          */
+  //         productivity,
+
+  //         /**
+  //          * Covered % = distinct visited outlets / SC * 100
+  //          */
+  //         covered,
+
+  //         /**
+  //          * PC = Productive Calls
+  //          */
+  //         pc,
+
+  //         /**
+  //          * TC = Total Calls
+  //          */
+  //         tc,
+
+  //         /**
+  //          * SC = distinct outlets assigned to routes/beats
+  //          * of vans associated with manager's team.
+  //          */
+  //         sc,
+
+  //         /**
+  //          * Sales Value
+  //          */
+  //         qtyValue: Number((salesSummary.qtyValue || 0).toFixed(2)),
+
+  //         /**
+  //          * Total Cases Sold
+  //          */
+  //         qtyCases: Number((salesSummary.qtyCases || 0).toFixed(1)),
+
+  //         /**
+  //          * Total Tonnage Sold
+  //          *
+  //          * Already converted from KG to tonnage in aggregation.
+  //          */
+  //         qtyTonnage: Number((salesSummary.qtyTonnage || 0).toFixed(3)),
+  //       },
+  //     },
+  //   };
+  // }
+
   async getManagerStats(query: {
     date?: string;
     startDate?: string;
@@ -2188,6 +2682,26 @@ export class EmployeeService extends MongoRepository<Employee> {
 
     endOfDay.setHours(23, 59, 59, 999);
 
+    const emptyData = {
+      userSummary: {
+        retailing: 0,
+        officeWork: 0,
+        leave: 0,
+        absent: 0,
+        total: 0,
+      },
+      callSummary: {
+        productivity: 0,
+        covered: 0,
+        pc: 0,
+        tc: 0,
+        sc: 0,
+        qtyCases: 0,
+        qtyTonnage: 0,
+        qtyValue: 0,
+      },
+    };
+
     /**
      * =====================================================
      * TEAM MEMBERS
@@ -2208,25 +2722,7 @@ export class EmployeeService extends MongoRepository<Employee> {
       return {
         statusCode: HttpStatus.OK,
         message: 'Manager stats fetched successfully',
-        data: {
-          userSummary: {
-            retailing: 0,
-            officeWork: 0,
-            leave: 0,
-            absent: 0,
-            total: 0,
-          },
-          callSummary: {
-            productivity: 0,
-            covered: 0,
-            pc: 0,
-            tc: 0,
-            sc: 0,
-            qtyCases: 0,
-            qtyTonnage: 0,
-            qtyValue: 0,
-          },
-        },
+        data: emptyData,
       };
     }
 
@@ -2234,10 +2730,6 @@ export class EmployeeService extends MongoRepository<Employee> {
      * =====================================================
      * ASSOCIATED VANS → ROUTES → DISTINCT ASSIGNED OUTLETS
      * =====================================================
-     *
-     * SC formula:
-     * SC = distinct count of outlets assigned to all active routes/beats
-     *      of vans associated with manager's team employees.
      */
     const vans = await this.vanModel
       .find(
@@ -2256,10 +2748,6 @@ export class EmployeeService extends MongoRepository<Employee> {
       )
       .lean();
 
-    /**
-     * Get all routeIds assigned to associated vans.
-     * Only include routes active in selected date range.
-     */
     const routeIds = [
       ...new Set(
         vans.flatMap((van) =>
@@ -2274,14 +2762,12 @@ export class EmployeeService extends MongoRepository<Employee> {
                 (!toDate || toDate >= startOfDay)
               );
             })
-            .map((route) => route.routeId),
+            .map((route) => route.routeId)
+            .filter(Boolean),
         ),
       ),
     ];
 
-    /**
-     * Get distinct outlets/customers assigned to those routes.
-     */
     const assignedCustomerIds = routeIds.length
       ? await this.routeCustomerMappingModel.distinct('customerId', {
           routeId: {
@@ -2310,7 +2796,7 @@ export class EmployeeService extends MongoRepository<Employee> {
       : [];
 
     /**
-     * SC = distinct outlets in assigned routes/beats.
+     * SC = distinct outlets assigned to routes/beats
      */
     const sc = assignedCustomerIds.length;
 
@@ -2326,9 +2812,11 @@ export class EmployeeService extends MongoRepository<Employee> {
       visitSummaryResult,
     ] = await Promise.all([
       /**
-       * =====================================================
-       * RETAILING + OFFICE WORK USERS
-       * =====================================================
+       * Retailing + Office Work users
+       *
+       * Important:
+       * Do not use $$REMOVE inside $addToSet.
+       * Use null and filter null later.
        */
       this.activityModel.aggregate([
         {
@@ -2356,7 +2844,7 @@ export class EmployeeService extends MongoRepository<Employee> {
                     $eq: ['$name', 'Retailing'],
                   },
                   '$userId',
-                  '$$REMOVE',
+                  null,
                 ],
               },
             },
@@ -2371,7 +2859,7 @@ export class EmployeeService extends MongoRepository<Employee> {
                     ],
                   },
                   '$userId',
-                  '$$REMOVE',
+                  null,
                 ],
               },
             },
@@ -2380,9 +2868,7 @@ export class EmployeeService extends MongoRepository<Employee> {
       ]),
 
       /**
-       * =====================================================
-       * LEAVE USERS
-       * =====================================================
+       * Leave users
        */
       this.leaveModel.distinct('userId', {
         userId: {
@@ -2396,13 +2882,10 @@ export class EmployeeService extends MongoRepository<Employee> {
       }),
 
       /**
-       * =====================================================
-       * SALES SUMMARY
-       * =====================================================
+       * Sales summary
        *
-       * IMPORTANT:
        * Sale schema has employees array.
-       * So use employees.employeeId, not employeeId.
+       * Use employees.employeeId, not employeeId.
        */
       this.saleModal.aggregate([
         {
@@ -2421,25 +2904,16 @@ export class EmployeeService extends MongoRepository<Employee> {
           $group: {
             _id: null,
 
-            /**
-             * PC = Productive Calls
-             */
             pc: {
               $sum: 1,
             },
 
-            /**
-             * Sales Value
-             */
             qtyValue: {
               $sum: {
                 $ifNull: ['$totalValue', 0],
               },
             },
 
-            /**
-             * Total Cases Sold
-             */
             qtyCases: {
               $sum: {
                 $ifNull: ['$netCases', 0],
@@ -2447,10 +2921,7 @@ export class EmployeeService extends MongoRepository<Employee> {
             },
 
             /**
-             * Total Tonnage Sold
-             *
-             * totalWeight is stored in KG.
-             * Convert KG to tonnage before calculation.
+             * totalWeight is KG, convert to tonnage.
              */
             qtyTonnage: {
               $sum: {
@@ -2467,12 +2938,7 @@ export class EmployeeService extends MongoRepository<Employee> {
       ]),
 
       /**
-       * =====================================================
-       * TC + VISITED OUTLETS
-       * =====================================================
-       *
-       * TC = Total Calls
-       * visitedOutletIds = distinct visited outlets
+       * TC + distinct visited outlets
        */
       this.shopVisitModel.aggregate([
         {
@@ -2513,13 +2979,14 @@ export class EmployeeService extends MongoRepository<Employee> {
       officeUsers: [],
     };
 
-    const retailingUserSet = new Set<string>(
-      activitySummary.retailingUsers || [],
+    const retailingUsers = (activitySummary.retailingUsers || []).filter(
+      Boolean,
     );
+    const officeUsers = (activitySummary.officeUsers || []).filter(Boolean);
 
-    const officeUserSet = new Set<string>(activitySummary.officeUsers || []);
-
-    const leaveUserSet = new Set<string>(leaveUsers || []);
+    const retailingUserSet = new Set<string>(retailingUsers);
+    const officeUserSet = new Set<string>(officeUsers);
+    const leaveUserSet = new Set<string>((leaveUsers || []).filter(Boolean));
 
     /**
      * Priority:
@@ -2527,8 +2994,6 @@ export class EmployeeService extends MongoRepository<Employee> {
      * 2. Office Work
      * 3. Leave
      * 4. Absent
-     *
-     * This prevents same employee from being counted twice.
      */
     const retailing = retailingUserSet.size;
 
@@ -2565,20 +3030,13 @@ export class EmployeeService extends MongoRepository<Employee> {
       visitedOutletIds: [],
     };
 
-    /**
-     * PC = Productive Calls
-     */
     const pc = Number(salesSummary.pc || 0);
-
-    /**
-     * TC = Total Calls
-     */
     const tc = Number(visitSummary.tc || 0);
 
-    /**
-     * Distinct visited outlets.
-     */
-    const visitedOutletCount = visitSummary.visitedOutletIds?.length || 0;
+    const visitedOutletIds = (visitSummary.visitedOutletIds || []).filter(
+      Boolean,
+    );
+    const visitedOutletCount = visitedOutletIds.length;
 
     /**
      * Covered % = distinct visited outlets / SC * 100
@@ -2604,24 +3062,9 @@ export class EmployeeService extends MongoRepository<Employee> {
         },
 
         callSummary: {
-          /**
-           * Productivity % = PC / TC * 100
-           */
           productivity,
-
-          /**
-           * Covered % = distinct visited outlets / SC * 100
-           */
           covered,
-
-          /**
-           * PC = Productive Calls
-           */
           pc,
-
-          /**
-           * TC = Total Calls
-           */
           tc,
 
           /**
@@ -2630,21 +3073,8 @@ export class EmployeeService extends MongoRepository<Employee> {
            */
           sc,
 
-          /**
-           * Sales Value
-           */
           qtyValue: Number((salesSummary.qtyValue || 0).toFixed(2)),
-
-          /**
-           * Total Cases Sold
-           */
           qtyCases: Number((salesSummary.qtyCases || 0).toFixed(1)),
-
-          /**
-           * Total Tonnage Sold
-           *
-           * Already converted from KG to tonnage in aggregation.
-           */
           qtyTonnage: Number((salesSummary.qtyTonnage || 0).toFixed(3)),
         },
       },
@@ -6181,12 +6611,565 @@ export class EmployeeService extends MongoRepository<Employee> {
   //   };
   // }
 
+  // async getManagerOrderSummary(query?: {
+  //   date?: string;
+  //   startDate?: string;
+  //   endDate?: string;
+  // }) {
+  //   const managerId = RequestContextStore.getStore()?.userId;
+
+  //   const now = new Date();
+
+  //   const startDate = query?.startDate
+  //     ? parseCalendarDate(query.startDate)
+  //     : query?.date
+  //       ? parseCalendarDate(query.date)
+  //       : new Date(now.getFullYear(), now.getMonth(), 1);
+  //   startDate.setHours(0, 0, 0, 0);
+
+  //   const endDate = query?.endDate
+  //     ? parseCalendarDate(query.endDate)
+  //     : query?.date
+  //       ? parseCalendarDate(query.date)
+  //       : now;
+  //   endDate.setHours(23, 59, 59, 999);
+
+  //   /* ==========================================
+  //    * TEAM MEMBERS
+  //    * ========================================== */
+  //   const employees = await this.find({
+  //     $or: [{ reportingEmployeeId: managerId }, { hierarchyPath: managerId }],
+  //     status: UserStatus.ACTIVE,
+  //   });
+
+  //   const employeeIds = employees.map((employee) => employee.employeeId);
+
+  //   if (!employeeIds.length) {
+  //     return {
+  //       statusCode: HttpStatus.OK,
+  //       message: 'Manager order summary fetched successfully',
+  //       data: {
+  //         primaryCategoryWiseOrder: {
+  //           totalCases: 0,
+  //           totalTonnage: 0,
+  //           totalValue: 0,
+  //           categories: [],
+  //         },
+
+  //         managerOrderSummary: {
+  //           orders: 0,
+  //           validation: 0,
+  //           orderCases: 0,
+  //           orderTonnage: 0,
+  //           orderValue: 0,
+  //           validationCases: 0,
+  //           validationTonnage: 0,
+  //           validationValue: 0,
+  //         },
+
+  //         outletSummary: {
+  //           utc: {
+  //             count: 0,
+  //             percentage: 0,
+  //           },
+  //           upc: {
+  //             count: 0,
+  //             percentage: 0,
+  //           },
+
+  //           zeroOrder: {
+  //             count: 0,
+  //             percentage: 0,
+  //           },
+
+  //           notVisited: {
+  //             count: 0,
+  //             percentage: 0,
+  //           },
+
+  //           total: {
+  //             count: 0,
+  //             percentage: 100,
+  //           },
+
+  //           productivity: {
+  //             pc: 0,
+  //             tc: 0,
+  //             percentage: 0,
+  //           },
+  //           ordered: {
+  //             count: 0,
+  //             percentage: 0,
+  //           },
+  //         },
+  //       },
+  //     };
+  //   }
+
+  //   /* ==========================================
+  //    * TEAM VANS
+  //    * ========================================== */
+  //   const vans = await this.vanModel.find(
+  //     {
+  //       associatedUsers: {
+  //         $in: employeeIds,
+  //       },
+  //       status: VanStatus.ACTIVE,
+  //     },
+  //     {
+  //       vanId: 1,
+  //       associatedRoutes: 1,
+  //     },
+  //   );
+
+  //   /* ==========================================
+  //    * ROUTES
+  //    * ========================================== */
+  //   const routeIds = [
+  //     ...new Set(
+  //       vans.flatMap((van) =>
+  //         (van.associatedRoutes || [])
+  //           .filter((route) => {
+  //             const fromDate = route.fromDate ? new Date(route.fromDate) : null;
+  //             const toDate = route.toDate ? new Date(route.toDate) : null;
+
+  //             return (
+  //               route.routeId &&
+  //               (!fromDate || fromDate <= endDate) &&
+  //               (!toDate || toDate >= startDate)
+  //             );
+  //           })
+  //           .map((route) => route.routeId),
+  //       ),
+  //     ),
+  //   ];
+
+  //   /* ==========================================
+  //    * ASSIGNED OUTLETS
+  //    * ========================================== */
+  //   const assignedCustomerIds = await this.routeCustomerMappingModel.distinct(
+  //     'customerId',
+  //     {
+  //       routeId: {
+  //         $in: routeIds,
+  //       },
+  //       status: RouteCustomerMappingStatus.ACTIVE,
+  //       effectiveFrom: {
+  //         $lte: endDate,
+  //       },
+  //       $or: [
+  //         { effectiveTo: null },
+  //         { effectiveTo: { $exists: false } },
+  //         { effectiveTo: { $gte: startDate } },
+  //       ],
+  //     },
+  //   );
+
+  //   const totalAssignedOutlets = assignedCustomerIds.length;
+
+  //   /* ==========================================
+  //    * DASHBOARD DATA
+  //    * ========================================== */
+  //   const [
+  //     categoryTargets,
+  //     managerOrders,
+  //     visitedCustomers,
+  //     productiveCustomers,
+  //     totalCalls,
+  //     productiveCalls,
+  //     zeroOrderOutlets,
+  //   ] = await Promise.all([
+  //     /* ======================================
+  //      * PRIMARY CATEGORY WISE ORDER
+  //      * ====================================== */
+  //     this.saleModal.aggregate([
+  //       {
+  //         $match: {
+  //           employeeId: {
+  //             $in: employeeIds,
+  //           },
+  //           status: SaleStatus.COMPLETED,
+  //           date: {
+  //             $gte: startDate,
+  //             $lte: endDate,
+  //           },
+  //         },
+  //       },
+  //       {
+  //         $lookup: {
+  //           from: 'sale_items',
+  //           localField: 'saleId',
+  //           foreignField: 'saleId',
+  //           as: 'items',
+  //         },
+  //       },
+  //       {
+  //         $unwind: '$items',
+  //       },
+  //       {
+  //         $lookup: {
+  //           from: 'product_master',
+  //           localField: 'items.productId',
+  //           foreignField: 'productId',
+  //           as: 'product',
+  //         },
+  //       },
+  //       {
+  //         $unwind: {
+  //           path: '$product',
+  //           preserveNullAndEmptyArrays: true,
+  //         },
+  //       },
+  //       {
+  //         $lookup: {
+  //           from: 'productcategories',
+  //           localField: 'product.parentCategoryId',
+  //           foreignField: 'categoryId',
+  //           as: 'category',
+  //         },
+  //       },
+  //       {
+  //         $unwind: {
+  //           path: '$category',
+  //           preserveNullAndEmptyArrays: true,
+  //         },
+  //       },
+  //       {
+  //         $group: {
+  //           _id: {
+  //             $ifNull: ['$product.parentCategoryId', 'UNKNOWN'],
+  //           },
+
+  //           category: {
+  //             $first: {
+  //               $ifNull: ['$category.name', 'Unknown'],
+  //             },
+  //           },
+
+  //           cases: {
+  //             $sum: {
+  //               $add: [
+  //                 {
+  //                   $ifNull: ['$items.caseQty', 0],
+  //                 },
+  //                 {
+  //                   $cond: [
+  //                     {
+  //                       $gt: ['$items.unitQtyInCase', 0],
+  //                     },
+  //                     {
+  //                       $divide: [
+  //                         {
+  //                           $ifNull: ['$items.pieceQty', 0],
+  //                         },
+  //                         '$items.unitQtyInCase',
+  //                       ],
+  //                     },
+  //                     0,
+  //                   ],
+  //                 },
+  //               ],
+  //             },
+  //           },
+
+  //           tonnage: {
+  //             $sum: {
+  //               $ifNull: ['$items.totalNetWeight', 0],
+  //             },
+  //           },
+
+  //           value: {
+  //             $sum: {
+  //               $ifNull: ['$items.totalValue', 0],
+  //             },
+  //           },
+  //         },
+  //       },
+  //       {
+  //         $sort: {
+  //           cases: -1,
+  //         },
+  //       },
+  //     ]),
+
+  //     /* ======================================
+  //      * MANAGER ORDER SUMMARY
+  //      * ====================================== */
+  //     this.saleModal.aggregate([
+  //       {
+  //         $match: {
+  //           employeeId: {
+  //             $in: employeeIds,
+  //           },
+  //           status: SaleStatus.COMPLETED,
+  //           date: {
+  //             $gte: startDate,
+  //             $lte: endDate,
+  //           },
+  //         },
+  //       },
+  //       {
+  //         $group: {
+  //           _id: null,
+
+  //           orders: {
+  //             $sum: '$netCases',
+  //           },
+
+  //           validation: {
+  //             $sum: '$totalValue',
+  //           },
+
+  //           orderCases: {
+  //             $sum: '$netCases',
+  //           },
+
+  //           orderTonnage: {
+  //             $sum: '$totalWeight',
+  //           },
+
+  //           orderValue: {
+  //             $sum: '$totalValue',
+  //           },
+
+  //           validationCases: {
+  //             $sum: '$netCases',
+  //           },
+
+  //           validationTonnage: {
+  //             $sum: '$totalWeight',
+  //           },
+
+  //           validationValue: {
+  //             $sum: '$totalValue',
+  //           },
+  //         },
+  //       },
+  //     ]),
+
+  //     /* ======================================
+  //      * TOTAL CALLS (TC)
+  //      * ====================================== */
+  //     this.shopVisitModel.distinct('outletId', {
+  //       employeeId: {
+  //         $in: employeeIds,
+  //       },
+  //       outletId: {
+  //         $in: assignedCustomerIds,
+  //       },
+  //       status: ShopVisitStatus.COMPLETED,
+  //       checkInTime: {
+  //         $gte: startDate,
+  //         $lte: endDate,
+  //       },
+  //     }),
+
+  //     /* ======================================
+  //      * UNIQUE PRODUCTIVE OUTLETS (UPC)
+  //      * ====================================== */
+  //     this.saleModal.distinct('customerId', {
+  //       employeeId: {
+  //         $in: employeeIds,
+  //       },
+  //       status: SaleStatus.COMPLETED,
+  //       date: {
+  //         $gte: startDate,
+  //         $lte: endDate,
+  //       },
+  //     }),
+
+  //     /* ======================================
+  //      * TOTAL CALLS (TC)
+  //      * ====================================== */
+  //     this.shopVisitModel.countDocuments({
+  //       employeeId: {
+  //         $in: employeeIds,
+  //       },
+  //       status: ShopVisitStatus.COMPLETED,
+  //       checkInTime: {
+  //         $gte: startDate,
+  //         $lte: endDate,
+  //       },
+  //     }),
+
+  //     /* ======================================
+  //      * PRODUCTIVE CALLS (PC)
+  //      * ====================================== */
+  //     this.saleModal.countDocuments({
+  //       employeeId: {
+  //         $in: employeeIds,
+  //       },
+  //       status: SaleStatus.COMPLETED,
+  //       date: {
+  //         $gte: startDate,
+  //         $lte: endDate,
+  //       },
+  //     }),
+
+  //     /* ======================================
+  //      * ZERO ORDER OUTLETS
+  //      * ====================================== */
+  //     this.nonSaleModel.distinct('outletId', {
+  //       employeeId: {
+  //         $in: employeeIds,
+  //       },
+  //       status: NonSaleStatus.COMPLETED,
+  //       createdAt: {
+  //         $gte: startDate,
+  //         $lte: endDate,
+  //       },
+  //     }),
+  //   ]);
+
+  //   /* ==========================================
+  //    * CATEGORY SUMMARY
+  //    * ========================================== */
+  //   const totalCases = categoryTargets.reduce(
+  //     (sum, item) => sum + item.cases,
+  //     0,
+  //   );
+
+  //   const totalTonnage = categoryTargets.reduce(
+  //     (sum, item) => sum + item.tonnage,
+  //     0,
+  //   );
+
+  //   const totalValue = categoryTargets.reduce(
+  //     (sum, item) => sum + item.value,
+  //     0,
+  //   );
+
+  //   const categories = categoryTargets.map((item) => ({
+  //     categoryId: item._id,
+  //     category: item.category,
+  //     cases: Number((item.cases || 0).toFixed(2)),
+  //     tonnage: Number((item.tonnage || 0).toFixed(2)),
+  //     value: Number((item.value || 0).toFixed(2)),
+
+  //     percentage:
+  //       totalCases > 0 ? Math.round((item.cases / totalCases) * 100) : 0,
+  //     tonnagePercentage:
+  //       totalTonnage > 0 ? Math.round((item.tonnage / totalTonnage) * 100) : 0,
+  //     valuePercentage:
+  //       totalValue > 0 ? Math.round((item.value / totalValue) * 100) : 0,
+  //   }));
+
+  //   /* ==========================================
+  //    * OUTLET SUMMARY
+  //    * ========================================== */
+  //   const tc = visitedCustomers.length;
+
+  //   const upc = productiveCustomers.length;
+
+  //   const zeroOrder = zeroOrderOutlets.length;
+
+  //   const notVisited = Math.max(totalAssignedOutlets - tc, 0);
+
+  //   const productivity =
+  //     totalCalls > 0
+  //       ? Number(((productiveCalls / totalCalls) * 100).toFixed(2))
+  //       : 0;
+
+  //   const managerOrder = managerOrders?.[0] || {
+  //     orders: 0,
+  //     validation: 0,
+  //     orderCases: 0,
+  //     orderTonnage: 0,
+  //     orderValue: 0,
+  //     validationCases: 0,
+  //     validationTonnage: 0,
+  //     validationValue: 0,
+  //   };
+
+  //   return {
+  //     statusCode: HttpStatus.OK,
+  //     message: 'Manager order summary fetched successfully',
+
+  //     data: {
+  //       primaryCategoryWiseOrder: {
+  //         totalCases: Number(totalCases.toFixed(2)),
+  //         totalTonnage: Number(totalTonnage.toFixed(2)),
+  //         totalValue: Number(totalValue.toFixed(2)),
+
+  //         categories,
+  //       },
+
+  //       managerOrderSummary: {
+  //         orders: Number(managerOrder.orders || 0),
+
+  //         validation: Number(managerOrder.validation || 0),
+  //         orderCases: Number(managerOrder.orderCases || 0),
+  //         orderTonnage: Number(managerOrder.orderTonnage || 0),
+  //         orderValue: Number(managerOrder.orderValue || 0),
+  //         validationCases: Number(managerOrder.validationCases || 0),
+  //         validationTonnage: Number(managerOrder.validationTonnage || 0),
+  //         validationValue: Number(managerOrder.validationValue || 0),
+  //       },
+
+  //       outletSummary: {
+  //         utc: {
+  //           count: tc,
+  //           percentage:
+  //             totalAssignedOutlets > 0
+  //               ? Number(((tc / totalAssignedOutlets) * 100).toFixed(2))
+  //               : 0,
+  //         },
+  //         upc: {
+  //           count: upc,
+  //           percentage:
+  //             totalAssignedOutlets > 0
+  //               ? Number(((upc / totalAssignedOutlets) * 100).toFixed(2))
+  //               : 0,
+  //         },
+
+  //         zeroOrder: {
+  //           count: zeroOrder,
+
+  //           percentage:
+  //             tc > 0 ? Number(((zeroOrder / tc) * 100).toFixed(2)) : 0,
+  //         },
+
+  //         notVisited: {
+  //           count: notVisited,
+
+  //           percentage:
+  //             totalAssignedOutlets > 0
+  //               ? Number(((notVisited / totalAssignedOutlets) * 100).toFixed(2))
+  //               : 0,
+  //         },
+
+  //         total: {
+  //           count: totalAssignedOutlets,
+  //           percentage: 100,
+  //         },
+
+  //         productivity: {
+  //           pc: productiveCalls,
+  //           tc: totalCalls,
+  //           percentage: productivity,
+  //         },
+  //         ordered: {
+  //           count: upc,
+  //           percentage:
+  //             totalAssignedOutlets > 0
+  //               ? Number(((upc / totalAssignedOutlets) * 100).toFixed(2))
+  //               : 0,
+  //         },
+  //       },
+  //     },
+  //   };
+  // }
+
   async getManagerOrderSummary(query?: {
     date?: string;
     startDate?: string;
     endDate?: string;
   }) {
     const managerId = RequestContextStore.getStore()?.userId;
+
+    if (!managerId) {
+      throw new NotFoundException(EMPLOYEE.NOT_FOUND);
+    }
 
     const now = new Date();
 
@@ -6195,6 +7178,7 @@ export class EmployeeService extends MongoRepository<Employee> {
       : query?.date
         ? parseCalendarDate(query.date)
         : new Date(now.getFullYear(), now.getMonth(), 1);
+
     startDate.setHours(0, 0, 0, 0);
 
     const endDate = query?.endDate
@@ -6202,99 +7186,104 @@ export class EmployeeService extends MongoRepository<Employee> {
       : query?.date
         ? parseCalendarDate(query.date)
         : now;
+
     endDate.setHours(23, 59, 59, 999);
 
-    /* ==========================================
+    const emptyResponse = {
+      statusCode: HttpStatus.OK,
+      message: 'Manager order summary fetched successfully',
+      data: {
+        primaryCategoryWiseOrder: {
+          totalCases: 0,
+          totalTonnage: 0,
+          totalValue: 0,
+          categories: [],
+        },
+
+        managerOrderSummary: {
+          orders: 0,
+          validation: 0,
+          orderCases: 0,
+          orderTonnage: 0,
+          orderValue: 0,
+          validationCases: 0,
+          validationTonnage: 0,
+          validationValue: 0,
+        },
+
+        outletSummary: {
+          utc: {
+            count: 0,
+            percentage: 0,
+          },
+          upc: {
+            count: 0,
+            percentage: 0,
+          },
+          zeroOrder: {
+            count: 0,
+            percentage: 0,
+          },
+          notVisited: {
+            count: 0,
+            percentage: 0,
+          },
+          total: {
+            count: 0,
+            percentage: 100,
+          },
+          productivity: {
+            pc: 0,
+            tc: 0,
+            percentage: 0,
+          },
+          ordered: {
+            count: 0,
+            percentage: 0,
+          },
+        },
+      },
+    };
+
+    /**
+     * ==========================================
      * TEAM MEMBERS
-     * ========================================== */
+     * ==========================================
+     */
     const employees = await this.find({
       $or: [{ reportingEmployeeId: managerId }, { hierarchyPath: managerId }],
       status: UserStatus.ACTIVE,
     });
 
-    const employeeIds = employees.map((employee) => employee.employeeId);
+    const employeeIds = employees
+      .map((employee) => employee.employeeId)
+      .filter(Boolean);
 
     if (!employeeIds.length) {
-      return {
-        statusCode: HttpStatus.OK,
-        message: 'Manager order summary fetched successfully',
-        data: {
-          primaryCategoryWiseOrder: {
-            totalCases: 0,
-            totalTonnage: 0,
-            totalValue: 0,
-            categories: [],
-          },
-
-          managerOrderSummary: {
-            orders: 0,
-            validation: 0,
-            orderCases: 0,
-            orderTonnage: 0,
-            orderValue: 0,
-            validationCases: 0,
-            validationTonnage: 0,
-            validationValue: 0,
-          },
-
-          outletSummary: {
-            utc: {
-              count: 0,
-              percentage: 0,
-            },
-            upc: {
-              count: 0,
-              percentage: 0,
-            },
-
-            zeroOrder: {
-              count: 0,
-              percentage: 0,
-            },
-
-            notVisited: {
-              count: 0,
-              percentage: 0,
-            },
-
-            total: {
-              count: 0,
-              percentage: 100,
-            },
-
-            productivity: {
-              pc: 0,
-              tc: 0,
-              percentage: 0,
-            },
-            ordered: {
-              count: 0,
-              percentage: 0,
-            },
-          },
-        },
-      };
+      return emptyResponse;
     }
 
-    /* ==========================================
-     * TEAM VANS
-     * ========================================== */
-    const vans = await this.vanModel.find(
-      {
-        associatedUsers: {
-          $in: employeeIds,
+    /**
+     * ==========================================
+     * TEAM VANS → ROUTES
+     * ==========================================
+     */
+    const vans = await this.vanModel
+      .find(
+        {
+          associatedUsers: {
+            $in: employeeIds,
+          },
+          status: VanStatus.ACTIVE,
         },
-        status: VanStatus.ACTIVE,
-      },
-      {
-        vanId: 1,
-        associatedRoutes: 1,
-      },
-    );
+        {
+          vanId: 1,
+          associatedRoutes: 1,
+          _id: 0,
+        },
+      )
+      .lean();
 
-    /* ==========================================
-     * ROUTES
-     * ========================================== */
     const routeIds = [
       ...new Set(
         vans.flatMap((van) =>
@@ -6309,276 +7298,325 @@ export class EmployeeService extends MongoRepository<Employee> {
                 (!toDate || toDate >= startDate)
               );
             })
-            .map((route) => route.routeId),
+            .map((route) => route.routeId)
+            .filter(Boolean),
         ),
       ),
     ];
 
-    /* ==========================================
+    /**
+     * ==========================================
      * ASSIGNED OUTLETS
-     * ========================================== */
-    const assignedCustomerIds = await this.routeCustomerMappingModel.distinct(
-      'customerId',
-      {
-        routeId: {
-          $in: routeIds,
-        },
-        status: RouteCustomerMappingStatus.ACTIVE,
-        effectiveFrom: {
-          $lte: endDate,
-        },
-        $or: [
-          { effectiveTo: null },
-          { effectiveTo: { $exists: false } },
-          { effectiveTo: { $gte: startDate } },
-        ],
-      },
-    );
+     * ==========================================
+     */
+    const assignedCustomerIds = routeIds.length
+      ? await this.routeCustomerMappingModel.distinct('customerId', {
+          routeId: {
+            $in: routeIds,
+          },
+          status: RouteCustomerMappingStatus.ACTIVE,
+          effectiveFrom: {
+            $lte: endDate,
+          },
+          $or: [
+            { effectiveTo: null },
+            { effectiveTo: { $exists: false } },
+            { effectiveTo: { $gte: startDate } },
+          ],
+        })
+      : [];
 
     const totalAssignedOutlets = assignedCustomerIds.length;
 
-    /* ==========================================
+    /**
+     * Common sale match.
+     *
+     * IMPORTANT:
+     * Sale schema has employees array.
+     * Use employees.employeeId, not employeeId.
+     */
+    const saleMatch = {
+      'employees.employeeId': {
+        $in: employeeIds,
+      },
+      status: SaleStatus.COMPLETED,
+      date: {
+        $gte: startDate,
+        $lte: endDate,
+      },
+    };
+
+    /**
+     * ==========================================
      * DASHBOARD DATA
-     * ========================================== */
+     * ==========================================
+     */
     const [
       categoryTargets,
       managerOrders,
-      visitedCustomers,
-      productiveCustomers,
-      totalCalls,
-      productiveCalls,
+      visitSummaryResult,
       zeroOrderOutlets,
     ] = await Promise.all([
-      /* ======================================
+      /**
+       * ======================================
        * PRIMARY CATEGORY WISE ORDER
-       * ====================================== */
-      this.saleModal.aggregate([
-        {
-          $match: {
-            employeeId: {
-              $in: employeeIds,
-            },
-            status: SaleStatus.COMPLETED,
-            date: {
-              $gte: startDate,
-              $lte: endDate,
-            },
+       * ======================================
+       *
+       * Optimized:
+       * - Removed product_master lookup.
+       * - sale_items already has parentCategoryId.
+       * - Lookup productcategories directly by items.parentCategoryId.
+       * - Convert KG to tonnage using / 1000.
+       */
+      this.saleModal
+        .aggregate([
+          {
+            $match: saleMatch,
           },
-        },
-        {
-          $lookup: {
-            from: 'sale_items',
-            localField: 'saleId',
-            foreignField: 'saleId',
-            as: 'items',
-          },
-        },
-        {
-          $unwind: '$items',
-        },
-        {
-          $lookup: {
-            from: 'product_master',
-            localField: 'items.productId',
-            foreignField: 'productId',
-            as: 'product',
-          },
-        },
-        {
-          $unwind: {
-            path: '$product',
-            preserveNullAndEmptyArrays: true,
-          },
-        },
-        {
-          $lookup: {
-            from: 'productcategories',
-            localField: 'product.parentCategoryId',
-            foreignField: 'categoryId',
-            as: 'category',
-          },
-        },
-        {
-          $unwind: {
-            path: '$category',
-            preserveNullAndEmptyArrays: true,
-          },
-        },
-        {
-          $group: {
-            _id: {
-              $ifNull: ['$product.parentCategoryId', 'UNKNOWN'],
-            },
-
-            category: {
-              $first: {
-                $ifNull: ['$category.name', 'Unknown'],
+          {
+            $lookup: {
+              from: 'sale_items',
+              let: {
+                saleId: '$saleId',
               },
-            },
-
-            cases: {
-              $sum: {
-                $add: [
-                  {
-                    $ifNull: ['$items.caseQty', 0],
+              pipeline: [
+                {
+                  $match: {
+                    $expr: {
+                      $eq: ['$saleId', '$$saleId'],
+                    },
                   },
-                  {
-                    $cond: [
-                      {
-                        $gt: ['$items.unitQtyInCase', 0],
-                      },
-                      {
-                        $divide: [
-                          {
-                            $ifNull: ['$items.pieceQty', 0],
-                          },
-                          '$items.unitQtyInCase',
-                        ],
-                      },
-                      0,
-                    ],
+                },
+                {
+                  $project: {
+                    _id: 0,
+                    parentCategoryId: 1,
+                    caseQty: 1,
+                    pieceQty: 1,
+                    unitQtyInCase: 1,
+                    totalNetWeight: 1,
+                    totalValue: 1,
                   },
-                ],
-              },
+                },
+              ],
+              as: 'items',
             },
-
-            tonnage: {
-              $sum: {
-                $ifNull: ['$items.totalNetWeight', 0],
-              },
+          },
+          {
+            $unwind: '$items',
+          },
+          {
+            $lookup: {
+              from: 'productcategories',
+              localField: 'items.parentCategoryId',
+              foreignField: 'categoryId',
+              as: 'category',
             },
+          },
+          {
+            $unwind: {
+              path: '$category',
+              preserveNullAndEmptyArrays: true,
+            },
+          },
+          {
+            $group: {
+              _id: {
+                $ifNull: ['$items.parentCategoryId', 'UNKNOWN'],
+              },
 
-            value: {
-              $sum: {
-                $ifNull: ['$items.totalValue', 0],
+              category: {
+                $first: {
+                  $ifNull: ['$category.name', 'Unknown'],
+                },
+              },
+
+              cases: {
+                $sum: {
+                  $add: [
+                    {
+                      $ifNull: ['$items.caseQty', 0],
+                    },
+                    {
+                      $cond: [
+                        {
+                          $gt: ['$items.unitQtyInCase', 0],
+                        },
+                        {
+                          $divide: [
+                            {
+                              $ifNull: ['$items.pieceQty', 0],
+                            },
+                            '$items.unitQtyInCase',
+                          ],
+                        },
+                        0,
+                      ],
+                    },
+                  ],
+                },
+              },
+
+              /**
+               * totalNetWeight is KG, convert to tonnage.
+               */
+              tonnage: {
+                $sum: {
+                  $divide: [
+                    {
+                      $ifNull: ['$items.totalNetWeight', 0],
+                    },
+                    1000,
+                  ],
+                },
+              },
+
+              value: {
+                $sum: {
+                  $ifNull: ['$items.totalValue', 0],
+                },
               },
             },
           },
-        },
-        {
-          $sort: {
-            cases: -1,
+          {
+            $sort: {
+              cases: -1,
+            },
           },
-        },
-      ]),
+        ])
+        .allowDiskUse(true),
 
-      /* ======================================
+      /**
+       * ======================================
        * MANAGER ORDER SUMMARY
-       * ====================================== */
+       * ======================================
+       *
+       * Fixed sale employee filter.
+       * order count = number of completed sales.
+       * tonnage = KG / 1000.
+       */
       this.saleModal.aggregate([
         {
-          $match: {
-            employeeId: {
-              $in: employeeIds,
-            },
-            status: SaleStatus.COMPLETED,
-            date: {
-              $gte: startDate,
-              $lte: endDate,
-            },
-          },
+          $match: saleMatch,
         },
         {
           $group: {
             _id: null,
 
+            /**
+             * Orders should be count of orders, not netCases.
+             */
             orders: {
-              $sum: '$netCases',
+              $sum: 1,
             },
 
+            /**
+             * Keep validation same as order count unless you have
+             * separate validation collection/status.
+             */
             validation: {
-              $sum: '$totalValue',
+              $sum: 1,
             },
 
             orderCases: {
-              $sum: '$netCases',
+              $sum: {
+                $ifNull: ['$netCases', 0],
+              },
             },
 
             orderTonnage: {
-              $sum: '$totalWeight',
+              $sum: {
+                $divide: [
+                  {
+                    $ifNull: ['$totalWeight', 0],
+                  },
+                  1000,
+                ],
+              },
             },
 
             orderValue: {
-              $sum: '$totalValue',
+              $sum: {
+                $ifNull: ['$totalValue', 0],
+              },
             },
 
             validationCases: {
-              $sum: '$netCases',
+              $sum: {
+                $ifNull: ['$netCases', 0],
+              },
             },
 
             validationTonnage: {
-              $sum: '$totalWeight',
+              $sum: {
+                $divide: [
+                  {
+                    $ifNull: ['$totalWeight', 0],
+                  },
+                  1000,
+                ],
+              },
             },
 
             validationValue: {
-              $sum: '$totalValue',
+              $sum: {
+                $ifNull: ['$totalValue', 0],
+              },
+            },
+
+            productiveOutletIds: {
+              $addToSet: '$customerId',
             },
           },
         },
       ]),
 
-      /* ======================================
-       * TOTAL CALLS (TC)
-       * ====================================== */
-      this.shopVisitModel.distinct('outletId', {
-        employeeId: {
-          $in: employeeIds,
+      /**
+       * ======================================
+       * VISITS SUMMARY
+       * ======================================
+       *
+       * Optimized:
+       * - distinct visited outlets + total calls in one query.
+       */
+      this.shopVisitModel.aggregate([
+        {
+          $match: {
+            employeeId: {
+              $in: employeeIds,
+            },
+            status: ShopVisitStatus.COMPLETED,
+            checkInTime: {
+              $gte: startDate,
+              $lte: endDate,
+            },
+            ...(assignedCustomerIds.length
+              ? {
+                  outletId: {
+                    $in: assignedCustomerIds,
+                  },
+                }
+              : {}),
+          },
         },
-        outletId: {
-          $in: assignedCustomerIds,
+        {
+          $group: {
+            _id: null,
+            totalCalls: {
+              $sum: 1,
+            },
+            visitedOutletIds: {
+              $addToSet: '$outletId',
+            },
+          },
         },
-        status: ShopVisitStatus.COMPLETED,
-        checkInTime: {
-          $gte: startDate,
-          $lte: endDate,
-        },
-      }),
+      ]),
 
-      /* ======================================
-       * UNIQUE PRODUCTIVE OUTLETS (UPC)
-       * ====================================== */
-      this.saleModal.distinct('customerId', {
-        employeeId: {
-          $in: employeeIds,
-        },
-        status: SaleStatus.COMPLETED,
-        date: {
-          $gte: startDate,
-          $lte: endDate,
-        },
-      }),
-
-      /* ======================================
-       * TOTAL CALLS (TC)
-       * ====================================== */
-      this.shopVisitModel.countDocuments({
-        employeeId: {
-          $in: employeeIds,
-        },
-        status: ShopVisitStatus.COMPLETED,
-        checkInTime: {
-          $gte: startDate,
-          $lte: endDate,
-        },
-      }),
-
-      /* ======================================
-       * PRODUCTIVE CALLS (PC)
-       * ====================================== */
-      this.saleModal.countDocuments({
-        employeeId: {
-          $in: employeeIds,
-        },
-        status: SaleStatus.COMPLETED,
-        date: {
-          $gte: startDate,
-          $lte: endDate,
-        },
-      }),
-
-      /* ======================================
+      /**
+       * ======================================
        * ZERO ORDER OUTLETS
-       * ====================================== */
+       * ======================================
+       */
       this.nonSaleModel.distinct('outletId', {
         employeeId: {
           $in: employeeIds,
@@ -6588,24 +7626,33 @@ export class EmployeeService extends MongoRepository<Employee> {
           $gte: startDate,
           $lte: endDate,
         },
+        ...(assignedCustomerIds.length
+          ? {
+              outletId: {
+                $in: assignedCustomerIds,
+              },
+            }
+          : {}),
       }),
     ]);
 
-    /* ==========================================
+    /**
+     * ==========================================
      * CATEGORY SUMMARY
-     * ========================================== */
+     * ==========================================
+     */
     const totalCases = categoryTargets.reduce(
-      (sum, item) => sum + item.cases,
+      (sum, item) => sum + Number(item.cases || 0),
       0,
     );
 
     const totalTonnage = categoryTargets.reduce(
-      (sum, item) => sum + item.tonnage,
+      (sum, item) => sum + Number(item.tonnage || 0),
       0,
     );
 
     const totalValue = categoryTargets.reduce(
-      (sum, item) => sum + item.value,
+      (sum, item) => sum + Number(item.value || 0),
       0,
     );
 
@@ -6613,33 +7660,30 @@ export class EmployeeService extends MongoRepository<Employee> {
       categoryId: item._id,
       category: item.category,
       cases: Number((item.cases || 0).toFixed(2)),
-      tonnage: Number((item.tonnage || 0).toFixed(2)),
+      tonnage: Number((item.tonnage || 0).toFixed(3)),
       value: Number((item.value || 0).toFixed(2)),
 
       percentage:
-        totalCases > 0 ? Math.round((item.cases / totalCases) * 100) : 0,
+        totalCases > 0
+          ? Math.round((Number(item.cases || 0) / totalCases) * 100)
+          : 0,
+
       tonnagePercentage:
-        totalTonnage > 0 ? Math.round((item.tonnage / totalTonnage) * 100) : 0,
+        totalTonnage > 0
+          ? Math.round((Number(item.tonnage || 0) / totalTonnage) * 100)
+          : 0,
+
       valuePercentage:
-        totalValue > 0 ? Math.round((item.value / totalValue) * 100) : 0,
+        totalValue > 0
+          ? Math.round((Number(item.value || 0) / totalValue) * 100)
+          : 0,
     }));
 
-    /* ==========================================
-     * OUTLET SUMMARY
-     * ========================================== */
-    const tc = visitedCustomers.length;
-
-    const upc = productiveCustomers.length;
-
-    const zeroOrder = zeroOrderOutlets.length;
-
-    const notVisited = Math.max(totalAssignedOutlets - tc, 0);
-
-    const productivity =
-      totalCalls > 0
-        ? Number(((productiveCalls / totalCalls) * 100).toFixed(2))
-        : 0;
-
+    /**
+     * ==========================================
+     * ORDER SUMMARY
+     * ==========================================
+     */
     const managerOrder = managerOrders?.[0] || {
       orders: 0,
       validation: 0,
@@ -6649,7 +7693,62 @@ export class EmployeeService extends MongoRepository<Employee> {
       validationCases: 0,
       validationTonnage: 0,
       validationValue: 0,
+      productiveOutletIds: [],
     };
+
+    const visitSummary = visitSummaryResult?.[0] || {
+      totalCalls: 0,
+      visitedOutletIds: [],
+    };
+
+    /**
+     * ==========================================
+     * OUTLET SUMMARY
+     * ==========================================
+     */
+    const visitedOutletIds = (visitSummary.visitedOutletIds || []).filter(
+      Boolean,
+    );
+    const productiveOutletIds = (managerOrder.productiveOutletIds || []).filter(
+      Boolean,
+    );
+    const zeroOrderOutletIds = (zeroOrderOutlets || []).filter(Boolean);
+
+    /**
+     * UTC = unique visited outlets.
+     */
+    const utc = visitedOutletIds.length;
+
+    /**
+     * UPC = unique productive outlets.
+     */
+    const upc = productiveOutletIds.length;
+
+    /**
+     * TC = total shop visits/calls.
+     */
+    const totalCalls = Number(visitSummary.totalCalls || 0);
+
+    /**
+     * PC = productive calls/orders.
+     */
+    const productiveCalls = Number(managerOrder.orders || 0);
+
+    /**
+     * Zero order should be outlets with non-sale,
+     * excluding outlets that already placed order.
+     */
+    const productiveOutletSet = new Set(productiveOutletIds);
+    const zeroOrder = zeroOrderOutletIds.filter(
+      (outletId) => !productiveOutletSet.has(outletId),
+    ).length;
+
+    const notVisited = Math.max(totalAssignedOutlets - utc, 0);
+
+    const productivity =
+      totalCalls > 0
+        ? Number(((productiveCalls / totalCalls) * 100).toFixed(2))
+        : 0;
 
     return {
       statusCode: HttpStatus.OK,
@@ -6658,9 +7757,8 @@ export class EmployeeService extends MongoRepository<Employee> {
       data: {
         primaryCategoryWiseOrder: {
           totalCases: Number(totalCases.toFixed(2)),
-          totalTonnage: Number(totalTonnage.toFixed(2)),
+          totalTonnage: Number(totalTonnage.toFixed(3)),
           totalValue: Number(totalValue.toFixed(2)),
-
           categories,
         },
 
@@ -6668,22 +7766,31 @@ export class EmployeeService extends MongoRepository<Employee> {
           orders: Number(managerOrder.orders || 0),
 
           validation: Number(managerOrder.validation || 0),
-          orderCases: Number(managerOrder.orderCases || 0),
-          orderTonnage: Number(managerOrder.orderTonnage || 0),
-          orderValue: Number(managerOrder.orderValue || 0),
-          validationCases: Number(managerOrder.validationCases || 0),
-          validationTonnage: Number(managerOrder.validationTonnage || 0),
-          validationValue: Number(managerOrder.validationValue || 0),
+
+          orderCases: Number((managerOrder.orderCases || 0).toFixed(2)),
+          orderTonnage: Number((managerOrder.orderTonnage || 0).toFixed(3)),
+          orderValue: Number((managerOrder.orderValue || 0).toFixed(2)),
+
+          validationCases: Number(
+            (managerOrder.validationCases || 0).toFixed(2),
+          ),
+          validationTonnage: Number(
+            (managerOrder.validationTonnage || 0).toFixed(3),
+          ),
+          validationValue: Number(
+            (managerOrder.validationValue || 0).toFixed(2),
+          ),
         },
 
         outletSummary: {
           utc: {
-            count: tc,
+            count: utc,
             percentage:
               totalAssignedOutlets > 0
-                ? Number(((tc / totalAssignedOutlets) * 100).toFixed(2))
+                ? Number(((utc / totalAssignedOutlets) * 100).toFixed(2))
                 : 0,
           },
+
           upc: {
             count: upc,
             percentage:
@@ -6694,14 +7801,14 @@ export class EmployeeService extends MongoRepository<Employee> {
 
           zeroOrder: {
             count: zeroOrder,
-
             percentage:
-              tc > 0 ? Number(((zeroOrder / tc) * 100).toFixed(2)) : 0,
+              totalCalls > 0
+                ? Number(((zeroOrder / totalCalls) * 100).toFixed(2))
+                : 0,
           },
 
           notVisited: {
             count: notVisited,
-
             percentage:
               totalAssignedOutlets > 0
                 ? Number(((notVisited / totalAssignedOutlets) * 100).toFixed(2))
@@ -6718,6 +7825,7 @@ export class EmployeeService extends MongoRepository<Employee> {
             tc: totalCalls,
             percentage: productivity,
           },
+
           ordered: {
             count: upc,
             percentage:
