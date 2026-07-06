@@ -84,6 +84,11 @@ export class UpdateCustomerDto {
   @ApiPropertyOptional({ type: String })
   @IsOptional()
   @IsString()
+  name?: string;
+
+  @ApiPropertyOptional({ type: String })
+  @IsOptional()
+  @IsString()
   phoneNumber?: string;
 
   @ApiPropertyOptional({ type: String })
