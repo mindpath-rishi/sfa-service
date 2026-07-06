@@ -7181,13 +7181,18 @@ export class EmployeeService extends MongoRepository<Employee> {
      * UBO TARGET SUMMARY
      * =====================================================
      *
-     * For UBO:
-     * - targetCases = uboTarget
-     * - achievementCases = unique billed outlet count
-     * - tonnage/value will remain 0
+     * UBO = Unique Billed Outlets
+     *
+     * UBO Target      = count target from target.uboTarget
+     * UBO Achievement = count of unique billed outlets
+     *
+     * No cases, no tonnage, no value.
      */
     if (targetType === 'UBO') {
       const [targets, achievements] = await Promise.all([
+        /**
+         * UBO target by user + category
+         */
         this.targetModel.aggregate([
           {
             $match: {
@@ -7211,7 +7216,11 @@ export class EmployeeService extends MongoRepository<Employee> {
                 userId: '$userId',
                 dimensionId: '$categoryId',
               },
-              targetCases: {
+
+              /**
+               * Count target only.
+               */
+              target: {
                 $sum: {
                   $ifNull: ['$uboTarget', 0],
                 },
@@ -7221,11 +7230,8 @@ export class EmployeeService extends MongoRepository<Employee> {
         ]),
 
         /**
-         * UBO Achievement:
-         * Count unique billed outlets per employee + category.
-         *
-         * If same customer buys same category multiple times,
-         * it counts only once.
+         * UBO achievement:
+         * unique billed outlet count per user + category.
          */
         this.saleModal
           .aggregate([
@@ -7283,12 +7289,15 @@ export class EmployeeService extends MongoRepository<Employee> {
                 'items.categoryId': {
                   $ne: null,
                 },
+                customerId: {
+                  $ne: null,
+                },
               },
             },
 
             /**
-             * First group removes duplicate billing:
-             * employee + category + customer counted once.
+             * Remove duplicate billing:
+             * same employee + category + customer counted once.
              */
             {
               $group: {
@@ -7301,7 +7310,7 @@ export class EmployeeService extends MongoRepository<Employee> {
             },
 
             /**
-             * Second group counts unique customers.
+             * Count unique billed customers/outlets.
              */
             {
               $group: {
@@ -7309,7 +7318,8 @@ export class EmployeeService extends MongoRepository<Employee> {
                   employeeId: '$_id.employeeId',
                   dimensionId: '$_id.dimensionId',
                 },
-                achievementCases: {
+
+                achievement: {
                   $sum: 1,
                 },
               },
@@ -7328,11 +7338,11 @@ export class EmployeeService extends MongoRepository<Employee> {
 
         const current = targetsByUser.get(userId) || {
           dimensions: new Set<string>(),
-          targetCases: 0,
+          target: 0,
         };
 
         current.dimensions.add(dimensionId);
-        current.targetCases += Number(target.targetCases || 0);
+        current.target += Number(target.target || 0);
 
         targetsByUser.set(userId, current);
       }
@@ -7348,75 +7358,62 @@ export class EmployeeService extends MongoRepository<Employee> {
         const target = targetsByUser.get(employeeId);
 
         /**
-         * Count achievement only for categories where UBO target exists.
+         * Count only categories where UBO target exists.
          */
         if (!target?.dimensions?.has(dimensionId)) continue;
 
         const current = achievementsByUser.get(employeeId) || {
-          achievementCases: 0,
+          achievement: 0,
         };
 
-        current.achievementCases += Number(achievement.achievementCases || 0);
+        current.achievement += Number(achievement.achievement || 0);
 
         achievementsByUser.set(employeeId, current);
       }
 
       const data = employees.map((employee) => {
-        const target = targetsByUser.get(employee.employeeId) || {};
-        const achievement = achievementsByUser.get(employee.employeeId) || {};
+        const targetData = targetsByUser.get(employee.employeeId) || {};
+        const achievementData =
+          achievementsByUser.get(employee.employeeId) || {};
 
-        const targetCases = Number(target.targetCases || 0);
-        const achievementCases = Number(achievement.achievementCases || 0);
-        const remainingCases = Math.max(targetCases - achievementCases, 0);
+        const target = Number(targetData.target || 0);
+        const achievement = Number(achievementData.achievement || 0);
+        const remaining = Math.max(target - achievement, 0);
 
-        const achievementPercentage =
-          targetCases > 0 ? round((achievementCases / targetCases) * 100) : 0;
+        const percentage = target > 0 ? round((achievement / target) * 100) : 0;
+
+        const crr = elapsedDays > 0 ? achievement / elapsedDays : 0;
+        const rrr = remainingDays > 0 ? remaining / remainingDays : 0;
 
         return {
           employeeId: employee.employeeId,
           employeeName: employee.name,
 
           /**
-           * For UBO:
-           * targetCases = UBO Target
-           * achievementCases = Unique billed outlets
+           * UBO count fields.
            */
-          targetCases: round(targetCases, 0),
-          achievementCases: round(achievementCases, 0),
-          remainingCases: round(remainingCases, 0),
+          target: round(target, 0),
+          achievement: round(achievement, 0),
+          remaining: round(remaining, 0),
+          percentage,
 
           /**
-           * UBO does not need tonnage/value.
+           * CRR / RRR based on outlet count.
            */
-          targetTonnage: 0,
-          achievementTonnage: 0,
-          remainingTonnage: 0,
-
-          targetValue: 0,
-          achievementValue: 0,
-          remainingValue: 0,
-
-          achievementPercentage,
-          tonnageAchievementPercentage: 0,
-          valueAchievementPercentage: 0,
-
-          /**
-           * For UBO, CRR/RRR is based on outlet count.
-           */
-          crr: round(achievementCases / elapsedDays),
-          rrr: round(remainingCases / remainingDays),
+          crr: round(crr),
+          rrr: round(rrr),
 
           elapsedDays,
           remainingDays,
 
-          hasTarget: targetCases > 0,
+          hasTarget: target > 0,
         };
       });
 
       return {
         statusCode: HttpStatus.OK,
         message: `${targetType} target summary fetched successfully`,
-        data: data.sort((a, b) => b.achievementCases - a.achievementCases),
+        data: data.sort((a, b) => b.achievement - a.achievement),
       };
     }
 
@@ -7425,10 +7422,7 @@ export class EmployeeService extends MongoRepository<Employee> {
      * FOCUSED PACK TARGET SUMMARY
      * =====================================================
      *
-     * For FOCUSED_PACK:
-     * - Target comes from focused_pack_targets
-     * - Achievement comes from sale_items.productId
-     * - Only products having focused pack target are counted
+     * Focused pack uses cases, tonnage and value.
      */
     const [targets, achievements] = await Promise.all([
       this.focusedPackTargetModel.aggregate([
@@ -7451,16 +7445,19 @@ export class EmployeeService extends MongoRepository<Employee> {
               userId: '$userId',
               dimensionId: '$productId',
             },
+
             targetCases: {
               $sum: {
                 $ifNull: ['$targetCases', 0],
               },
             },
+
             targetTonnage: {
               $sum: {
                 $ifNull: ['$targetTonnage', 0],
               },
             },
+
             targetValue: {
               $sum: {
                 $ifNull: ['$targetValue', 0],
@@ -7632,7 +7629,7 @@ export class EmployeeService extends MongoRepository<Employee> {
       const target = targetsByUser.get(employeeId);
 
       /**
-       * Count only those products which are assigned as focused pack target.
+       * Count only products that have focused pack target.
        */
       if (!target?.dimensions?.has(dimensionId)) continue;
 
