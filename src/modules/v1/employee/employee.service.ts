@@ -12411,12 +12411,15 @@ export class EmployeeService extends MongoRepository<Employee> {
         : [],
     ]);
 
-    const customersById = new Map<string, any>(
-      customers.map((customer: any) => [
-        String(customer.customerId || '').trim(),
-        customer,
-      ]),
-    );
+    const customersById = new Map<string, any>();
+
+    for (const customer of customers as any[]) {
+      const customerId = String(customer.customerId || '').trim();
+
+      if (customerId) {
+        customersById.set(customerId, customer);
+      }
+    }
 
     const visited = new Set<string>(
       visitedOutletIds
