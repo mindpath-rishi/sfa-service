@@ -10121,6 +10121,10 @@ export class EmployeeService extends MongoRepository<Employee> {
   async getBeatOMeter() {
     const managerId = RequestContextStore.getStore()?.userId;
 
+    if (!managerId) {
+      throw new NotFoundException(EMPLOYEE.NOT_FOUND);
+    }
+
     const now = new Date();
 
     const startDate = new Date(
@@ -10133,62 +10137,103 @@ export class EmployeeService extends MongoRepository<Employee> {
       0,
     );
 
-    const endDate = now;
+    const endDate = new Date(now);
+    endDate.setHours(23, 59, 59, 999);
 
-    /* ==========================================
+    const emptyRow = (type: string) => ({
+      type,
+      total: 0,
+      mtdVisited: {
+        count: 0,
+        percentage: 0,
+      },
+      mtdOrder: {
+        count: 0,
+        percentage: 0,
+      },
+    });
+
+    const emptyResponse = () => ({
+      statusCode: HttpStatus.OK,
+      message: 'Beat-O-Meter fetched successfully',
+      data: {
+        totalOutlets: 0,
+        summary: {
+          visitedOutlets: 0,
+          orderedOutlets: 0,
+          visitedPercentage: 0,
+          orderedPercentage: 0,
+        },
+        outletTypes: [
+          emptyRow('New'),
+          emptyRow('Active'),
+          emptyRow('To Be Dormant'),
+          emptyRow('Dormant'),
+          emptyRow('No Order'),
+          emptyRow('Never Visited'),
+        ],
+      },
+    });
+
+    /**
+     * ==========================================
      * TEAM MEMBERS
-     * ========================================== */
+     * ==========================================
+     */
     const employees = await this.find({
       $or: [{ reportingEmployeeId: managerId }, { hierarchyPath: managerId }],
       status: UserStatus.ACTIVE,
     });
 
-    const employeeIds: any = employees.map((employee) => employee.employeeId);
-
-    employeeIds.push(managerId); // Include manager themselves
-    if (!employeeIds.length) {
-      return {
-        statusCode: HttpStatus.OK,
-        message: 'Beat-O-Meter fetched successfully',
-        data: {
-          totalOutlets: 0,
-          summary: {
-            visitedOutlets: 0,
-            orderedOutlets: 0,
-            visitedPercentage: 0,
-            orderedPercentage: 0,
-          },
-          outletTypes: [],
-        },
-      };
-    }
-
-    /* ==========================================
-     * TEAM VANS
-     * ========================================== */
-    const vans = await this.vanModel.find(
-      {
-        associatedUsers: {
-          $in: employeeIds,
-        },
-        status: VanStatus.ACTIVE,
-      },
-      {
-        associatedRoutes: 1,
-      },
+    const employeeIds = Array.from(
+      new Set(
+        [...employees.map((employee) => employee.employeeId), managerId]
+          .map((id) => String(id || '').trim())
+          .filter(Boolean),
+      ),
     );
 
-    const routeIds = [
-      ...new Set(
-        vans.flatMap((van) =>
-          (van.associatedRoutes || []).map((route) => route.routeId),
-        ),
-      ),
-    ];
+    if (!employeeIds.length) {
+      return emptyResponse();
+    }
 
-    /* ==========================================
+    /**
+     * ==========================================
+     * TEAM VANS
+     * ==========================================
+     */
+    const vans = await this.vanModel
+      .find(
+        {
+          associatedUsers: {
+            $in: employeeIds,
+          },
+          status: VanStatus.ACTIVE,
+        },
+        {
+          associatedRoutes: 1,
+        },
+      )
+      .lean();
+
+    const routeIds = Array.from(
+      new Set(
+        vans
+          .flatMap((van: any) => van.associatedRoutes || [])
+          .map((route: any) => String(route.routeId || '').trim())
+          .filter(Boolean),
+      ),
+    );
+
+    if (!routeIds.length) {
+      return emptyResponse();
+    }
+
+    /**
+     * ==========================================
      * ASSIGNED CUSTOMERS
-     * ========================================== */
+     * ==========================================
+     */
     const customerIds = await this.routeCustomerMappingModel.distinct(
       'customerId',
       {
@@ -10196,181 +10241,244 @@ export class EmployeeService extends MongoRepository<Employee> {
           $in: routeIds,
         },
         status: RouteCustomerMappingStatus.ACTIVE,
+        customerId: {
+          $nin: [null, ''],
+        },
       },
     );
 
-    const customers: any = await this.customerModel.find({
-      customerId: {
-        $in: customerIds,
-      },
-    });
+    const normalizedCustomerIds = Array.from(
+      new Set(
+        customerIds
+          .map((customerId: any) => String(customerId || '').trim())
+          .filter(Boolean),
+      ),
+    );
 
-    /* ==========================================
-     * SALES HISTORY
-     * ========================================== */
-    const salesHistory = await this.saleModal.aggregate([
-      {
-        $match: {
-          customerId: {
-            $in: customerIds,
+    if (!normalizedCustomerIds.length) {
+      return emptyResponse();
+    }
+
+    /**
+     * ==========================================
+     * FETCH CUSTOMER / HISTORY / MTD DATA
+     * ==========================================
+     */
+    const [
+      customers,
+      salesHistory,
+      visitHistory,
+      visitedCustomerIds,
+      orderedCustomerIds,
+    ] = await Promise.all([
+      this.customerModel
+        .find(
+          {
+            customerId: {
+              $in: normalizedCustomerIds,
+            },
           },
-          status: SaleStatus.COMPLETED,
-        },
-      },
-      {
-        $group: {
-          _id: '$customerId',
-          lastOrderDate: {
-            $max: '$date',
+          {
+            customerId: 1,
+            status: 1,
+            createdAt: 1,
           },
+        )
+        .lean(),
+
+      /**
+       * Last order history.
+       */
+      this.saleModal
+        .aggregate([
+          {
+            $match: {
+              customerId: {
+                $in: normalizedCustomerIds,
+                $nin: [null, ''],
+              },
+              status: SaleStatus.COMPLETED,
+            },
+          },
+          {
+            $group: {
+              _id: '$customerId',
+              lastOrderDate: {
+                $max: '$date',
+              },
+            },
+          },
+        ])
+        .allowDiskUse(true),
+
+      /**
+       * Last visit history.
+       */
+      this.shopVisitModel
+        .aggregate([
+          {
+            $match: {
+              outletId: {
+                $in: normalizedCustomerIds,
+                $nin: [null, ''],
+              },
+              status: ShopVisitStatus.COMPLETED,
+            },
+          },
+          {
+            $group: {
+              _id: '$outletId',
+              lastVisitedAt: {
+                $max: '$checkInTime',
+              },
+            },
+          },
+        ])
+        .allowDiskUse(true),
+
+      /**
+       * MTD visited outlets.
+       */
+      this.shopVisitModel.distinct('outletId', {
+        employeeId: {
+          $in: employeeIds,
         },
-      },
+        outletId: {
+          $in: normalizedCustomerIds,
+          $nin: [null, ''],
+        },
+        status: ShopVisitStatus.COMPLETED,
+        checkInTime: {
+          $gte: startDate,
+          $lte: endDate,
+        },
+      }),
+
+      /**
+       * MTD ordered outlets.
+       *
+       * IMPORTANT:
+       * Sale schema has employees array.
+       */
+      this.saleModal.distinct('customerId', {
+        'employees.employeeId': {
+          $in: employeeIds,
+        },
+        customerId: {
+          $in: normalizedCustomerIds,
+          $nin: [null, ''],
+        },
+        status: SaleStatus.COMPLETED,
+        date: {
+          $gte: startDate,
+          $lte: endDate,
+        },
+      }),
     ]);
 
-    const lastOrderMap = new Map(
-      salesHistory.map((item) => [item._id, item.lastOrderDate]),
+    const lastOrderMap = new Map<string, Date>(
+      salesHistory.map((item: any) => [
+        String(item._id || '').trim(),
+        item.lastOrderDate,
+      ]),
     );
 
-    /* ==========================================
-     * VISIT HISTORY
-     * ========================================== */
-    const visitHistory = await this.shopVisitModel.aggregate([
-      {
-        $match: {
-          outletId: {
-            $in: customerIds,
-          },
-          status: ShopVisitStatus.COMPLETED,
-        },
-      },
-      {
-        $group: {
-          _id: '$outletId',
-          lastVisitedAt: {
-            $max: '$checkInTime',
-          },
-        },
-      },
-    ]);
-
-    const lastVisitMap = new Map(
-      visitHistory.map((item) => [item._id, item.lastVisitedAt]),
+    const lastVisitMap = new Map<string, Date>(
+      visitHistory.map((item: any) => [
+        String(item._id || '').trim(),
+        item.lastVisitedAt,
+      ]),
     );
 
-    /* ==========================================
-     * MTD VISITED
-     * ========================================== */
-    const visitedCustomerIds = await this.shopVisitModel.distinct('outletId', {
-      employeeId: {
-        $in: employeeIds,
-      },
-      outletId: {
-        $in: customerIds,
-      },
-      status: ShopVisitStatus.COMPLETED,
-      checkInTime: {
-        $gte: startDate,
-        $lte: endDate,
-      },
-    });
+    const visitedSet = new Set<string>(
+      visitedCustomerIds
+        .map((customerId: any) => String(customerId || '').trim())
+        .filter(Boolean),
+    );
 
-    const visitedSet = new Set(visitedCustomerIds);
+    const orderedSet = new Set<string>(
+      orderedCustomerIds
+        .map((customerId: any) => String(customerId || '').trim())
+        .filter(Boolean),
+    );
 
-    /* ==========================================
-     * MTD ORDERED
-     * ========================================== */
-    const orderedCustomerIds = await this.saleModal.distinct('customerId', {
-      employeeId: {
-        $in: employeeIds,
-      },
-      customerId: {
-        $in: customerIds,
-      },
-      status: SaleStatus.COMPLETED,
-      date: {
-        $gte: startDate,
-        $lte: endDate,
-      },
-    });
-
-    const orderedSet = new Set(orderedCustomerIds);
-
-    /* ==========================================
+    /**
+     * ==========================================
      * BEAT-O-METER BUCKETS
-     * ========================================== */
-    const buckets: any = {
-      NEW: [],
-      ACTIVE: [],
-      TO_BE_DORMANT: [],
-      DORMANT: [],
-      NO_ORDER: [],
-      NEVER_VISITED: [],
+     * ==========================================
+     */
+    const buckets: Record<string, Set<string>> = {
+      NEW: new Set<string>(),
+      ACTIVE: new Set<string>(),
+      TO_BE_DORMANT: new Set<string>(),
+      DORMANT: new Set<string>(),
+      NO_ORDER: new Set<string>(),
+      NEVER_VISITED: new Set<string>(),
     };
 
-    for (const customer of customers) {
-      const customerId = customer.customerId;
+    for (const customer of customers as any[]) {
+      const customerId = String(customer.customerId || '').trim();
+
+      if (!customerId) continue;
 
       const lastOrder = lastOrderMap.get(customerId);
-
       const lastVisited = lastVisitMap.get(customerId);
 
       const createdAt = customer.createdAt
         ? new Date(customer.createdAt)
         : null;
-      const ageDays = createdAt
-        ? Math.floor((now.getTime() - createdAt.getTime()) / 86400000)
-        : Number.POSITIVE_INFINITY;
+
+      const ageDays =
+        createdAt && !Number.isNaN(createdAt.getTime())
+          ? Math.floor((now.getTime() - createdAt.getTime()) / 86400000)
+          : Number.POSITIVE_INFINITY;
 
       if (ageDays <= 30) {
-        buckets.NEW.push(customerId);
+        buckets.NEW.add(customerId);
       }
 
       if (customer.status === CustomerStatus.ACTIVE) {
-        buckets.ACTIVE.push(customerId);
+        buckets.ACTIVE.add(customerId);
       }
 
       if (!lastOrder) {
-        buckets.NO_ORDER.push(customerId);
+        buckets.NO_ORDER.add(customerId);
       }
 
       if (!lastVisited) {
-        buckets.NEVER_VISITED.push(customerId);
-        continue;
+        buckets.NEVER_VISITED.add(customerId);
       }
 
-      if (!lastOrder) {
-        continue;
-      }
+      if (lastOrder) {
+        const orderDate = new Date(lastOrder);
 
-      const orderAge = Math.floor(
-        (now.getTime() - new Date(lastOrder).getTime()) / 86400000,
-      );
+        const orderAge = !Number.isNaN(orderDate.getTime())
+          ? Math.floor((now.getTime() - orderDate.getTime()) / 86400000)
+          : Number.POSITIVE_INFINITY;
 
-      if (orderAge >= 60) {
-        buckets.DORMANT.push(customerId);
-      } else if (orderAge >= 45) {
-        buckets.TO_BE_DORMANT.push(customerId);
+        if (orderAge >= 60) {
+          buckets.DORMANT.add(customerId);
+        } else if (orderAge >= 45) {
+          buckets.TO_BE_DORMANT.add(customerId);
+        }
       }
     }
 
-    const buildRow = (label: string, customerList: string[]) => {
+    const buildRow = (label: string, customerSet: Set<string>) => {
+      const customerList = Array.from(customerSet);
       const total = customerList.length;
 
       const visited = customerList.filter((id) => visitedSet.has(id)).length;
-
       const ordered = customerList.filter((id) => orderedSet.has(id)).length;
 
       return {
         type: label,
-
         total,
-
         mtdVisited: {
           count: visited,
           percentage:
             total > 0 ? Number(((visited / total) * 100).toFixed(1)) : 0,
         },
-
         mtdOrder: {
           count: ordered,
           percentage:
@@ -10379,11 +10487,17 @@ export class EmployeeService extends MongoRepository<Employee> {
       };
     };
 
-    const totalOutlets = customerIds.length;
+    const assignedCustomerSet = new Set(normalizedCustomerIds);
 
-    const visitedOutlets = visitedCustomerIds.length;
+    const visitedOutlets = Array.from(visitedSet).filter((customerId) =>
+      assignedCustomerSet.has(customerId),
+    ).length;
 
-    const orderedOutlets = orderedCustomerIds.length;
+    const orderedOutlets = Array.from(orderedSet).filter((customerId) =>
+      assignedCustomerSet.has(customerId),
+    ).length;
+
+    const totalOutlets = assignedCustomerSet.size;
 
     return {
       statusCode: HttpStatus.OK,
@@ -10394,10 +10508,12 @@ export class EmployeeService extends MongoRepository<Employee> {
         summary: {
           visitedOutlets,
           orderedOutlets,
+
           visitedPercentage:
             totalOutlets > 0
               ? Number(((visitedOutlets / totalOutlets) * 100).toFixed(1))
               : 0,
+
           orderedPercentage:
             totalOutlets > 0
               ? Number(((orderedOutlets / totalOutlets) * 100).toFixed(1))
