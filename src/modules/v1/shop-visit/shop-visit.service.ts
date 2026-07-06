@@ -320,7 +320,7 @@ export class ShopVisitService extends MongoRepository<ShopVisit> {
         /**Updated Last visit date */
         await this.customerService.update(outletId, {
           lastVisitedAt: new Date(),
-        });
+        } as any);
 
         /** Updated Count of visited outlets */
         if (existing?.[ShopVisitStatus.COMPLETED] || !existing) {
