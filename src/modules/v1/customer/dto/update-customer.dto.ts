@@ -54,6 +54,11 @@ export class UpdateCustomerDto {
   @ApiPropertyOptional({ type: String, description: 'Reference ID' })
   @IsOptional()
   @IsString()
+  segmentation?: string;
+
+  @ApiPropertyOptional({ type: String, description: 'Reference ID' })
+  @IsOptional()
+  @IsString()
   countryId?: string;
 
   @ApiPropertyOptional({ type: String, description: 'Reference ID' })
