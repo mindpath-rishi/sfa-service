@@ -7115,97 +7115,244 @@ export class EmployeeService extends MongoRepository<Employee> {
     };
   }
 
-async getSpecialTargetSummary(
-  targetType: 'UBO' | 'FOCUSED_PACK',
-  date?: string,
-) {
-  const managerId = RequestContextStore.getStore()?.userId;
+  async getSpecialTargetSummary(
+    targetType: 'UBO' | 'FOCUSED_PACK',
+    date?: string,
+  ) {
+    const managerId = RequestContextStore.getStore()?.userId;
 
-  if (!managerId) {
-    throw new NotFoundException(EMPLOYEE.NOT_FOUND);
-  }
+    if (!managerId) {
+      throw new NotFoundException(EMPLOYEE.NOT_FOUND);
+    }
 
-  const now = date ? parseCalendarDate(date) : new Date();
+    const now = date ? parseCalendarDate(date) : new Date();
 
-  const startDate = new Date(
-    now.getFullYear(),
-    now.getMonth(),
-    1,
-    0,
-    0,
-    0,
-    0,
-  );
+    const startDate = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      1,
+      0,
+      0,
+      0,
+      0,
+    );
 
-  const endDate = new Date(now);
-  endDate.setHours(23, 59, 59, 999);
+    const endDate = new Date(now);
+    endDate.setHours(23, 59, 59, 999);
 
-  const monthEndDate = new Date(
-    now.getFullYear(),
-    now.getMonth() + 1,
-    0,
-    23,
-    59,
-    59,
-    999,
-  );
+    const monthEndDate = new Date(
+      now.getFullYear(),
+      now.getMonth() + 1,
+      0,
+      23,
+      59,
+      59,
+      999,
+    );
 
-  const employees = await this.find({
-    $or: [{ reportingEmployeeId: managerId }, { hierarchyPath: managerId }],
-    status: UserStatus.ACTIVE,
-  });
+    const employees = await this.find({
+      $or: [{ reportingEmployeeId: managerId }, { hierarchyPath: managerId }],
+      status: UserStatus.ACTIVE,
+    });
 
-  const employeeIds = employees
-    .map((employee) => employee.employeeId)
-    .filter(Boolean);
+    const employeeIds = employees
+      .map((employee) => employee.employeeId)
+      .filter(Boolean);
 
-  if (!employeeIds.length) {
-    return {
-      statusCode: HttpStatus.OK,
-      message: `${targetType} target summary fetched successfully`,
-      data: [],
-    };
-  }
+    if (!employeeIds.length) {
+      return {
+        statusCode: HttpStatus.OK,
+        message: `${targetType} target summary fetched successfully`,
+        data: [],
+      };
+    }
 
-  const elapsedDays = Math.max(
-    Math.floor((endDate.getTime() - startDate.getTime()) / 86400000) + 1,
-    1,
-  );
+    const elapsedDays = Math.max(
+      Math.floor((endDate.getTime() - startDate.getTime()) / 86400000) + 1,
+      1,
+    );
 
-  const remainingDays = Math.max(monthEndDate.getDate() - elapsedDays, 1);
+    const remainingDays = Math.max(monthEndDate.getDate() - elapsedDays, 1);
 
-  const round = (value: number, digits = 2) => Number(value.toFixed(digits));
+    const round = (value: number, digits = 2) => Number(value.toFixed(digits));
 
-  /**
-   * =====================================================
-   * UBO TARGET SUMMARY
-   * =====================================================
-   *
-   * UBO = Unique Billed Outlets
-   *
-   * UBO Target:
-   * Sum of uboTarget from target collection user-wise.
-   *
-   * UBO Achievement:
-   * Count of unique billed customerId from completed sales user-wise.
-   *
-   * No category, no cases, no tonnage, no value.
-   */
-  if (targetType === 'UBO') {
+    /**
+     * =====================================================
+     * UBO TARGET SUMMARY
+     * =====================================================
+     *
+     * UBO = Unique Billed Outlets
+     *
+     * UBO Target:
+     * Sum of uboTarget from target collection user-wise.
+     *
+     * UBO Achievement:
+     * Count of unique billed customerId from completed sales user-wise.
+     *
+     * No category, no cases, no tonnage, no value.
+     */
+    if (targetType === 'UBO') {
+      const [targets, achievements] = await Promise.all([
+        /**
+         * =====================================================
+         * UBO TARGET USER-WISE
+         * =====================================================
+         */
+        this.targetModel.aggregate([
+          {
+            $match: {
+              userId: {
+                $in: employeeIds,
+              },
+              uboTarget: {
+                $gt: 0,
+              },
+              startDate: {
+                $lte: endDate,
+              },
+              endDate: {
+                $gte: startDate,
+              },
+            },
+          },
+          {
+            $group: {
+              _id: '$userId',
+
+              target: {
+                $sum: {
+                  $ifNull: ['$uboTarget', 0],
+                },
+              },
+            },
+          },
+        ]),
+
+        /**
+         * =====================================================
+         * UBO ACHIEVEMENT USER-WISE
+         * =====================================================
+         *
+         * Unique billed outlet = distinct customerId from completed sales.
+         */
+        this.saleModal.aggregate([
+          {
+            $match: {
+              status: SaleStatus.COMPLETED,
+              date: {
+                $gte: startDate,
+                $lte: endDate,
+              },
+              'employees.employeeId': {
+                $in: employeeIds,
+              },
+              customerId: {
+                $ne: null,
+              },
+            },
+          },
+          {
+            $unwind: '$employees',
+          },
+          {
+            $match: {
+              'employees.employeeId': {
+                $in: employeeIds,
+              },
+            },
+          },
+          {
+            $group: {
+              _id: '$employees.employeeId',
+
+              uniqueBilledOutlets: {
+                $addToSet: '$customerId',
+              },
+            },
+          },
+          {
+            $project: {
+              _id: 1,
+
+              achievement: {
+                $size: '$uniqueBilledOutlets',
+              },
+            },
+          },
+        ]),
+      ]);
+
+      const targetMap = new Map<string, any>(
+        targets.map((item) => [item._id, item]),
+      );
+
+      const achievementMap = new Map<string, any>(
+        achievements.map((item) => [item._id, item]),
+      );
+
+      const data = employees.map((employee) => {
+        const employeeId = employee.employeeId;
+
+        const targetData = targetMap.get(employeeId) || {};
+        const achievementData = achievementMap.get(employeeId) || {};
+
+        const target = Number(targetData.target || 0);
+        const achievement = Number(achievementData.achievement || 0);
+        const remaining = Math.max(target - achievement, 0);
+
+        const percentage = target > 0 ? round((achievement / target) * 100) : 0;
+
+        const crr = elapsedDays > 0 ? achievement / elapsedDays : 0;
+        const rrr = remainingDays > 0 ? remaining / remainingDays : 0;
+
+        return {
+          employeeId,
+          employeeName: employee.name,
+
+          /**
+           * UBO count fields only
+           */
+          target: round(target, 0),
+          achievement: round(achievement, 0),
+          remaining: round(remaining, 0),
+          percentage,
+
+          /**
+           * CRR/RRR based on billed outlet count
+           */
+          crr: round(crr),
+          rrr: round(rrr),
+
+          elapsedDays,
+          remainingDays,
+
+          hasTarget: target > 0,
+        };
+      });
+
+      return {
+        statusCode: HttpStatus.OK,
+        message: `${targetType} target summary fetched successfully`,
+        data: data.sort((a, b) => b.achievement - a.achievement),
+      };
+    }
+
+    /**
+     * =====================================================
+     * FOCUSED PACK TARGET SUMMARY
+     * =====================================================
+     *
+     * Focused pack uses:
+     * - cases
+     * - tonnage
+     * - value
+     */
     const [targets, achievements] = await Promise.all([
-      /**
-       * =====================================================
-       * UBO TARGET USER-WISE
-       * =====================================================
-       */
-      this.targetModel.aggregate([
+      this.focusedPackTargetModel.aggregate([
         {
           $match: {
             userId: {
               $in: employeeIds,
-            },
-            uboTarget: {
-              $gt: 0,
             },
             startDate: {
               $lte: endDate,
@@ -7217,422 +7364,274 @@ async getSpecialTargetSummary(
         },
         {
           $group: {
-            _id: '$userId',
+            _id: {
+              userId: '$userId',
+              dimensionId: '$productId',
+            },
 
-            target: {
+            targetCases: {
               $sum: {
-                $ifNull: ['$uboTarget', 0],
+                $ifNull: ['$targetCases', 0],
+              },
+            },
+
+            targetTonnage: {
+              $sum: {
+                $ifNull: ['$targetTonnage', 0],
+              },
+            },
+
+            targetValue: {
+              $sum: {
+                $ifNull: ['$targetValue', 0],
               },
             },
           },
         },
       ]),
 
-      /**
-       * =====================================================
-       * UBO ACHIEVEMENT USER-WISE
-       * =====================================================
-       *
-       * Unique billed outlet = distinct customerId from completed sales.
-       */
-      this.saleModal.aggregate([
-        {
-          $match: {
-            status: SaleStatus.COMPLETED,
-            date: {
-              $gte: startDate,
-              $lte: endDate,
-            },
-            'employees.employeeId': {
-              $in: employeeIds,
-            },
-            customerId: {
-              $ne: null,
+      this.saleModal
+        .aggregate([
+          {
+            $match: {
+              status: SaleStatus.COMPLETED,
+              date: {
+                $gte: startDate,
+                $lte: endDate,
+              },
+              'employees.employeeId': {
+                $in: employeeIds,
+              },
             },
           },
-        },
-        {
-          $unwind: '$employees',
-        },
-        {
-          $match: {
-            'employees.employeeId': {
-              $in: employeeIds,
+          {
+            $unwind: '$employees',
+          },
+          {
+            $match: {
+              'employees.employeeId': {
+                $in: employeeIds,
+              },
             },
           },
-        },
-        {
-          $group: {
-            _id: '$employees.employeeId',
+          {
+            $lookup: {
+              from: 'sale_items',
+              let: {
+                saleId: '$saleId',
+              },
+              pipeline: [
+                {
+                  $match: {
+                    $expr: {
+                      $eq: ['$saleId', '$$saleId'],
+                    },
+                  },
+                },
+                {
+                  $project: {
+                    _id: 0,
+                    productId: 1,
+                    netCases: 1,
+                    caseQty: 1,
+                    pieceQty: 1,
+                    unitQtyInCase: 1,
+                    totalNetWeight: 1,
+                    totalValue: 1,
+                  },
+                },
+              ],
+              as: 'items',
+            },
+          },
+          {
+            $unwind: '$items',
+          },
+          {
+            $match: {
+              'items.productId': {
+                $ne: null,
+              },
+            },
+          },
+          {
+            $group: {
+              _id: {
+                employeeId: '$employees.employeeId',
+                dimensionId: '$items.productId',
+              },
 
-            uniqueBilledOutlets: {
-              $addToSet: '$customerId',
-            },
-          },
-        },
-        {
-          $project: {
-            _id: 1,
+              achievementCases: {
+                $sum: {
+                  $ifNull: [
+                    '$items.netCases',
+                    {
+                      $add: [
+                        {
+                          $ifNull: ['$items.caseQty', 0],
+                        },
+                        {
+                          $cond: [
+                            {
+                              $gt: ['$items.unitQtyInCase', 0],
+                            },
+                            {
+                              $divide: [
+                                {
+                                  $ifNull: ['$items.pieceQty', 0],
+                                },
+                                '$items.unitQtyInCase',
+                              ],
+                            },
+                            0,
+                          ],
+                        },
+                      ],
+                    },
+                  ],
+                },
+              },
 
-            achievement: {
-              $size: '$uniqueBilledOutlets',
+              /**
+               * totalNetWeight is KG.
+               * Convert KG to tonnage.
+               */
+              achievementTonnage: {
+                $sum: {
+                  $divide: [
+                    {
+                      $ifNull: ['$items.totalNetWeight', 0],
+                    },
+                    1000,
+                  ],
+                },
+              },
+
+              achievementValue: {
+                $sum: {
+                  $ifNull: ['$items.totalValue', 0],
+                },
+              },
             },
           },
-        },
-      ]),
+        ])
+        .allowDiskUse(true),
     ]);
 
-    const targetMap = new Map<string, any>(
-      targets.map((item) => [item._id, item]),
-    );
+    const targetsByUser = new Map<string, any>();
 
-    const achievementMap = new Map<string, any>(
-      achievements.map((item) => [item._id, item]),
-    );
+    for (const target of targets) {
+      const userId = target._id?.userId;
+      const dimensionId = target._id?.dimensionId;
+
+      if (!userId || !dimensionId) continue;
+
+      const current = targetsByUser.get(userId) || {
+        dimensions: new Set<string>(),
+        targetCases: 0,
+        targetTonnage: 0,
+        targetValue: 0,
+      };
+
+      current.dimensions.add(dimensionId);
+      current.targetCases += Number(target.targetCases || 0);
+      current.targetTonnage += Number(target.targetTonnage || 0);
+      current.targetValue += Number(target.targetValue || 0);
+
+      targetsByUser.set(userId, current);
+    }
+
+    const achievementsByUser = new Map<string, any>();
+
+    for (const achievement of achievements) {
+      const employeeId = achievement._id?.employeeId;
+      const dimensionId = achievement._id?.dimensionId;
+
+      if (!employeeId || !dimensionId) continue;
+
+      const target = targetsByUser.get(employeeId);
+
+      /**
+       * Count only products that have focused pack target.
+       */
+      if (!target?.dimensions?.has(dimensionId)) continue;
+
+      const current = achievementsByUser.get(employeeId) || {
+        achievementCases: 0,
+        achievementTonnage: 0,
+        achievementValue: 0,
+      };
+
+      current.achievementCases += Number(achievement.achievementCases || 0);
+      current.achievementTonnage += Number(achievement.achievementTonnage || 0);
+      current.achievementValue += Number(achievement.achievementValue || 0);
+
+      achievementsByUser.set(employeeId, current);
+    }
 
     const data = employees.map((employee) => {
-      const employeeId = employee.employeeId;
+      const target = targetsByUser.get(employee.employeeId) || {};
+      const achievement = achievementsByUser.get(employee.employeeId) || {};
 
-      const targetData = targetMap.get(employeeId) || {};
-      const achievementData = achievementMap.get(employeeId) || {};
+      const targetCases = Number(target.targetCases || 0);
+      const targetTonnage = Number(target.targetTonnage || 0);
+      const targetValue = Number(target.targetValue || 0);
 
-      const target = Number(targetData.target || 0);
-      const achievement = Number(achievementData.achievement || 0);
-      const remaining = Math.max(target - achievement, 0);
+      const achievementCases = Number(achievement.achievementCases || 0);
+      const achievementTonnage = Number(achievement.achievementTonnage || 0);
+      const achievementValue = Number(achievement.achievementValue || 0);
 
-      const percentage =
-        target > 0 ? round((achievement / target) * 100) : 0;
+      const remainingCases = Math.max(targetCases - achievementCases, 0);
+      const remainingTonnage = Math.max(targetTonnage - achievementTonnage, 0);
+      const remainingValue = Math.max(targetValue - achievementValue, 0);
 
-      const crr = elapsedDays > 0 ? achievement / elapsedDays : 0;
-      const rrr = remainingDays > 0 ? remaining / remainingDays : 0;
+      const achievementPercentage =
+        targetCases > 0 ? round((achievementCases / targetCases) * 100) : 0;
+
+      const tonnageAchievementPercentage =
+        targetTonnage > 0
+          ? round((achievementTonnage / targetTonnage) * 100)
+          : 0;
+
+      const valueAchievementPercentage =
+        targetValue > 0 ? round((achievementValue / targetValue) * 100) : 0;
 
       return {
-        employeeId,
+        employeeId: employee.employeeId,
         employeeName: employee.name,
 
-        /**
-         * UBO count fields only
-         */
-        target: round(target, 0),
-        achievement: round(achievement, 0),
-        remaining: round(remaining, 0),
-        percentage,
+        targetCases: round(targetCases),
+        achievementCases: round(achievementCases),
+        remainingCases: round(remainingCases),
 
-        /**
-         * CRR/RRR based on billed outlet count
-         */
-        crr: round(crr),
-        rrr: round(rrr),
+        targetTonnage: round(targetTonnage, 3),
+        achievementTonnage: round(achievementTonnage, 3),
+        remainingTonnage: round(remainingTonnage, 3),
+
+        targetValue: round(targetValue),
+        achievementValue: round(achievementValue),
+        remainingValue: round(remainingValue),
+
+        achievementPercentage,
+        tonnageAchievementPercentage,
+        valueAchievementPercentage,
+
+        crr: round(achievementCases / elapsedDays),
+        rrr: round(remainingCases / remainingDays),
 
         elapsedDays,
         remainingDays,
 
-        hasTarget: target > 0,
+        hasTarget: targetCases > 0 || targetTonnage > 0 || targetValue > 0,
       };
     });
 
     return {
       statusCode: HttpStatus.OK,
       message: `${targetType} target summary fetched successfully`,
-      data: data.sort((a, b) => b.achievement - a.achievement),
+      data: data.sort((a, b) => b.achievementCases - a.achievementCases),
     };
   }
-
-  /**
-   * =====================================================
-   * FOCUSED PACK TARGET SUMMARY
-   * =====================================================
-   *
-   * Focused pack uses:
-   * - cases
-   * - tonnage
-   * - value
-   */
-  const [targets, achievements] = await Promise.all([
-    this.focusedPackTargetModel.aggregate([
-      {
-        $match: {
-          userId: {
-            $in: employeeIds,
-          },
-          startDate: {
-            $lte: endDate,
-          },
-          endDate: {
-            $gte: startDate,
-          },
-        },
-      },
-      {
-        $group: {
-          _id: {
-            userId: '$userId',
-            dimensionId: '$productId',
-          },
-
-          targetCases: {
-            $sum: {
-              $ifNull: ['$targetCases', 0],
-            },
-          },
-
-          targetTonnage: {
-            $sum: {
-              $ifNull: ['$targetTonnage', 0],
-            },
-          },
-
-          targetValue: {
-            $sum: {
-              $ifNull: ['$targetValue', 0],
-            },
-          },
-        },
-      },
-    ]),
-
-    this.saleModal
-      .aggregate([
-        {
-          $match: {
-            status: SaleStatus.COMPLETED,
-            date: {
-              $gte: startDate,
-              $lte: endDate,
-            },
-            'employees.employeeId': {
-              $in: employeeIds,
-            },
-          },
-        },
-        {
-          $unwind: '$employees',
-        },
-        {
-          $match: {
-            'employees.employeeId': {
-              $in: employeeIds,
-            },
-          },
-        },
-        {
-          $lookup: {
-            from: 'sale_items',
-            let: {
-              saleId: '$saleId',
-            },
-            pipeline: [
-              {
-                $match: {
-                  $expr: {
-                    $eq: ['$saleId', '$$saleId'],
-                  },
-                },
-              },
-              {
-                $project: {
-                  _id: 0,
-                  productId: 1,
-                  netCases: 1,
-                  caseQty: 1,
-                  pieceQty: 1,
-                  unitQtyInCase: 1,
-                  totalNetWeight: 1,
-                  totalValue: 1,
-                },
-              },
-            ],
-            as: 'items',
-          },
-        },
-        {
-          $unwind: '$items',
-        },
-        {
-          $match: {
-            'items.productId': {
-              $ne: null,
-            },
-          },
-        },
-        {
-          $group: {
-            _id: {
-              employeeId: '$employees.employeeId',
-              dimensionId: '$items.productId',
-            },
-
-            achievementCases: {
-              $sum: {
-                $ifNull: [
-                  '$items.netCases',
-                  {
-                    $add: [
-                      {
-                        $ifNull: ['$items.caseQty', 0],
-                      },
-                      {
-                        $cond: [
-                          {
-                            $gt: ['$items.unitQtyInCase', 0],
-                          },
-                          {
-                            $divide: [
-                              {
-                                $ifNull: ['$items.pieceQty', 0],
-                              },
-                              '$items.unitQtyInCase',
-                            ],
-                          },
-                          0,
-                        ],
-                      },
-                    ],
-                  },
-                ],
-              },
-            },
-
-            /**
-             * totalNetWeight is KG.
-             * Convert KG to tonnage.
-             */
-            achievementTonnage: {
-              $sum: {
-                $divide: [
-                  {
-                    $ifNull: ['$items.totalNetWeight', 0],
-                  },
-                  1000,
-                ],
-              },
-            },
-
-            achievementValue: {
-              $sum: {
-                $ifNull: ['$items.totalValue', 0],
-              },
-            },
-          },
-        },
-      ])
-      .allowDiskUse(true),
-  ]);
-
-  const targetsByUser = new Map<string, any>();
-
-  for (const target of targets) {
-    const userId = target._id?.userId;
-    const dimensionId = target._id?.dimensionId;
-
-    if (!userId || !dimensionId) continue;
-
-    const current = targetsByUser.get(userId) || {
-      dimensions: new Set<string>(),
-      targetCases: 0,
-      targetTonnage: 0,
-      targetValue: 0,
-    };
-
-    current.dimensions.add(dimensionId);
-    current.targetCases += Number(target.targetCases || 0);
-    current.targetTonnage += Number(target.targetTonnage || 0);
-    current.targetValue += Number(target.targetValue || 0);
-
-    targetsByUser.set(userId, current);
-  }
-
-  const achievementsByUser = new Map<string, any>();
-
-  for (const achievement of achievements) {
-    const employeeId = achievement._id?.employeeId;
-    const dimensionId = achievement._id?.dimensionId;
-
-    if (!employeeId || !dimensionId) continue;
-
-    const target = targetsByUser.get(employeeId);
-
-    /**
-     * Count only products that have focused pack target.
-     */
-    if (!target?.dimensions?.has(dimensionId)) continue;
-
-    const current = achievementsByUser.get(employeeId) || {
-      achievementCases: 0,
-      achievementTonnage: 0,
-      achievementValue: 0,
-    };
-
-    current.achievementCases += Number(achievement.achievementCases || 0);
-    current.achievementTonnage += Number(achievement.achievementTonnage || 0);
-    current.achievementValue += Number(achievement.achievementValue || 0);
-
-    achievementsByUser.set(employeeId, current);
-  }
-
-  const data = employees.map((employee) => {
-    const target = targetsByUser.get(employee.employeeId) || {};
-    const achievement = achievementsByUser.get(employee.employeeId) || {};
-
-    const targetCases = Number(target.targetCases || 0);
-    const targetTonnage = Number(target.targetTonnage || 0);
-    const targetValue = Number(target.targetValue || 0);
-
-    const achievementCases = Number(achievement.achievementCases || 0);
-    const achievementTonnage = Number(achievement.achievementTonnage || 0);
-    const achievementValue = Number(achievement.achievementValue || 0);
-
-    const remainingCases = Math.max(targetCases - achievementCases, 0);
-    const remainingTonnage = Math.max(targetTonnage - achievementTonnage, 0);
-    const remainingValue = Math.max(targetValue - achievementValue, 0);
-
-    const achievementPercentage =
-      targetCases > 0 ? round((achievementCases / targetCases) * 100) : 0;
-
-    const tonnageAchievementPercentage =
-      targetTonnage > 0
-        ? round((achievementTonnage / targetTonnage) * 100)
-        : 0;
-
-    const valueAchievementPercentage =
-      targetValue > 0 ? round((achievementValue / targetValue) * 100) : 0;
-
-    return {
-      employeeId: employee.employeeId,
-      employeeName: employee.name,
-
-      targetCases: round(targetCases),
-      achievementCases: round(achievementCases),
-      remainingCases: round(remainingCases),
-
-      targetTonnage: round(targetTonnage, 3),
-      achievementTonnage: round(achievementTonnage, 3),
-      remainingTonnage: round(remainingTonnage, 3),
-
-      targetValue: round(targetValue),
-      achievementValue: round(achievementValue),
-      remainingValue: round(remainingValue),
-
-      achievementPercentage,
-      tonnageAchievementPercentage,
-      valueAchievementPercentage,
-
-      crr: round(achievementCases / elapsedDays),
-      rrr: round(remainingCases / remainingDays),
-
-      elapsedDays,
-      remainingDays,
-
-      hasTarget: targetCases > 0 || targetTonnage > 0 || targetValue > 0,
-    };
-  });
-
-  return {
-    statusCode: HttpStatus.OK,
-    message: `${targetType} target summary fetched successfully`,
-    data: data.sort((a, b) => b.achievementCases - a.achievementCases),
-  };
-}
 
   async getUserUboTargetBreakdown(query: {
     employeeId: string;
@@ -7667,20 +7666,22 @@ async getSpecialTargetSummary(
       999,
     );
 
-    const totalDaysInMonth = monthEndDate.getDate();
-
-    const elapsedDays =
+    const elapsedDays = Math.max(
       Math.floor(
         (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24),
-      ) + 1;
+      ) + 1,
+      1,
+    );
 
-    const remainingDays = Math.max(totalDaysInMonth - elapsedDays, 1);
+    const remainingDays = Math.max(monthEndDate.getDate() - elapsedDays, 1);
 
-    const [targets, achievements] = await Promise.all([
+    const [targetResult, uniqueBilledOutletIds] = await Promise.all([
       /**
        * ==========================================
-       * UBO TARGET BY CATEGORY
+       * UBO TARGET
        * ==========================================
+       *
+       * Sum uboTarget from target collection.
        */
       this.targetModel.aggregate([
         {
@@ -7699,12 +7700,7 @@ async getSpecialTargetSummary(
         },
         {
           $group: {
-            _id: '$categoryId',
-
-            category: {
-              $first: '$category',
-            },
-
+            _id: null,
             target: {
               $sum: {
                 $ifNull: ['$uboTarget', 0],
@@ -7716,122 +7712,59 @@ async getSpecialTargetSummary(
 
       /**
        * ==========================================
-       * UBO ACHIEVEMENT BY CATEGORY
+       * UBO ACHIEVEMENT
        * ==========================================
        *
-       * UBO Achievement = unique billed outlets.
-       *
-       * Since UBO is category-wise, we need sale_items also.
-       * We group by:
-       * - categoryId
-       * - customerId
-       *
-       * Then final count = unique customers per category.
+       * Faster than aggregation.
+       * Directly gets unique customerId from completed sales.
        */
-      this.saleModal
-        .aggregate([
-          {
-            $match: {
-              'employees.employeeId': query.employeeId,
-              status: SaleStatus.COMPLETED,
-              date: {
-                $gte: startDate,
-                $lte: endDate,
-              },
-            },
-          },
-          {
-            $lookup: {
-              from: 'sale_items',
-              let: {
-                saleId: '$saleId',
-              },
-              pipeline: [
-                {
-                  $match: {
-                    $expr: {
-                      $eq: ['$saleId', '$$saleId'],
-                    },
-                  },
-                },
-                {
-                  $project: {
-                    _id: 0,
-                    parentCategoryId: 1,
-                    categoryId: 1,
-                  },
-                },
-              ],
-              as: 'items',
-            },
-          },
-          {
-            $unwind: '$items',
-          },
-          {
-            $group: {
-              _id: {
-                categoryId: '$items.categoryId',
-                customerId: '$customerId',
-              },
-            },
-          },
-          {
-            $group: {
-              _id: '$_id.categoryId',
-
-              uniqueBilledOutlets: {
-                $sum: 1,
-              },
-            },
-          },
-        ])
-        .allowDiskUse(true),
+      this.saleModal.distinct('customerId', {
+        'employees.employeeId': query.employeeId,
+        status: SaleStatus.COMPLETED,
+        date: {
+          $gte: startDate,
+          $lte: endDate,
+        },
+        customerId: {
+          $nin: [null, ''],
+        },
+      }),
     ]);
 
-    const achievementMap = new Map<string, any>(
-      achievements.map((item) => [item._id, item]),
-    );
+    const targetValue = Number(targetResult?.[0]?.target || 0);
+    const achievementValue = uniqueBilledOutletIds.length;
 
-    const data = targets.map((target) => {
-      const targetValue = Number(target.target || 0);
+    const remainingValue = Math.max(targetValue - achievementValue, 0);
 
-      const achievementValue = Number(
-        achievementMap.get(target._id)?.uniqueBilledOutlets || 0,
-      );
+    const percentage =
+      targetValue > 0
+        ? Number(((achievementValue / targetValue) * 100).toFixed(2))
+        : 0;
 
-      const remainingValue = Math.max(targetValue - achievementValue, 0);
-
-      const percentage =
-        targetValue > 0
-          ? Number(((achievementValue / targetValue) * 100).toFixed(2))
-          : 0;
-
-      const crr = elapsedDays > 0 ? achievementValue / elapsedDays : 0;
-      const rrr = remainingDays > 0 ? remainingValue / remainingDays : 0;
-
-      return {
-        categoryId: target._id,
-        category: target.category,
-
-        target: Number(targetValue.toFixed(0)),
-        achievement: Number(achievementValue.toFixed(0)),
-        remaining: Number(remainingValue.toFixed(0)),
-
-        percentage,
-
-        crr: Number(crr.toFixed(2)),
-        rrr: Number(rrr.toFixed(2)),
-
-        elapsedDays,
-        remainingDays,
-      };
-    });
+    const crr = elapsedDays > 0 ? achievementValue / elapsedDays : 0;
+    const rrr = remainingDays > 0 ? remainingValue / remainingDays : 0;
 
     return {
       statusCode: HttpStatus.OK,
       message: 'User UBO target breakdown fetched successfully',
-      data: data.sort((a, b) => b.achievement - a.achievement),
+      data: [
+        {
+          categoryId: 'UBO',
+          category: 'Unique Billed Outlets',
+
+          target: Number(targetValue.toFixed(0)),
+          achievement: Number(achievementValue.toFixed(0)),
+          remaining: Number(remainingValue.toFixed(0)),
+
+          percentage,
+
+          crr: Number(crr.toFixed(2)),
+          rrr: Number(rrr.toFixed(2)),
+
+          elapsedDays,
+          remainingDays,
+        },
+      ],
     };
   }
 
@@ -8810,204 +8743,191 @@ async getSpecialTargetSummary(
       999,
     );
 
-    const totalDaysInMonth = monthEndDate.getDate();
-
-    const elapsedDays =
+    const elapsedDays = Math.max(
       Math.floor(
         (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24),
-      ) + 1;
+      ) + 1,
+      1,
+    );
 
-    const remainingDays = Math.max(totalDaysInMonth - elapsedDays, 1);
+    const remainingDays = Math.max(monthEndDate.getDate() - elapsedDays, 1);
 
-    const [targets, achievements] = await Promise.all([
-      /**
-       * ==========================================
-       * FOCUSED PACK TARGETS
-       * ==========================================
-       */
-      this.focusedPackTargetModel.aggregate([
-        {
-          $match: {
-            userId: query.employeeId,
-            startDate: {
-              $lte: endDate,
-            },
-            endDate: {
-              $gte: startDate,
+    const round = (value: unknown, digits = 2) =>
+      Number(Number(value || 0).toFixed(digits));
+
+    /**
+     * =====================================================
+     * STEP 1: GET FOCUSED PACK TARGETS FIRST
+     * =====================================================
+     */
+    const targets = await this.focusedPackTargetModel.aggregate([
+      {
+        $match: {
+          userId: query.employeeId,
+          startDate: {
+            $lte: endDate,
+          },
+          endDate: {
+            $gte: startDate,
+          },
+        },
+      },
+      {
+        $group: {
+          _id: '$productId',
+
+          productName: {
+            $first: '$productName',
+          },
+
+          targetCases: {
+            $sum: {
+              $ifNull: ['$targetCases', 0],
             },
           },
+
+          targetTonnage: {
+            $sum: {
+              $ifNull: ['$targetTonnage', 0],
+            },
+          },
+
+          targetValue: {
+            $sum: {
+              $ifNull: ['$targetValue', 0],
+            },
+          },
+        },
+      },
+    ]);
+
+    const targetProductIds = targets
+      .map((target) => target._id)
+      .filter(Boolean);
+
+    if (!targetProductIds.length) {
+      return {
+        statusCode: HttpStatus.OK,
+        message: 'User Focused Pack target breakdown fetched successfully',
+        data: [],
+      };
+    }
+
+    /**
+     * =====================================================
+     * STEP 2: GET ACHIEVEMENTS FROM SALE ITEMS
+     * =====================================================
+     *
+     * Faster approach:
+     * - Start from sale_items
+     * - Match only focused target productIds
+     * - Lookup sales only for those sale items
+     */
+    const achievements = await this.saleItemModel
+      .aggregate([
+        {
+          $match: {
+            productId: {
+              $in: targetProductIds,
+            },
+          },
+        },
+        {
+          $lookup: {
+            from: 'sales',
+            let: {
+              saleId: '$saleId',
+            },
+            pipeline: [
+              {
+                $match: {
+                  $expr: {
+                    $eq: ['$saleId', '$$saleId'],
+                  },
+                  status: SaleStatus.COMPLETED,
+                  date: {
+                    $gte: startDate,
+                    $lte: endDate,
+                  },
+                  'employees.employeeId': query.employeeId,
+                },
+              },
+              {
+                $project: {
+                  _id: 0,
+                  saleId: 1,
+                },
+              },
+            ],
+            as: 'sale',
+          },
+        },
+        {
+          $unwind: '$sale',
         },
         {
           $group: {
             _id: '$productId',
 
-            productName: {
-              $first: '$productName',
-            },
-
-            targetCases: {
+            achievementCases: {
               $sum: {
-                $ifNull: ['$targetCases', 0],
+                $ifNull: [
+                  '$netCases',
+                  {
+                    $add: [
+                      {
+                        $ifNull: ['$caseQty', 0],
+                      },
+                      {
+                        $cond: [
+                          {
+                            $gt: ['$unitQtyInCase', 0],
+                          },
+                          {
+                            $divide: [
+                              {
+                                $ifNull: ['$pieceQty', 0],
+                              },
+                              '$unitQtyInCase',
+                            ],
+                          },
+                          0,
+                        ],
+                      },
+                    ],
+                  },
+                ],
               },
             },
 
-            targetTonnage: {
+            /**
+             * totalNetWeight is KG.
+             * Convert KG to tonnage.
+             */
+            achievementTonnage: {
               $sum: {
-                $ifNull: ['$targetTonnage', 0],
+                $divide: [
+                  {
+                    $ifNull: ['$totalNetWeight', 0],
+                  },
+                  1000,
+                ],
               },
             },
 
-            targetValue: {
+            achievementValue: {
               $sum: {
-                $ifNull: ['$targetValue', 0],
+                $ifNull: ['$totalValue', 0],
               },
             },
           },
         },
-      ]),
-
-      /**
-       * ==========================================
-       * FOCUSED PACK ACHIEVEMENT
-       * ==========================================
-       *
-       * Achievement should be based on sale_items.productId.
-       * We do not need product_master lookup here because
-       * focused_pack_targets already defines focused products.
-       */
-      this.saleModal
-        .aggregate([
-          {
-            $match: {
-              status: SaleStatus.COMPLETED,
-              date: {
-                $gte: startDate,
-                $lte: endDate,
-              },
-              'employees.employeeId': query.employeeId,
-            },
-          },
-          {
-            $unwind: '$employees',
-          },
-          {
-            $match: {
-              'employees.employeeId': query.employeeId,
-            },
-          },
-          {
-            $lookup: {
-              from: 'sale_items',
-              let: {
-                saleId: '$saleId',
-              },
-              pipeline: [
-                {
-                  $match: {
-                    $expr: {
-                      $eq: ['$saleId', '$$saleId'],
-                    },
-                  },
-                },
-                {
-                  $project: {
-                    _id: 0,
-                    productId: 1,
-                    netCases: 1,
-                    caseQty: 1,
-                    pieceQty: 1,
-                    unitQtyInCase: 1,
-                    totalNetWeight: 1,
-                    totalValue: 1,
-                  },
-                },
-              ],
-              as: 'items',
-            },
-          },
-          {
-            $unwind: '$items',
-          },
-          {
-            $match: {
-              'items.productId': {
-                $ne: null,
-              },
-            },
-          },
-          {
-            $group: {
-              _id: '$items.productId',
-
-              achievementCases: {
-                $sum: {
-                  $ifNull: [
-                    '$items.netCases',
-                    {
-                      $add: [
-                        {
-                          $ifNull: ['$items.caseQty', 0],
-                        },
-                        {
-                          $cond: [
-                            {
-                              $gt: ['$items.unitQtyInCase', 0],
-                            },
-                            {
-                              $divide: [
-                                {
-                                  $ifNull: ['$items.pieceQty', 0],
-                                },
-                                '$items.unitQtyInCase',
-                              ],
-                            },
-                            0,
-                          ],
-                        },
-                      ],
-                    },
-                  ],
-                },
-              },
-
-              /**
-               * totalNetWeight is KG.
-               * Convert KG to tonnage.
-               */
-              achievementTonnage: {
-                $sum: {
-                  $divide: [
-                    {
-                      $ifNull: ['$items.totalNetWeight', 0],
-                    },
-                    1000,
-                  ],
-                },
-              },
-
-              achievementValue: {
-                $sum: {
-                  $ifNull: ['$items.totalValue', 0],
-                },
-              },
-            },
-          },
-        ])
-        .allowDiskUse(true),
-    ]);
-
-    const targetProductIds = new Set<string>(
-      targets.map((target) => target._id).filter(Boolean),
-    );
+      ])
+      .allowDiskUse(true);
 
     const achievementMap = new Map<string, any>(
-      achievements
-        .filter((item) => targetProductIds.has(item._id))
-        .map((item) => [item._id, item]),
+      achievements.map((item) => [item._id, item]),
     );
-
-    const round = (value: unknown, digits = 2) =>
-      Number(Number(value || 0).toFixed(digits));
 
     const data = targets.map((target) => {
       const achievement = achievementMap.get(target._id) || {};
