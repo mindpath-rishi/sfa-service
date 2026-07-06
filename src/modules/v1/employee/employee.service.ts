@@ -5938,6 +5938,201 @@ export class EmployeeService extends MongoRepository<Employee> {
       },
     };
   }
+
+  async getUserWiseTargetSummary(date?: string) {
+    const managerId = RequestContextStore.getStore()?.userId;
+
+    if (!managerId) {
+      throw new NotFoundException(EMPLOYEE.NOT_FOUND);
+    }
+
+    const now = date ? parseCalendarDate(date) : new Date();
+
+    const startDate = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      1,
+      0,
+      0,
+      0,
+      0,
+    );
+
+    const endDate = new Date(now);
+    endDate.setHours(23, 59, 59, 999);
+
+    const monthEndDate = new Date(
+      now.getFullYear(),
+      now.getMonth() + 1,
+      0,
+      23,
+      59,
+      59,
+      999,
+    );
+
+    /**
+     * ==========================================
+     * TEAM MEMBERS
+     * ==========================================
+     */
+    const employees = await this.find({
+      $or: [{ reportingEmployeeId: managerId }, { hierarchyPath: managerId }],
+      status: UserStatus.ACTIVE,
+    });
+
+    const employeeIds = employees
+      .map((employee) => employee.employeeId)
+      .filter(Boolean);
+
+    if (!employeeIds.length) {
+      return {
+        statusCode: HttpStatus.OK,
+        message: 'User target summary fetched successfully',
+        data: [],
+      };
+    }
+
+    /**
+     * ==========================================
+     * UBO TARGETS + ACHIEVEMENTS
+     * ==========================================
+     */
+    const [targets, achievements] = await Promise.all([
+      /**
+       * UBO target from target collection
+       */
+      this.targetModel.aggregate([
+        {
+          $match: {
+            userId: {
+              $in: employeeIds,
+            },
+            startDate: {
+              $lte: endDate,
+            },
+            endDate: {
+              $gte: startDate,
+            },
+          },
+        },
+        {
+          $group: {
+            _id: '$userId',
+
+            uboTarget: {
+              $sum: {
+                $ifNull: ['$uboTarget', 0],
+              },
+            },
+          },
+        },
+      ]),
+
+      /**
+       * UBO achievement = unique billed outlets from completed sales
+       */
+      this.saleModal.aggregate([
+        {
+          $match: {
+            'employees.employeeId': {
+              $in: employeeIds,
+            },
+            status: SaleStatus.COMPLETED,
+            date: {
+              $gte: startDate,
+              $lte: endDate,
+            },
+          },
+        },
+        {
+          $unwind: '$employees',
+        },
+        {
+          $match: {
+            'employees.employeeId': {
+              $in: employeeIds,
+            },
+          },
+        },
+        {
+          $group: {
+            _id: '$employees.employeeId',
+
+            uniqueBilledOutlets: {
+              $addToSet: '$customerId',
+            },
+          },
+        },
+        {
+          $project: {
+            _id: 1,
+
+            uboAchievement: {
+              $size: '$uniqueBilledOutlets',
+            },
+          },
+        },
+      ]),
+    ]);
+
+    const targetMap = new Map<string, any>(
+      targets.map((item) => [item._id, item]),
+    );
+
+    const achievementMap = new Map<string, any>(
+      achievements.map((item) => [item._id, item]),
+    );
+
+    const totalDaysInMonth = monthEndDate.getDate();
+
+    const elapsedDays =
+      Math.floor(
+        (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24),
+      ) + 1;
+
+    const remainingDays = Math.max(totalDaysInMonth - elapsedDays, 1);
+
+    const result = employees.map((employee) => {
+      const employeeId = employee.employeeId;
+
+      const target = targetMap.get(employeeId) || {};
+      const achievement = achievementMap.get(employeeId) || {};
+
+      const uboTarget = Number(target.uboTarget || 0);
+      const uboAchievement = Number(achievement.uboAchievement || 0);
+      const uboRemaining = Math.max(uboTarget - uboAchievement, 0);
+
+      const uboAchievementPercentage =
+        uboTarget > 0
+          ? Number(((uboAchievement / uboTarget) * 100).toFixed(2))
+          : 0;
+
+      const crrUbo = elapsedDays > 0 ? uboAchievement / elapsedDays : 0;
+      const rrrUbo = remainingDays > 0 ? uboRemaining / remainingDays : 0;
+
+      return {
+        employeeId,
+        employeeName: employee.name,
+
+        uboTarget: Number(uboTarget.toFixed(0)),
+        uboAchievement: Number(uboAchievement.toFixed(0)),
+        uboRemaining: Number(uboRemaining.toFixed(0)),
+        uboAchievementPercentage,
+
+        crrUbo: Number(crrUbo.toFixed(2)),
+        rrrUbo: Number(rrrUbo.toFixed(2)),
+
+        hasTarget: uboTarget > 0,
+      };
+    });
+
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'User target summary fetched successfully',
+      data: result.sort((a, b) => b.uboAchievement - a.uboAchievement),
+    };
+  }
   // async getUserWiseTargetSummary(date?: string) {
   //   const managerId = RequestContextStore.getStore()?.userId;
 
@@ -6105,299 +6300,299 @@ export class EmployeeService extends MongoRepository<Employee> {
   //   };
   // }
 
-  async getUserWiseTargetSummary(date?: string) {
-    const managerId = RequestContextStore.getStore()?.userId;
+  // async getUserWiseTargetSummary(date?: string) {
+  //   const managerId = RequestContextStore.getStore()?.userId;
 
-    if (!managerId) {
-      throw new NotFoundException(EMPLOYEE.NOT_FOUND);
-    }
+  //   if (!managerId) {
+  //     throw new NotFoundException(EMPLOYEE.NOT_FOUND);
+  //   }
 
-    const now = date ? parseCalendarDate(date) : new Date();
+  //   const now = date ? parseCalendarDate(date) : new Date();
 
-    const startDate = new Date(
-      now.getFullYear(),
-      now.getMonth(),
-      1,
-      0,
-      0,
-      0,
-      0,
-    );
+  //   const startDate = new Date(
+  //     now.getFullYear(),
+  //     now.getMonth(),
+  //     1,
+  //     0,
+  //     0,
+  //     0,
+  //     0,
+  //   );
 
-    const endDate = new Date(now);
-    endDate.setHours(23, 59, 59, 999);
+  //   const endDate = new Date(now);
+  //   endDate.setHours(23, 59, 59, 999);
 
-    const monthEndDate = new Date(
-      now.getFullYear(),
-      now.getMonth() + 1,
-      0,
-      23,
-      59,
-      59,
-      999,
-    );
+  //   const monthEndDate = new Date(
+  //     now.getFullYear(),
+  //     now.getMonth() + 1,
+  //     0,
+  //     23,
+  //     59,
+  //     59,
+  //     999,
+  //   );
 
-    /**
-     * ==========================================
-     * TEAM MEMBERS
-     * ==========================================
-     */
-    const employees = await this.find({
-      $or: [{ reportingEmployeeId: managerId }, { hierarchyPath: managerId }],
-      status: UserStatus.ACTIVE,
-    });
+  //   /**
+  //    * ==========================================
+  //    * TEAM MEMBERS
+  //    * ==========================================
+  //    */
+  //   const employees = await this.find({
+  //     $or: [{ reportingEmployeeId: managerId }, { hierarchyPath: managerId }],
+  //     status: UserStatus.ACTIVE,
+  //   });
 
-    const employeeIds = employees
-      .map((employee) => employee.employeeId)
-      .filter(Boolean);
+  //   const employeeIds = employees
+  //     .map((employee) => employee.employeeId)
+  //     .filter(Boolean);
 
-    if (!employeeIds.length) {
-      return {
-        statusCode: HttpStatus.OK,
-        message: 'User target summary fetched successfully',
-        data: [],
-      };
-    }
+  //   if (!employeeIds.length) {
+  //     return {
+  //       statusCode: HttpStatus.OK,
+  //       message: 'User target summary fetched successfully',
+  //       data: [],
+  //     };
+  //   }
 
-    /**
-     * ==========================================
-     * TARGETS + ACHIEVEMENTS
-     * ==========================================
-     */
-    const [targets, achievements] = await Promise.all([
-      this.targetModel.aggregate([
-        {
-          $match: {
-            userId: { $in: employeeIds },
-            startDate: { $lte: endDate },
-            endDate: { $gte: startDate },
-          },
-        },
-        {
-          $group: {
-            _id: '$userId',
+  //   /**
+  //    * ==========================================
+  //    * TARGETS + ACHIEVEMENTS
+  //    * ==========================================
+  //    */
+  //   const [targets, achievements] = await Promise.all([
+  //     this.targetModel.aggregate([
+  //       {
+  //         $match: {
+  //           userId: { $in: employeeIds },
+  //           startDate: { $lte: endDate },
+  //           endDate: { $gte: startDate },
+  //         },
+  //       },
+  //       {
+  //         $group: {
+  //           _id: '$userId',
 
-            targetCases: {
-              $sum: {
-                $ifNull: ['$targetCases', 0],
-              },
-            },
+  //           targetCases: {
+  //             $sum: {
+  //               $ifNull: ['$targetCases', 0],
+  //             },
+  //           },
 
-            targetTonnage: {
-              $sum: {
-                $ifNull: ['$targetTonnage', 0],
-              },
-            },
+  //           targetTonnage: {
+  //             $sum: {
+  //               $ifNull: ['$targetTonnage', 0],
+  //             },
+  //           },
 
-            targetValue: {
-              $sum: {
-                $ifNull: ['$targetValue', 0],
-              },
-            },
-          },
-        },
-      ]),
+  //           targetValue: {
+  //             $sum: {
+  //               $ifNull: ['$targetValue', 0],
+  //             },
+  //           },
+  //         },
+  //       },
+  //     ]),
 
-      /**
-       * IMPORTANT:
-       * Sale schema has employees array.
-       * So we must unwind employees and group by employees.employeeId.
-       */
-      this.saleModal.aggregate([
-        {
-          $match: {
-            'employees.employeeId': { $in: employeeIds },
-            status: SaleStatus.COMPLETED,
-            date: {
-              $gte: startDate,
-              $lte: endDate,
-            },
-          },
-        },
-        {
-          $unwind: '$employees',
-        },
-        {
-          $match: {
-            'employees.employeeId': { $in: employeeIds },
-          },
-        },
-        {
-          $group: {
-            _id: '$employees.employeeId',
+  //     /**
+  //      * IMPORTANT:
+  //      * Sale schema has employees array.
+  //      * So we must unwind employees and group by employees.employeeId.
+  //      */
+  //     this.saleModal.aggregate([
+  //       {
+  //         $match: {
+  //           'employees.employeeId': { $in: employeeIds },
+  //           status: SaleStatus.COMPLETED,
+  //           date: {
+  //             $gte: startDate,
+  //             $lte: endDate,
+  //           },
+  //         },
+  //       },
+  //       {
+  //         $unwind: '$employees',
+  //       },
+  //       {
+  //         $match: {
+  //           'employees.employeeId': { $in: employeeIds },
+  //         },
+  //       },
+  //       {
+  //         $group: {
+  //           _id: '$employees.employeeId',
 
-            achievementCases: {
-              $sum: {
-                $ifNull: ['$netCases', 0],
-              },
-            },
+  //           achievementCases: {
+  //             $sum: {
+  //               $ifNull: ['$netCases', 0],
+  //             },
+  //           },
 
-            /**
-             * totalWeight is KG.
-             * Convert KG to tonnage before grouping.
-             */
-            achievementTonnage: {
-              $sum: {
-                $divide: [
-                  {
-                    $ifNull: ['$totalWeight', 0],
-                  },
-                  1000,
-                ],
-              },
-            },
+  //           /**
+  //            * totalWeight is KG.
+  //            * Convert KG to tonnage before grouping.
+  //            */
+  //           achievementTonnage: {
+  //             $sum: {
+  //               $divide: [
+  //                 {
+  //                   $ifNull: ['$totalWeight', 0],
+  //                 },
+  //                 1000,
+  //               ],
+  //             },
+  //           },
 
-            achievementValue: {
-              $sum: {
-                $ifNull: ['$totalValue', 0],
-              },
-            },
+  //           achievementValue: {
+  //             $sum: {
+  //               $ifNull: ['$totalValue', 0],
+  //             },
+  //           },
 
-            orders: {
-              $sum: 1,
-            },
+  //           orders: {
+  //             $sum: 1,
+  //           },
 
-            uniqueOutlets: {
-              $addToSet: '$customerId',
-            },
-          },
-        },
-      ]),
-    ]);
+  //           uniqueOutlets: {
+  //             $addToSet: '$customerId',
+  //           },
+  //         },
+  //       },
+  //     ]),
+  //   ]);
 
-    const targetMap = new Map<string, any>(
-      targets.map((item) => [item._id, item]),
-    );
+  //   const targetMap = new Map<string, any>(
+  //     targets.map((item) => [item._id, item]),
+  //   );
 
-    const achievementMap = new Map<string, any>(
-      achievements.map((item) => [item._id, item]),
-    );
+  //   const achievementMap = new Map<string, any>(
+  //     achievements.map((item) => [item._id, item]),
+  //   );
 
-    const totalDaysInMonth = monthEndDate.getDate();
+  //   const totalDaysInMonth = monthEndDate.getDate();
 
-    const elapsedDays =
-      Math.floor(
-        (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24),
-      ) + 1;
+  //   const elapsedDays =
+  //     Math.floor(
+  //       (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24),
+  //     ) + 1;
 
-    const remainingDays = Math.max(totalDaysInMonth - elapsedDays, 1);
+  //   const remainingDays = Math.max(totalDaysInMonth - elapsedDays, 1);
 
-    const result = employees.map((employee) => {
-      const employeeId = employee.employeeId;
+  //   const result = employees.map((employee) => {
+  //     const employeeId = employee.employeeId;
 
-      const target = targetMap.get(employeeId) || {};
-      const achievement = achievementMap.get(employeeId) || {};
+  //     const target = targetMap.get(employeeId) || {};
+  //     const achievement = achievementMap.get(employeeId) || {};
 
-      /**
-       * ==========================================
-       * TARGET
-       * ==========================================
-       */
-      const targetCases = Number(target.targetCases || 0);
-      const targetTonnage = Number(target.targetTonnage || 0);
-      const targetValue = Number(target.targetValue || 0);
+  //     /**
+  //      * ==========================================
+  //      * TARGET
+  //      * ==========================================
+  //      */
+  //     const targetCases = Number(target.targetCases || 0);
+  //     const targetTonnage = Number(target.targetTonnage || 0);
+  //     const targetValue = Number(target.targetValue || 0);
 
-      /**
-       * ==========================================
-       * ACHIEVEMENT
-       * ==========================================
-       *
-       * achievementTonnage is already converted from KG to tonnage.
-       */
-      const achievementCases = Number(achievement.achievementCases || 0);
-      const achievementTonnage = Number(achievement.achievementTonnage || 0);
-      const achievementValue = Number(achievement.achievementValue || 0);
+  //     /**
+  //      * ==========================================
+  //      * ACHIEVEMENT
+  //      * ==========================================
+  //      *
+  //      * achievementTonnage is already converted from KG to tonnage.
+  //      */
+  //     const achievementCases = Number(achievement.achievementCases || 0);
+  //     const achievementTonnage = Number(achievement.achievementTonnage || 0);
+  //     const achievementValue = Number(achievement.achievementValue || 0);
 
-      /**
-       * ==========================================
-       * REMAINING
-       * ==========================================
-       */
-      const remainingCases = Math.max(targetCases - achievementCases, 0);
-      const remainingTonnage = Math.max(targetTonnage - achievementTonnage, 0);
-      const remainingValue = Math.max(targetValue - achievementValue, 0);
+  //     /**
+  //      * ==========================================
+  //      * REMAINING
+  //      * ==========================================
+  //      */
+  //     const remainingCases = Math.max(targetCases - achievementCases, 0);
+  //     const remainingTonnage = Math.max(targetTonnage - achievementTonnage, 0);
+  //     const remainingValue = Math.max(targetValue - achievementValue, 0);
 
-      /**
-       * ==========================================
-       * ACHIEVEMENT %
-       * Default achievement percentage is based on cases.
-       * ==========================================
-       */
-      const achievementPercentage =
-        targetCases > 0
-          ? Number(((achievementCases / targetCases) * 100).toFixed(2))
-          : 0;
+  //     /**
+  //      * ==========================================
+  //      * ACHIEVEMENT %
+  //      * Default achievement percentage is based on cases.
+  //      * ==========================================
+  //      */
+  //     const achievementPercentage =
+  //       targetCases > 0
+  //         ? Number(((achievementCases / targetCases) * 100).toFixed(2))
+  //         : 0;
 
-      const tonnageAchievementPercentage =
-        targetTonnage > 0
-          ? Number(((achievementTonnage / targetTonnage) * 100).toFixed(2))
-          : 0;
+  //     const tonnageAchievementPercentage =
+  //       targetTonnage > 0
+  //         ? Number(((achievementTonnage / targetTonnage) * 100).toFixed(2))
+  //         : 0;
 
-      const valueAchievementPercentage =
-        targetValue > 0
-          ? Number(((achievementValue / targetValue) * 100).toFixed(2))
-          : 0;
+  //     const valueAchievementPercentage =
+  //       targetValue > 0
+  //         ? Number(((achievementValue / targetValue) * 100).toFixed(2))
+  //         : 0;
 
-      /**
-       * ==========================================
-       * CRR / RRR
-       * ==========================================
-       */
-      const crrCases = elapsedDays > 0 ? achievementCases / elapsedDays : 0;
-      const rrrCases = remainingDays > 0 ? remainingCases / remainingDays : 0;
+  //     /**
+  //      * ==========================================
+  //      * CRR / RRR
+  //      * ==========================================
+  //      */
+  //     const crrCases = elapsedDays > 0 ? achievementCases / elapsedDays : 0;
+  //     const rrrCases = remainingDays > 0 ? remainingCases / remainingDays : 0;
 
-      const crrTonnage = elapsedDays > 0 ? achievementTonnage / elapsedDays : 0;
-      const rrrTonnage =
-        remainingDays > 0 ? remainingTonnage / remainingDays : 0;
+  //     const crrTonnage = elapsedDays > 0 ? achievementTonnage / elapsedDays : 0;
+  //     const rrrTonnage =
+  //       remainingDays > 0 ? remainingTonnage / remainingDays : 0;
 
-      const crrValue = elapsedDays > 0 ? achievementValue / elapsedDays : 0;
-      const rrrValue = remainingDays > 0 ? remainingValue / remainingDays : 0;
+  //     const crrValue = elapsedDays > 0 ? achievementValue / elapsedDays : 0;
+  //     const rrrValue = remainingDays > 0 ? remainingValue / remainingDays : 0;
 
-      return {
-        employeeId,
-        employeeName: employee.name,
+  //     return {
+  //       employeeId,
+  //       employeeName: employee.name,
 
-        targetCases: Number(targetCases.toFixed(2)),
-        achievementCases: Number(achievementCases.toFixed(2)),
-        remainingCases: Number(remainingCases.toFixed(2)),
+  //       targetCases: Number(targetCases.toFixed(2)),
+  //       achievementCases: Number(achievementCases.toFixed(2)),
+  //       remainingCases: Number(remainingCases.toFixed(2)),
 
-        targetTonnage: Number(targetTonnage.toFixed(3)),
-        achievementTonnage: Number(achievementTonnage.toFixed(3)),
-        remainingTonnage: Number(remainingTonnage.toFixed(3)),
+  //       targetTonnage: Number(targetTonnage.toFixed(3)),
+  //       achievementTonnage: Number(achievementTonnage.toFixed(3)),
+  //       remainingTonnage: Number(remainingTonnage.toFixed(3)),
 
-        targetValue: Number(targetValue.toFixed(2)),
-        achievementValue: Number(achievementValue.toFixed(2)),
-        remainingValue: Number(remainingValue.toFixed(2)),
+  //       targetValue: Number(targetValue.toFixed(2)),
+  //       achievementValue: Number(achievementValue.toFixed(2)),
+  //       remainingValue: Number(remainingValue.toFixed(2)),
 
-        achievementPercentage,
-        tonnageAchievementPercentage,
-        valueAchievementPercentage,
+  //       achievementPercentage,
+  //       tonnageAchievementPercentage,
+  //       valueAchievementPercentage,
 
-        crr: Number(crrCases.toFixed(2)),
-        rrr: Number(rrrCases.toFixed(2)),
+  //       crr: Number(crrCases.toFixed(2)),
+  //       rrr: Number(rrrCases.toFixed(2)),
 
-        crrCases: Number(crrCases.toFixed(2)),
-        rrrCases: Number(rrrCases.toFixed(2)),
+  //       crrCases: Number(crrCases.toFixed(2)),
+  //       rrrCases: Number(rrrCases.toFixed(2)),
 
-        crrTonnage: Number(crrTonnage.toFixed(3)),
-        rrrTonnage: Number(rrrTonnage.toFixed(3)),
+  //       crrTonnage: Number(crrTonnage.toFixed(3)),
+  //       rrrTonnage: Number(rrrTonnage.toFixed(3)),
 
-        crrValue: Number(crrValue.toFixed(2)),
-        rrrValue: Number(rrrValue.toFixed(2)),
+  //       crrValue: Number(crrValue.toFixed(2)),
+  //       rrrValue: Number(rrrValue.toFixed(2)),
 
-        orders: Number(achievement.orders || 0),
-        uniqueOutlets: achievement.uniqueOutlets?.length || 0,
+  //       orders: Number(achievement.orders || 0),
+  //       uniqueOutlets: achievement.uniqueOutlets?.length || 0,
 
-        hasTarget: targetCases > 0 || targetTonnage > 0 || targetValue > 0,
-      };
-    });
+  //       hasTarget: targetCases > 0 || targetTonnage > 0 || targetValue > 0,
+  //     };
+  //   });
 
-    return {
-      statusCode: HttpStatus.OK,
-      message: 'User target summary fetched successfully',
-      data: result.sort((a, b) => b.achievementCases - a.achievementCases),
-    };
-  }
+  //   return {
+  //     statusCode: HttpStatus.OK,
+  //     message: 'User target summary fetched successfully',
+  //     data: result.sort((a, b) => b.achievementCases - a.achievementCases),
+  //   };
+  // }
 
   // async getUserPrimaryCategoryTarget(query: {
   //   employeeId: string;
