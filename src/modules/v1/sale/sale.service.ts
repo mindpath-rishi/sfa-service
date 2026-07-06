@@ -39,10 +39,15 @@ import { VanDailyStockService } from '../van-daily-stock/van-daily-stock.service
 import { OracleRepository } from 'src/core/database/oracle/oracle.repository';
 import { RequestContextStore } from 'src/core/context/request-context';
 import { ErpSyncStatus } from 'src/shared/enums/stock-sales.enums';
+import {
+  ProductCategory,
+  ProductCategorySchema,
+} from 'src/core/database/mongo/schema/product-category';
 
 @Injectable()
 export class SaleService extends MongoRepository<Sale> {
   private readonly employeeModel: Model<Employee>;
+  private readonly productCategoryModel: Model<ProductCategory>;
 
   constructor(
     mongo: MongoService,
@@ -57,6 +62,10 @@ export class SaleService extends MongoRepository<Sale> {
   ) {
     super(mongo.getModel(Sale.name, SaleSchema));
     this.employeeModel = mongo.getModel(Employee.name, EmployeeSchema);
+    this.productCategoryModel = mongo.getModel(
+      ProductCategory.name,
+      ProductCategorySchema,
+    );
   }
 
   async create(payload: CreateSaleDto) {
@@ -616,6 +625,496 @@ export class SaleService extends MongoRepository<Sale> {
     };
   }
 
+  // async getLastSixMonthCategoryWiseSale(query: {
+  //   vanId?: string;
+  //   outletId?: string;
+  // }) {
+  //   const { vanId, outletId } = query;
+
+  //   const currentDate = new Date();
+
+  //   const monthsData: any = [];
+
+  //   for (let i = 0; i < 6; i++) {
+  //     const date = new Date(
+  //       currentDate.getFullYear(),
+  //       currentDate.getMonth() - i,
+  //       1,
+  //     );
+
+  //     monthsData.push({
+  //       year: date.getFullYear(),
+  //       monthNumber: date.getMonth() + 1,
+  //       month: date.toLocaleString('default', {
+  //         month: 'short',
+  //       }),
+  //     });
+  //   }
+
+  //   const startDate = new Date(
+  //     monthsData[5].year,
+  //     monthsData[5].monthNumber - 1,
+  //     1,
+  //   );
+
+  //   const match: Record<string, any> = {
+  //     isDeleted: false,
+  //     date: {
+  //       $gte: startDate,
+  //     },
+  //   };
+
+  //   if (vanId) {
+  //     match.vanId = vanId;
+  //   }
+
+  //   if (outletId) {
+  //     match.customerId = outletId;
+  //   }
+
+  //   const pipeline: any[] = [
+  //     {
+  //       $match: match,
+  //     },
+
+  //     {
+  //       $lookup: {
+  //         from: 'sale_items',
+  //         localField: 'saleId',
+  //         foreignField: 'saleId',
+  //         as: 'items',
+  //       },
+  //     },
+
+  //     {
+  //       $unwind: '$items',
+  //     },
+
+  //     {
+  //       $match: {
+  //         'items.isDeleted': false,
+  //       },
+  //     },
+
+  //     // Product Master Lookup
+  //     {
+  //       $lookup: {
+  //         from: 'product_master',
+  //         localField: 'items.productId',
+  //         foreignField: 'productId',
+  //         as: 'product',
+  //       },
+  //     },
+
+  //     {
+  //       $unwind: {
+  //         path: '$product',
+  //         preserveNullAndEmptyArrays: true,
+  //       },
+  //     },
+
+  //     // Product Category Lookup
+  //     {
+  //       $lookup: {
+  //         from: 'productcategories',
+  //         localField: 'product.parentCategoryId',
+  //         foreignField: 'categoryId',
+  //         as: 'category',
+  //       },
+  //     },
+
+  //     {
+  //       $unwind: {
+  //         path: '$category',
+  //         preserveNullAndEmptyArrays: true,
+  //       },
+  //     },
+
+  //     {
+  //       $group: {
+  //         _id: {
+  //           year: {
+  //             $year: '$date',
+  //           },
+
+  //           monthNumber: {
+  //             $month: '$date',
+  //           },
+
+  //           categoryName: {
+  //             $ifNull: ['$category.name', 'UNKNOWN'],
+  //           },
+  //         },
+
+  //         totalCases: {
+  //           $sum: {
+  //             $ifNull: ['$items.caseQty', 0],
+  //           },
+  //         },
+
+  //         totalPieces: {
+  //           $sum: {
+  //             $ifNull: ['$items.pieceQty', 0],
+  //           },
+  //         },
+
+  //         totalQtyInCases: {
+  //           $sum: {
+  //             $add: [
+  //               {
+  //                 $ifNull: ['$items.caseQty', 0],
+  //               },
+
+  //               {
+  //                 $cond: [
+  //                   {
+  //                     $gt: ['$items.unitQtyInCase', 0],
+  //                   },
+
+  //                   {
+  //                     $divide: [
+  //                       {
+  //                         $ifNull: ['$items.pieceQty', 0],
+  //                       },
+  //                       '$items.unitQtyInCase',
+  //                     ],
+  //                   },
+
+  //                   0,
+  //                 ],
+  //               },
+  //             ],
+  //           },
+  //         },
+
+  //         totalValue: {
+  //           $sum: {
+  //             $ifNull: ['$items.totalValue', 0],
+  //           },
+  //         },
+
+  //         totalWeight: {
+  //           $sum: {
+  //             $ifNull: ['$items.totalNetWeight', 0],
+  //           },
+  //         },
+  //       },
+  //     },
+  //     {
+  //       $project: {
+  //         _id: 0,
+
+  //         year: '$_id.year',
+
+  //         monthNumber: '$_id.monthNumber',
+
+  //         categoryName: '$_id.categoryName',
+
+  //         totalCases: 1,
+
+  //         totalPieces: 1,
+
+  //         totalQtyInCases: {
+  //           $round: ['$totalQtyInCases', 3],
+  //         },
+
+  //         totalValue: {
+  //           $round: ['$totalValue', 3],
+  //         },
+
+  //         totalWeight: {
+  //           $round: ['$totalWeight', 3],
+  //         },
+  //       },
+  //     },
+  //   ];
+
+  //   try {
+  //     const rawData = await this.model.aggregate(pipeline);
+
+  //     const categories = [...new Set(rawData.map((item) => item.categoryName))];
+
+  //     const finalData: any = [];
+
+  //     for (const monthData of monthsData) {
+  //       for (const categoryName of categories) {
+  //         const existing = rawData.find(
+  //           (item) =>
+  //             item.year === monthData.year &&
+  //             item.monthNumber === monthData.monthNumber &&
+  //             item.categoryName === categoryName,
+  //         );
+
+  //         finalData.push({
+  //           year: monthData.year,
+
+  //           monthNumber: monthData.monthNumber,
+
+  //           month: monthData.month,
+
+  //           categoryName,
+
+  //           totalCases: existing?.totalCases ?? 0,
+
+  //           totalPieces: existing?.totalPieces ?? 0,
+
+  //           totalQtyInCases: existing?.totalQtyInCases ?? 0,
+
+  //           totalValue: existing?.totalValue ?? 0,
+
+  //           totalWeight: existing?.totalWeight ?? 0,
+  //         });
+  //       }
+  //     }
+
+  //     return {
+  //       statusCode: HttpStatus.OK,
+  //       message: 'Last six month category wise sales fetched successfully',
+  //       data: finalData,
+  //     };
+  //   } catch (error) {
+  //     console.log(error);
+
+  //     throw error;
+  //   }
+  // }
+
+  // async getCategoryWiseSaleDetail(query: {
+  //   vanId?: string;
+  //   outletId?: string;
+  //   categoryName?: string;
+  //   year?: number;
+  //   monthNumber?: number;
+  // }) {
+  //   const { vanId, outletId, categoryName, year, monthNumber } = query;
+
+  //   const emptyData = {
+  //     year,
+  //     monthNumber,
+  //     categoryName,
+  //     totalCases: 0,
+  //     totalPieces: 0,
+  //     totalQtyInCases: 0,
+  //     totalValue: 0,
+  //     totalWeight: 0,
+  //     products: [],
+  //   };
+
+  //   if (!categoryName || !year || !monthNumber) {
+  //     return {
+  //       statusCode: HttpStatus.OK,
+  //       message: 'Category wise sales detail fetched successfully',
+  //       data: emptyData,
+  //     };
+  //   }
+
+  //   const match: Record<string, any> = {
+  //     isDeleted: false,
+  //     date: {
+  //       $gte: new Date(year, monthNumber - 1, 1),
+  //       $lt: new Date(year, monthNumber, 1),
+  //     },
+  //   };
+
+  //   if (vanId) {
+  //     match.vanId = vanId;
+  //   }
+
+  //   if (outletId) {
+  //     match.customerId = outletId;
+  //   }
+
+  //   const [detail] = await this.model.aggregate([
+  //     {
+  //       $match: match,
+  //     },
+  //     {
+  //       $lookup: {
+  //         from: 'sale_items',
+  //         localField: 'saleId',
+  //         foreignField: 'saleId',
+  //         as: 'items',
+  //       },
+  //     },
+  //     {
+  //       $unwind: '$items',
+  //     },
+  //     {
+  //       $match: {
+  //         'items.isDeleted': false,
+  //       },
+  //     },
+  //     {
+  //       $lookup: {
+  //         from: 'product_master',
+  //         localField: 'items.productId',
+  //         foreignField: 'productId',
+  //         as: 'product',
+  //       },
+  //     },
+  //     {
+  //       $unwind: {
+  //         path: '$product',
+  //         preserveNullAndEmptyArrays: true,
+  //       },
+  //     },
+  //     {
+  //       $lookup: {
+  //         from: 'productcategories',
+  //         localField: 'product.parentCategoryId',
+  //         foreignField: 'categoryId',
+  //         as: 'category',
+  //       },
+  //     },
+  //     {
+  //       $unwind: {
+  //         path: '$category',
+  //         preserveNullAndEmptyArrays: true,
+  //       },
+  //     },
+  //     {
+  //       $match: {
+  //         $expr: {
+  //           $eq: [{ $ifNull: ['$category.name', 'UNKNOWN'] }, categoryName],
+  //         },
+  //       },
+  //     },
+  //     {
+  //       $group: {
+  //         _id: {
+  //           productId: '$items.productId',
+  //           productName: {
+  //             $ifNull: ['$items.productName', '$product.name'],
+  //           },
+  //         },
+  //         cases: {
+  //           $sum: {
+  //             $ifNull: ['$items.caseQty', 0],
+  //           },
+  //         },
+  //         pieces: {
+  //           $sum: {
+  //             $ifNull: ['$items.pieceQty', 0],
+  //           },
+  //         },
+  //         qtyInCases: {
+  //           $sum: {
+  //             $add: [
+  //               {
+  //                 $ifNull: ['$items.caseQty', 0],
+  //               },
+  //               {
+  //                 $cond: [
+  //                   {
+  //                     $gt: ['$items.unitQtyInCase', 0],
+  //                   },
+  //                   {
+  //                     $divide: [
+  //                       {
+  //                         $ifNull: ['$items.pieceQty', 0],
+  //                       },
+  //                       '$items.unitQtyInCase',
+  //                     ],
+  //                   },
+  //                   0,
+  //                 ],
+  //               },
+  //             ],
+  //           },
+  //         },
+  //         value: {
+  //           $sum: {
+  //             $ifNull: ['$items.totalValue', 0],
+  //           },
+  //         },
+  //         weight: {
+  //           $sum: {
+  //             $ifNull: ['$items.totalNetWeight', 0],
+  //           },
+  //         },
+  //       },
+  //     },
+  //     {
+  //       $sort: {
+  //         value: -1,
+  //         '_id.productName': 1,
+  //       },
+  //     },
+  //     {
+  //       $group: {
+  //         _id: null,
+  //         totalCases: { $sum: '$cases' },
+  //         totalPieces: { $sum: '$pieces' },
+  //         totalQtyInCases: { $sum: '$qtyInCases' },
+  //         totalValue: { $sum: '$value' },
+  //         totalWeight: { $sum: '$weight' },
+  //         products: {
+  //           $push: {
+  //             productId: '$_id.productId',
+  //             productName: '$_id.productName',
+  //             cases: '$cases',
+  //             pieces: '$pieces',
+  //             qtyInCases: '$qtyInCases',
+  //             value: '$value',
+  //             weight: '$weight',
+  //           },
+  //         },
+  //       },
+  //     },
+  //     {
+  //       $project: {
+  //         _id: 0,
+  //         totalCases: 1,
+  //         totalPieces: 1,
+  //         totalQtyInCases: {
+  //           $round: ['$totalQtyInCases', 3],
+  //         },
+  //         totalValue: {
+  //           $round: ['$totalValue', 3],
+  //         },
+  //         totalWeight: {
+  //           $round: ['$totalWeight', 3],
+  //         },
+  //         products: {
+  //           $map: {
+  //             input: '$products',
+  //             as: 'product',
+  //             in: {
+  //               productId: '$$product.productId',
+  //               productName: '$$product.productName',
+  //               cases: '$$product.cases',
+  //               pieces: '$$product.pieces',
+  //               qtyInCases: {
+  //                 $round: ['$$product.qtyInCases', 3],
+  //               },
+  //               value: {
+  //                 $round: ['$$product.value', 3],
+  //               },
+  //               weight: {
+  //                 $round: ['$$product.weight', 3],
+  //               },
+  //             },
+  //           },
+  //         },
+  //       },
+  //     },
+  //   ]);
+
+  //   return {
+  //     statusCode: HttpStatus.OK,
+  //     message: 'Category wise sales detail fetched successfully',
+  //     data: {
+  //       ...emptyData,
+  //       totalCases: detail?.totalCases ?? 0,
+  //       totalPieces: detail?.totalPieces ?? 0,
+  //       totalQtyInCases: detail?.totalQtyInCases ?? 0,
+  //       totalValue: detail?.totalValue ?? 0,
+  //       totalWeight: detail?.totalWeight ?? 0,
+  //       products: detail?.products ?? [],
+  //     },
+  //   };
+  // }
+
   async getLastSixMonthCategoryWiseSale(query: {
     vanId?: string;
     outletId?: string;
@@ -624,7 +1123,10 @@ export class SaleService extends MongoRepository<Sale> {
 
     const currentDate = new Date();
 
-    const monthsData: any = [];
+    /**
+     * ================= MONTHS DATA =================
+     */
+    const monthsData: any[] = [];
 
     for (let i = 0; i < 6; i++) {
       const date = new Date(
@@ -642,16 +1144,54 @@ export class SaleService extends MongoRepository<Sale> {
       });
     }
 
+    /**
+     * For response order old to new, reverse months.
+     */
+    const orderedMonthsData = [...monthsData].reverse();
+
     const startDate = new Date(
-      monthsData[5].year,
-      monthsData[5].monthNumber - 1,
+      orderedMonthsData[0].year,
+      orderedMonthsData[0].monthNumber - 1,
       1,
     );
 
+    const endDate = new Date(
+      currentDate.getFullYear(),
+      currentDate.getMonth() + 1,
+      1,
+    );
+
+    /**
+     * ================= CATEGORY MAP =================
+     *
+     * Load categories once instead of lookup for every sale item.
+     */
+    const categories = await this.productCategoryModel
+      .find({
+        type: 'PARENT',
+        isDeleted: false,
+      })
+      .select({
+        categoryId: 1,
+        name: 1,
+        _id: 0,
+      })
+      .lean();
+
+    const categoryNameMap = new Map<string, string>();
+
+    for (const category of categories) {
+      categoryNameMap.set(category.categoryId, category.name);
+    }
+
+    /**
+     * ================= SALE MATCH =================
+     */
     const match: Record<string, any> = {
       isDeleted: false,
       date: {
         $gte: startDate,
+        $lt: endDate,
       },
     };
 
@@ -663,196 +1203,198 @@ export class SaleService extends MongoRepository<Sale> {
       match.customerId = outletId;
     }
 
-    const pipeline: any[] = [
-      {
-        $match: match,
-      },
-
-      {
-        $lookup: {
-          from: 'sale_items',
-          localField: 'saleId',
-          foreignField: 'saleId',
-          as: 'items',
-        },
-      },
-
-      {
-        $unwind: '$items',
-      },
-
-      {
-        $match: {
-          'items.isDeleted': false,
-        },
-      },
-
-      // Product Master Lookup
-      {
-        $lookup: {
-          from: 'product_master',
-          localField: 'items.productId',
-          foreignField: 'productId',
-          as: 'product',
-        },
-      },
-
-      {
-        $unwind: {
-          path: '$product',
-          preserveNullAndEmptyArrays: true,
-        },
-      },
-
-      // Product Category Lookup
-      {
-        $lookup: {
-          from: 'productcategories',
-          localField: 'product.parentCategoryId',
-          foreignField: 'categoryId',
-          as: 'category',
-        },
-      },
-
-      {
-        $unwind: {
-          path: '$category',
-          preserveNullAndEmptyArrays: true,
-        },
-      },
-
-      {
-        $group: {
-          _id: {
-            year: {
-              $year: '$date',
-            },
-
-            monthNumber: {
-              $month: '$date',
-            },
-
-            categoryName: {
-              $ifNull: ['$category.name', 'UNKNOWN'],
-            },
+    try {
+      const rawData = await this.model
+        .aggregate([
+          {
+            $match: match,
           },
 
-          totalCases: {
-            $sum: {
-              $ifNull: ['$items.caseQty', 0],
-            },
-          },
-
-          totalPieces: {
-            $sum: {
-              $ifNull: ['$items.pieceQty', 0],
-            },
-          },
-
-          totalQtyInCases: {
-            $sum: {
-              $add: [
+          /**
+           * Lookup sale_items only.
+           * No product_master lookup needed.
+           */
+          {
+            $lookup: {
+              from: 'sale_items',
+              let: {
+                saleId: '$saleId',
+              },
+              pipeline: [
                 {
-                  $ifNull: ['$items.caseQty', 0],
+                  $match: {
+                    $expr: {
+                      $eq: ['$saleId', '$$saleId'],
+                    },
+                  },
                 },
-
                 {
-                  $cond: [
-                    {
-                      $gt: ['$items.unitQtyInCase', 0],
-                    },
-
-                    {
-                      $divide: [
-                        {
-                          $ifNull: ['$items.pieceQty', 0],
-                        },
-                        '$items.unitQtyInCase',
-                      ],
-                    },
-
-                    0,
-                  ],
+                  $project: {
+                    _id: 0,
+                    parentCategoryId: 1,
+                    caseQty: 1,
+                    pieceQty: 1,
+                    unitQtyInCase: 1,
+                    totalValue: 1,
+                    totalNetWeight: 1,
+                  },
                 },
               ],
+              as: 'items',
             },
           },
 
-          totalValue: {
-            $sum: {
-              $ifNull: ['$items.totalValue', 0],
+          {
+            $unwind: '$items',
+          },
+
+          /**
+           * Group by month and parentCategoryId.
+           */
+          {
+            $group: {
+              _id: {
+                year: {
+                  $year: '$date',
+                },
+                monthNumber: {
+                  $month: '$date',
+                },
+                parentCategoryId: '$items.parentCategoryId',
+              },
+
+              totalCases: {
+                $sum: {
+                  $ifNull: ['$items.caseQty', 0],
+                },
+              },
+
+              totalPieces: {
+                $sum: {
+                  $ifNull: ['$items.pieceQty', 0],
+                },
+              },
+
+              totalQtyInCases: {
+                $sum: {
+                  $add: [
+                    {
+                      $ifNull: ['$items.caseQty', 0],
+                    },
+                    {
+                      $cond: [
+                        {
+                          $gt: ['$items.unitQtyInCase', 0],
+                        },
+                        {
+                          $divide: [
+                            {
+                              $ifNull: ['$items.pieceQty', 0],
+                            },
+                            '$items.unitQtyInCase',
+                          ],
+                        },
+                        0,
+                      ],
+                    },
+                  ],
+                },
+              },
+
+              totalValue: {
+                $sum: {
+                  $ifNull: ['$items.totalValue', 0],
+                },
+              },
+
+              totalWeight: {
+                $sum: {
+                  $ifNull: ['$items.totalNetWeight', 0],
+                },
+              },
             },
           },
 
-          totalWeight: {
-            $sum: {
-              $ifNull: ['$items.totalNetWeight', 0],
+          {
+            $project: {
+              _id: 0,
+
+              year: '$_id.year',
+              monthNumber: '$_id.monthNumber',
+              parentCategoryId: '$_id.parentCategoryId',
+
+              totalCases: 1,
+              totalPieces: 1,
+
+              totalQtyInCases: {
+                $round: ['$totalQtyInCases', 3],
+              },
+
+              totalValue: {
+                $round: ['$totalValue', 3],
+              },
+
+              totalWeight: {
+                $round: ['$totalWeight', 3],
+              },
             },
           },
-        },
-      },
-      {
-        $project: {
-          _id: 0,
 
-          year: '$_id.year',
-
-          monthNumber: '$_id.monthNumber',
-
-          categoryName: '$_id.categoryName',
-
-          totalCases: 1,
-
-          totalPieces: 1,
-
-          totalQtyInCases: {
-            $round: ['$totalQtyInCases', 3],
+          {
+            $sort: {
+              year: 1,
+              monthNumber: 1,
+              totalValue: -1,
+            },
           },
+        ])
+        .allowDiskUse(true);
 
-          totalValue: {
-            $round: ['$totalValue', 3],
-          },
+      /**
+       * ================= ADD CATEGORY NAME =================
+       */
+      const formattedRawData = rawData.map((item) => ({
+        ...item,
+        categoryName: categoryNameMap.get(item.parentCategoryId) || 'UNKNOWN',
+      }));
 
-          totalWeight: {
-            $round: ['$totalWeight', 3],
-          },
-        },
-      },
-    ];
+      /**
+       * Get only categories that have sales in last 6 months.
+       */
+      const soldCategoryNames = [
+        ...new Set(formattedRawData.map((item) => item.categoryName)),
+      ];
 
-    try {
-      const rawData = await this.model.aggregate(pipeline);
+      /**
+       * Fast lookup map instead of rawData.find inside nested loop.
+       */
+      const salesMap = new Map<string, any>();
 
-      const categories = [...new Set(rawData.map((item) => item.categoryName))];
+      for (const item of formattedRawData) {
+        const key = `${item.year}-${item.monthNumber}-${item.categoryName}`;
+        salesMap.set(key, item);
+      }
 
-      const finalData: any = [];
+      /**
+       * ================= FINAL DATA =================
+       */
+      const finalData: any[] = [];
 
-      for (const monthData of monthsData) {
-        for (const categoryName of categories) {
-          const existing = rawData.find(
-            (item) =>
-              item.year === monthData.year &&
-              item.monthNumber === monthData.monthNumber &&
-              item.categoryName === categoryName,
-          );
+      for (const monthData of orderedMonthsData) {
+        for (const categoryName of soldCategoryNames) {
+          const key = `${monthData.year}-${monthData.monthNumber}-${categoryName}`;
+          const existing = salesMap.get(key);
 
           finalData.push({
             year: monthData.year,
-
             monthNumber: monthData.monthNumber,
-
             month: monthData.month,
-
             categoryName,
 
             totalCases: existing?.totalCases ?? 0,
-
             totalPieces: existing?.totalPieces ?? 0,
-
             totalQtyInCases: existing?.totalQtyInCases ?? 0,
-
             totalValue: existing?.totalValue ?? 0,
-
             totalWeight: existing?.totalWeight ?? 0,
           });
         }
@@ -865,7 +1407,6 @@ export class SaleService extends MongoRepository<Sale> {
       };
     } catch (error) {
       console.log(error);
-
       throw error;
     }
   }
@@ -899,203 +1440,277 @@ export class SaleService extends MongoRepository<Sale> {
       };
     }
 
-    const match: Record<string, any> = {
+    /**
+     * ================= DATE RANGE =================
+     */
+    const startDate = new Date(year, monthNumber - 1, 1);
+    const endDate = new Date(year, monthNumber, 1);
+
+    /**
+     * ================= RESOLVE CATEGORY ONCE =================
+     *
+     * Instead of doing productcategories lookup for every sale item,
+     * get categoryId once.
+     */
+    const category = await this.productCategoryModel
+      .findOne({
+        name: categoryName,
+        type: 'PARENT',
+        isDeleted: false,
+      })
+      .select({
+        categoryId: 1,
+        name: 1,
+        _id: 0,
+      })
+      .lean();
+
+    if (!category?.categoryId) {
+      return {
+        statusCode: HttpStatus.OK,
+        message: 'Category wise sales detail fetched successfully',
+        data: emptyData,
+      };
+    }
+
+    /**
+     * ================= SALE MATCH =================
+     */
+    const saleMatch: Record<string, any> = {
       isDeleted: false,
       date: {
-        $gte: new Date(year, monthNumber - 1, 1),
-        $lt: new Date(year, monthNumber, 1),
+        $gte: startDate,
+        $lt: endDate,
       },
     };
 
     if (vanId) {
-      match.vanId = vanId;
+      saleMatch.vanId = vanId;
     }
 
     if (outletId) {
-      match.customerId = outletId;
+      saleMatch.customerId = outletId;
     }
 
-    const [detail] = await this.model.aggregate([
-      {
-        $match: match,
-      },
-      {
-        $lookup: {
-          from: 'sale_items',
-          localField: 'saleId',
-          foreignField: 'saleId',
-          as: 'items',
+    const [detail] = await this.model
+      .aggregate([
+        {
+          $match: saleMatch,
         },
-      },
-      {
-        $unwind: '$items',
-      },
-      {
-        $match: {
-          'items.isDeleted': false,
-        },
-      },
-      {
-        $lookup: {
-          from: 'product_master',
-          localField: 'items.productId',
-          foreignField: 'productId',
-          as: 'product',
-        },
-      },
-      {
-        $unwind: {
-          path: '$product',
-          preserveNullAndEmptyArrays: true,
-        },
-      },
-      {
-        $lookup: {
-          from: 'productcategories',
-          localField: 'product.categoryId',
-          foreignField: 'categoryId',
-          as: 'category',
-        },
-      },
-      {
-        $unwind: {
-          path: '$category',
-          preserveNullAndEmptyArrays: true,
-        },
-      },
-      {
-        $match: {
-          $expr: {
-            $eq: [{ $ifNull: ['$category.name', 'UNKNOWN'] }, categoryName],
-          },
-        },
-      },
-      {
-        $group: {
-          _id: {
-            productId: '$items.productId',
-            productName: {
-              $ifNull: ['$items.productName', '$product.name'],
+
+        /**
+         * Lookup only matching sale items of selected parent category.
+         */
+        {
+          $lookup: {
+            from: 'sale_items',
+            let: {
+              saleId: '$saleId',
+              parentCategoryId: category.categoryId,
             },
-          },
-          cases: {
-            $sum: {
-              $ifNull: ['$items.caseQty', 0],
-            },
-          },
-          pieces: {
-            $sum: {
-              $ifNull: ['$items.pieceQty', 0],
-            },
-          },
-          qtyInCases: {
-            $sum: {
-              $add: [
-                {
-                  $ifNull: ['$items.caseQty', 0],
+            pipeline: [
+              {
+                $match: {
+                  $expr: {
+                    $and: [
+                      {
+                        $eq: ['$saleId', '$$saleId'],
+                      },
+                      {
+                        $eq: ['$parentCategoryId', '$$parentCategoryId'],
+                      },
+                    ],
+                  },
                 },
-                {
-                  $cond: [
-                    {
-                      $gt: ['$items.unitQtyInCase', 0],
-                    },
-                    {
-                      $divide: [
-                        {
-                          $ifNull: ['$items.pieceQty', 0],
-                        },
-                        '$items.unitQtyInCase',
-                      ],
-                    },
-                    0,
-                  ],
+              },
+              {
+                $project: {
+                  _id: 0,
+                  productId: 1,
+                  productName: 1,
+                  caseQty: 1,
+                  pieceQty: 1,
+                  unitQtyInCase: 1,
+                  totalValue: 1,
+                  totalNetWeight: 1,
                 },
-              ],
-            },
+              },
+            ],
+            as: 'items',
           },
-          value: {
-            $sum: {
-              $ifNull: ['$items.totalValue', 0],
+        },
+
+        /**
+         * Remove sales where no matching items found.
+         */
+        {
+          $unwind: '$items',
+        },
+
+        /**
+         * Product-wise grouping.
+         */
+        {
+          $group: {
+            _id: {
+              productId: '$items.productId',
+              productName: '$items.productName',
             },
-          },
-          weight: {
-            $sum: {
-              $ifNull: ['$items.totalNetWeight', 0],
+
+            cases: {
+              $sum: {
+                $ifNull: ['$items.caseQty', 0],
+              },
+            },
+
+            pieces: {
+              $sum: {
+                $ifNull: ['$items.pieceQty', 0],
+              },
+            },
+
+            qtyInCases: {
+              $sum: {
+                $add: [
+                  {
+                    $ifNull: ['$items.caseQty', 0],
+                  },
+                  {
+                    $cond: [
+                      {
+                        $gt: ['$items.unitQtyInCase', 0],
+                      },
+                      {
+                        $divide: [
+                          {
+                            $ifNull: ['$items.pieceQty', 0],
+                          },
+                          '$items.unitQtyInCase',
+                        ],
+                      },
+                      0,
+                    ],
+                  },
+                ],
+              },
+            },
+
+            value: {
+              $sum: {
+                $ifNull: ['$items.totalValue', 0],
+              },
+            },
+
+            weight: {
+              $sum: {
+                $ifNull: ['$items.totalNetWeight', 0],
+              },
             },
           },
         },
-      },
-      {
-        $sort: {
-          value: -1,
-          '_id.productName': 1,
+
+        {
+          $sort: {
+            value: -1,
+            '_id.productName': 1,
+          },
         },
-      },
-      {
-        $group: {
-          _id: null,
-          totalCases: { $sum: '$cases' },
-          totalPieces: { $sum: '$pieces' },
-          totalQtyInCases: { $sum: '$qtyInCases' },
-          totalValue: { $sum: '$value' },
-          totalWeight: { $sum: '$weight' },
-          products: {
-            $push: {
-              productId: '$_id.productId',
-              productName: '$_id.productName',
-              cases: '$cases',
-              pieces: '$pieces',
-              qtyInCases: '$qtyInCases',
-              value: '$value',
-              weight: '$weight',
+
+        /**
+         * Final total grouping.
+         */
+        {
+          $group: {
+            _id: null,
+
+            totalCases: {
+              $sum: '$cases',
+            },
+
+            totalPieces: {
+              $sum: '$pieces',
+            },
+
+            totalQtyInCases: {
+              $sum: '$qtyInCases',
+            },
+
+            totalValue: {
+              $sum: '$value',
+            },
+
+            totalWeight: {
+              $sum: '$weight',
+            },
+
+            products: {
+              $push: {
+                productId: '$_id.productId',
+                productName: '$_id.productName',
+                cases: '$cases',
+                pieces: '$pieces',
+                qtyInCases: '$qtyInCases',
+                value: '$value',
+                weight: '$weight',
+              },
             },
           },
         },
-      },
-      {
-        $project: {
-          _id: 0,
-          totalCases: 1,
-          totalPieces: 1,
-          totalQtyInCases: {
-            $round: ['$totalQtyInCases', 3],
-          },
-          totalValue: {
-            $round: ['$totalValue', 3],
-          },
-          totalWeight: {
-            $round: ['$totalWeight', 3],
-          },
-          products: {
-            $map: {
-              input: '$products',
-              as: 'product',
-              in: {
-                productId: '$$product.productId',
-                productName: '$$product.productName',
-                cases: '$$product.cases',
-                pieces: '$$product.pieces',
-                qtyInCases: {
-                  $round: ['$$product.qtyInCases', 3],
-                },
-                value: {
-                  $round: ['$$product.value', 3],
-                },
-                weight: {
-                  $round: ['$$product.weight', 3],
+
+        {
+          $project: {
+            _id: 0,
+
+            totalCases: 1,
+            totalPieces: 1,
+
+            totalQtyInCases: {
+              $round: ['$totalQtyInCases', 3],
+            },
+
+            totalValue: {
+              $round: ['$totalValue', 3],
+            },
+
+            totalWeight: {
+              $round: ['$totalWeight', 3],
+            },
+
+            products: {
+              $map: {
+                input: '$products',
+                as: 'product',
+                in: {
+                  productId: '$$product.productId',
+                  productName: '$$product.productName',
+                  cases: '$$product.cases',
+                  pieces: '$$product.pieces',
+
+                  qtyInCases: {
+                    $round: ['$$product.qtyInCases', 3],
+                  },
+
+                  value: {
+                    $round: ['$$product.value', 3],
+                  },
+
+                  weight: {
+                    $round: ['$$product.weight', 3],
+                  },
                 },
               },
             },
           },
         },
-      },
-    ]);
+      ])
+      .allowDiskUse(true);
 
     return {
       statusCode: HttpStatus.OK,
       message: 'Category wise sales detail fetched successfully',
       data: {
         ...emptyData,
+        categoryName: category.name,
         totalCases: detail?.totalCases ?? 0,
         totalPieces: detail?.totalPieces ?? 0,
         totalQtyInCases: detail?.totalQtyInCases ?? 0,

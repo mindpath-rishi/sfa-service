@@ -2852,10 +2852,10 @@ export class EmployeeService extends MongoRepository<Employee> {
           ? {
               $ifNull: [
                 '$product.unitType',
-                { $ifNull: ['$product.categoryId', 'UNKNOWN'] },
+                { $ifNull: ['$product.parentCategoryId', 'UNKNOWN'] },
               ],
             }
-          : { $ifNull: ['$product.categoryId', 'UNKNOWN'] };
+          : { $ifNull: ['$product.parentCategoryId', 'UNKNOWN'] };
 
     const groupNameExpression =
       normalizedGroupBy === 'SKU'
@@ -2929,7 +2929,7 @@ export class EmployeeService extends MongoRepository<Employee> {
             {
               $lookup: {
                 from: 'productcategories',
-                localField: 'product.categoryId',
+                localField: 'product.parentCategoryId',
                 foreignField: 'categoryId',
                 as: 'category',
               },
@@ -3548,7 +3548,7 @@ export class EmployeeService extends MongoRepository<Employee> {
         {
           $lookup: {
             from: 'productcategories',
-            localField: 'product.categoryId',
+            localField: 'product.parentCategoryId',
             foreignField: 'categoryId',
             as: 'category',
           },
@@ -3562,7 +3562,7 @@ export class EmployeeService extends MongoRepository<Employee> {
         {
           $group: {
             _id: {
-              $ifNull: ['$product.categoryId', 'UNKNOWN'],
+              $ifNull: ['$product.parentCategoryId', 'UNKNOWN'],
             },
             category: {
               $first: {
@@ -3741,7 +3741,7 @@ export class EmployeeService extends MongoRepository<Employee> {
           dimensionId:
             targetType === 'FOCUSED_PACK'
               ? '$product.productId'
-              : { $ifNull: ['$product.categoryId', '$items.categoryId'] },
+              : { $ifNull: ['$product.parentCategoryId', '$items.categoryId'] },
         },
         achievementCases: { $sum: { $ifNull: ['$items.netCases', 0] } },
         achievementTonnage: { $sum: { $ifNull: ['$items.totalNetWeight', 0] } },
@@ -4521,7 +4521,7 @@ export class EmployeeService extends MongoRepository<Employee> {
         {
           $lookup: {
             from: 'productcategories',
-            localField: 'product.categoryId',
+            localField: 'product.parentCategoryId',
             foreignField: 'categoryId',
             as: 'category',
           },
@@ -4535,7 +4535,7 @@ export class EmployeeService extends MongoRepository<Employee> {
         {
           $group: {
             _id: {
-              $ifNull: ['$product.categoryId', 'UNKNOWN'],
+              $ifNull: ['$product.parentCategoryId', 'UNKNOWN'],
             },
 
             category: {
@@ -6087,7 +6087,7 @@ export class EmployeeService extends MongoRepository<Employee> {
           {
             $lookup: {
               from: 'productcategories',
-              localField: 'product.categoryId',
+              localField: 'product.parentCategoryId',
               foreignField: 'categoryId',
               as: 'category',
             },
@@ -6110,7 +6110,7 @@ export class EmployeeService extends MongoRepository<Employee> {
               totalValue: 1,
               totalNetWeight: 1,
               categoryId: {
-                $ifNull: ['$product.categoryId', 'UNKNOWN'],
+                $ifNull: ['$product.parentCategoryId', 'UNKNOWN'],
               },
               categoryName: {
                 $ifNull: ['$category.name', 'Unknown'],

@@ -557,7 +557,9 @@ export class ProductService extends MongoRepository<Product> {
         productSysCode: product.productSysCode || '',
         compCode: product.compCode || '',
         categoryId:
-          categoryNameById.get(product.categoryId) || product.categoryId || '',
+          categoryNameById.get(product.parentCategoryId) ||
+          product.parentCategoryId ||
+          '',
         parentCategoryId:
           categoryNameById.get(product.parentCategoryId) ||
           product.parentCategoryId ||
