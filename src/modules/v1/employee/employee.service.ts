@@ -7312,11 +7312,15 @@ export class EmployeeService extends MongoRepository<Employee> {
     };
   }
 
-  async getUserUboTargetBreakdown(query: {
-    employeeId: string;
-    date?: string;
-  }) {
-    const now = query.date ? parseCalendarDate(query.date) : new Date();
+  async getUserUboTargets(date?: string) {
+    const managerId = RequestContextStore.getStore()?.userId;
+
+    if (!managerId) {
+      throw new NotFoundException(EMPLOYEE.NOT_FOUND);
+    }
+
+    const now = date ? parseCalendarDate(date) : new Date();
+
     const startDate = new Date(
       now.getFullYear(),
       now.getMonth(),
@@ -7326,43 +7330,207 @@ export class EmployeeService extends MongoRepository<Employee> {
       0,
       0,
     );
-    const primaryResponse = await this.getUserPrimaryCategoryTarget(query);
-    const achievements = new Map(
-      (primaryResponse.data || []).map((item: any) => [item.categoryId, item]),
+
+    const endDate = new Date(now);
+    endDate.setHours(23, 59, 59, 999);
+
+    const monthEndDate = new Date(
+      now.getFullYear(),
+      now.getMonth() + 1,
+      0,
+      23,
+      59,
+      59,
+      999,
     );
-    const targets = await this.targetModel.aggregate([
-      {
-        $match: {
-          userId: query.employeeId,
-          uboTarget: { $gt: 0 },
-          startDate: { $lte: now },
-          endDate: { $gte: startDate },
+
+    const totalDaysInMonth = monthEndDate.getDate();
+
+    const elapsedDays =
+      Math.floor(
+        (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24),
+      ) + 1;
+
+    const remainingDays = Math.max(totalDaysInMonth - elapsedDays, 1);
+
+    /**
+     * ==========================================
+     * TEAM MEMBERS
+     * ==========================================
+     */
+    const employees = await this.find({
+      $or: [{ reportingEmployeeId: managerId }, { hierarchyPath: managerId }],
+      status: UserStatus.ACTIVE,
+    });
+
+    const employeeIds = employees
+      .map((employee) => employee.employeeId)
+      .filter(Boolean);
+
+    if (!employeeIds.length) {
+      return {
+        statusCode: HttpStatus.OK,
+        message: 'User UBO targets fetched successfully',
+        data: [],
+      };
+    }
+
+    /**
+     * ==========================================
+     * UBO TARGET + ACHIEVEMENT
+     * ==========================================
+     */
+    const [targets, achievements] = await Promise.all([
+      this.targetModel.aggregate([
+        {
+          $match: {
+            userId: {
+              $in: employeeIds,
+            },
+            startDate: {
+              $lte: endDate,
+            },
+            endDate: {
+              $gte: startDate,
+            },
+          },
         },
-      },
-      {
-        $group: {
-          _id: '$categoryId',
-          category: { $first: '$category' },
-          target: { $sum: '$uboTarget' },
+        {
+          $group: {
+            _id: '$userId',
+
+            target: {
+              $sum: {
+                $ifNull: ['$uboTarget', 0],
+              },
+            },
+          },
         },
-      },
+      ]),
+
+      this.saleModal.aggregate([
+        {
+          $match: {
+            'employees.employeeId': {
+              $in: employeeIds,
+            },
+            status: SaleStatus.COMPLETED,
+            date: {
+              $gte: startDate,
+              $lte: endDate,
+            },
+          },
+        },
+        {
+          $unwind: '$employees',
+        },
+        {
+          $match: {
+            'employees.employeeId': {
+              $in: employeeIds,
+            },
+          },
+        },
+        {
+          $group: {
+            _id: '$employees.employeeId',
+
+            uniqueBilledOutlets: {
+              $addToSet: '$customerId',
+            },
+          },
+        },
+        {
+          $project: {
+            _id: 1,
+
+            achievement: {
+              $size: '$uniqueBilledOutlets',
+            },
+          },
+        },
+      ]),
     ]);
 
-    const data = targets.map((target) => ({
-      categoryId: target._id,
-      category: target.category,
-      target: Number(Number(target.target || 0).toFixed(2)),
-      achievement: Number(
-        Number(
-          (achievements.get(target._id) as any)?.achievementCases || 0,
-        ).toFixed(2),
-      ),
-    }));
+    const targetMap = new Map<string, any>(
+      targets.map((item) => [item._id, item]),
+    );
+
+    const achievementMap = new Map<string, any>(
+      achievements.map((item) => [item._id, item]),
+    );
+
+    /**
+     * ==========================================
+     * RESPONSE AS PER UI REQUIREMENT
+     * ==========================================
+     */
+    const data = employees.map((employee) => {
+      const employeeId = employee.employeeId;
+
+      const target = targetMap.get(employeeId) || {};
+      const achievement = achievementMap.get(employeeId) || {};
+
+      const targetValue = Number(target.target || 0);
+      const achievementValue = Number(achievement.achievement || 0);
+      const remainingValue = Math.max(targetValue - achievementValue, 0);
+
+      const percentage =
+        targetValue > 0
+          ? Number(((achievementValue / targetValue) * 100).toFixed(2))
+          : 0;
+
+      /**
+       * CRR = current run rate
+       * How many billed outlets achieved per day till now.
+       */
+      const crr = elapsedDays > 0 ? achievementValue / elapsedDays : 0;
+
+      /**
+       * RRR = required run rate
+       * How many billed outlets required per remaining day.
+       */
+      const rrr = remainingDays > 0 ? remainingValue / remainingDays : 0;
+
+      return {
+        /**
+         * UI uses this as id
+         */
+        categoryId: employeeId,
+
+        /**
+         * UI uses this as name
+         */
+        category: employee.name,
+
+        /**
+         * UI uses item.target
+         */
+        target: Number(targetValue.toFixed(0)),
+
+        /**
+         * UI uses item.achievement
+         */
+        achievement: Number(achievementValue.toFixed(0)),
+
+        /**
+         * Extra fields
+         */
+        remaining: Number(remainingValue.toFixed(0)),
+        percentage,
+
+        crr: Number(crr.toFixed(2)),
+        rrr: Number(rrr.toFixed(2)),
+
+        elapsedDays,
+        remainingDays,
+      };
+    });
 
     return {
       statusCode: HttpStatus.OK,
-      message: 'User UBO target breakdown fetched successfully',
-      data,
+      message: 'User UBO targets fetched successfully',
+      data: data.sort((a, b) => b.achievement - a.achievement),
     };
   }
 
