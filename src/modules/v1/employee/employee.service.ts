@@ -11249,61 +11249,214 @@ export class EmployeeService extends MongoRepository<Employee> {
       .lean();
   }
 
+  // async getManagerUserMtdSummary(query: { employeeId: string; date?: string }) {
+  //   const employee = await this.getManagedEmployee(query.employeeId);
+  //   const { selectedDate, startOfMonth, endOfDay } = this.getMonthRange(
+  //     query.date,
+  //   );
+
+  //   const [assignedBeatCustomers, visitedOutletIds, billedOutletIds] =
+  //     await Promise.all([
+  //       this.getAssignedBeatCustomers(
+  //         employee.employeeId,
+  //         startOfMonth,
+  //         endOfDay,
+  //       ),
+  //       this.shopVisitModel.distinct('outletId', {
+  //         employeeId: employee.employeeId,
+  //         checkInTime: {
+  //           $gte: startOfMonth,
+  //           $lte: endOfDay,
+  //         },
+  //         status: ShopVisitStatus.COMPLETED,
+  //       }),
+  //       this.saleModal.distinct('customerId', {
+  //         employeeId: employee.employeeId,
+  //         date: {
+  //           $gte: startOfMonth,
+  //           $lte: endOfDay,
+  //         },
+  //         status: SaleStatus.COMPLETED,
+  //       }),
+  //     ]);
+
+  //   const visitedBeatOutletCount = new Set(
+  //     assignedBeatCustomers.map((mapping: any) => mapping.customerId),
+  //   ).size;
+  //   const utc = visitedOutletIds.length;
+  //   const upc = billedOutletIds.length;
+  //   const zeroOrder = Math.max(utc - upc, 0);
+  //   const notVisited = Math.max(visitedBeatOutletCount - utc, 0);
+  //   const total = utc + upc + zeroOrder + notVisited;
+
+  //   return {
+  //     statusCode: HttpStatus.OK,
+  //     message: 'Manager user MTD summary fetched successfully',
+  //     data: {
+  //       employeeId: employee.employeeId,
+  //       employeeName: employee.name,
+  //       date: formatCalendarDate(selectedDate),
+  //       utc,
+  //       upc,
+  //       zeroOrder,
+  //       notVisited,
+  //       total,
+  //     },
+  //   };
+  // }
+
   async getManagerUserMtdSummary(query: { employeeId: string; date?: string }) {
-    const employee = await this.getManagedEmployee(query.employeeId);
-    const { selectedDate, startOfMonth, endOfDay } = this.getMonthRange(
-      query.date,
-    );
+  const employee = await this.getManagedEmployee(query.employeeId);
 
-    const [assignedBeatCustomers, visitedOutletIds, billedOutletIds] =
-      await Promise.all([
-        this.getAssignedBeatCustomers(
-          employee.employeeId,
-          startOfMonth,
-          endOfDay,
-        ),
-        this.shopVisitModel.distinct('outletId', {
-          employeeId: employee.employeeId,
-          checkInTime: {
-            $gte: startOfMonth,
-            $lte: endOfDay,
-          },
-          status: ShopVisitStatus.COMPLETED,
-        }),
-        this.saleModal.distinct('customerId', {
-          employeeId: employee.employeeId,
-          date: {
-            $gte: startOfMonth,
-            $lte: endOfDay,
-          },
-          status: SaleStatus.COMPLETED,
-        }),
-      ]);
+  const { selectedDate, startOfMonth, endOfDay } = this.getMonthRange(
+    query.date,
+  );
 
-    const visitedBeatOutletCount = new Set(
-      assignedBeatCustomers.map((mapping: any) => mapping.customerId),
-    ).size;
-    const utc = visitedOutletIds.length;
-    const upc = billedOutletIds.length;
-    const zeroOrder = Math.max(utc - upc, 0);
-    const notVisited = Math.max(visitedBeatOutletCount - utc, 0);
-    const total = utc + upc + zeroOrder + notVisited;
+  const [assignedBeatCustomers, visitedOutletIds, billedOutletIds] =
+    await Promise.all([
+      this.getAssignedBeatCustomers(
+        employee.employeeId,
+        startOfMonth,
+        endOfDay,
+      ),
 
-    return {
-      statusCode: HttpStatus.OK,
-      message: 'Manager user MTD summary fetched successfully',
-      data: {
+      this.shopVisitModel.distinct('outletId', {
         employeeId: employee.employeeId,
-        employeeName: employee.name,
-        date: formatCalendarDate(selectedDate),
-        utc,
-        upc,
-        zeroOrder,
-        notVisited,
-        total,
-      },
-    };
+        checkInTime: {
+          $gte: startOfMonth,
+          $lte: endOfDay,
+        },
+        status: ShopVisitStatus.COMPLETED,
+        outletId: {
+          $nin: [null, ''],
+        },
+      }),
+
+      /**
+       * IMPORTANT:
+       * Sale schema has employees array.
+       * Do not use employeeId directly.
+       */
+      this.saleModal.distinct('customerId', {
+        'employees.employeeId': employee.employeeId,
+        date: {
+          $gte: startOfMonth,
+          $lte: endOfDay,
+        },
+        status: SaleStatus.COMPLETED,
+        customerId: {
+          $nin: [null, ''],
+        },
+      }),
+    ]);
+
+  /**
+   * ==========================================
+   * ASSIGNED BEAT OUTLETS
+   * ==========================================
+   */
+  const assignedBeatOutletSet = new Set<string>(
+    assignedBeatCustomers
+      .map((mapping: any) => String(mapping.customerId || '').trim())
+      .filter(Boolean),
+  );
+
+  /**
+   * ==========================================
+   * VISITED OUTLETS
+   * ==========================================
+   */
+  const visitedOutletSet = new Set<string>(
+    visitedOutletIds
+      .map((outletId: any) => String(outletId || '').trim())
+      .filter(Boolean),
+  );
+
+  /**
+   * ==========================================
+   * BILLED OUTLETS
+   * ==========================================
+   */
+  const billedOutletSet = new Set<string>(
+    billedOutletIds
+      .map((customerId: any) => String(customerId || '').trim())
+      .filter(Boolean),
+  );
+
+  /**
+   * ==========================================
+   * ONLY COUNT ASSIGNED BEAT OUTLETS
+   * ==========================================
+   */
+  let utc = 0;
+  let upc = 0;
+  let zeroOrder = 0;
+  let notVisited = 0;
+
+  for (const customerId of assignedBeatOutletSet) {
+    const isVisited = visitedOutletSet.has(customerId);
+    const isBilled = billedOutletSet.has(customerId);
+
+    if (isVisited) {
+      utc += 1;
+    }
+
+    if (isBilled) {
+      upc += 1;
+    }
+
+    /**
+     * Zero order = visited but not billed
+     */
+    if (isVisited && !isBilled) {
+      zeroOrder += 1;
+    }
+
+    /**
+     * Not visited = assigned but not visited
+     */
+    if (!isVisited) {
+      notVisited += 1;
+    }
   }
+
+  const totalAssigned = assignedBeatOutletSet.size;
+
+  return {
+    statusCode: HttpStatus.OK,
+    message: 'Manager user MTD summary fetched successfully',
+    data: {
+      employeeId: employee.employeeId,
+      employeeName: employee.name,
+      date: formatCalendarDate(selectedDate),
+
+      /**
+       * UTC = Unique total calls / visited assigned outlets
+       */
+      utc,
+
+      /**
+       * UPC = Unique productive calls / billed assigned outlets
+       */
+      upc,
+
+      /**
+       * Zero order = visited but no billing
+       */
+      zeroOrder,
+
+      /**
+       * Not visited = assigned but not visited
+       */
+      notVisited,
+
+      /**
+       * Total assigned beat outlets
+       */
+      total: totalAssigned,
+    },
+  };
+}
 
   async getManagerUserRoutePlan(query: { employeeId: string; date?: string }) {
     const employee = await this.getManagedEmployee(query.employeeId);
