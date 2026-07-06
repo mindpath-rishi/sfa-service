@@ -708,7 +708,7 @@ export class SaleService extends MongoRepository<Sale> {
       {
         $lookup: {
           from: 'productcategories',
-          localField: 'product.categoryId',
+          localField: 'product.parentCategoryId',
           foreignField: 'categoryId',
           as: 'category',
         },
