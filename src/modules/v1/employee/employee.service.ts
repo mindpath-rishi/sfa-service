@@ -1969,782 +1969,1752 @@ export class EmployeeService extends MongoRepository<Employee> {
     };
   }
 
+  // async getSalesmanPocketAndTarget(
+  //   date?: string,
+  //   metric: 'cases' | 'tonnage' | 'value' = 'cases',
+  //   startDateParam?: string,
+  //   endDateParam?: string,
+  // ) {
+  //   const employeeId = RequestContextStore.getStore()?.userId;
+
+  //   if (!employeeId) {
+  //     throw new NotFoundException(EMPLOYEE.NOT_FOUND);
+  //   }
+
+  //   const now = endDateParam
+  //     ? parseCalendarDate(endDateParam)
+  //     : date
+  //       ? parseCalendarDate(date)
+  //       : new Date();
+  //   const hasDateRange = Boolean(startDateParam || endDateParam);
+
+  //   const startDate = startDateParam
+  //     ? parseCalendarDate(startDateParam)
+  //     : new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+  //   startDate.setHours(0, 0, 0, 0);
+
+  //   const endDate = hasDateRange
+  //     ? parseCalendarDate(endDateParam || startDateParam!)
+  //     : now;
+  //   endDate.setHours(23, 59, 59, 999);
+  //   const todayEnd = new Date();
+  //   todayEnd.setHours(23, 59, 59, 999);
+  //   if (endDate > todayEnd) {
+  //     endDate.setTime(todayEnd.getTime());
+  //   }
+
+  //   const monthEndDate = new Date(
+  //     now.getFullYear(),
+  //     now.getMonth() + 1,
+  //     0,
+  //     23,
+  //     59,
+  //     59,
+  //     999,
+  //   );
+
+  //   const lmtdDate = new Date(
+  //     now.getFullYear(),
+  //     now.getMonth() - 1,
+  //     Math.min(
+  //       now.getDate(),
+  //       new Date(now.getFullYear(), now.getMonth(), 0).getDate(),
+  //     ),
+  //     now.getHours(),
+  //     now.getMinutes(),
+  //     now.getSeconds(),
+  //     now.getMilliseconds(),
+  //   );
+
+  //   const lmtdStartDate = new Date(
+  //     lmtdDate.getFullYear(),
+  //     lmtdDate.getMonth(),
+  //     1,
+  //     0,
+  //     0,
+  //     0,
+  //     0,
+  //   );
+
+  //   const normalizedMetric = ['cases', 'tonnage', 'value'].includes(metric)
+  //     ? metric
+  //     : 'cases';
+
+  //   const [
+  //     targets,
+  //     salesSummary,
+  //     lmtdTargets,
+  //     lmtdSalesSummary,
+  //     totalVisits,
+  //     uniqueVisitedOutlets,
+  //     retailingDays,
+  //     vanStockSummary,
+  //   ] = await Promise.all([
+  //     this.targetModel.aggregate([
+  //       {
+  //         $match: {
+  //           userId: employeeId,
+  //           startDate: { $lte: endDate },
+  //           endDate: { $gte: startDate },
+  //         },
+  //       },
+  //       {
+  //         $group: {
+  //           _id: null,
+  //           targetCases: { $sum: '$targetCases' },
+  //           targetTonnage: { $sum: '$targetTonnage' },
+  //           targetValue: { $sum: '$targetValue' },
+  //         },
+  //       },
+  //     ]),
+
+  //     this.saleModal.aggregate([
+  //       {
+  //         $match: {
+  //           'employees.employeeId': employeeId,
+  //           status: SaleStatus.COMPLETED,
+  //           date: {
+  //             $gte: startDate,
+  //             $lte: endDate,
+  //           },
+  //         },
+  //       },
+  //       {
+  //         $group: {
+  //           _id: null,
+  //           totalOrders: { $sum: 1 },
+  //           totalCases: { $sum: '$netCases' },
+  //           totalTonnage: { $sum: '$totalWeight' },
+  //           totalValue: { $sum: '$totalValue' },
+  //           saleIds: { $addToSet: '$saleId' },
+  //           uniqueBilledOutlets: { $addToSet: '$customerId' },
+  //         },
+  //       },
+  //     ]),
+
+  //     this.targetModel.aggregate([
+  //       {
+  //         $match: {
+  //           userId: employeeId,
+  //           startDate: { $lte: lmtdDate },
+  //           endDate: { $gte: lmtdStartDate },
+  //         },
+  //       },
+  //       {
+  //         $group: {
+  //           _id: null,
+  //           targetCases: { $sum: '$targetCases' },
+  //           targetTonnage: { $sum: '$targetTonnage' },
+  //           targetValue: { $sum: '$targetValue' },
+  //         },
+  //       },
+  //     ]),
+
+  //     this.saleModal.aggregate([
+  //       {
+  //         $match: {
+  //           'employees.employeeId': employeeId,
+  //           status: SaleStatus.COMPLETED,
+  //           date: {
+  //             $gte: lmtdStartDate,
+  //             $lte: lmtdDate,
+  //           },
+  //         },
+  //       },
+  //       {
+  //         $group: {
+  //           _id: null,
+  //           totalCases: { $sum: '$netCases' },
+  //           totalTonnage: { $sum: '$totalWeight' },
+  //           totalValue: { $sum: '$totalValue' },
+  //         },
+  //       },
+  //     ]),
+
+  //     this.shopVisitModel.countDocuments({
+  //       employeeId,
+  //       status: ShopVisitStatus.COMPLETED,
+  //       checkInTime: {
+  //         $gte: startDate,
+  //         $lte: endDate,
+  //       },
+  //     }),
+
+  //     this.shopVisitModel.distinct('outletId', {
+  //       employeeId,
+  //       status: ShopVisitStatus.COMPLETED,
+  //       checkInTime: {
+  //         $gte: startDate,
+  //         $lte: endDate,
+  //       },
+  //     }),
+
+  //     this.activityModel.aggregate([
+  //       {
+  //         $match: {
+  //           userId: employeeId,
+  //           name: 'Retailing',
+  //           status: {
+  //             $in: [ActivityStatus.ACTIVE, ActivityStatus.COMPLETED],
+  //           },
+  //           startTime: {
+  //             $gte: startDate,
+  //             $lte: endDate,
+  //           },
+  //         },
+  //       },
+  //       {
+  //         $group: {
+  //           _id: {
+  //             $dateToString: {
+  //               format: '%Y-%m-%d',
+  //               date: '$startTime',
+  //               timezone: REPORT_TIMEZONE,
+  //             },
+  //           },
+  //         },
+  //       },
+  //       {
+  //         $count: 'days',
+  //       },
+  //     ]),
+
+  //     this.vanDailyStockModel.aggregate([
+  //       {
+  //         $match: {
+  //           employeeId,
+  //           date: {
+  //             $gte: startDate,
+  //             $lte: endDate,
+  //           },
+  //         },
+  //       },
+  //       {
+  //         $addFields: {
+  //           unitQty: {
+  //             $cond: [{ $gt: ['$unitQtyInCase', 0] }, '$unitQtyInCase', 1],
+  //           },
+  //         },
+  //       },
+  //       {
+  //         $group: {
+  //           _id: null,
+  //           openingCases: { $sum: { $divide: ['$openingQty', '$unitQty'] } },
+  //           topupCases: { $sum: { $divide: ['$inQty', '$unitQty'] } },
+  //           salesCases: { $sum: { $divide: ['$outQty', '$unitQty'] } },
+  //         },
+  //       },
+  //     ]),
+  //   ]);
+
+  //   const targetSummary = targets[0] || {
+  //     targetCases: 0,
+  //     targetTonnage: 0,
+  //     targetValue: 0,
+  //   };
+
+  //   const sales = salesSummary[0] || {
+  //     totalOrders: 0,
+  //     totalCases: 0,
+  //     totalTonnage: 0,
+  //     totalValue: 0,
+  //     saleIds: [],
+  //     uniqueBilledOutlets: [],
+  //   };
+  //   const stock = vanStockSummary[0] || {
+  //     openingCases: 0,
+  //     topupCases: 0,
+  //     salesCases: 0,
+  //   };
+  //   const openingStockCases = Number(stock.openingCases || 0);
+  //   const topupStockCases = Number(stock.topupCases || 0);
+  //   const totalStockCases = openingStockCases + topupStockCases;
+  //   const stockSalesCases = Number(stock.salesCases || 0);
+  //   const utilizationPercentage =
+  //     totalStockCases > 0
+  //       ? Number(((stockSalesCases / totalStockCases) * 100).toFixed(2))
+  //       : 0;
+
+  //   const lmtdTargetSummary = lmtdTargets[0] || {
+  //     targetCases: 0,
+  //     targetTonnage: 0,
+  //     targetValue: 0,
+  //   };
+
+  //   const lmtdSales = lmtdSalesSummary[0] || {
+  //     totalCases: 0,
+  //     totalTonnage: 0,
+  //     totalValue: 0,
+  //   };
+
+  //   const totalLinesSold = sales.saleIds.length
+  //     ? await this.saleItemModel.countDocuments({
+  //         saleId: {
+  //           $in: sales.saleIds,
+  //         },
+  //       })
+  //     : 0;
+  //   const openActivityEnd =
+  //     endDate.getTime() > Date.now() ? new Date() : endDate;
+
+  //   const [
+  //     activityDaySummary,
+  //     visitDaySummary,
+  //     salesDaySummary,
+  //     leaveDaySummary,
+  //     workSessionDaySummary,
+  //   ] = await Promise.all([
+  //     this.activityModel.aggregate([
+  //       {
+  //         $match: {
+  //           userId: employeeId,
+  //           status: {
+  //             $in: [ActivityStatus.ACTIVE, ActivityStatus.COMPLETED],
+  //           },
+  //           startTime: {
+  //             $gte: startDate,
+  //             $lte: endDate,
+  //           },
+  //         },
+  //       },
+  //       {
+  //         $group: {
+  //           _id: {
+  //             $dateToString: {
+  //               format: '%Y-%m-%d',
+  //               date: '$startTime',
+  //               timezone: REPORT_TIMEZONE,
+  //             },
+  //           },
+  //           retailing: {
+  //             $sum: {
+  //               $cond: [{ $eq: ['$name', 'Retailing'] }, 1, 0],
+  //             },
+  //           },
+  //           officialWork: {
+  //             $sum: {
+  //               $cond: [{ $ne: ['$name', 'Retailing'] }, 1, 0],
+  //             },
+  //           },
+  //           totalActivities: { $sum: 1 },
+  //           retailingDurationMs: {
+  //             $sum: {
+  //               $cond: [
+  //                 { $eq: ['$name', 'Retailing'] },
+  //                 {
+  //                   $subtract: [
+  //                     { $ifNull: ['$endTime', openActivityEnd] },
+  //                     '$startTime',
+  //                   ],
+  //                 },
+  //                 0,
+  //               ],
+  //             },
+  //           },
+  //           totalDurationMs: {
+  //             $sum: {
+  //               $subtract: [
+  //                 { $ifNull: ['$endTime', openActivityEnd] },
+  //                 '$startTime',
+  //               ],
+  //             },
+  //           },
+  //         },
+  //       },
+  //     ]),
+  //     this.shopVisitModel.aggregate([
+  //       {
+  //         $match: {
+  //           employeeId,
+  //           status: ShopVisitStatus.COMPLETED,
+  //           checkInTime: {
+  //             $gte: startDate,
+  //             $lte: endDate,
+  //           },
+  //         },
+  //       },
+  //       {
+  //         $group: {
+  //           _id: {
+  //             $dateToString: {
+  //               format: '%Y-%m-%d',
+  //               date: '$checkInTime',
+  //               timezone: REPORT_TIMEZONE,
+  //             },
+  //           },
+  //           tc: { $sum: 1 },
+  //           firstCallTime: { $min: '$checkInTime' },
+  //         },
+  //       },
+  //     ]),
+  //     this.saleModal.aggregate([
+  //       {
+  //         $match: {
+  //           'employees.employeeId': employeeId,
+  //           status: SaleStatus.COMPLETED,
+  //           date: {
+  //             $gte: startDate,
+  //             $lte: endDate,
+  //           },
+  //         },
+  //       },
+  //       {
+  //         $group: {
+  //           _id: {
+  //             $dateToString: {
+  //               format: '%Y-%m-%d',
+  //               date: '$date',
+  //               timezone: REPORT_TIMEZONE,
+  //             },
+  //           },
+  //           pc: { $sum: 1 },
+  //           upc: { $addToSet: '$customerId' },
+  //           cases: { $sum: '$netCases' },
+  //           netValue: { $sum: '$totalValue' },
+  //           firstPcTime: { $min: '$date' },
+  //         },
+  //       },
+  //     ]),
+  //     this.leaveModel.aggregate([
+  //       {
+  //         $match: {
+  //           userId: employeeId,
+  //           status: LeaveStatus.COMPLETED,
+  //           createdAt: {
+  //             $gte: startDate,
+  //             $lte: endDate,
+  //           },
+  //         },
+  //       },
+  //       {
+  //         $group: {
+  //           _id: {
+  //             $dateToString: {
+  //               format: '%Y-%m-%d',
+  //               date: '$createdAt',
+  //               timezone: REPORT_TIMEZONE,
+  //             },
+  //           },
+  //           leave: { $sum: 1 },
+  //         },
+  //       },
+  //     ]),
+  //     this.workSessionModel.aggregate([
+  //       {
+  //         $addFields: {
+  //           normalizedDayStartTime: {
+  //             $convert: {
+  //               input: '$dayStartTime',
+  //               to: 'date',
+  //               onError: '$createdAt',
+  //               onNull: '$createdAt',
+  //             },
+  //           },
+  //         },
+  //       },
+  //       {
+  //         $match: {
+  //           userId: employeeId,
+  //           normalizedDayStartTime: { $gte: startDate, $lte: endDate },
+  //         },
+  //       },
+  //       {
+  //         $group: {
+  //           _id: {
+  //             $dateToString: {
+  //               format: '%Y-%m-%d',
+  //               date: '$normalizedDayStartTime',
+  //               timezone: REPORT_TIMEZONE,
+  //             },
+  //           },
+  //           dayStarted: { $sum: 1 },
+  //           dayCompleted: {
+  //             $sum: { $cond: [{ $eq: ['$status', 'COMPLETED'] }, 1, 0] },
+  //           },
+  //           latestStatus: { $last: '$status' },
+  //         },
+  //       },
+  //     ]),
+  //   ]);
+
+  //   const formatTime = (value?: Date | string | null) => {
+  //     if (!value) return null;
+  //     const parsedDate = new Date(value);
+  //     if (Number.isNaN(parsedDate.getTime())) return null;
+
+  //     return parsedDate.toLocaleTimeString('en-IN', {
+  //       hour: '2-digit',
+  //       minute: '2-digit',
+  //       hour12: true,
+  //     });
+  //   };
+
+  //   const formatAverageTime = (
+  //     values: Array<Date | string | null | undefined>,
+  //   ) => {
+  //     const minutes = values
+  //       .map((value) => {
+  //         if (!value) return null;
+
+  //         const parsedDate = new Date(value);
+  //         if (Number.isNaN(parsedDate.getTime())) return null;
+
+  //         return parsedDate.getHours() * 60 + parsedDate.getMinutes();
+  //       })
+  //       .filter((value): value is number => value !== null);
+
+  //     if (!minutes.length) return null;
+
+  //     const averageMinutes = Math.round(
+  //       minutes.reduce((sum, value) => sum + value, 0) / minutes.length,
+  //     );
+  //     const averageDate = new Date();
+  //     averageDate.setHours(
+  //       Math.floor(averageMinutes / 60),
+  //       averageMinutes % 60,
+  //       0,
+  //       0,
+  //     );
+
+  //     return formatTime(averageDate);
+  //   };
+
+  //   const formatDurationMinutes = (value: number) => {
+  //     if (!Number.isFinite(value) || value < 1) return '< 1 min';
+
+  //     const hours = Math.floor(value / 60);
+  //     const minutes = value % 60;
+
+  //     if (!hours) return `${minutes} min${minutes === 1 ? '' : 's'}`;
+  //     if (!minutes) return `${hours} hr${hours === 1 ? '' : 's'}`;
+
+  //     return `${hours} hr${hours === 1 ? '' : 's'} ${minutes} min${
+  //       minutes === 1 ? '' : 's'
+  //     }`;
+  //   };
+
+  //   const formatAverageDuration = (
+  //     values: Array<number | null | undefined>,
+  //   ) => {
+  //     const minutes = values
+  //       .map((value) => Math.max(Math.round(Number(value || 0) / 60000), 0))
+  //       .filter((value) => value > 0);
+
+  //     if (!minutes.length) return null;
+
+  //     const averageMinutes = Math.round(
+  //       minutes.reduce((sum, value) => sum + value, 0) / minutes.length,
+  //     );
+
+  //     return formatDurationMinutes(averageMinutes);
+  //   };
+
+  //   const formatDayLabel = (value: Date) =>
+  //     value.toLocaleDateString('en-IN', {
+  //       weekday: 'short',
+  //       day: '2-digit',
+  //       month: 'short',
+  //       year: 'numeric',
+  //     });
+
+  //   const toMap = (rows: any[]) =>
+  //     rows.reduce((map, row) => {
+  //       map.set(row._id, row);
+  //       return map;
+  //     }, new Map<string, any>());
+
+  //   const activityDayMap = toMap(activityDaySummary);
+  //   const visitDayMap = toMap(visitDaySummary);
+  //   const salesDayMap = toMap(salesDaySummary);
+  //   const leaveDayMap = toMap(leaveDaySummary);
+  //   const workSessionDayMap = toMap(workSessionDaySummary);
+  //   const avgFirstCallTime = formatAverageTime(
+  //     visitDaySummary.map((item) => item.firstCallTime),
+  //   );
+  //   const avgFirstPcTime = formatAverageTime(
+  //     salesDaySummary.map((item) => item.firstPcTime),
+  //   );
+  //   const avgRetailingTime = formatAverageDuration(
+  //     activityDaySummary.map((item) => item.retailingDurationMs),
+  //   );
+  //   const avgTotalTime = formatAverageDuration(
+  //     activityDaySummary.map((item) => item.totalDurationMs),
+  //   );
+  //   const dayWiseSummary: any[] = [];
+  //   const dayCursor = new Date(startDate);
+
+  //   while (dayCursor <= endDate) {
+  //     const dayKey = formatCalendarDate(dayCursor);
+  //     const activity = activityDayMap.get(dayKey) || {};
+  //     const visits = visitDayMap.get(dayKey) || {};
+  //     const daySales = salesDayMap.get(dayKey) || {};
+  //     const leave = leaveDayMap.get(dayKey) || {};
+  //     const workSession = workSessionDayMap.get(dayKey) || {};
+  //     const retailing = Number(activity.retailing || 0);
+  //     const officialWork = Number(activity.officialWork || 0);
+  //     const leaveCount = Number(leave.leave || 0);
+  //     const totalActivities = Number(activity.totalActivities || 0);
+  //     const tcCount = Number(visits.tc || 0);
+  //     const pcCount = Number(daySales.pc || 0);
+  //     const dayStarted = Number(workSession.dayStarted || 0) > 0;
+  //     const hasWorkRecord =
+  //       dayStarted || totalActivities > 0 || tcCount > 0 || pcCount > 0;
+  //     const absent = leaveCount > 0 || hasWorkRecord ? 0 : 1;
+  //     const dayStatus =
+  //       leaveCount > 0
+  //         ? 'Leave'
+  //         : retailing > 0 || tcCount > 0 || pcCount > 0
+  //           ? 'Retailing'
+  //           : officialWork > 0
+  //             ? 'Official Work'
+  //             : dayStarted
+  //               ? 'Official Work'
+  //               : 'Absent';
+
+  //     dayWiseSummary.push({
+  //       date: dayKey,
+  //       label: formatDayLabel(dayCursor),
+  //       dayStatus,
+  //       workSessionStatus: workSession.latestStatus ?? null,
+  //       dayStarted,
+  //       dayCompleted: Number(workSession.dayCompleted || 0) > 0,
+  //       retailing,
+  //       officialWork,
+  //       leave: leaveCount,
+  //       absent,
+  //       totalActivities,
+  //       retailingDuration: formatDurationMinutes(
+  //         Math.max(
+  //           Math.round(Number(activity.retailingDurationMs || 0) / 60000),
+  //           0,
+  //         ),
+  //       ),
+  //       totalDuration: formatDurationMinutes(
+  //         Math.max(
+  //           Math.round(Number(activity.totalDurationMs || 0) / 60000),
+  //           0,
+  //         ),
+  //       ),
+  //       tc: tcCount,
+  //       pc: pcCount,
+  //       upc: daySales.upc?.length || 0,
+  //       netValue: Number((daySales.netValue || 0).toFixed(2)),
+  //       cases: Number((daySales.cases || 0).toFixed(2)),
+  //       firstCallTime: formatTime(visits.firstCallTime),
+  //       firstPcTime: formatTime(daySales.firstPcTime),
+  //     });
+
+  //     dayCursor.setDate(dayCursor.getDate() + 1);
+  //   }
+
+  //   const pc = Number(sales.totalOrders || 0);
+  //   const tc = Number(totalVisits || 0);
+  //   const upc = sales.uniqueBilledOutlets?.length || 0;
+  //   const utc = uniqueVisitedOutlets.length;
+  //   const retailingDayCount = retailingDays?.[0]?.days || 0;
+  //   const targetCases = Number(targetSummary.targetCases || 0);
+  //   const achievedCases = Number(sales.totalCases || 0);
+  //   const targetTonnage = Number(targetSummary.targetTonnage || 0);
+  //   const achievedTonnage = Number(sales.totalTonnage || 0);
+  //   const targetValue = Number(targetSummary.targetValue || 0);
+  //   const achievedValue = Number(sales.totalValue || 0);
+  //   const remainingCases = Math.max(targetCases - achievedCases, 0);
+  //   const remainingTonnage = Math.max(targetTonnage - achievedTonnage, 0);
+  //   const remainingValue = Math.max(targetValue - achievedValue, 0);
+  //   const selectedTarget =
+  //     normalizedMetric === 'tonnage'
+  //       ? targetTonnage
+  //       : normalizedMetric === 'value'
+  //         ? targetValue
+  //         : targetCases;
+  //   const selectedAchieved =
+  //     normalizedMetric === 'tonnage'
+  //       ? achievedTonnage
+  //       : normalizedMetric === 'value'
+  //         ? achievedValue
+  //         : achievedCases;
+  //   const selectedRemaining = Math.max(selectedTarget - selectedAchieved, 0);
+  //   const lmtdTarget =
+  //     normalizedMetric === 'tonnage'
+  //       ? Number(lmtdTargetSummary.targetTonnage || 0)
+  //       : normalizedMetric === 'value'
+  //         ? Number(lmtdTargetSummary.targetValue || 0)
+  //         : Number(lmtdTargetSummary.targetCases || 0);
+  //   const lmtdAchieved =
+  //     normalizedMetric === 'tonnage'
+  //       ? Number(lmtdSales.totalTonnage || 0)
+  //       : normalizedMetric === 'value'
+  //         ? Number(lmtdSales.totalValue || 0)
+  //         : Number(lmtdSales.totalCases || 0);
+  //   const elapsedDays =
+  //     Math.floor(
+  //       (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24),
+  //     ) + 1;
+  //   const remainingDays = Math.max(monthEndDate.getDate() - elapsedDays, 1);
+  //   const achievementPercentage =
+  //     targetCases > 0
+  //       ? Number(((achievedCases / targetCases) * 100).toFixed(2))
+  //       : 0;
+  //   const selectedAchievementPercentage =
+  //     selectedTarget > 0
+  //       ? Number(((selectedAchieved / selectedTarget) * 100).toFixed(2))
+  //       : 0;
+  //   const lmtdAchievementPercentage =
+  //     lmtdTarget > 0
+  //       ? Number(((lmtdAchieved / lmtdTarget) * 100).toFixed(2))
+  //       : 0;
+  //   const improvement = Number(
+  //     (selectedAchievementPercentage - lmtdAchievementPercentage).toFixed(2),
+  //   );
+
+  //   return {
+  //     statusCode: HttpStatus.OK,
+  //     message: 'Salesman pocket and target fetched successfully',
+  //     data: {
+  //       startDate,
+  //       endDate,
+  //       retailingDays: retailingDayCount,
+  //       avgRetailingTime,
+  //       avgTotalTime,
+
+  //       target: {
+  //         metric: normalizedMetric,
+  //         selected: {
+  //           target: Number(selectedTarget.toFixed(2)),
+  //           achieved: Number(selectedAchieved.toFixed(2)),
+  //           remaining: Number(selectedRemaining.toFixed(2)),
+  //           achievementPercentage: selectedAchievementPercentage,
+  //           mtd: selectedAchievementPercentage,
+  //           lmtd: lmtdAchievementPercentage,
+  //           improvement,
+  //           crr:
+  //             elapsedDays > 0
+  //               ? Number((selectedAchieved / elapsedDays).toFixed(2))
+  //               : 0,
+  //           rrr:
+  //             remainingDays > 0
+  //               ? Number((selectedRemaining / remainingDays).toFixed(2))
+  //               : 0,
+  //         },
+  //         targetCases,
+  //         achievedCases,
+  //         remainingCases,
+  //         targetTonnage,
+  //         achievedTonnage,
+  //         remainingTonnage,
+  //         targetValue,
+  //         achievedValue,
+  //         remainingValue,
+  //         achievementPercentage,
+  //         crr:
+  //           elapsedDays > 0
+  //             ? Number((achievedCases / elapsedDays).toFixed(2))
+  //             : 0,
+  //         rrr:
+  //           remainingDays > 0
+  //             ? Number((remainingCases / remainingDays).toFixed(2))
+  //             : 0,
+  //       },
+
+  //       pocket: {
+  //         tc,
+  //         avgTc:
+  //           retailingDayCount > 0
+  //             ? Number((tc / retailingDayCount).toFixed(2))
+  //             : 0,
+  //         pc,
+  //         avgPc:
+  //           retailingDayCount > 0
+  //             ? Number((pc / retailingDayCount).toFixed(2))
+  //             : 0,
+  //         upc,
+  //         utc,
+  //         totalLinesSold,
+  //         lpc: pc > 0 ? Number((totalLinesSold / pc).toFixed(2)) : 0,
+  //         avgFirstCallTime,
+  //         avgFirstPcTime,
+  //       },
+  //       vanUtilization: {
+  //         openingStockCases: Number(openingStockCases.toFixed(2)),
+  //         topupStockCases: Number(topupStockCases.toFixed(2)),
+  //         totalStockCases: Number(totalStockCases.toFixed(2)),
+  //         salesCases: Number(stockSalesCases.toFixed(2)),
+  //         utilizationPercentage,
+  //       },
+  //       dayWiseSummary,
+  //     },
+  //   };
+  // }
+
+
   async getSalesmanPocketAndTarget(
-    date?: string,
-    metric: 'cases' | 'tonnage' | 'value' = 'cases',
-    startDateParam?: string,
-    endDateParam?: string,
-  ) {
-    const employeeId = RequestContextStore.getStore()?.userId;
+  date?: string,
+  metric: 'cases' | 'tonnage' | 'value' = 'cases',
+  startDateParam?: string,
+  endDateParam?: string,
+) {
+  const employeeId = RequestContextStore.getStore()?.userId;
 
-    if (!employeeId) {
-      throw new NotFoundException(EMPLOYEE.NOT_FOUND);
-    }
+  if (!employeeId) {
+    throw new NotFoundException(EMPLOYEE.NOT_FOUND);
+  }
 
-    const now = endDateParam
-      ? parseCalendarDate(endDateParam)
-      : date
-        ? parseCalendarDate(date)
-        : new Date();
-    const hasDateRange = Boolean(startDateParam || endDateParam);
+  const now = endDateParam
+    ? parseCalendarDate(endDateParam)
+    : date
+      ? parseCalendarDate(date)
+      : new Date();
 
-    const startDate = startDateParam
-      ? parseCalendarDate(startDateParam)
-      : new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
-    startDate.setHours(0, 0, 0, 0);
+  const hasDateRange = Boolean(startDateParam || endDateParam);
 
-    const endDate = hasDateRange
-      ? parseCalendarDate(endDateParam || startDateParam!)
-      : now;
-    endDate.setHours(23, 59, 59, 999);
-    const todayEnd = new Date();
-    todayEnd.setHours(23, 59, 59, 999);
-    if (endDate > todayEnd) {
-      endDate.setTime(todayEnd.getTime());
-    }
+  const startDate = startDateParam
+    ? parseCalendarDate(startDateParam)
+    : new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
 
-    const monthEndDate = new Date(
-      now.getFullYear(),
-      now.getMonth() + 1,
-      0,
-      23,
-      59,
-      59,
-      999,
-    );
+  startDate.setHours(0, 0, 0, 0);
 
-    const lmtdDate = new Date(
-      now.getFullYear(),
-      now.getMonth() - 1,
-      Math.min(
-        now.getDate(),
-        new Date(now.getFullYear(), now.getMonth(), 0).getDate(),
-      ),
-      now.getHours(),
-      now.getMinutes(),
-      now.getSeconds(),
-      now.getMilliseconds(),
-    );
+  const endDate = hasDateRange
+    ? parseCalendarDate(endDateParam || startDateParam!)
+    : now;
 
-    const lmtdStartDate = new Date(
-      lmtdDate.getFullYear(),
-      lmtdDate.getMonth(),
-      1,
-      0,
-      0,
-      0,
-      0,
-    );
+  endDate.setHours(23, 59, 59, 999);
 
-    const normalizedMetric = ['cases', 'tonnage', 'value'].includes(metric)
-      ? metric
-      : 'cases';
+  const todayEnd = new Date();
+  todayEnd.setHours(23, 59, 59, 999);
 
-    const [
-      targets,
-      salesSummary,
-      lmtdTargets,
-      lmtdSalesSummary,
-      totalVisits,
-      uniqueVisitedOutlets,
-      retailingDays,
-      vanStockSummary,
-    ] = await Promise.all([
-      this.targetModel.aggregate([
-        {
-          $match: {
-            userId: employeeId,
-            startDate: { $lte: endDate },
-            endDate: { $gte: startDate },
+  if (endDate > todayEnd) {
+    endDate.setTime(todayEnd.getTime());
+  }
+
+  const monthEndDate = new Date(
+    now.getFullYear(),
+    now.getMonth() + 1,
+    0,
+    23,
+    59,
+    59,
+    999,
+  );
+
+  const lmtdDate = new Date(
+    now.getFullYear(),
+    now.getMonth() - 1,
+    Math.min(
+      now.getDate(),
+      new Date(now.getFullYear(), now.getMonth(), 0).getDate(),
+    ),
+    now.getHours(),
+    now.getMinutes(),
+    now.getSeconds(),
+    now.getMilliseconds(),
+  );
+
+  const lmtdStartDate = new Date(
+    lmtdDate.getFullYear(),
+    lmtdDate.getMonth(),
+    1,
+    0,
+    0,
+    0,
+    0,
+  );
+
+  const normalizedMetric = ['cases', 'tonnage', 'value'].includes(metric)
+    ? metric
+    : 'cases';
+
+  const openActivityEnd = endDate.getTime() > Date.now() ? new Date() : endDate;
+
+  /**
+   * KG to tonnage expression.
+   * totalWeight is stored in KG.
+   */
+  const kgToTonnageExpression = (field: string) => ({
+    $divide: [{ $ifNull: [field, 0] }, 1000],
+  });
+
+  const [
+    targets,
+    salesAggregate,
+    lmtdTargets,
+    lmtdSalesSummary,
+    totalVisits,
+    uniqueVisitedOutlets,
+    retailingDays,
+    vanStockSummary,
+    totalLinesSoldAggregate,
+    activityDaySummary,
+    visitDaySummary,
+    leaveDaySummary,
+    workSessionDaySummary,
+  ] = await Promise.all([
+    /**
+     * ================= CURRENT TARGET =================
+     */
+    this.targetModel.aggregate([
+      {
+        $match: {
+          userId: employeeId,
+          startDate: { $lte: endDate },
+          endDate: { $gte: startDate },
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          targetCases: { $sum: '$targetCases' },
+          targetTonnage: { $sum: '$targetTonnage' },
+          targetValue: { $sum: '$targetValue' },
+        },
+      },
+    ]),
+
+    /**
+     * ================= CURRENT SALES SUMMARY + DAY SUMMARY =================
+     *
+     * Optimized:
+     * Earlier you were querying sales twice:
+     * 1. salesSummary
+     * 2. salesDaySummary
+     *
+     * Now both come from one aggregation using $facet.
+     */
+    this.saleModal.aggregate([
+      {
+        $match: {
+          'employees.employeeId': employeeId,
+          status: SaleStatus.COMPLETED,
+          date: {
+            $gte: startDate,
+            $lte: endDate,
           },
         },
-        {
-          $group: {
-            _id: null,
-            targetCases: { $sum: '$targetCases' },
-            targetTonnage: { $sum: '$targetTonnage' },
-            targetValue: { $sum: '$targetValue' },
-          },
-        },
-      ]),
+      },
+      {
+        $facet: {
+          summary: [
+            {
+              $group: {
+                _id: null,
+                totalOrders: { $sum: 1 },
+                totalCases: { $sum: '$netCases' },
 
-      this.saleModal.aggregate([
-        {
-          $match: {
-            'employees.employeeId': employeeId,
-            status: SaleStatus.COMPLETED,
-            date: {
-              $gte: startDate,
-              $lte: endDate,
-            },
-          },
-        },
-        {
-          $group: {
-            _id: null,
-            totalOrders: { $sum: 1 },
-            totalCases: { $sum: '$netCases' },
-            totalTonnage: { $sum: '$totalWeight' },
-            totalValue: { $sum: '$totalValue' },
-            saleIds: { $addToSet: '$saleId' },
-            uniqueBilledOutlets: { $addToSet: '$customerId' },
-          },
-        },
-      ]),
+                /**
+                 * Convert KG to tonnage before summing.
+                 */
+                totalTonnage: {
+                  $sum: kgToTonnageExpression('$totalWeight'),
+                },
 
-      this.targetModel.aggregate([
-        {
-          $match: {
-            userId: employeeId,
-            startDate: { $lte: lmtdDate },
-            endDate: { $gte: lmtdStartDate },
-          },
-        },
-        {
-          $group: {
-            _id: null,
-            targetCases: { $sum: '$targetCases' },
-            targetTonnage: { $sum: '$targetTonnage' },
-            targetValue: { $sum: '$targetValue' },
-          },
-        },
-      ]),
-
-      this.saleModal.aggregate([
-        {
-          $match: {
-            'employees.employeeId': employeeId,
-            status: SaleStatus.COMPLETED,
-            date: {
-              $gte: lmtdStartDate,
-              $lte: lmtdDate,
-            },
-          },
-        },
-        {
-          $group: {
-            _id: null,
-            totalCases: { $sum: '$netCases' },
-            totalTonnage: { $sum: '$totalWeight' },
-            totalValue: { $sum: '$totalValue' },
-          },
-        },
-      ]),
-
-      this.shopVisitModel.countDocuments({
-        employeeId,
-        status: ShopVisitStatus.COMPLETED,
-        checkInTime: {
-          $gte: startDate,
-          $lte: endDate,
-        },
-      }),
-
-      this.shopVisitModel.distinct('outletId', {
-        employeeId,
-        status: ShopVisitStatus.COMPLETED,
-        checkInTime: {
-          $gte: startDate,
-          $lte: endDate,
-        },
-      }),
-
-      this.activityModel.aggregate([
-        {
-          $match: {
-            userId: employeeId,
-            name: 'Retailing',
-            status: {
-              $in: [ActivityStatus.ACTIVE, ActivityStatus.COMPLETED],
-            },
-            startTime: {
-              $gte: startDate,
-              $lte: endDate,
-            },
-          },
-        },
-        {
-          $group: {
-            _id: {
-              $dateToString: {
-                format: '%Y-%m-%d',
-                date: '$startTime',
-                timezone: REPORT_TIMEZONE,
+                totalValue: { $sum: '$totalValue' },
+                saleIds: { $addToSet: '$saleId' },
+                uniqueBilledOutlets: { $addToSet: '$customerId' },
               },
             },
-          },
-        },
-        {
-          $count: 'days',
-        },
-      ]),
+          ],
 
-      this.vanDailyStockModel.aggregate([
-        {
-          $match: {
-            employeeId,
-            date: {
-              $gte: startDate,
-              $lte: endDate,
-            },
-          },
-        },
-        {
-          $addFields: {
-            unitQty: {
-              $cond: [{ $gt: ['$unitQtyInCase', 0] }, '$unitQtyInCase', 1],
-            },
-          },
-        },
-        {
-          $group: {
-            _id: null,
-            openingCases: { $sum: { $divide: ['$openingQty', '$unitQty'] } },
-            topupCases: { $sum: { $divide: ['$inQty', '$unitQty'] } },
-            salesCases: { $sum: { $divide: ['$outQty', '$unitQty'] } },
-          },
-        },
-      ]),
-    ]);
-
-    const targetSummary = targets[0] || {
-      targetCases: 0,
-      targetTonnage: 0,
-      targetValue: 0,
-    };
-
-    const sales = salesSummary[0] || {
-      totalOrders: 0,
-      totalCases: 0,
-      totalTonnage: 0,
-      totalValue: 0,
-      saleIds: [],
-      uniqueBilledOutlets: [],
-    };
-    const stock = vanStockSummary[0] || {
-      openingCases: 0,
-      topupCases: 0,
-      salesCases: 0,
-    };
-    const openingStockCases = Number(stock.openingCases || 0);
-    const topupStockCases = Number(stock.topupCases || 0);
-    const totalStockCases = openingStockCases + topupStockCases;
-    const stockSalesCases = Number(stock.salesCases || 0);
-    const utilizationPercentage =
-      totalStockCases > 0
-        ? Number(((stockSalesCases / totalStockCases) * 100).toFixed(2))
-        : 0;
-
-    const lmtdTargetSummary = lmtdTargets[0] || {
-      targetCases: 0,
-      targetTonnage: 0,
-      targetValue: 0,
-    };
-
-    const lmtdSales = lmtdSalesSummary[0] || {
-      totalCases: 0,
-      totalTonnage: 0,
-      totalValue: 0,
-    };
-
-    const totalLinesSold = sales.saleIds.length
-      ? await this.saleItemModel.countDocuments({
-          saleId: {
-            $in: sales.saleIds,
-          },
-        })
-      : 0;
-    const openActivityEnd =
-      endDate.getTime() > Date.now() ? new Date() : endDate;
-
-    const [
-      activityDaySummary,
-      visitDaySummary,
-      salesDaySummary,
-      leaveDaySummary,
-      workSessionDaySummary,
-    ] = await Promise.all([
-      this.activityModel.aggregate([
-        {
-          $match: {
-            userId: employeeId,
-            status: {
-              $in: [ActivityStatus.ACTIVE, ActivityStatus.COMPLETED],
-            },
-            startTime: {
-              $gte: startDate,
-              $lte: endDate,
-            },
-          },
-        },
-        {
-          $group: {
-            _id: {
-              $dateToString: {
-                format: '%Y-%m-%d',
-                date: '$startTime',
-                timezone: REPORT_TIMEZONE,
-              },
-            },
-            retailing: {
-              $sum: {
-                $cond: [{ $eq: ['$name', 'Retailing'] }, 1, 0],
-              },
-            },
-            officialWork: {
-              $sum: {
-                $cond: [{ $ne: ['$name', 'Retailing'] }, 1, 0],
-              },
-            },
-            totalActivities: { $sum: 1 },
-            retailingDurationMs: {
-              $sum: {
-                $cond: [
-                  { $eq: ['$name', 'Retailing'] },
-                  {
-                    $subtract: [
-                      { $ifNull: ['$endTime', openActivityEnd] },
-                      '$startTime',
-                    ],
+          dayWise: [
+            {
+              $group: {
+                _id: {
+                  $dateToString: {
+                    format: '%Y-%m-%d',
+                    date: '$date',
+                    timezone: REPORT_TIMEZONE,
                   },
-                  0,
-                ],
+                },
+                pc: { $sum: 1 },
+                upc: { $addToSet: '$customerId' },
+                cases: { $sum: '$netCases' },
+
+                /**
+                 * Day-wise tonnage after KG conversion.
+                 */
+                tonnage: {
+                  $sum: kgToTonnageExpression('$totalWeight'),
+                },
+
+                netValue: { $sum: '$totalValue' },
+                firstPcTime: { $min: '$date' },
               },
             },
-            totalDurationMs: {
-              $sum: {
-                $subtract: [
-                  { $ifNull: ['$endTime', openActivityEnd] },
-                  '$startTime',
-                ],
+          ],
+        },
+      },
+    ]),
+
+    /**
+     * ================= LMTD TARGET =================
+     */
+    this.targetModel.aggregate([
+      {
+        $match: {
+          userId: employeeId,
+          startDate: { $lte: lmtdDate },
+          endDate: { $gte: lmtdStartDate },
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          targetCases: { $sum: '$targetCases' },
+          targetTonnage: { $sum: '$targetTonnage' },
+          targetValue: { $sum: '$targetValue' },
+        },
+      },
+    ]),
+
+    /**
+     * ================= LMTD SALES =================
+     */
+    this.saleModal.aggregate([
+      {
+        $match: {
+          'employees.employeeId': employeeId,
+          status: SaleStatus.COMPLETED,
+          date: {
+            $gte: lmtdStartDate,
+            $lte: lmtdDate,
+          },
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          totalCases: { $sum: '$netCases' },
+
+          /**
+           * Convert KG to tonnage before summing.
+           */
+          totalTonnage: {
+            $sum: kgToTonnageExpression('$totalWeight'),
+          },
+
+          totalValue: { $sum: '$totalValue' },
+        },
+      },
+    ]),
+
+    /**
+     * ================= TOTAL VISITS =================
+     */
+    this.shopVisitModel.countDocuments({
+      employeeId,
+      status: ShopVisitStatus.COMPLETED,
+      checkInTime: {
+        $gte: startDate,
+        $lte: endDate,
+      },
+    }),
+
+    /**
+     * ================= UNIQUE VISITED OUTLETS =================
+     */
+    this.shopVisitModel.distinct('outletId', {
+      employeeId,
+      status: ShopVisitStatus.COMPLETED,
+      checkInTime: {
+        $gte: startDate,
+        $lte: endDate,
+      },
+    }),
+
+    /**
+     * ================= RETAILING DAYS =================
+     */
+    this.activityModel.aggregate([
+      {
+        $match: {
+          userId: employeeId,
+          name: 'Retailing',
+          status: {
+            $in: [ActivityStatus.ACTIVE, ActivityStatus.COMPLETED],
+          },
+          startTime: {
+            $gte: startDate,
+            $lte: endDate,
+          },
+        },
+      },
+      {
+        $group: {
+          _id: {
+            $dateToString: {
+              format: '%Y-%m-%d',
+              date: '$startTime',
+              timezone: REPORT_TIMEZONE,
+            },
+          },
+        },
+      },
+      {
+        $count: 'days',
+      },
+    ]),
+
+    /**
+     * ================= VAN STOCK SUMMARY =================
+     */
+    this.vanDailyStockModel.aggregate([
+      {
+        $match: {
+          employeeId,
+          date: {
+            $gte: startDate,
+            $lte: endDate,
+          },
+        },
+      },
+      {
+        $addFields: {
+          unitQty: {
+            $cond: [{ $gt: ['$unitQtyInCase', 0] }, '$unitQtyInCase', 1],
+          },
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          openingCases: { $sum: { $divide: ['$openingQty', '$unitQty'] } },
+          topupCases: { $sum: { $divide: ['$inQty', '$unitQty'] } },
+          salesCases: { $sum: { $divide: ['$outQty', '$unitQty'] } },
+        },
+      },
+    ]),
+
+    /**
+     * ================= TOTAL LINES SOLD =================
+     *
+     * Optimized:
+     * Instead of first collecting saleIds and then querying after Promise.all,
+     * we calculate count directly using sales + sale_items lookup.
+     */
+    this.saleModal.aggregate([
+      {
+        $match: {
+          'employees.employeeId': employeeId,
+          status: SaleStatus.COMPLETED,
+          date: {
+            $gte: startDate,
+            $lte: endDate,
+          },
+        },
+      },
+      {
+        $lookup: {
+          from: 'sale_items',
+          let: {
+            saleId: '$saleId',
+          },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $eq: ['$saleId', '$$saleId'],
+                },
               },
             },
-          },
-        },
-      ]),
-      this.shopVisitModel.aggregate([
-        {
-          $match: {
-            employeeId,
-            status: ShopVisitStatus.COMPLETED,
-            checkInTime: {
-              $gte: startDate,
-              $lte: endDate,
-            },
-          },
-        },
-        {
-          $group: {
-            _id: {
-              $dateToString: {
-                format: '%Y-%m-%d',
-                date: '$checkInTime',
-                timezone: REPORT_TIMEZONE,
+            {
+              $project: {
+                _id: 1,
               },
             },
-            tc: { $sum: 1 },
-            firstCallTime: { $min: '$checkInTime' },
+          ],
+          as: 'items',
+        },
+      },
+      {
+        $project: {
+          itemCount: {
+            $size: '$items',
           },
         },
-      ]),
-      this.saleModal.aggregate([
-        {
-          $match: {
-            'employees.employeeId': employeeId,
-            status: SaleStatus.COMPLETED,
-            date: {
-              $gte: startDate,
-              $lte: endDate,
+      },
+      {
+        $group: {
+          _id: null,
+          totalLinesSold: {
+            $sum: '$itemCount',
+          },
+        },
+      },
+    ]),
+
+    /**
+     * ================= ACTIVITY DAY SUMMARY =================
+     */
+    this.activityModel.aggregate([
+      {
+        $match: {
+          userId: employeeId,
+          status: {
+            $in: [ActivityStatus.ACTIVE, ActivityStatus.COMPLETED],
+          },
+          startTime: {
+            $gte: startDate,
+            $lte: endDate,
+          },
+        },
+      },
+      {
+        $group: {
+          _id: {
+            $dateToString: {
+              format: '%Y-%m-%d',
+              date: '$startTime',
+              timezone: REPORT_TIMEZONE,
+            },
+          },
+          retailing: {
+            $sum: {
+              $cond: [{ $eq: ['$name', 'Retailing'] }, 1, 0],
+            },
+          },
+          officialWork: {
+            $sum: {
+              $cond: [{ $ne: ['$name', 'Retailing'] }, 1, 0],
+            },
+          },
+          totalActivities: { $sum: 1 },
+          retailingDurationMs: {
+            $sum: {
+              $cond: [
+                { $eq: ['$name', 'Retailing'] },
+                {
+                  $subtract: [
+                    { $ifNull: ['$endTime', openActivityEnd] },
+                    '$startTime',
+                  ],
+                },
+                0,
+              ],
+            },
+          },
+          totalDurationMs: {
+            $sum: {
+              $subtract: [
+                { $ifNull: ['$endTime', openActivityEnd] },
+                '$startTime',
+              ],
             },
           },
         },
-        {
-          $group: {
-            _id: {
-              $dateToString: {
-                format: '%Y-%m-%d',
-                date: '$date',
-                timezone: REPORT_TIMEZONE,
-              },
-            },
-            pc: { $sum: 1 },
-            upc: { $addToSet: '$customerId' },
-            cases: { $sum: '$netCases' },
-            netValue: { $sum: '$totalValue' },
-            firstPcTime: { $min: '$date' },
+      },
+    ]),
+
+    /**
+     * ================= VISIT DAY SUMMARY =================
+     */
+    this.shopVisitModel.aggregate([
+      {
+        $match: {
+          employeeId,
+          status: ShopVisitStatus.COMPLETED,
+          checkInTime: {
+            $gte: startDate,
+            $lte: endDate,
           },
         },
-      ]),
-      this.leaveModel.aggregate([
-        {
-          $match: {
-            userId: employeeId,
-            status: LeaveStatus.COMPLETED,
-            createdAt: {
-              $gte: startDate,
-              $lte: endDate,
+      },
+      {
+        $group: {
+          _id: {
+            $dateToString: {
+              format: '%Y-%m-%d',
+              date: '$checkInTime',
+              timezone: REPORT_TIMEZONE,
+            },
+          },
+          tc: { $sum: 1 },
+          firstCallTime: { $min: '$checkInTime' },
+        },
+      },
+    ]),
+
+    /**
+     * ================= LEAVE DAY SUMMARY =================
+     */
+    this.leaveModel.aggregate([
+      {
+        $match: {
+          userId: employeeId,
+          status: LeaveStatus.COMPLETED,
+          createdAt: {
+            $gte: startDate,
+            $lte: endDate,
+          },
+        },
+      },
+      {
+        $group: {
+          _id: {
+            $dateToString: {
+              format: '%Y-%m-%d',
+              date: '$createdAt',
+              timezone: REPORT_TIMEZONE,
+            },
+          },
+          leave: { $sum: 1 },
+        },
+      },
+    ]),
+
+    /**
+     * ================= WORK SESSION DAY SUMMARY =================
+     */
+    this.workSessionModel.aggregate([
+      {
+        $addFields: {
+          normalizedDayStartTime: {
+            $convert: {
+              input: '$dayStartTime',
+              to: 'date',
+              onError: '$createdAt',
+              onNull: '$createdAt',
             },
           },
         },
-        {
-          $group: {
-            _id: {
-              $dateToString: {
-                format: '%Y-%m-%d',
-                date: '$createdAt',
-                timezone: REPORT_TIMEZONE,
-              },
-            },
-            leave: { $sum: 1 },
-          },
+      },
+      {
+        $match: {
+          userId: employeeId,
+          normalizedDayStartTime: { $gte: startDate, $lte: endDate },
         },
-      ]),
-      this.workSessionModel.aggregate([
-        {
-          $addFields: {
-            normalizedDayStartTime: {
-              $convert: {
-                input: '$dayStartTime',
-                to: 'date',
-                onError: '$createdAt',
-                onNull: '$createdAt',
-              },
+      },
+      {
+        $group: {
+          _id: {
+            $dateToString: {
+              format: '%Y-%m-%d',
+              date: '$normalizedDayStartTime',
+              timezone: REPORT_TIMEZONE,
             },
           },
-        },
-        {
-          $match: {
-            userId: employeeId,
-            normalizedDayStartTime: { $gte: startDate, $lte: endDate },
+          dayStarted: { $sum: 1 },
+          dayCompleted: {
+            $sum: { $cond: [{ $eq: ['$status', 'COMPLETED'] }, 1, 0] },
           },
+          latestStatus: { $last: '$status' },
         },
-        {
-          $group: {
-            _id: {
-              $dateToString: {
-                format: '%Y-%m-%d',
-                date: '$normalizedDayStartTime',
-                timezone: REPORT_TIMEZONE,
-              },
-            },
-            dayStarted: { $sum: 1 },
-            dayCompleted: {
-              $sum: { $cond: [{ $eq: ['$status', 'COMPLETED'] }, 1, 0] },
-            },
-            latestStatus: { $last: '$status' },
-          },
-        },
-      ]),
-    ]);
+      },
+    ]),
+  ]);
 
-    const formatTime = (value?: Date | string | null) => {
-      if (!value) return null;
-      const parsedDate = new Date(value);
-      if (Number.isNaN(parsedDate.getTime())) return null;
+  const targetSummary = targets[0] || {
+    targetCases: 0,
+    targetTonnage: 0,
+    targetValue: 0,
+  };
 
-      return parsedDate.toLocaleTimeString('en-IN', {
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: true,
-      });
-    };
+  const salesFacet = salesAggregate?.[0] || {};
+  const sales = salesFacet.summary?.[0] || {
+    totalOrders: 0,
+    totalCases: 0,
+    totalTonnage: 0,
+    totalValue: 0,
+    saleIds: [],
+    uniqueBilledOutlets: [],
+  };
 
-    const formatAverageTime = (
-      values: Array<Date | string | null | undefined>,
-    ) => {
-      const minutes = values
-        .map((value) => {
-          if (!value) return null;
+  const salesDaySummary = salesFacet.dayWise || [];
 
-          const parsedDate = new Date(value);
-          if (Number.isNaN(parsedDate.getTime())) return null;
+  const stock = vanStockSummary[0] || {
+    openingCases: 0,
+    topupCases: 0,
+    salesCases: 0,
+  };
 
-          return parsedDate.getHours() * 60 + parsedDate.getMinutes();
-        })
-        .filter((value): value is number => value !== null);
+  const openingStockCases = Number(stock.openingCases || 0);
+  const topupStockCases = Number(stock.topupCases || 0);
+  const totalStockCases = openingStockCases + topupStockCases;
+  const stockSalesCases = Number(stock.salesCases || 0);
 
-      if (!minutes.length) return null;
+  const utilizationPercentage =
+    totalStockCases > 0
+      ? Number(((stockSalesCases / totalStockCases) * 100).toFixed(2))
+      : 0;
 
-      const averageMinutes = Math.round(
-        minutes.reduce((sum, value) => sum + value, 0) / minutes.length,
-      );
-      const averageDate = new Date();
-      averageDate.setHours(
-        Math.floor(averageMinutes / 60),
-        averageMinutes % 60,
-        0,
-        0,
-      );
+  const lmtdTargetSummary = lmtdTargets[0] || {
+    targetCases: 0,
+    targetTonnage: 0,
+    targetValue: 0,
+  };
 
-      return formatTime(averageDate);
-    };
+  const lmtdSales = lmtdSalesSummary[0] || {
+    totalCases: 0,
+    totalTonnage: 0,
+    totalValue: 0,
+  };
 
-    const formatDurationMinutes = (value: number) => {
-      if (!Number.isFinite(value) || value < 1) return '< 1 min';
+  const totalLinesSold = totalLinesSoldAggregate?.[0]?.totalLinesSold || 0;
 
-      const hours = Math.floor(value / 60);
-      const minutes = value % 60;
+  const formatTime = (value?: Date | string | null) => {
+    if (!value) return null;
 
-      if (!hours) return `${minutes} min${minutes === 1 ? '' : 's'}`;
-      if (!minutes) return `${hours} hr${hours === 1 ? '' : 's'}`;
+    const parsedDate = new Date(value);
+    if (Number.isNaN(parsedDate.getTime())) return null;
 
-      return `${hours} hr${hours === 1 ? '' : 's'} ${minutes} min${
-        minutes === 1 ? '' : 's'
-      }`;
-    };
+    return parsedDate.toLocaleTimeString('en-IN', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+    });
+  };
 
-    const formatAverageDuration = (
-      values: Array<number | null | undefined>,
-    ) => {
-      const minutes = values
-        .map((value) => Math.max(Math.round(Number(value || 0) / 60000), 0))
-        .filter((value) => value > 0);
+  const formatAverageTime = (
+    values: Array<Date | string | null | undefined>,
+  ) => {
+    const minutes = values
+      .map((value) => {
+        if (!value) return null;
 
-      if (!minutes.length) return null;
+        const parsedDate = new Date(value);
+        if (Number.isNaN(parsedDate.getTime())) return null;
 
-      const averageMinutes = Math.round(
-        minutes.reduce((sum, value) => sum + value, 0) / minutes.length,
-      );
+        return parsedDate.getHours() * 60 + parsedDate.getMinutes();
+      })
+      .filter((value): value is number => value !== null);
 
-      return formatDurationMinutes(averageMinutes);
-    };
+    if (!minutes.length) return null;
 
-    const formatDayLabel = (value: Date) =>
-      value.toLocaleDateString('en-IN', {
-        weekday: 'short',
-        day: '2-digit',
-        month: 'short',
-        year: 'numeric',
-      });
-
-    const toMap = (rows: any[]) =>
-      rows.reduce((map, row) => {
-        map.set(row._id, row);
-        return map;
-      }, new Map<string, any>());
-
-    const activityDayMap = toMap(activityDaySummary);
-    const visitDayMap = toMap(visitDaySummary);
-    const salesDayMap = toMap(salesDaySummary);
-    const leaveDayMap = toMap(leaveDaySummary);
-    const workSessionDayMap = toMap(workSessionDaySummary);
-    const avgFirstCallTime = formatAverageTime(
-      visitDaySummary.map((item) => item.firstCallTime),
+    const averageMinutes = Math.round(
+      minutes.reduce((sum, value) => sum + value, 0) / minutes.length,
     );
-    const avgFirstPcTime = formatAverageTime(
-      salesDaySummary.map((item) => item.firstPcTime),
-    );
-    const avgRetailingTime = formatAverageDuration(
-      activityDaySummary.map((item) => item.retailingDurationMs),
-    );
-    const avgTotalTime = formatAverageDuration(
-      activityDaySummary.map((item) => item.totalDurationMs),
-    );
-    const dayWiseSummary: any[] = [];
-    const dayCursor = new Date(startDate);
 
-    while (dayCursor <= endDate) {
-      const dayKey = formatCalendarDate(dayCursor);
-      const activity = activityDayMap.get(dayKey) || {};
-      const visits = visitDayMap.get(dayKey) || {};
-      const daySales = salesDayMap.get(dayKey) || {};
-      const leave = leaveDayMap.get(dayKey) || {};
-      const workSession = workSessionDayMap.get(dayKey) || {};
-      const retailing = Number(activity.retailing || 0);
-      const officialWork = Number(activity.officialWork || 0);
-      const leaveCount = Number(leave.leave || 0);
-      const totalActivities = Number(activity.totalActivities || 0);
-      const tcCount = Number(visits.tc || 0);
-      const pcCount = Number(daySales.pc || 0);
-      const dayStarted = Number(workSession.dayStarted || 0) > 0;
-      const hasWorkRecord =
-        dayStarted || totalActivities > 0 || tcCount > 0 || pcCount > 0;
-      const absent = leaveCount > 0 || hasWorkRecord ? 0 : 1;
-      const dayStatus =
-        leaveCount > 0
-          ? 'Leave'
-          : retailing > 0 || tcCount > 0 || pcCount > 0
-            ? 'Retailing'
-            : officialWork > 0
+    const averageDate = new Date();
+    averageDate.setHours(
+      Math.floor(averageMinutes / 60),
+      averageMinutes % 60,
+      0,
+      0,
+    );
+
+    return formatTime(averageDate);
+  };
+
+  const formatDurationMinutes = (value: number) => {
+    if (!Number.isFinite(value) || value < 1) return '< 1 min';
+
+    const hours = Math.floor(value / 60);
+    const minutes = value % 60;
+
+    if (!hours) return `${minutes} min${minutes === 1 ? '' : 's'}`;
+    if (!minutes) return `${hours} hr${hours === 1 ? '' : 's'}`;
+
+    return `${hours} hr${hours === 1 ? '' : 's'} ${minutes} min${
+      minutes === 1 ? '' : 's'
+    }`;
+  };
+
+  const formatAverageDuration = (
+    values: Array<number | null | undefined>,
+  ) => {
+    const minutes = values
+      .map((value) => Math.max(Math.round(Number(value || 0) / 60000), 0))
+      .filter((value) => value > 0);
+
+    if (!minutes.length) return null;
+
+    const averageMinutes = Math.round(
+      minutes.reduce((sum, value) => sum + value, 0) / minutes.length,
+    );
+
+    return formatDurationMinutes(averageMinutes);
+  };
+
+  const formatDayLabel = (value: Date) =>
+    value.toLocaleDateString('en-IN', {
+      weekday: 'short',
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+    });
+
+  const toMap = (rows: any[]) =>
+    rows.reduce((map, row) => {
+      map.set(row._id, row);
+      return map;
+    }, new Map<string, any>());
+
+  const activityDayMap = toMap(activityDaySummary);
+  const visitDayMap = toMap(visitDaySummary);
+  const salesDayMap = toMap(salesDaySummary);
+  const leaveDayMap = toMap(leaveDaySummary);
+  const workSessionDayMap = toMap(workSessionDaySummary);
+
+  const avgFirstCallTime = formatAverageTime(
+    visitDaySummary.map((item) => item.firstCallTime),
+  );
+
+  const avgFirstPcTime = formatAverageTime(
+    salesDaySummary.map((item) => item.firstPcTime),
+  );
+
+  const avgRetailingTime = formatAverageDuration(
+    activityDaySummary.map((item) => item.retailingDurationMs),
+  );
+
+  const avgTotalTime = formatAverageDuration(
+    activityDaySummary.map((item) => item.totalDurationMs),
+  );
+
+  const dayWiseSummary: any[] = [];
+  const dayCursor = new Date(startDate);
+
+  while (dayCursor <= endDate) {
+    const dayKey = formatCalendarDate(dayCursor);
+
+    const activity = activityDayMap.get(dayKey) || {};
+    const visits = visitDayMap.get(dayKey) || {};
+    const daySales = salesDayMap.get(dayKey) || {};
+    const leave = leaveDayMap.get(dayKey) || {};
+    const workSession = workSessionDayMap.get(dayKey) || {};
+
+    const retailing = Number(activity.retailing || 0);
+    const officialWork = Number(activity.officialWork || 0);
+    const leaveCount = Number(leave.leave || 0);
+    const totalActivities = Number(activity.totalActivities || 0);
+    const tcCount = Number(visits.tc || 0);
+    const pcCount = Number(daySales.pc || 0);
+    const dayStarted = Number(workSession.dayStarted || 0) > 0;
+
+    const hasWorkRecord =
+      dayStarted || totalActivities > 0 || tcCount > 0 || pcCount > 0;
+
+    const absent = leaveCount > 0 || hasWorkRecord ? 0 : 1;
+
+    const dayStatus =
+      leaveCount > 0
+        ? 'Leave'
+        : retailing > 0 || tcCount > 0 || pcCount > 0
+          ? 'Retailing'
+          : officialWork > 0
+            ? 'Official Work'
+            : dayStarted
               ? 'Official Work'
-              : dayStarted
-                ? 'Official Work'
-                : 'Absent';
+              : 'Absent';
 
-      dayWiseSummary.push({
-        date: dayKey,
-        label: formatDayLabel(dayCursor),
-        dayStatus,
-        workSessionStatus: workSession.latestStatus ?? null,
-        dayStarted,
-        dayCompleted: Number(workSession.dayCompleted || 0) > 0,
-        retailing,
-        officialWork,
-        leave: leaveCount,
-        absent,
-        totalActivities,
-        retailingDuration: formatDurationMinutes(
-          Math.max(
-            Math.round(Number(activity.retailingDurationMs || 0) / 60000),
-            0,
-          ),
+    dayWiseSummary.push({
+      date: dayKey,
+      label: formatDayLabel(dayCursor),
+      dayStatus,
+      workSessionStatus: workSession.latestStatus ?? null,
+      dayStarted,
+      dayCompleted: Number(workSession.dayCompleted || 0) > 0,
+      retailing,
+      officialWork,
+      leave: leaveCount,
+      absent,
+      totalActivities,
+      retailingDuration: formatDurationMinutes(
+        Math.max(
+          Math.round(Number(activity.retailingDurationMs || 0) / 60000),
+          0,
         ),
-        totalDuration: formatDurationMinutes(
-          Math.max(
-            Math.round(Number(activity.totalDurationMs || 0) / 60000),
-            0,
-          ),
+      ),
+      totalDuration: formatDurationMinutes(
+        Math.max(
+          Math.round(Number(activity.totalDurationMs || 0) / 60000),
+          0,
         ),
-        tc: tcCount,
-        pc: pcCount,
-        upc: daySales.upc?.length || 0,
-        netValue: Number((daySales.netValue || 0).toFixed(2)),
-        cases: Number((daySales.cases || 0).toFixed(2)),
-        firstCallTime: formatTime(visits.firstCallTime),
-        firstPcTime: formatTime(daySales.firstPcTime),
-      });
+      ),
+      tc: tcCount,
+      pc: pcCount,
+      upc: daySales.upc?.length || 0,
+      netValue: Number((daySales.netValue || 0).toFixed(2)),
+      cases: Number((daySales.cases || 0).toFixed(2)),
 
-      dayCursor.setDate(dayCursor.getDate() + 1);
-    }
+      /**
+       * Already converted from KG to tonnage inside aggregation.
+       */
+      tonnage: Number((daySales.tonnage || 0).toFixed(3)),
 
-    const pc = Number(sales.totalOrders || 0);
-    const tc = Number(totalVisits || 0);
-    const upc = sales.uniqueBilledOutlets?.length || 0;
-    const utc = uniqueVisitedOutlets.length;
-    const retailingDayCount = retailingDays?.[0]?.days || 0;
-    const targetCases = Number(targetSummary.targetCases || 0);
-    const achievedCases = Number(sales.totalCases || 0);
-    const targetTonnage = Number(targetSummary.targetTonnage || 0);
-    const achievedTonnage = Number(sales.totalTonnage || 0);
-    const targetValue = Number(targetSummary.targetValue || 0);
-    const achievedValue = Number(sales.totalValue || 0);
-    const remainingCases = Math.max(targetCases - achievedCases, 0);
-    const remainingTonnage = Math.max(targetTonnage - achievedTonnage, 0);
-    const remainingValue = Math.max(targetValue - achievedValue, 0);
-    const selectedTarget =
-      normalizedMetric === 'tonnage'
-        ? targetTonnage
-        : normalizedMetric === 'value'
-          ? targetValue
-          : targetCases;
-    const selectedAchieved =
-      normalizedMetric === 'tonnage'
-        ? achievedTonnage
-        : normalizedMetric === 'value'
-          ? achievedValue
-          : achievedCases;
-    const selectedRemaining = Math.max(selectedTarget - selectedAchieved, 0);
-    const lmtdTarget =
-      normalizedMetric === 'tonnage'
-        ? Number(lmtdTargetSummary.targetTonnage || 0)
-        : normalizedMetric === 'value'
-          ? Number(lmtdTargetSummary.targetValue || 0)
-          : Number(lmtdTargetSummary.targetCases || 0);
-    const lmtdAchieved =
-      normalizedMetric === 'tonnage'
-        ? Number(lmtdSales.totalTonnage || 0)
-        : normalizedMetric === 'value'
-          ? Number(lmtdSales.totalValue || 0)
-          : Number(lmtdSales.totalCases || 0);
-    const elapsedDays =
-      Math.floor(
-        (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24),
-      ) + 1;
-    const remainingDays = Math.max(monthEndDate.getDate() - elapsedDays, 1);
-    const achievementPercentage =
-      targetCases > 0
-        ? Number(((achievedCases / targetCases) * 100).toFixed(2))
-        : 0;
-    const selectedAchievementPercentage =
-      selectedTarget > 0
-        ? Number(((selectedAchieved / selectedTarget) * 100).toFixed(2))
-        : 0;
-    const lmtdAchievementPercentage =
-      lmtdTarget > 0
-        ? Number(((lmtdAchieved / lmtdTarget) * 100).toFixed(2))
-        : 0;
-    const improvement = Number(
-      (selectedAchievementPercentage - lmtdAchievementPercentage).toFixed(2),
-    );
+      firstCallTime: formatTime(visits.firstCallTime),
+      firstPcTime: formatTime(daySales.firstPcTime),
+    });
 
-    return {
-      statusCode: HttpStatus.OK,
-      message: 'Salesman pocket and target fetched successfully',
-      data: {
-        startDate,
-        endDate,
-        retailingDays: retailingDayCount,
-        avgRetailingTime,
-        avgTotalTime,
+    dayCursor.setDate(dayCursor.getDate() + 1);
+  }
 
-        target: {
-          metric: normalizedMetric,
-          selected: {
-            target: Number(selectedTarget.toFixed(2)),
-            achieved: Number(selectedAchieved.toFixed(2)),
-            remaining: Number(selectedRemaining.toFixed(2)),
-            achievementPercentage: selectedAchievementPercentage,
-            mtd: selectedAchievementPercentage,
-            lmtd: lmtdAchievementPercentage,
-            improvement,
-            crr:
-              elapsedDays > 0
-                ? Number((selectedAchieved / elapsedDays).toFixed(2))
-                : 0,
-            rrr:
-              remainingDays > 0
-                ? Number((selectedRemaining / remainingDays).toFixed(2))
-                : 0,
-          },
-          targetCases,
-          achievedCases,
-          remainingCases,
-          targetTonnage,
-          achievedTonnage,
-          remainingTonnage,
-          targetValue,
-          achievedValue,
-          remainingValue,
-          achievementPercentage,
+  const pc = Number(sales.totalOrders || 0);
+  const tc = Number(totalVisits || 0);
+  const upc = sales.uniqueBilledOutlets?.length || 0;
+  const utc = uniqueVisitedOutlets.length;
+  const retailingDayCount = retailingDays?.[0]?.days || 0;
+
+  const targetCases = Number(targetSummary.targetCases || 0);
+  const achievedCases = Number(sales.totalCases || 0);
+  const remainingCases = Math.max(targetCases - achievedCases, 0);
+
+  /**
+   * Tonnage values are now correct because achievedTonnage is already KG / 1000.
+   */
+  const targetTonnage = Number(targetSummary.targetTonnage || 0);
+  const achievedTonnage = Number(sales.totalTonnage || 0);
+  const remainingTonnage = Math.max(targetTonnage - achievedTonnage, 0);
+
+  const targetValue = Number(targetSummary.targetValue || 0);
+  const achievedValue = Number(sales.totalValue || 0);
+  const remainingValue = Math.max(targetValue - achievedValue, 0);
+
+  const selectedTarget =
+    normalizedMetric === 'tonnage'
+      ? targetTonnage
+      : normalizedMetric === 'value'
+        ? targetValue
+        : targetCases;
+
+  const selectedAchieved =
+    normalizedMetric === 'tonnage'
+      ? achievedTonnage
+      : normalizedMetric === 'value'
+        ? achievedValue
+        : achievedCases;
+
+  const selectedRemaining = Math.max(selectedTarget - selectedAchieved, 0);
+
+  const lmtdTarget =
+    normalizedMetric === 'tonnage'
+      ? Number(lmtdTargetSummary.targetTonnage || 0)
+      : normalizedMetric === 'value'
+        ? Number(lmtdTargetSummary.targetValue || 0)
+        : Number(lmtdTargetSummary.targetCases || 0);
+
+  /**
+   * LMTD tonnage is also already KG / 1000.
+   */
+  const lmtdAchieved =
+    normalizedMetric === 'tonnage'
+      ? Number(lmtdSales.totalTonnage || 0)
+      : normalizedMetric === 'value'
+        ? Number(lmtdSales.totalValue || 0)
+        : Number(lmtdSales.totalCases || 0);
+
+  const elapsedDays =
+    Math.floor(
+      (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24),
+    ) + 1;
+
+  const remainingDays = Math.max(monthEndDate.getDate() - elapsedDays, 1);
+
+  const achievementPercentage =
+    targetCases > 0
+      ? Number(((achievedCases / targetCases) * 100).toFixed(2))
+      : 0;
+
+  const selectedAchievementPercentage =
+    selectedTarget > 0
+      ? Number(((selectedAchieved / selectedTarget) * 100).toFixed(2))
+      : 0;
+
+  const lmtdAchievementPercentage =
+    lmtdTarget > 0
+      ? Number(((lmtdAchieved / lmtdTarget) * 100).toFixed(2))
+      : 0;
+
+  const improvement = Number(
+    (selectedAchievementPercentage - lmtdAchievementPercentage).toFixed(2),
+  );
+
+  const selectedDecimalPlaces = normalizedMetric === 'tonnage' ? 3 : 2;
+
+  return {
+    statusCode: HttpStatus.OK,
+    message: 'Salesman pocket and target fetched successfully',
+    data: {
+      startDate,
+      endDate,
+      retailingDays: retailingDayCount,
+      avgRetailingTime,
+      avgTotalTime,
+
+      target: {
+        metric: normalizedMetric,
+
+        selected: {
+          target: Number(selectedTarget.toFixed(selectedDecimalPlaces)),
+          achieved: Number(selectedAchieved.toFixed(selectedDecimalPlaces)),
+          remaining: Number(selectedRemaining.toFixed(selectedDecimalPlaces)),
+          achievementPercentage: selectedAchievementPercentage,
+          mtd: selectedAchievementPercentage,
+          lmtd: lmtdAchievementPercentage,
+          improvement,
+
           crr:
             elapsedDays > 0
-              ? Number((achievedCases / elapsedDays).toFixed(2))
+              ? Number(
+                  (selectedAchieved / elapsedDays).toFixed(
+                    selectedDecimalPlaces,
+                  ),
+                )
               : 0,
+
           rrr:
             remainingDays > 0
-              ? Number((remainingCases / remainingDays).toFixed(2))
+              ? Number(
+                  (selectedRemaining / remainingDays).toFixed(
+                    selectedDecimalPlaces,
+                  ),
+                )
               : 0,
         },
 
-        pocket: {
-          tc,
-          avgTc:
-            retailingDayCount > 0
-              ? Number((tc / retailingDayCount).toFixed(2))
-              : 0,
-          pc,
-          avgPc:
-            retailingDayCount > 0
-              ? Number((pc / retailingDayCount).toFixed(2))
-              : 0,
-          upc,
-          utc,
-          totalLinesSold,
-          lpc: pc > 0 ? Number((totalLinesSold / pc).toFixed(2)) : 0,
-          avgFirstCallTime,
-          avgFirstPcTime,
-        },
-        vanUtilization: {
-          openingStockCases: Number(openingStockCases.toFixed(2)),
-          topupStockCases: Number(topupStockCases.toFixed(2)),
-          totalStockCases: Number(totalStockCases.toFixed(2)),
-          salesCases: Number(stockSalesCases.toFixed(2)),
-          utilizationPercentage,
-        },
-        dayWiseSummary,
+        targetCases: Number(targetCases.toFixed(2)),
+        achievedCases: Number(achievedCases.toFixed(2)),
+        remainingCases: Number(remainingCases.toFixed(2)),
+
+        targetTonnage: Number(targetTonnage.toFixed(3)),
+        achievedTonnage: Number(achievedTonnage.toFixed(3)),
+        remainingTonnage: Number(remainingTonnage.toFixed(3)),
+
+        targetValue: Number(targetValue.toFixed(2)),
+        achievedValue: Number(achievedValue.toFixed(2)),
+        remainingValue: Number(remainingValue.toFixed(2)),
+
+        achievementPercentage,
+
+        crr:
+          elapsedDays > 0
+            ? Number((achievedCases / elapsedDays).toFixed(2))
+            : 0,
+
+        rrr:
+          remainingDays > 0
+            ? Number((remainingCases / remainingDays).toFixed(2))
+            : 0,
       },
-    };
-  }
+
+      pocket: {
+        tc,
+        avgTc:
+          retailingDayCount > 0
+            ? Number((tc / retailingDayCount).toFixed(2))
+            : 0,
+        pc,
+        avgPc:
+          retailingDayCount > 0
+            ? Number((pc / retailingDayCount).toFixed(2))
+            : 0,
+        upc,
+        utc,
+        totalLinesSold,
+        lpc: pc > 0 ? Number((totalLinesSold / pc).toFixed(2)) : 0,
+        avgFirstCallTime,
+        avgFirstPcTime,
+      },
+
+      vanUtilization: {
+        openingStockCases: Number(openingStockCases.toFixed(2)),
+        topupStockCases: Number(topupStockCases.toFixed(2)),
+        totalStockCases: Number(totalStockCases.toFixed(2)),
+        salesCases: Number(stockSalesCases.toFixed(2)),
+        utilizationPercentage,
+      },
+
+      dayWiseSummary,
+    },
+  };
+}
 
   async getSalesmanDayWiseSummary(
     date?: string,
