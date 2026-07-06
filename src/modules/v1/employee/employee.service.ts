@@ -11064,124 +11064,124 @@ export class EmployeeService extends MongoRepository<Employee> {
     };
   }
 
-  async getManagerLiveLocations(
-    query: {
-      date?: string;
-      startDate?: string;
-      endDate?: string;
-    } = {},
-  ) {
-    const managerId = RequestContextStore.getStore()?.userId;
-    const selectedStart = parseCalendarDate(query.startDate || query.date);
-    const selectedEnd = parseCalendarDate(
-      query.endDate || query.startDate || query.date,
-    );
-    const startOfDay = new Date(
-      Math.min(selectedStart.getTime(), selectedEnd.getTime()),
-    );
-    startOfDay.setHours(0, 0, 0, 0);
-    const endOfDay = new Date(
-      Math.max(selectedStart.getTime(), selectedEnd.getTime()),
-    );
-    endOfDay.setHours(23, 59, 59, 999);
+  // async getManagerLiveLocations(
+  //   query: {
+  //     date?: string;
+  //     startDate?: string;
+  //     endDate?: string;
+  //   } = {},
+  // ) {
+  //   const managerId = RequestContextStore.getStore()?.userId;
+  //   const selectedStart = parseCalendarDate(query.startDate || query.date);
+  //   const selectedEnd = parseCalendarDate(
+  //     query.endDate || query.startDate || query.date,
+  //   );
+  //   const startOfDay = new Date(
+  //     Math.min(selectedStart.getTime(), selectedEnd.getTime()),
+  //   );
+  //   startOfDay.setHours(0, 0, 0, 0);
+  //   const endOfDay = new Date(
+  //     Math.max(selectedStart.getTime(), selectedEnd.getTime()),
+  //   );
+  //   endOfDay.setHours(23, 59, 59, 999);
 
-    const employees = await this.find({
-      $or: [{ reportingEmployeeId: managerId }, { hierarchyPath: managerId }],
-      status: UserStatus.ACTIVE,
-    });
-    const employeeIds = employees.map((employee) => employee.employeeId);
+  //   const employees = await this.find({
+  //     $or: [{ reportingEmployeeId: managerId }, { hierarchyPath: managerId }],
+  //     status: UserStatus.ACTIVE,
+  //   });
+  //   const employeeIds = employees.map((employee) => employee.employeeId);
 
-    const sessions = employeeIds.length
-      ? await this.workSessionModel
-          .find({
-            userId: { $in: employeeIds },
-            dayStartTime: { $gte: startOfDay, $lte: endOfDay },
-          })
-          .sort({ dayStartTime: 1 })
-          .lean()
-      : [];
-    const sessionsByUser = new Map<string, any[]>();
-    for (const session of sessions) {
-      const userSessions = sessionsByUser.get(session.userId) || [];
-      userSessions.push(session);
-      sessionsByUser.set(session.userId, userSessions);
-    }
+  //   const sessions = employeeIds.length
+  //     ? await this.workSessionModel
+  //         .find({
+  //           userId: { $in: employeeIds },
+  //           dayStartTime: { $gte: startOfDay, $lte: endOfDay },
+  //         })
+  //         .sort({ dayStartTime: 1 })
+  //         .lean()
+  //     : [];
+  //   const sessionsByUser = new Map<string, any[]>();
+  //   for (const session of sessions) {
+  //     const userSessions = sessionsByUser.get(session.userId) || [];
+  //     userSessions.push(session);
+  //     sessionsByUser.set(session.userId, userSessions);
+  //   }
 
-    const sessionIds = sessions.map((session) => session.workSessionId);
-    const trackedLocations = await this.liveLocationService.findForSessions(
-      sessionIds,
-      startOfDay,
-      endOfDay,
-    );
-    const trackedLocationsBySession = new Map<string, any[]>();
-    for (const location of trackedLocations) {
-      const points =
-        trackedLocationsBySession.get(location.workSessionId) || [];
-      points.push(location);
-      trackedLocationsBySession.set(location.workSessionId, points);
-    }
+  //   const sessionIds = sessions.map((session) => session.workSessionId);
+  //   const trackedLocations = await this.liveLocationService.findForSessions(
+  //     sessionIds,
+  //     startOfDay,
+  //     endOfDay,
+  //   );
+  //   const trackedLocationsBySession = new Map<string, any[]>();
+  //   for (const location of trackedLocations) {
+  //     const points =
+  //       trackedLocationsBySession.get(location.workSessionId) || [];
+  //     points.push(location);
+  //     trackedLocationsBySession.set(location.workSessionId, points);
+  //   }
 
-    const normalizeLocation = (value?: any) => {
-      const latitude = Number(value?.latitude);
-      const longitude = Number(value?.longitude);
-      if (!Number.isFinite(latitude) || !Number.isFinite(longitude))
-        return null;
-      return {
-        latitude,
-        longitude,
-        accuracy: value?.accuracy ?? null,
-        speed: value?.speed ?? null,
-        heading: value?.heading ?? null,
-        capturedAt: value?.capturedAt ?? null,
-      };
-    };
+  //   const normalizeLocation = (value?: any) => {
+  //     const latitude = Number(value?.latitude);
+  //     const longitude = Number(value?.longitude);
+  //     if (!Number.isFinite(latitude) || !Number.isFinite(longitude))
+  //       return null;
+  //     return {
+  //       latitude,
+  //       longitude,
+  //       accuracy: value?.accuracy ?? null,
+  //       speed: value?.speed ?? null,
+  //       heading: value?.heading ?? null,
+  //       capturedAt: value?.capturedAt ?? null,
+  //     };
+  //   };
 
-    const data = employees.map((employee) => {
-      const userSessions = sessionsByUser.get(employee.employeeId) || [];
-      const latestSession = userSessions.at(-1);
-      const routePaths = userSessions
-        .map((session) => {
-          const dedicatedLocations =
-            trackedLocationsBySession.get(session.workSessionId) || [];
-          const trackedPath = dedicatedLocations
-            .map(normalizeLocation)
-            .filter(Boolean)
-            .sort(
-              (first: any, second: any) =>
-                new Date(first.capturedAt || 0).getTime() -
-                new Date(second.capturedAt || 0).getTime(),
-            );
-          return [
-            normalizeLocation(session.dayStartLocation),
-            ...trackedPath,
-            normalizeLocation(session.dayEndLocation),
-          ].filter(Boolean);
-        })
-        .filter((path) => path.length);
-      const routePath = routePaths.flat();
-      const location = routePath.at(-1) || null;
+  //   const data = employees.map((employee) => {
+  //     const userSessions = sessionsByUser.get(employee.employeeId) || [];
+  //     const latestSession = userSessions.at(-1);
+  //     const routePaths = userSessions
+  //       .map((session) => {
+  //         const dedicatedLocations =
+  //           trackedLocationsBySession.get(session.workSessionId) || [];
+  //         const trackedPath = dedicatedLocations
+  //           .map(normalizeLocation)
+  //           .filter(Boolean)
+  //           .sort(
+  //             (first: any, second: any) =>
+  //               new Date(first.capturedAt || 0).getTime() -
+  //               new Date(second.capturedAt || 0).getTime(),
+  //           );
+  //         return [
+  //           normalizeLocation(session.dayStartLocation),
+  //           ...trackedPath,
+  //           normalizeLocation(session.dayEndLocation),
+  //         ].filter(Boolean);
+  //       })
+  //       .filter((path) => path.length);
+  //     const routePath = routePaths.flat();
+  //     const location = routePath.at(-1) || null;
 
-      return {
-        employeeId: employee.employeeId,
-        employeeName: employee.name,
-        mobile: employee.mobile || '',
-        status: latestSession?.status || 'OFFLINE',
-        vanId: latestSession?.vanId || null,
-        vanName: latestSession?.vanName || null,
-        dayStartTime: userSessions[0]?.dayStartTime || null,
-        dayEndTime: latestSession?.dayEndTime || null,
-        location,
-        routePath,
-        routePaths,
-      };
-    });
+  //     return {
+  //       employeeId: employee.employeeId,
+  //       employeeName: employee.name,
+  //       mobile: employee.mobile || '',
+  //       status: latestSession?.status || 'OFFLINE',
+  //       vanId: latestSession?.vanId || null,
+  //       vanName: latestSession?.vanName || null,
+  //       dayStartTime: userSessions[0]?.dayStartTime || null,
+  //       dayEndTime: latestSession?.dayEndTime || null,
+  //       location,
+  //       routePath,
+  //       routePaths,
+  //     };
+  //   });
 
-    return {
-      statusCode: HttpStatus.OK,
-      message: 'Live locations fetched successfully',
-      data,
-    };
-  }
+  //   return {
+  //     statusCode: HttpStatus.OK,
+  //     message: 'Live locations fetched successfully',
+  //     data,
+  //   };
+  // }
 
   // async getManagerUserTimeline(query: { employeeId: string; date?: string }) {
   //   const managerId = RequestContextStore.getStore()?.userId;
@@ -11569,6 +11569,230 @@ export class EmployeeService extends MongoRepository<Employee> {
   //     },
   //   };
   // }
+
+  async getManagerLiveLocations(
+    query: {
+      date?: string;
+      startDate?: string;
+      endDate?: string;
+    } = {},
+  ) {
+    const store = RequestContextStore.getStore();
+
+    const managerId = store?.userId;
+    const roleId = store?.roleId;
+
+    if (!managerId) {
+      throw new NotFoundException(EMPLOYEE.NOT_FOUND);
+    }
+
+    const baseDate = query.date || query.startDate || query.endDate;
+
+    const selectedStart = baseDate
+      ? parseCalendarDate(query.startDate || query.date)
+      : new Date();
+
+    const selectedEnd = baseDate
+      ? parseCalendarDate(query.endDate || query.startDate || query.date)
+      : new Date();
+
+    const startOfDay = new Date(
+      Math.min(selectedStart.getTime(), selectedEnd.getTime()),
+    );
+    startOfDay.setHours(0, 0, 0, 0);
+
+    const endOfDay = new Date(
+      Math.max(selectedStart.getTime(), selectedEnd.getTime()),
+    );
+    endOfDay.setHours(23, 59, 59, 999);
+
+    /**
+     * ==========================================
+     * USERS
+     * ==========================================
+     *
+     * ADMIN:
+     * - show all active SALESMAN users
+     *
+     * MANAGER:
+     * - show only reporting / hierarchy users
+     */
+    const employeeFilter =
+      roleId === 'ADMIN'
+        ? {
+            roleId: 'SALESMAN',
+            status: UserStatus.ACTIVE,
+          }
+        : {
+            $or: [
+              { reportingEmployeeId: managerId },
+              { hierarchyPath: managerId },
+            ],
+            status: UserStatus.ACTIVE,
+          };
+
+    const employees = await this.find(employeeFilter);
+
+    const employeeIds = employees
+      .map((employee) => String(employee.employeeId || '').trim())
+      .filter(Boolean);
+
+    if (!employeeIds.length) {
+      return {
+        statusCode: HttpStatus.OK,
+        message: 'Live locations fetched successfully',
+        data: [],
+      };
+    }
+
+    /**
+     * ==========================================
+     * WORK SESSIONS
+     * ==========================================
+     */
+    const sessions = await this.workSessionModel
+      .find({
+        userId: {
+          $in: employeeIds,
+        },
+        dayStartTime: {
+          $gte: startOfDay,
+          $lte: endOfDay,
+        },
+      })
+      .sort({
+        dayStartTime: 1,
+      })
+      .lean();
+
+    const sessionsByUser = new Map<string, any[]>();
+
+    for (const session of sessions) {
+      const userId = String(session.userId || '').trim();
+
+      if (!userId) continue;
+
+      const userSessions = sessionsByUser.get(userId) || [];
+      userSessions.push(session);
+      sessionsByUser.set(userId, userSessions);
+    }
+
+    const sessionIds = sessions
+      .map((session) => String(session.workSessionId || '').trim())
+      .filter(Boolean);
+
+    /**
+     * ==========================================
+     * LIVE TRACKED LOCATIONS
+     * ==========================================
+     */
+    const trackedLocations = sessionIds.length
+      ? await this.liveLocationService.findForSessions(
+          sessionIds,
+          startOfDay,
+          endOfDay,
+        )
+      : [];
+
+    const trackedLocationsBySession = new Map<string, any[]>();
+
+    for (const location of trackedLocations) {
+      const workSessionId = String(location.workSessionId || '').trim();
+
+      if (!workSessionId) continue;
+
+      const points = trackedLocationsBySession.get(workSessionId) || [];
+      points.push(location);
+      trackedLocationsBySession.set(workSessionId, points);
+    }
+
+    const normalizeLocation = (value?: any) => {
+      const latitude = Number(value?.latitude);
+      const longitude = Number(value?.longitude);
+
+      if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+        return null;
+      }
+
+      return {
+        latitude,
+        longitude,
+        accuracy: value?.accuracy ?? null,
+        speed: value?.speed ?? null,
+        heading: value?.heading ?? null,
+        capturedAt: value?.capturedAt ?? null,
+      };
+    };
+
+    /**
+     * ==========================================
+     * FINAL RESPONSE
+     * ==========================================
+     */
+    const data = employees.map((employee) => {
+      const employeeId = String(employee.employeeId || '').trim();
+
+      const userSessions = sessionsByUser.get(employeeId) || [];
+
+      const latestSession = userSessions.length
+        ? userSessions[userSessions.length - 1]
+        : null;
+
+      const routePaths = userSessions
+        .map((session) => {
+          const dedicatedLocations =
+            trackedLocationsBySession.get(session.workSessionId) || [];
+
+          const trackedPath = dedicatedLocations
+            .map(normalizeLocation)
+            .filter(Boolean)
+            .sort(
+              (first: any, second: any) =>
+                new Date(first.capturedAt || 0).getTime() -
+                new Date(second.capturedAt || 0).getTime(),
+            );
+
+          return [
+            normalizeLocation(session.dayStartLocation),
+            ...trackedPath,
+            normalizeLocation(session.dayEndLocation),
+          ].filter(Boolean);
+        })
+        .filter((path) => path.length);
+
+      const routePath = routePaths.flat();
+
+      const location = routePath.length
+        ? routePath[routePath.length - 1]
+        : null;
+
+      return {
+        employeeId,
+        employeeName: employee.name,
+        mobile: employee.mobile || '',
+
+        roleId: employee.roleId || null,
+
+        status: latestSession?.status || 'OFFLINE',
+
+        vanId: latestSession?.vanId || null,
+        vanName: latestSession?.vanName || null,
+
+        dayStartTime: userSessions[0]?.dayStartTime || null,
+        dayEndTime: latestSession?.dayEndTime || null,
+
+        location,
+        routePath,
+        routePaths,
+      };
+    });
+
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'Live locations fetched successfully',
+      data,
+    };
+  }
 
   async getManagerUserTimeline(query: { employeeId: string; date?: string }) {
     const managerId = RequestContextStore.getStore()?.userId;
