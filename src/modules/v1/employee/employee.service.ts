@@ -5636,6 +5636,7 @@ export class EmployeeService extends MongoRepository<Employee> {
     const emptyData = {
       startDate,
       endDate,
+
       targetCases: 0,
       achievedCases: 0,
       remainingCases: 0,
@@ -5648,12 +5649,21 @@ export class EmployeeService extends MongoRepository<Employee> {
       achievedValue: 0,
       remainingValue: 0,
 
+      uboTarget: 0,
+      uboAchievement: 0,
+      uboRemaining: 0,
+
       achievementPercentage: 0,
+      tonnageAchievementPercentage: 0,
+      valueAchievementPercentage: 0,
+      uboAchievementPercentage: 0,
 
       display: {
         percentage: '0%',
         achievedCases: '0 Cases',
+        uboAchievement: '0 Outlets',
         remainingMessage: 'No target assigned for current month',
+        uboRemainingMessage: 'No UBO target assigned for current month',
       },
     };
 
@@ -5720,6 +5730,15 @@ export class EmployeeService extends MongoRepository<Employee> {
                 $ifNull: ['$targetValue', 0],
               },
             },
+
+            /**
+             * Unique Billed Outlet Target
+             */
+            uboTarget: {
+              $sum: {
+                $ifNull: ['$uboTarget', 0],
+              },
+            },
           },
         },
       ]),
@@ -5728,9 +5747,7 @@ export class EmployeeService extends MongoRepository<Employee> {
         {
           $match: {
             /**
-             * IMPORTANT:
              * Sale schema has employees array.
-             * Use employees.employeeId, not employeeId.
              */
             'employees.employeeId': {
               $in: employeeIds,
@@ -5753,8 +5770,8 @@ export class EmployeeService extends MongoRepository<Employee> {
             },
 
             /**
-             * totalWeight is stored in KG.
-             * Convert KG to tonnage before calculation.
+             * totalWeight is KG.
+             * Convert KG to tonnage.
              */
             achievedTonnage: {
               $sum: {
@@ -5772,6 +5789,24 @@ export class EmployeeService extends MongoRepository<Employee> {
                 $ifNull: ['$totalValue', 0],
               },
             },
+
+            /**
+             * UBO Achievement = distinct billed outlets.
+             */
+            uniqueBilledOutlets: {
+              $addToSet: '$customerId',
+            },
+          },
+        },
+        {
+          $project: {
+            _id: 0,
+            achievedCases: 1,
+            achievedTonnage: 1,
+            achievedValue: 1,
+            uboAchievement: {
+              $size: '$uniqueBilledOutlets',
+            },
           },
         },
       ]),
@@ -5781,12 +5816,14 @@ export class EmployeeService extends MongoRepository<Employee> {
       targetCases: 0,
       targetTonnage: 0,
       targetValue: 0,
+      uboTarget: 0,
     };
 
     const achievementSummary = sales[0] || {
       achievedCases: 0,
       achievedTonnage: 0,
       achievedValue: 0,
+      uboAchievement: 0,
     };
 
     /**
@@ -5802,8 +5839,6 @@ export class EmployeeService extends MongoRepository<Employee> {
      * ==========================================
      * TONNAGE
      * ==========================================
-     *
-     * achievedTonnage is already converted from KG to tonnage.
      */
     const targetTonnage = Number(targetSummary.targetTonnage || 0);
     const achievedTonnage = Number(achievementSummary.achievedTonnage || 0);
@@ -5819,11 +5854,37 @@ export class EmployeeService extends MongoRepository<Employee> {
     const remainingValue = Math.max(targetValue - achievedValue, 0);
 
     /**
-     * Main achievement percentage based on cases.
+     * ==========================================
+     * UNIQUE BILLED OUTLETS
+     * ==========================================
+     */
+    const uboTarget = Number(targetSummary.uboTarget || 0);
+    const uboAchievement = Number(achievementSummary.uboAchievement || 0);
+    const uboRemaining = Math.max(uboTarget - uboAchievement, 0);
+
+    /**
+     * ==========================================
+     * PERCENTAGES
+     * ==========================================
      */
     const achievementPercentage =
       targetCases > 0
         ? Number(((achievedCases / targetCases) * 100).toFixed(2))
+        : 0;
+
+    const tonnageAchievementPercentage =
+      targetTonnage > 0
+        ? Number(((achievedTonnage / targetTonnage) * 100).toFixed(2))
+        : 0;
+
+    const valueAchievementPercentage =
+      targetValue > 0
+        ? Number(((achievedValue / targetValue) * 100).toFixed(2))
+        : 0;
+
+    const uboAchievementPercentage =
+      uboTarget > 0
+        ? Number(((uboAchievement / uboTarget) * 100).toFixed(2))
         : 0;
 
     return {
@@ -5845,20 +5906,38 @@ export class EmployeeService extends MongoRepository<Employee> {
         achievedValue: Number(achievedValue.toFixed(2)),
         remainingValue: Number(remainingValue.toFixed(2)),
 
+        /**
+         * UBO = Unique Billed Outlets
+         */
+        uboTarget: Number(uboTarget.toFixed(0)),
+        uboAchievement: Number(uboAchievement.toFixed(0)),
+        uboRemaining: Number(uboRemaining.toFixed(0)),
+
         achievementPercentage,
+        tonnageAchievementPercentage,
+        valueAchievementPercentage,
+        uboAchievementPercentage,
 
         display: {
           percentage: `${achievementPercentage}%`,
           achievedCases: `${Math.round(achievedCases).toLocaleString()} Cases`,
+
+          uboPercentage: `${uboAchievementPercentage}%`,
+          uboAchievement: `${uboAchievement.toLocaleString()} Outlets`,
+
           remainingMessage:
             targetCases > 0
               ? `Only ${Math.round(remainingCases).toLocaleString()} more Cases to achieve your target`
               : 'No target assigned for current month',
+
+          uboRemainingMessage:
+            uboTarget > 0
+              ? `Only ${uboRemaining.toLocaleString()} more billed outlets to achieve your UBO target`
+              : 'No UBO target assigned for current month',
         },
       },
     };
   }
-
   // async getUserWiseTargetSummary(date?: string) {
   //   const managerId = RequestContextStore.getStore()?.userId;
 
