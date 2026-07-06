@@ -1063,6 +1063,7 @@ export class ProductService extends MongoRepository<Product> {
       isFocusedPack,
       customerCategoryId,
       includeUnpricedProducts,
+      sortBy = 'stock',
     } = query;
 
     /**
@@ -1099,7 +1100,7 @@ export class ProductService extends MongoRepository<Product> {
      * sortBy=stock OR inStockOnly=true:
      * - stock lookup happens before pagination because stock affects sorting/filtering.
      */
-    const shouldSortByStock = query.sortBy === 'stock';
+    const shouldSortByStock = sortBy === 'stock';
     const shouldCalculateStockBeforeFacet =
       shouldSortByStock || inStockOnly === 'true';
 
