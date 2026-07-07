@@ -1245,7 +1245,6 @@
 //   }
 // }
 
-
 import { Injectable } from '@nestjs/common';
 import { InjectConnection } from '@nestjs/mongoose';
 import { Connection, Types } from 'mongoose';
@@ -1977,7 +1976,6 @@ export class SyncService {
     };
   }
 
-
   private resolveConflict(
     existing: Record<string, unknown>,
     payload: Record<string, unknown>,
@@ -2359,7 +2357,11 @@ export class SyncService {
 
         if (!existing) throw new Error('Server record not found');
 
-        const conflictResult = this.resolveConflict(existing, payload, operation);
+        const conflictResult = this.resolveConflict(
+          existing,
+          payload,
+          operation,
+        );
 
         if (conflictResult.hasConflict) {
           results.push({
@@ -2446,19 +2448,28 @@ export class SyncService {
       const ownership = this.ownershipFilter(entity, ownerId, scope);
       const collection = this.connection.collection(collectionName);
 
-      // Older generic sync inserts omitted the soft-delete flag, making those
-      // documents invisible to normal repositories that require
-      // `isDeleted: false`. Repair records in the current user's scope.
+      // Older generic sync inserts omitted sync metadata. Repair it before
+      // applying the incremental updatedAt filter so products/categories and
+      // other master data can be downloaded normally without always-refreshing.
+      const now = new Date();
+
       if (!GLOBAL_MASTER_ENTITIES.has(entity)) {
         await collection.updateMany(
           { ...ownership, ownerId: { $exists: true } },
-          { $unset: { ownerId: '' } },
-        );
-        await collection.updateMany(
-          { ...ownership, isDeleted: { $exists: false } },
-          { $set: { isDeleted: false, updatedAt: new Date() } },
+          { $unset: { ownerId: '' }, $set: { updatedAt: now } },
         );
       }
+
+      await collection.updateMany(
+        { ...ownership, isDeleted: { $exists: false } },
+        { $set: { isDeleted: false, updatedAt: now } },
+      );
+
+      await collection.updateMany(
+        { ...ownership, updatedAt: { $exists: false } },
+        { $set: { updatedAt: now } },
+      );
+
       // Membership of these collections is controlled by van/route mappings.
       // A mapping can change without touching the underlying route/customer,
       // so filtering only by updatedAt would omit newly assigned offline data.
