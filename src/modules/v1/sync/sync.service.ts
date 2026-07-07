@@ -449,6 +449,14 @@ export class SyncService {
       });
     }
 
+    // Important for strict incremental offline sync:
+    // route/customer membership can change without the route or customer body
+    // changing, so touch updatedAt on the affected documents. Otherwise the
+    // next offline download using updatedAt > lastSync will not receive them.
+    await this.connection
+      .collection('customer_master')
+      .updateOne({ customerId }, { $set: { updatedAt: now } });
+
     const affectedRouteIds = new Set(
       [String(current?.routeId ?? ''), routeId].filter(Boolean),
     );
@@ -1222,20 +1230,13 @@ export class SyncService {
         { $set: { updatedAt: now } },
       );
 
-      // Membership of these collections is controlled by van/route mappings.
-      // A mapping can change without touching the underlying route/customer,
-      // so filtering only by updatedAt would omit newly assigned offline data.
-      const scopeSensitive = [
-        'routes',
-        'vans',
-        'customers',
-        'outlets',
-        // Targets can be reassigned or edited and legacy target documents do
-        // not have updatedAt. Always refresh the logged-in user's 3-month set.
-        'targets',
-      ].includes(entity);
-      const changed =
-        lastSync && !scopeSensitive ? { updatedAt: { $gt: since } } : {};
+      // Strict incremental sync:
+      // After the first full download, every entity must be returned only when
+      // its updatedAt is newer than the client's last successful sync time.
+      // If route/customer/assignment membership changes, the write operation
+      // that changes the mapping must also touch updatedAt on the affected
+      // route/customer documents.
+      const changed = lastSync ? { updatedAt: { $gt: since } } : {};
 
       const documents =
         entity === 'priceLists'
