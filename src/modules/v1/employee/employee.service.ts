@@ -5087,16 +5087,19 @@ export class EmployeeService extends MongoRepository<Employee> {
       : date
         ? parseCalendarDate(date)
         : new Date();
+
     const hasDateRange = Boolean(startDateParam || endDateParam);
 
     const startDate = startDateParam
       ? parseCalendarDate(startDateParam)
       : new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+
     startDate.setHours(0, 0, 0, 0);
 
     const endDate = hasDateRange
       ? parseCalendarDate(endDateParam || startDateParam!)
       : now;
+
     endDate.setHours(23, 59, 59, 999);
 
     const normalizedGroupBy = [
@@ -5107,28 +5110,37 @@ export class EmployeeService extends MongoRepository<Employee> {
       ? groupBy
       : 'PRIMARYCATEGORY';
 
+    /**
+     * New sales schema:
+     * Sale does not have direct employeeId.
+     * Employee is inside employees array.
+     */
+    const saleMatch = {
+      'employees.employeeId': employeeId,
+      status: SaleStatus.COMPLETED,
+      date: {
+        $gte: startDate,
+        $lte: endDate,
+      },
+    };
+
     const [salesSummary, tc] = await Promise.all([
       this.saleModal.aggregate([
         {
-          $match: {
-            employeeId,
-            status: SaleStatus.COMPLETED,
-            date: {
-              $gte: startDate,
-              $lte: endDate,
-            },
-          },
+          $match: saleMatch,
         },
         {
           $group: {
             _id: null,
             totalOrders: { $sum: 1 },
-            totalValue: { $sum: '$totalValue' },
-            totalCases: { $sum: '$netCases' },
+            totalValue: { $sum: { $ifNull: ['$totalValue', 0] } },
+            totalCases: { $sum: { $ifNull: ['$netCases', 0] } },
+            totalWeight: { $sum: { $ifNull: ['$totalWeight', 0] } },
             saleIds: { $addToSet: '$saleId' },
           },
         },
       ]),
+
       this.shopVisitModel.countDocuments({
         employeeId,
         status: ShopVisitStatus.COMPLETED,
@@ -5143,33 +5155,83 @@ export class EmployeeService extends MongoRepository<Employee> {
       totalOrders: 0,
       totalValue: 0,
       totalCases: 0,
+      totalWeight: 0,
       saleIds: [],
     };
-    const saleIds = sales.saleIds || [];
+
+    const saleIds: string[] = sales.saleIds || [];
 
     const groupIdExpression =
       normalizedGroupBy === 'SKU'
-        ? { $ifNull: ['$product.productId', '$productId'] }
+        ? { $ifNull: ['$productId', '$product.productId'] }
         : normalizedGroupBy === 'SECONDARYCATEGORY'
           ? {
               $ifNull: [
-                '$product.unitType',
-                { $ifNull: ['$product.parentCategoryId', 'UNKNOWN'] },
+                '$categoryId',
+                {
+                  $ifNull: ['$product.categoryId', 'UNKNOWN'],
+                },
               ],
             }
-          : { $ifNull: ['$product.parentCategoryId', 'UNKNOWN'] };
+          : {
+              $ifNull: [
+                '$parentCategoryId',
+                {
+                  $ifNull: ['$product.parentCategoryId', 'UNKNOWN'],
+                },
+              ],
+            };
 
     const groupNameExpression =
       normalizedGroupBy === 'SKU'
-        ? { $ifNull: ['$product.name', '$productName'] }
+        ? {
+            $ifNull: [
+              '$productName',
+              {
+                $ifNull: ['$product.name', 'Unknown'],
+              },
+            ],
+          }
         : normalizedGroupBy === 'SECONDARYCATEGORY'
           ? {
               $ifNull: [
-                '$product.unitType',
-                { $ifNull: ['$category.name', 'Unknown'] },
+                '$secondaryCategory.name',
+                {
+                  $ifNull: ['$categoryName', 'Unknown'],
+                },
               ],
             }
-          : { $ifNull: ['$category.name', 'Unknown'] };
+          : {
+              $ifNull: [
+                '$primaryCategory.name',
+                {
+                  $ifNull: ['$parentCategoryName', 'Unknown'],
+                },
+              ],
+            };
+
+    const casesExpression = {
+      $ifNull: [
+        '$netCases',
+        {
+          $add: [
+            { $ifNull: ['$caseQty', 0] },
+            {
+              $cond: [
+                { $gt: [{ $ifNull: ['$unitQtyInCase', 0] }, 0] },
+                {
+                  $divide: [
+                    { $ifNull: ['$pieceQty', 0] },
+                    { $ifNull: ['$unitQtyInCase', 1] },
+                  ],
+                },
+                0,
+              ],
+            },
+          ],
+        },
+      ],
+    };
 
     const [itemSummary, productSales] = saleIds.length
       ? await Promise.all([
@@ -5182,38 +5244,27 @@ export class EmployeeService extends MongoRepository<Employee> {
             {
               $group: {
                 _id: null,
-                totalValue: { $sum: '$totalValue' },
-                totalPieces: { $sum: '$quantity' },
-                totalCases: {
-                  $sum: {
-                    $add: [
-                      { $ifNull: ['$caseQty', 0] },
-                      {
-                        $cond: [
-                          { $gt: ['$unitQtyInCase', 0] },
-                          {
-                            $divide: [
-                              { $ifNull: ['$pieceQty', 0] },
-                              '$unitQtyInCase',
-                            ],
-                          },
-                          0,
-                        ],
-                      },
-                    ],
-                  },
-                },
+                totalValue: { $sum: { $ifNull: ['$totalValue', 0] } },
+                totalPieces: { $sum: { $ifNull: ['$quantity', 0] } },
+                totalCases: { $sum: casesExpression },
                 skuIds: { $addToSet: '$productId' },
                 lineCount: { $sum: 1 },
               },
             },
           ]),
+
           this.saleItemModel.aggregate([
             {
               $match: {
                 saleId: { $in: saleIds },
               },
             },
+
+            /**
+             * Product lookup is only fallback.
+             * New sale_items already stores productId, productName,
+             * categoryId, parentCategoryId, quantities and values.
+             */
             {
               $lookup: {
                 from: 'product_master',
@@ -5228,45 +5279,74 @@ export class EmployeeService extends MongoRepository<Employee> {
                 preserveNullAndEmptyArrays: true,
               },
             },
+
+            /**
+             * Primary category lookup.
+             */
             {
               $lookup: {
                 from: 'productcategories',
-                localField: 'product.parentCategoryId',
-                foreignField: 'categoryId',
-                as: 'category',
+                let: {
+                  parentCategoryId: {
+                    $ifNull: ['$parentCategoryId', '$product.parentCategoryId'],
+                  },
+                },
+                pipeline: [
+                  {
+                    $match: {
+                      $expr: {
+                        $eq: ['$categoryId', '$$parentCategoryId'],
+                      },
+                    },
+                  },
+                ],
+                as: 'primaryCategory',
               },
             },
             {
               $unwind: {
-                path: '$category',
+                path: '$primaryCategory',
                 preserveNullAndEmptyArrays: true,
               },
             },
+
+            /**
+             * Secondary category lookup.
+             */
+            {
+              $lookup: {
+                from: 'productcategories',
+                let: {
+                  categoryId: {
+                    $ifNull: ['$categoryId', '$product.categoryId'],
+                  },
+                },
+                pipeline: [
+                  {
+                    $match: {
+                      $expr: {
+                        $eq: ['$categoryId', '$$categoryId'],
+                      },
+                    },
+                  },
+                ],
+                as: 'secondaryCategory',
+              },
+            },
+            {
+              $unwind: {
+                path: '$secondaryCategory',
+                preserveNullAndEmptyArrays: true,
+              },
+            },
+
             {
               $group: {
                 _id: groupIdExpression,
                 name: { $first: groupNameExpression },
-                value: { $sum: '$totalValue' },
-                pcs: { $sum: '$quantity' },
-                cases: {
-                  $sum: {
-                    $add: [
-                      { $ifNull: ['$caseQty', 0] },
-                      {
-                        $cond: [
-                          { $gt: ['$unitQtyInCase', 0] },
-                          {
-                            $divide: [
-                              { $ifNull: ['$pieceQty', 0] },
-                              '$unitQtyInCase',
-                            ],
-                          },
-                          0,
-                        ],
-                      },
-                    ],
-                  },
-                },
+                value: { $sum: { $ifNull: ['$totalValue', 0] } },
+                pcs: { $sum: { $ifNull: ['$quantity', 0] } },
+                cases: { $sum: casesExpression },
               },
             },
             {
@@ -5285,6 +5365,7 @@ export class EmployeeService extends MongoRepository<Employee> {
       skuIds: [],
       lineCount: 0,
     };
+
     const pc = Number(sales.totalOrders || 0);
     const totalValue = Number(itemTotals.totalValue || sales.totalValue || 0);
     const totalCases = Number(itemTotals.totalCases || sales.totalCases || 0);
@@ -5304,8 +5385,9 @@ export class EmployeeService extends MongoRepository<Employee> {
               ? Number((Number(itemTotals.lineCount || 0) / pc).toFixed(2))
               : 0,
         },
+
         categories: productSales.map((item) => ({
-          id: item._id,
+          id: item._id || 'UNKNOWN',
           name: item.name || 'Unknown',
           value: Number((item.value || 0).toFixed(2)),
           pcs: Number((item.pcs || 0).toFixed(2)),
