@@ -1459,10 +1459,10 @@ const MASTER_ENTITIES = new Set([
   'vans',
   'routes',
   'salesmen',
-  'stock',
+  // 'stock',
   'promotions',
   'targets',
-  'vanDailyStock',
+  // 'vanDailyStock',
   'vanErpClosing',
 ]);
 const GLOBAL_MASTER_ENTITIES = new Set([
