@@ -9097,7 +9097,7 @@ export class EmployeeService extends MongoRepository<Employee> {
 
     startDate.setHours(0, 0, 0, 0);
 
-    const endDate = new Date(query?.endDate);
+    const endDate = new Date(query?.endDate || new Date());
     endDate.setHours(23, 59, 59, 999);
 
     const emptyResponse = {
