@@ -648,7 +648,7 @@ export class VanDailyStockService extends MongoRepository<VanDailyStock> {
           $match: {
             vanId,
             workSessionId,
-            date: targetDate,
+            date: { $gte: targetDate },
           },
         },
         {
