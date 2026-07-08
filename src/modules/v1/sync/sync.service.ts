@@ -1561,6 +1561,8 @@ const WRITABLE_ENTITIES = new Set([
   'complaints',
   'vanDailyStock',
   'inventoryTransactions',
+  'routeSessions'
+  
 ]);
 const GLOBAL_MASTER_ENTITIES = new Set([
   'products',
