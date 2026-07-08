@@ -839,7 +839,7 @@ export class VanDailyStockService extends MongoRepository<VanDailyStock> {
     try {
       /**
        * ======================================================
-       * 1. RESOLVE TARGET DATE
+       * 1. DATE FILTER
        * ======================================================
        */
       const targetDate = new Date(date || new Date());
@@ -854,6 +854,7 @@ export class VanDailyStockService extends MongoRepository<VanDailyStock> {
        * ======================================================
        */
       let customerCategoryId = '';
+      let customerCategoryCode = '';
 
       if (workSessionId) {
         const activeRouteSession = await this.model.db
@@ -883,11 +884,31 @@ export class VanDailyStockService extends MongoRepository<VanDailyStock> {
             activeRouteSession?.customerCategoryId ?? '',
           );
         }
+
+        /**
+         * price_master has categoryCode, not customerCategoryId.
+         * So convert customerCategoryId to categoryCode.
+         */
+        if (customerCategoryId) {
+          const customerCategory = await this.model.db
+            .collection('customer_category_master')
+            .findOne({
+              customerCategoryId,
+              isDeleted: { $ne: true },
+            });
+
+          customerCategoryCode = String(
+            customerCategory?.categoryCode ??
+              customerCategory?.code ??
+              customerCategory?.customerCategoryCode ??
+              customerCategoryId,
+          );
+        }
       }
 
       /**
        * ======================================================
-       * 3. BUILD MATCH FILTER
+       * 3. MATCH FILTER
        * ======================================================
        */
       const matchFilter: Record<string, unknown> = {
@@ -905,12 +926,7 @@ export class VanDailyStockService extends MongoRepository<VanDailyStock> {
 
       /**
        * ======================================================
-       * 4. DAY END SUMMARY
-       *
-       * Price priority:
-       * 1. price_master by productId + customerCategoryId
-       * 2. latest effectiveDate
-       * 3. fallback van_daily_stock.piecePrice
+       * 4. AGGREGATION
        * ======================================================
        */
       const result = await this.model.aggregate([
@@ -934,7 +950,17 @@ export class VanDailyStockService extends MongoRepository<VanDailyStock> {
 
         /**
          * ======================================================
-         * PRICE LIST LOOKUP
+         * PRICE MASTER LOOKUP
+         *
+         * Price schema fields:
+         * - productId
+         * - categoryCode
+         * - casePriceExclVat
+         * - casePriceInclVat
+         * - piecePriceExclVat
+         * - piecePriceInclVat
+         * - effectiveDate
+         * - priceFlag
          * ======================================================
          */
         {
@@ -942,7 +968,7 @@ export class VanDailyStockService extends MongoRepository<VanDailyStock> {
             from: 'price_master',
             let: {
               productId: '$productId',
-              customerCategoryId: customerCategoryId,
+              categoryCode: customerCategoryCode,
             },
             pipeline: [
               {
@@ -953,13 +979,7 @@ export class VanDailyStockService extends MongoRepository<VanDailyStock> {
                         $eq: ['$productId', '$$productId'],
                       },
                       {
-                        $eq: ['$categoryCode', '$$customerCategoryId'],
-                      },
-                      {
-                        $ne: ['$isDeleted', true],
-                      },
-                      {
-                        $ne: ['$status', 'INACTIVE'],
+                        $eq: ['$categoryCode', '$$categoryCode'],
                       },
                     ],
                   },
@@ -970,14 +990,6 @@ export class VanDailyStockService extends MongoRepository<VanDailyStock> {
                   effectiveDateForSort: {
                     $convert: {
                       input: '$effectiveDate',
-                      to: 'date',
-                      onError: new Date(0),
-                      onNull: new Date(0),
-                    },
-                  },
-                  updatedAtForSort: {
-                    $convert: {
-                      input: '$updatedAt',
                       to: 'date',
                       onError: new Date(0),
                       onNull: new Date(0),
@@ -995,7 +1007,6 @@ export class VanDailyStockService extends MongoRepository<VanDailyStock> {
               {
                 $sort: {
                   effectiveDateForSort: -1,
-                  updatedAtForSort: -1,
                   _id: -1,
                 },
               },
@@ -1015,15 +1026,12 @@ export class VanDailyStockService extends MongoRepository<VanDailyStock> {
 
         /**
          * ======================================================
-         * NORMALIZE PRICE
+         * RESOLVE PRICE
          *
-         * Supports multiple possible price fields:
-         * - piecePrice
-         * - priceInclVatPiece
-         * - priceExclVatPiece
-         * - priceInclVat / unitQtyInCase
-         * - priceExclVat / unitQtyInCase
-         * - fallback vanDailyStock.piecePrice
+         * Priority:
+         * 1. price_master.piecePriceInclVat
+         * 2. price_master.piecePriceExclVat
+         * 3. van_daily_stock.piecePrice
          * ======================================================
          */
         {
@@ -1032,38 +1040,21 @@ export class VanDailyStockService extends MongoRepository<VanDailyStock> {
 
             resolvedPiecePrice: {
               $ifNull: [
-                '$priceList.piecePrice',
+                '$priceList.piecePriceInclVat',
+                {
+                  $ifNull: ['$priceList.piecePriceExclVat', '$piecePrice'],
+                },
+              ],
+            },
+
+            resolvedCasePrice: {
+              $ifNull: [
+                '$priceList.casePriceInclVat',
                 {
                   $ifNull: [
-                    '$priceList.priceInclVatPiece',
+                    '$priceList.casePriceExclVat',
                     {
-                      $ifNull: [
-                        '$priceList.priceExclVatPiece',
-                        {
-                          $ifNull: [
-                            {
-                              $cond: [
-                                {
-                                  $gt: ['$unitQtyInCase', 0],
-                                },
-                                {
-                                  $divide: [
-                                    {
-                                      $ifNull: [
-                                        '$priceList.priceInclVat',
-                                        '$priceList.priceExclVat',
-                                      ],
-                                    },
-                                    '$unitQtyInCase',
-                                  ],
-                                },
-                                null,
-                              ],
-                            },
-                            '$piecePrice',
-                          ],
-                        },
-                      ],
+                      $multiply: ['$piecePrice', '$unitQtyInCase'],
                     },
                   ],
                 },
@@ -1142,6 +1133,12 @@ export class VanDailyStockService extends MongoRepository<VanDailyStock> {
             },
           },
         },
+
+        /**
+         * ======================================================
+         * GROUP SUMMARY
+         * ======================================================
+         */
         {
           $group: {
             _id: null,
@@ -1167,9 +1164,12 @@ export class VanDailyStockService extends MongoRepository<VanDailyStock> {
                 productName: '$productName',
 
                 customerCategoryId: customerCategoryId,
+                categoryCode: customerCategoryCode,
 
                 unitQtyInCase: '$unitQtyInCase',
+
                 piecePrice: '$resolvedPiecePrice',
+                casePrice: '$resolvedCasePrice',
 
                 openingQty: '$openingQty',
                 openingCases: '$openingCases',
@@ -1204,7 +1204,7 @@ export class VanDailyStockService extends MongoRepository<VanDailyStock> {
 
       /**
        * ======================================================
-       * SUMMARY CASE / PIECE CALCULATION
+       * FIXED SUMMARY CASE / PIECE CALC
        * ======================================================
        */
       let openingCases = 0;
@@ -1244,7 +1244,10 @@ export class VanDailyStockService extends MongoRepository<VanDailyStock> {
         statusCode: 200,
         message: 'Day end summary fetched successfully',
         data: {
-          customerCategoryId,
+          routePricing: {
+            customerCategoryId,
+            categoryCode: customerCategoryCode,
+          },
           summary: {
             opening: {
               qty: data.openingQty || 0,
