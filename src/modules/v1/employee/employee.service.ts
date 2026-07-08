@@ -9095,8 +9095,6 @@ export class EmployeeService extends MongoRepository<Employee> {
     const startDate = new Date(query?.startDate || new Date());
     startDate.setHours(0, 0, 0, 0);
 
-    startDate.setHours(0, 0, 0, 0);
-
     const endDate = new Date(query?.endDate || new Date());
     endDate.setHours(23, 59, 59, 999);
 
@@ -9227,13 +9225,13 @@ export class EmployeeService extends MongoRepository<Employee> {
           },
           status: RouteCustomerMappingStatus.ACTIVE,
           effectiveFrom: {
-            $lte: endDate,
+            $lte: fromDate,
           },
-          $or: [
-            { effectiveTo: null },
-            { effectiveTo: { $exists: false } },
-            { effectiveTo: { $gte: startDate } },
-          ],
+          // $or: [
+          //   { effectiveTo: null },
+          //   { effectiveTo: { $exists: false } },
+          //   { effectiveTo: { $gte: startDate } },
+          // ],
         })
       : [];
 
