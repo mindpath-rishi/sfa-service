@@ -39,6 +39,7 @@
 //   complaints: 'complaints',
 //   targets: 'targets',
 //   vanDailyStock: 'van_daily_stock',
+//   vanErpClosing: 'van_erp_closing',
 //   inventoryTransactions: 'inventory_transactions',
 // } as const;
 
@@ -73,6 +74,7 @@
 //   complaints: 'complaintId',
 //   targets: '_id',
 //   vanDailyStock: 'vanDailyStockId',
+//   vanErpClosing: 'stockId',
 //   inventoryTransactions: 'transactionId',
 // };
 
@@ -90,7 +92,27 @@
 //   'stock',
 //   'promotions',
 //   'targets',
+//   'vanErpClosing',
+// ]);
+
+// const WRITABLE_ENTITIES = new Set([
+//   'customers',
+//   'outlets',
+//   'orders',
+//   'orderItems',
+//   'collections',
+//   'attendance',
+//   'activities',
+//   'visits',
+//   'interactions',
+//   'nonSales',
+//   'leaves',
+//   'surveys',
+//   'expenses',
+//   'returns',
+//   'complaints',
 //   'vanDailyStock',
+//   'inventoryTransactions',
 // ]);
 // const GLOBAL_MASTER_ENTITIES = new Set([
 //   'products',
@@ -113,6 +135,7 @@
 //     routeSessions: ['sessionDate', 'startTime', 'endTime'],
 //     targets: ['startDate', 'endDate'],
 //     vanDailyStock: ['date'],
+//     vanErpClosing: ['date', 'closeDate', 'modifiedDate', 'createdDate'],
 //     inventoryTransactions: ['transactionDate'],
 //   };
 // type SyncScope = {
@@ -268,9 +291,12 @@
 //     const transactionId = String(payload.transactionId ?? '');
 //     const productId = String(payload.productId ?? '');
 //     const vanId = String(payload.vanId ?? '');
+//     const workSessionId = String(payload.workSessionId ?? '');
 //     const quantity = toFiniteNumber(payload.quantity);
-//     if (!transactionId || !productId || !vanId || quantity <= 0)
+
+//     if (!transactionId || !productId || !vanId || quantity <= 0) {
 //       throw new Error('Offline sale transaction has invalid stock details');
+//     }
 
 //     const inventories = this.connection.collection('inventories');
 //     const inventoryResult = await inventories.updateOne(
@@ -317,32 +343,49 @@
 //     dayEnd.setHours(23, 59, 59, 999);
 
 //     const dailyStock = this.connection.collection('van_daily_stock');
-//     const dailyResult = await dailyStock.updateOne(
-//       {
-//         productId,
-//         vanId,
-//         date: { $gte: dayStart, $lte: dayEnd },
-//         appliedOfflineTransactionIds: { $ne: transactionId },
-//       },
-//       {
-//         $inc: { outQty: quantity, closingQty: -quantity },
-//         $addToSet: { appliedOfflineTransactionIds: transactionId },
-//         $set: { updatedAt: new Date() },
-//       },
-//     );
+
+//     /**
+//      * Prefer workSessionId because VanDailyStock is unique by:
+//      * date + vanId + productId + workSessionId.
+//      *
+//      * Legacy offline transactions may not have workSessionId, so the fallback
+//      * still uses product + van + date.
+//      */
+//     const dailyStockFilter: Record<string, unknown> = {
+//       productId,
+//       vanId,
+//       date: { $gte: dayStart, $lte: dayEnd },
+//       appliedOfflineTransactionIds: { $ne: transactionId },
+//     };
+
+//     if (workSessionId) {
+//       dailyStockFilter.workSessionId = workSessionId;
+//     }
+
+//     const dailyResult = await dailyStock.updateOne(dailyStockFilter, {
+//       $inc: { outQty: quantity, closingQty: -quantity },
+//       $addToSet: { appliedOfflineTransactionIds: transactionId },
+//       $set: { updatedAt: new Date() },
+//     });
+
 //     if (!dailyResult.matchedCount) {
-//       const existingDailyStock = await dailyStock.findOne({
-//         productId,
-//         vanId,
-//         date: { $gte: dayStart, $lte: dayEnd },
-//       });
+//       const existingDailyStock = await dailyStock.findOne(
+//         workSessionId
+//           ? { productId, vanId, workSessionId, date: { $gte: dayStart, $lte: dayEnd } }
+//           : { productId, vanId, date: { $gte: dayStart, $lte: dayEnd } },
+//       );
+
 //       const alreadyApplied =
 //         Array.isArray(existingDailyStock?.appliedOfflineTransactionIds) &&
 //         existingDailyStock.appliedOfflineTransactionIds.includes(transactionId);
-//       if (!alreadyApplied)
+
+//       if (!alreadyApplied) {
 //         throw new Error(
-//           `Daily stock not initialized for product: ${productId}`,
+//           workSessionId
+//             ? `Daily stock not initialized for product: ${productId}, workSession: ${workSessionId}`
+//             : `Daily stock not initialized for product: ${productId}`,
 //         );
+//       }
 //     }
 //   }
 
@@ -654,6 +697,13 @@
 //           employeeId: ownerId,
 //           ...this.lastThreeMonthsFilter('date'),
 //         };
+//       case 'vanErpClosing':
+//         return scope.vanId
+//           ? {
+//               vanId: scope.vanId,
+//               ...this.lastThreeMonthsFilter('date'),
+//             }
+//           : { _id: { $in: [] } };
 //       default:
 //         return {
 //           $or: [
@@ -922,6 +972,11 @@
 //             const existingRecordChanges = shouldMergeOfflineChanges
 //               ? payload
 //               : {};
+//             const existingVersion = Number(existing.version ?? 1);
+//             const nextVersion = shouldMergeOfflineChanges
+//               ? existingVersion + 1
+//               : existingVersion;
+
 //             await collection.updateOne(
 //               { _id: existing._id },
 //               {
@@ -942,6 +997,7 @@
 //                   lastSyncSource: 'OFFLINE',
 //                   lastSyncedAt: new Date(),
 //                   updatedAt: new Date(),
+//                   version: nextVersion,
 //                 },
 //                 $unset: { ownerId: '' },
 //               },
@@ -960,7 +1016,7 @@
 //               localId: operation.localId,
 //               success: true,
 //               serverId: String(existing._id),
-//               version: existing.version ?? 1,
+//               version: nextVersion,
 //             });
 //             continue;
 //           }
@@ -1189,6 +1245,50 @@
 //     return { results };
 //   }
 
+//   private async repairDownloadMetadata(
+//     entity: string,
+//     collection: ReturnType<Connection['collection']>,
+//     ownership: Record<string, unknown>,
+//   ) {
+//     /**
+//      * Important:
+//      * Do not bump updatedAt during download repairs.
+//      * If updatedAt is touched here, the same records look new and keep
+//      * downloading even when no business document changed.
+//      */
+//     if (!GLOBAL_MASTER_ENTITIES.has(entity)) {
+//       await collection.updateMany(
+//         { ...ownership, ownerId: { $exists: true } },
+//         { $unset: { ownerId: '' } },
+//       );
+//     }
+
+//     await collection.updateMany(
+//       { ...ownership, isDeleted: { $exists: false } },
+//       [
+//         {
+//           $set: {
+//             isDeleted: false,
+//             updatedAt: {
+//               $ifNull: ['$updatedAt', { $ifNull: ['$createdAt', new Date(0)] }],
+//             },
+//           },
+//         },
+//       ],
+//     );
+
+//     await collection.updateMany(
+//       { ...ownership, updatedAt: { $exists: false } },
+//       [
+//         {
+//           $set: {
+//             updatedAt: { $ifNull: ['$createdAt', new Date(0)] },
+//           },
+//         },
+//       ],
+//     );
+//   }
+
 //   async download(
 //     ownerId: string,
 //     lastSync?: string,
@@ -1208,27 +1308,7 @@
 //       const ownership = this.ownershipFilter(entity, ownerId, scope);
 //       const collection = this.connection.collection(collectionName);
 
-//       // Older generic sync inserts omitted sync metadata. Repair it before
-//       // applying the incremental updatedAt filter so products/categories and
-//       // other master data can be downloaded normally without always-refreshing.
-//       const now = new Date();
-
-//       if (!GLOBAL_MASTER_ENTITIES.has(entity)) {
-//         await collection.updateMany(
-//           { ...ownership, ownerId: { $exists: true } },
-//           { $unset: { ownerId: '' }, $set: { updatedAt: now } },
-//         );
-//       }
-
-//       await collection.updateMany(
-//         { ...ownership, isDeleted: { $exists: false } },
-//         { $set: { isDeleted: false, updatedAt: now } },
-//       );
-
-//       await collection.updateMany(
-//         { ...ownership, updatedAt: { $exists: false } },
-//         { $set: { updatedAt: now } },
-//       );
+//       await this.repairDownloadMetadata(entity, collection, ownership);
 
 //       // Strict incremental sync:
 //       // After the first full download, every entity must be returned only when
@@ -1368,8 +1448,6 @@
 
 
 
-
-
 import { Injectable } from '@nestjs/common';
 import { InjectConnection } from '@nestjs/mongoose';
 import { Connection, Types } from 'mongoose';
@@ -1459,11 +1537,30 @@ const MASTER_ENTITIES = new Set([
   'vans',
   'routes',
   'salesmen',
-  // 'stock',
+  'stock',
   'promotions',
   'targets',
-  // 'vanDailyStock',
   'vanErpClosing',
+]);
+
+const WRITABLE_ENTITIES = new Set([
+  'customers',
+  'outlets',
+  'orders',
+  'orderItems',
+  'collections',
+  'attendance',
+  'activities',
+  'visits',
+  'interactions',
+  'nonSales',
+  'leaves',
+  'surveys',
+  'expenses',
+  'returns',
+  'complaints',
+  'vanDailyStock',
+  'inventoryTransactions',
 ]);
 const GLOBAL_MASTER_ENTITIES = new Set([
   'products',
@@ -1642,9 +1739,12 @@ export class SyncService {
     const transactionId = String(payload.transactionId ?? '');
     const productId = String(payload.productId ?? '');
     const vanId = String(payload.vanId ?? '');
+    const workSessionId = String(payload.workSessionId ?? '');
     const quantity = toFiniteNumber(payload.quantity);
-    if (!transactionId || !productId || !vanId || quantity <= 0)
+
+    if (!transactionId || !productId || !vanId || quantity <= 0) {
       throw new Error('Offline sale transaction has invalid stock details');
+    }
 
     const inventories = this.connection.collection('inventories');
     const inventoryResult = await inventories.updateOne(
@@ -1691,32 +1791,49 @@ export class SyncService {
     dayEnd.setHours(23, 59, 59, 999);
 
     const dailyStock = this.connection.collection('van_daily_stock');
-    const dailyResult = await dailyStock.updateOne(
-      {
-        productId,
-        vanId,
-        date: { $gte: dayStart, $lte: dayEnd },
-        appliedOfflineTransactionIds: { $ne: transactionId },
-      },
-      {
-        $inc: { outQty: quantity, closingQty: -quantity },
-        $addToSet: { appliedOfflineTransactionIds: transactionId },
-        $set: { updatedAt: new Date() },
-      },
-    );
+
+    /**
+     * Prefer workSessionId because VanDailyStock is unique by:
+     * date + vanId + productId + workSessionId.
+     *
+     * Legacy offline transactions may not have workSessionId, so the fallback
+     * still uses product + van + date.
+     */
+    const dailyStockFilter: Record<string, unknown> = {
+      productId,
+      vanId,
+      date: { $gte: dayStart, $lte: dayEnd },
+      appliedOfflineTransactionIds: { $ne: transactionId },
+    };
+
+    if (workSessionId) {
+      dailyStockFilter.workSessionId = workSessionId;
+    }
+
+    const dailyResult = await dailyStock.updateOne(dailyStockFilter, {
+      $inc: { outQty: quantity, closingQty: -quantity },
+      $addToSet: { appliedOfflineTransactionIds: transactionId },
+      $set: { updatedAt: new Date() },
+    });
+
     if (!dailyResult.matchedCount) {
-      const existingDailyStock = await dailyStock.findOne({
-        productId,
-        vanId,
-        date: { $gte: dayStart, $lte: dayEnd },
-      });
+      const existingDailyStock = await dailyStock.findOne(
+        workSessionId
+          ? { productId, vanId, workSessionId, date: { $gte: dayStart, $lte: dayEnd } }
+          : { productId, vanId, date: { $gte: dayStart, $lte: dayEnd } },
+      );
+
       const alreadyApplied =
         Array.isArray(existingDailyStock?.appliedOfflineTransactionIds) &&
         existingDailyStock.appliedOfflineTransactionIds.includes(transactionId);
-      if (!alreadyApplied)
+
+      if (!alreadyApplied) {
         throw new Error(
-          `Daily stock not initialized for product: ${productId}`,
+          workSessionId
+            ? `Daily stock not initialized for product: ${productId}, workSession: ${workSessionId}`
+            : `Daily stock not initialized for product: ${productId}`,
         );
+      }
     }
   }
 
@@ -2121,6 +2238,89 @@ export class SyncService {
   }
 
 
+
+  private async createOfflineSyncAudit(params: {
+    operation: SyncOperationDto;
+    ownerId: string;
+    businessId?: string;
+    rawPayload: Record<string, unknown>;
+    cleanedPayload?: Record<string, unknown> | null;
+    before?: Record<string, unknown> | null;
+  }) {
+    const now = new Date();
+
+    const inserted = await this.connection
+      .collection('offline_sync_audit_logs')
+      .insertOne({
+        auditId: IdGenerator.generate('AUDT', 10),
+        queueId: String(params.operation.queueId ?? ''),
+        ownerId: params.ownerId,
+        entity: params.operation.entity,
+        operation: params.operation.operation,
+        localId: params.operation.localId,
+        businessId: params.businessId,
+        rawPayload: params.rawPayload,
+        cleanedPayload: params.cleanedPayload ?? null,
+        before: params.before ?? null,
+        status: 'PENDING',
+        performedBy: {
+          employeeId: params.ownerId,
+        },
+        metadata: {
+          source: 'OFFLINE_SYNC',
+          syncedAt: now,
+        },
+        createdAt: now,
+        updatedAt: now,
+      });
+
+    return inserted.insertedId;
+  }
+
+  private async markOfflineSyncAuditSuccess(
+    auditObjectId: unknown,
+    params: {
+      serverId?: string;
+      version?: number;
+      after?: Record<string, unknown> | null;
+      result?: Record<string, unknown>;
+    },
+  ) {
+    if (!auditObjectId) return;
+
+    await this.connection.collection('offline_sync_audit_logs').updateOne(
+      { _id: auditObjectId },
+      {
+        $set: {
+          status: 'SUCCESS',
+          serverId: params.serverId,
+          version: params.version ?? 1,
+          after: params.after ?? null,
+          result: params.result,
+          updatedAt: new Date(),
+        },
+      },
+    );
+  }
+
+  private async markOfflineSyncAuditFailed(
+    auditObjectId: unknown,
+    error: string,
+  ) {
+    if (!auditObjectId) return;
+
+    await this.connection.collection('offline_sync_audit_logs').updateOne(
+      { _id: auditObjectId },
+      {
+        $set: {
+          status: 'FAILED',
+          error,
+          updatedAt: new Date(),
+        },
+      },
+    );
+  }
+
   private resolveConflict(
     existing: Record<string, unknown>,
     payload: Record<string, unknown>,
@@ -2169,6 +2369,8 @@ export class SyncService {
   async upload(operations: SyncOperationDto[], ownerId: string) {
     const results = [] as Record<string, unknown>[];
     for (const operation of operations) {
+      let auditObjectId: unknown | null = null;
+
       try {
         const collectionName =
           COLLECTIONS[operation.entity as keyof typeof COLLECTIONS];
@@ -2176,6 +2378,8 @@ export class SyncService {
           throw new Error(`Unsupported sync entity: ${operation.entity}`);
         if (MASTER_ENTITIES.has(operation.entity))
           throw new Error('Master data is read-only');
+        if (!WRITABLE_ENTITIES.has(operation.entity))
+          throw new Error(`Entity is not writable from offline sync: ${operation.entity}`);
         const collection = this.connection.collection(collectionName);
         const payload = normalizeOfflinePayload(
           operation.entity as keyof typeof COLLECTIONS,
@@ -2291,6 +2495,15 @@ export class SyncService {
               : []),
           ],
         });
+        auditObjectId = await this.createOfflineSyncAudit({
+          operation,
+          ownerId,
+          businessId: String(businessId),
+          rawPayload: operation.payload,
+          cleanedPayload: payload,
+          before: existing ?? null,
+        });
+
         const clientVersion = Number(operation.payload.version ?? 0);
 
         if (operation.operation === 'CREATE') {
@@ -2303,6 +2516,11 @@ export class SyncService {
             const existingRecordChanges = shouldMergeOfflineChanges
               ? payload
               : {};
+            const existingVersion = Number(existing.version ?? 1);
+            const nextVersion = shouldMergeOfflineChanges
+              ? existingVersion + 1
+              : existingVersion;
+
             await collection.updateOne(
               { _id: existing._id },
               {
@@ -2323,6 +2541,7 @@ export class SyncService {
                   lastSyncSource: 'OFFLINE',
                   lastSyncedAt: new Date(),
                   updatedAt: new Date(),
+                  version: nextVersion,
                 },
                 $unset: { ownerId: '' },
               },
@@ -2336,13 +2555,22 @@ export class SyncService {
                 payload.routeId,
               );
             }
-            results.push({
+            const result = {
               queueId: operation.queueId,
               localId: operation.localId,
               success: true,
               serverId: String(existing._id),
-              version: existing.version ?? 1,
+              version: nextVersion,
+            };
+
+            await this.markOfflineSyncAuditSuccess(auditObjectId, {
+              serverId: String(existing._id),
+              version: nextVersion,
+              after: { ...payload, version: nextVersion },
+              result,
             });
+
+            results.push(result);
             continue;
           }
           const now = new Date();
@@ -2455,13 +2683,22 @@ export class SyncService {
               });
             }
           }
-          results.push({
+          const result = {
             queueId: operation.queueId,
             localId: operation.localId,
             success: true,
             serverId: String(inserted.insertedId),
             version: 1,
+          };
+
+          await this.markOfflineSyncAuditSuccess(auditObjectId, {
+            serverId: String(inserted.insertedId),
+            version: 1,
+            after: { ...payload, version: 1 },
+            result,
           });
+
+          results.push(result);
           continue;
         }
 
@@ -2490,13 +2727,22 @@ export class SyncService {
             deletedAt: null,
           });
           await persistOfflineLocations();
-          results.push({
+          const result = {
             queueId: operation.queueId,
             localId: operation.localId,
             success: true,
             serverId: String(inserted.insertedId),
             version: 1,
+          };
+
+          await this.markOfflineSyncAuditSuccess(auditObjectId, {
+            serverId: String(inserted.insertedId),
+            version: 1,
+            after: { ...payload, version: 1 },
+            result,
           });
+
+          results.push(result);
           continue;
         }
 
@@ -2505,7 +2751,7 @@ export class SyncService {
         const conflictResult = this.resolveConflict(existing, payload, operation);
 
         if (conflictResult.hasConflict) {
-          results.push({
+          const result = {
             queueId: operation.queueId,
             localId: operation.localId,
             success: false,
@@ -2513,7 +2759,14 @@ export class SyncService {
             error: conflictResult.error || 'VERSION_CONFLICT',
             serverId: String(existing._id),
             version: Number(existing.version ?? 1),
-          });
+          };
+
+          await this.markOfflineSyncAuditFailed(
+            auditObjectId,
+            result.error,
+          );
+
+          results.push(result);
           continue;
         }
 
@@ -2549,25 +2802,95 @@ export class SyncService {
             operation.operation === 'DELETE',
           );
         }
-        results.push({
+        const result = {
           queueId: operation.queueId,
           localId: operation.localId,
           success: true,
           serverId: String(existing._id),
           version,
           conflictResolved: conflictResult.conflictResolved,
+        };
+
+        await this.markOfflineSyncAuditSuccess(auditObjectId, {
+          serverId: String(existing._id),
+          version,
+          after: changes,
+          result,
         });
+
+        results.push(result);
       } catch (error) {
+        const message =
+          error instanceof Error ? error.message : 'Sync operation failed';
+
+        if (!auditObjectId) {
+          auditObjectId = await this.createOfflineSyncAudit({
+            operation,
+            ownerId,
+            businessId: operation.localId,
+            rawPayload: operation.payload,
+            cleanedPayload: null,
+            before: null,
+          }).catch(() => null);
+        }
+
+        await this.markOfflineSyncAuditFailed(auditObjectId, message).catch(
+          () => null,
+        );
+
         results.push({
           queueId: operation.queueId,
           localId: operation.localId,
           success: false,
-          error:
-            error instanceof Error ? error.message : 'Sync operation failed',
+          error: message,
         });
       }
     }
     return { results };
+  }
+
+  private async repairDownloadMetadata(
+    entity: string,
+    collection: ReturnType<Connection['collection']>,
+    ownership: Record<string, unknown>,
+  ) {
+    /**
+     * Important:
+     * Do not bump updatedAt during download repairs.
+     * If updatedAt is touched here, the same records look new and keep
+     * downloading even when no business document changed.
+     */
+    if (!GLOBAL_MASTER_ENTITIES.has(entity)) {
+      await collection.updateMany(
+        { ...ownership, ownerId: { $exists: true } },
+        { $unset: { ownerId: '' } },
+      );
+    }
+
+    await collection.updateMany(
+      { ...ownership, isDeleted: { $exists: false } },
+      [
+        {
+          $set: {
+            isDeleted: false,
+            updatedAt: {
+              $ifNull: ['$updatedAt', { $ifNull: ['$createdAt', new Date(0)] }],
+            },
+          },
+        },
+      ],
+    );
+
+    await collection.updateMany(
+      { ...ownership, updatedAt: { $exists: false } },
+      [
+        {
+          $set: {
+            updatedAt: { $ifNull: ['$createdAt', new Date(0)] },
+          },
+        },
+      ],
+    );
   }
 
   async download(
@@ -2589,27 +2912,7 @@ export class SyncService {
       const ownership = this.ownershipFilter(entity, ownerId, scope);
       const collection = this.connection.collection(collectionName);
 
-      // Older generic sync inserts omitted sync metadata. Repair it before
-      // applying the incremental updatedAt filter so products/categories and
-      // other master data can be downloaded normally without always-refreshing.
-      const now = new Date();
-
-      if (!GLOBAL_MASTER_ENTITIES.has(entity)) {
-        await collection.updateMany(
-          { ...ownership, ownerId: { $exists: true } },
-          { $unset: { ownerId: '' }, $set: { updatedAt: now } },
-        );
-      }
-
-      await collection.updateMany(
-        { ...ownership, isDeleted: { $exists: false } },
-        { $set: { isDeleted: false, updatedAt: now } },
-      );
-
-      await collection.updateMany(
-        { ...ownership, updatedAt: { $exists: false } },
-        { $set: { updatedAt: now } },
-      );
+      await this.repairDownloadMetadata(entity, collection, ownership);
 
       // Strict incremental sync:
       // After the first full download, every entity must be returned only when

@@ -1,20 +1,3 @@
-/**
- * Audit Logs Collection
- * --------------------
- * Purpose : System-wide audit trail for critical actions
- * Used by : ALL MODULES (read-only access)
- *
- * Contains:
- * - Entity reference and action performed
- * - Before & after state snapshots
- * - Actor (employee) information
-* - Request metadata
- *
- * Notes:
- * - Audit logs are immutable once created
- * - Used for compliance, debugging, and traceability
- */
-
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Schema as MongooseSchema } from 'mongoose';
 import { AuditAction } from 'src/shared/enums/app.enums';
@@ -28,10 +11,10 @@ export class AuditLog extends Document {
    * ====================================================== */
 
   @Prop({ required: true, index: true })
-  entity!: string; // e.g. Customer, Employee, Order
+  entity!: string; // customers / orders / inventoryTransactions / etc.
 
   @Prop({ required: true, index: true })
-  entityId!: string; // customerId / employeeId / orderId
+  entityId!: string; // customerId / saleId / transactionId / etc.
 
   @Prop({
     type: String,
@@ -70,18 +53,24 @@ export class AuditLog extends Document {
   };
 
   /* ======================================================
-   * REQUEST METADATA
+   * REQUEST / SYNC METADATA
    * ====================================================== */
 
   @Prop({
-    type: {
-      ip: String,
-      userAgent: String,
-    },
+    type: MongooseSchema.Types.Mixed,
   })
   metadata?: {
     ip?: string;
     userAgent?: string;
+
+    source?: 'ONLINE' | 'OFFLINE_SYNC';
+    queueId?: string;
+    localId?: string;
+    operation?: string;
+    syncStatus?: 'SUCCESS' | 'FAILED';
+    error?: string;
+    serverId?: string;
+    version?: number;
   };
 }
 
@@ -89,8 +78,12 @@ export const AuditLogSchema = SchemaFactory.createForClass(AuditLog);
 
 /* ==================== INDEXES ==================== */
 
-// Fast entity timeline lookup
 AuditLogSchema.index({ entity: 1, entityId: 1, createdAt: -1 });
 
-// Actor-based audit lookup
 AuditLogSchema.index({ 'performedBy.employeeId': 1, createdAt: -1 });
+
+AuditLogSchema.index({ action: 1, createdAt: -1 });
+
+AuditLogSchema.index({ 'metadata.source': 1, createdAt: -1 });
+
+AuditLogSchema.index({ 'metadata.queueId': 1 });
