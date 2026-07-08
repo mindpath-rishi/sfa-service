@@ -9092,20 +9092,12 @@ export class EmployeeService extends MongoRepository<Employee> {
 
     const now = new Date();
 
-    const startDate = query?.startDate
-      ? parseCalendarDate(query.startDate)
-      : query?.date
-        ? parseCalendarDate(query.date)
-        : new Date(now.getFullYear(), now.getMonth(), 1);
+    const startDate = new Date(query?.startDate || new Date());
+    startDate.setHours(0, 0, 0, 0);
 
     startDate.setHours(0, 0, 0, 0);
 
-    const endDate = query?.endDate
-      ? parseCalendarDate(query.endDate)
-      : query?.date
-        ? parseCalendarDate(query.date)
-        : now;
-
+    const endDate = new Date(query?.endDate);
     endDate.setHours(23, 59, 59, 999);
 
     const emptyResponse = {

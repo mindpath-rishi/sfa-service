@@ -1604,775 +1604,776 @@ export class RouteService extends MongoRepository<Route> {
   // }
 
   async getRouteCustomers(
-  routeId: string,
-  query: RouteCustomerQueryDto & {
-    routeSessionId?: string;
-    visitStatus?: 'VISITED' | 'NOT_VISITED';
-  },
-) {
-  const {
-    searchText,
-    page = 1,
-    limit = 20,
-    status,
-    routeSessionId,
-    visitStatus,
-  } = query;
-
-  /* ======================================================
-   * 1️⃣ VALIDATE ROUTE
-   * ====================================================== */
-  const route = await this.model.findOne({ routeId });
-
-  if (!route) {
-    return {
-      statusCode: HttpStatus.NOT_FOUND,
-      message: ROUTE.NOT_FOUND,
-      data: [],
-    };
-  }
-
-  const todayStart = new Date();
-  todayStart.setHours(0, 0, 0, 0);
-
-  const todayEnd = new Date();
-  todayEnd.setHours(23, 59, 59, 999);
-
-  /* ======================================================
-   * 2️⃣ PIPELINE
-   * ====================================================== */
-  const pipeline: any[] = [
-    {
-      $match: {
-        routeId,
-        isDeleted: false,
-      },
+    routeId: string,
+    query: RouteCustomerQueryDto & {
+      routeSessionId?: string;
+      visitStatus?: 'VISITED' | 'NOT_VISITED';
     },
-
-    /* ---------------- MAPPINGS ---------------- */
-    {
-      $lookup: {
-        from: 'route_customer_mappings',
-        let: { routeId: '$routeId' },
-        pipeline: [
-          {
-            $match: {
-              $expr: {
-                $and: [
-                  {
-                    $eq: ['$routeId', '$$routeId'],
-                  },
-                  {
-                    $eq: ['$status', 'ACTIVE'],
-                  },
-                ],
-              },
-            },
-          },
-        ],
-        as: 'mappings',
-      },
-    },
-
-    {
-      $unwind: '$mappings',
-    },
-
-    /* ---------------- CUSTOMER ---------------- */
-    {
-      $lookup: {
-        from: 'customer_master',
-        localField: 'mappings.customerId',
-        foreignField: 'customerId',
-        as: 'customer',
-      },
-    },
-
-    {
-      $unwind: '$customer',
-    },
-
-    /* ---------------- FILTER ---------------- */
-    {
-      $match: {
-        ...(status
-          ? {
-              'customer.status': status,
-            }
-          : {}),
-
-        ...(searchText
-          ? {
-              $or: [
-                {
-                  'customer.name': {
-                    $regex: searchText,
-                    $options: 'i',
-                  },
-                },
-                {
-                  'customer.mobile': {
-                    $regex: searchText,
-                    $options: 'i',
-                  },
-                },
-              ],
-            }
-          : {}),
-      },
-    },
+  ) {
+    const {
+      searchText,
+      page = 1,
+      limit = 20,
+      status,
+      routeSessionId,
+      visitStatus,
+    } = query;
 
     /* ======================================================
-     * VISITS
+     * 1️⃣ VALIDATE ROUTE
      * ====================================================== */
-    {
-      $lookup: {
-        from: 'shop_visits',
-        let: {
-          customerId: '$customer.customerId',
-          routeSessionId: routeSessionId || null,
-          todayStart,
-          todayEnd,
-        },
-        pipeline: [
-          {
-            $match: {
-              $expr: {
-                $and: [
-                  {
-                    $eq: ['$outletId', '$$customerId'],
-                  },
-                  {
-                    $eq: ['$status', ShopVisitStatus.COMPLETED],
-                  },
-                  {
-                    $or: [
-                      {
-                        $and: [
-                          {
-                            $gte: ['$checkOutTime', '$$todayStart'],
-                          },
-                          {
-                            $lte: ['$checkOutTime', '$$todayEnd'],
-                          },
-                        ],
-                      },
-                      {
-                        $and: [
-                          {
-                            $gte: ['$checkInTime', '$$todayStart'],
-                          },
-                          {
-                            $lte: ['$checkInTime', '$$todayEnd'],
-                          },
-                        ],
-                      },
-                    ],
-                  },
-                  {
-                    $cond: [
-                      {
-                        $or: [
-                          {
-                            $eq: ['$$routeSessionId', null],
-                          },
-                          {
-                            $eq: ['$$routeSessionId', ''],
-                          },
-                        ],
-                      },
-                      true,
-                      {
-                        $eq: ['$routeSessionId', '$$routeSessionId'],
-                      },
-                    ],
-                  },
-                ],
-              },
-            },
-          },
-          {
-            $sort: {
-              createdAt: -1,
-            },
-          },
-        ],
-        as: 'visits',
-      },
-    },
+    const route = await this.model.findOne({ routeId });
 
-    {
-      $addFields: {
-        visit: {
-          $arrayElemAt: ['$visits', 0],
-        },
-        visitIds: {
-          $map: {
-            input: {
-              $ifNull: ['$visits', []],
-            },
-            as: 'visit',
-            in: '$$visit.visitId',
-          },
-        },
-      },
-    },
+    if (!route) {
+      return {
+        statusCode: HttpStatus.NOT_FOUND,
+        message: ROUTE.NOT_FOUND,
+        data: [],
+      };
+    }
+
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
+    const todayEnd = new Date();
+    todayEnd.setHours(23, 59, 59, 999);
 
     /* ======================================================
-     * SALES
+     * 2️⃣ PIPELINE
      * ====================================================== */
-    {
-      $lookup: {
-        from: 'sales',
-        let: {
-          visitIds: '$visitIds',
-        },
-        pipeline: [
-          {
-            $match: {
-              $expr: {
-                $in: ['$visitId', '$$visitIds'],
-              },
-            },
-          },
-          {
-            $sort: {
-              createdAt: -1,
-            },
-          },
-        ],
-        as: 'sales',
-      },
-    },
-
-    {
-      $addFields: {
-        sale: {
-          $arrayElemAt: ['$sales', 0],
-        },
-        saleIds: {
-          $map: {
-            input: {
-              $ifNull: ['$sales', []],
-            },
-            as: 'sale',
-            in: '$$sale.saleId',
-          },
-        },
-        saleVisitIds: {
-          $setUnion: [
-            {
-              $map: {
-                input: {
-                  $ifNull: ['$sales', []],
-                },
-                as: 'sale',
-                in: '$$sale.visitId',
-              },
-            },
-            [],
-          ],
+    const pipeline: any[] = [
+      {
+        $match: {
+          routeId,
+          isDeleted: false,
         },
       },
-    },
 
-    /* ---------------- ALL SALE ITEMS FOR SUMMARY ---------------- */
-    {
-      $lookup: {
-        from: 'sale_items',
-        let: {
-          saleIds: '$saleIds',
-        },
-        pipeline: [
-          {
-            $match: {
-              $expr: {
-                $in: ['$saleId', '$$saleIds'],
-              },
-            },
-          },
-        ],
-        as: 'allSaleItems',
-      },
-    },
-
-    {
-      $addFields: {
-        saleItems: {
-          $filter: {
-            input: {
-              $ifNull: ['$allSaleItems', []],
-            },
-            as: 'item',
-            cond: {
-              $eq: ['$$item.saleId', '$sale.saleId'],
-            },
-          },
-        },
-      },
-    },
-
-    /* ======================================================
-     * NON-SALE
-     * ====================================================== */
-    {
-      $lookup: {
-        from: 'non_sale',
-        let: {
-          visitIds: '$visitIds',
-        },
-        pipeline: [
-          {
-            $match: {
-              $expr: {
-                $in: ['$visitId', '$$visitIds'],
-              },
-            },
-          },
-          {
-            $sort: {
-              createdAt: -1,
-            },
-          },
-        ],
-        as: 'nonSales',
-      },
-    },
-
-    {
-      $addFields: {
-        nonSale: {
-          $arrayElemAt: ['$nonSales', 0],
-        },
-        nonSaleVisitIds: {
-          $setUnion: [
-            {
-              $map: {
-                input: {
-                  $ifNull: ['$nonSales', []],
-                },
-                as: 'nonSale',
-                in: '$$nonSale.visitId',
-              },
-            },
-            [],
-          ],
-        },
-      },
-    },
-
-    /* ---------------- COMPUTED ---------------- */
-    {
-      $addFields: {
-        sequence: '$mappings.sequence',
-
-        isVisited: {
-          $gt: [
-            {
-              $size: {
-                $ifNull: ['$visits', []],
-              },
-            },
-            0,
-          ],
-        },
-
-        visitedAt: {
-          $ifNull: ['$visit.checkOutTime', '$visit.checkInTime'],
-        },
-
-        visitStatus: {
-          $ifNull: ['$visit.status', 'NOT_VISITED'],
-        },
-
-        hasSale: {
-          $gt: [
-            {
-              $size: {
-                $ifNull: ['$sales', []],
-              },
-            },
-            0,
-          ],
-        },
-
-        hasNonSale: {
-          $gt: [
-            {
-              $size: {
-                $ifNull: ['$nonSales', []],
-              },
-            },
-            0,
-          ],
-        },
-
-        isNonSale: {
-          $and: [
-            {
-              $gt: [
-                {
-                  $size: {
-                    $ifNull: ['$visits', []],
-                  },
-                },
-                0,
-              ],
-            },
-            {
-              $gt: [
-                {
-                  $size: {
-                    $ifNull: ['$nonSales', []],
-                  },
-                },
-                0,
-              ],
-            },
-            {
-              $eq: [
-                {
-                  $size: {
-                    $ifNull: ['$sales', []],
-                  },
-                },
-                0,
-              ],
-            },
-          ],
-        },
-
-        nonSaleReason: {
-          $cond: [
-            {
-              $and: [
-                {
-                  $gt: [
-                    {
-                      $size: {
-                        $ifNull: ['$nonSales', []],
-                      },
-                    },
-                    0,
-                  ],
-                },
-                {
-                  $eq: [
-                    {
-                      $size: {
-                        $ifNull: ['$sales', []],
-                      },
-                    },
-                    0,
-                  ],
-                },
-              ],
-            },
-            '$nonSale.reason',
-            null,
-          ],
-        },
-
-        visitCountForSummary: {
-          $size: {
-            $ifNull: ['$visits', []],
-          },
-        },
-
-        productiveCallCountForSummary: {
-          $size: {
-            $ifNull: ['$saleVisitIds', []],
-          },
-        },
-
-        nonProductiveCallCountForSummary: {
-          $size: {
-            $filter: {
-              input: {
-                $ifNull: ['$visitIds', []],
-              },
-              as: 'visitId',
-              cond: {
-                $not: {
-                  $in: ['$$visitId', '$saleVisitIds'],
-                },
-              },
-            },
-          },
-        },
-
-        nonSaleCallCountForSummary: {
-          $size: {
-            $filter: {
-              input: {
-                $ifNull: ['$nonSaleVisitIds', []],
-              },
-              as: 'visitId',
-              cond: {
-                $not: {
-                  $in: ['$$visitId', '$saleVisitIds'],
-                },
-              },
-            },
-          },
-        },
-      },
-    },
-
-    /* ---------------- VISIT FILTER ---------------- */
-    ...(visitStatus === 'VISITED'
-      ? [
-          {
-            $match: {
-              isVisited: true,
-            },
-          },
-        ]
-      : visitStatus === 'NOT_VISITED'
-        ? [
+      /* ---------------- MAPPINGS ---------------- */
+      {
+        $lookup: {
+          from: 'route_customer_mappings',
+          let: { routeId: '$routeId' },
+          pipeline: [
             {
               $match: {
-                isVisited: false,
+                $expr: {
+                  $and: [
+                    {
+                      $eq: ['$routeId', '$$routeId'],
+                    },
+                    {
+                      $eq: ['$status', 'ACTIVE'],
+                    },
+                  ],
+                },
               },
-            },
-          ]
-        : []),
-
-    /* ---------------- FINAL SHAPE ---------------- */
-    {
-      $replaceRoot: {
-        newRoot: {
-          $mergeObjects: [
-            '$customer',
-            {
-              sequence: '$sequence',
-
-              isVisited: '$isVisited',
-              visitedAt: '$visitedAt',
-              visitStatus: '$visitStatus',
-
-              hasSale: '$hasSale',
-              sale: '$sale',
-              saleItems: '$saleItems',
-
-              hasNonSale: '$hasNonSale',
-              isNonSale: '$isNonSale',
-              nonSaleReason: '$nonSaleReason',
-
-              /**
-               * UI/debug fields
-               */
-              visitCount: '$visitCountForSummary',
-              saleVisitCount: '$productiveCallCountForSummary',
-
-              /**
-               * Required for summary facet.
-               * These must stay until after $facet.
-               */
-              allSaleItems: '$allSaleItems',
-              visitCountForSummary: '$visitCountForSummary',
-              productiveCallCountForSummary: '$productiveCallCountForSummary',
-              nonProductiveCallCountForSummary: '$nonProductiveCallCountForSummary',
-              nonSaleCallCountForSummary: '$nonSaleCallCountForSummary',
             },
           ],
+          as: 'mappings',
         },
       },
-    },
 
-    /* ---------------- SORT ---------------- */
-    {
-      $sort: {
-        sequence: 1,
+      {
+        $unwind: '$mappings',
       },
-    },
 
-    /* ---------------- FACET ---------------- */
-    {
-      $facet: {
-        data: [
-          {
-            $skip: (page - 1) * limit,
-          },
-          {
-            $limit: limit,
-          },
+      /* ---------------- CUSTOMER ---------------- */
+      {
+        $lookup: {
+          from: 'customer_master',
+          localField: 'mappings.customerId',
+          foreignField: 'customerId',
+          as: 'customer',
+        },
+      },
 
-          /**
-           * Remove summary-only fields from row response.
-           */
-          {
-            $project: {
-              allSaleItems: 0,
-              visitCountForSummary: 0,
-              productiveCallCountForSummary: 0,
-              nonProductiveCallCountForSummary: 0,
-              nonSaleCallCountForSummary: 0,
-            },
-          },
-        ],
+      {
+        $unwind: '$customer',
+      },
 
-        meta: [
-          {
-            $count: 'total',
-          },
-        ],
+      /* ---------------- FILTER ---------------- */
+      {
+        $match: {
+          ...(status
+            ? {
+                'customer.status': status,
+              }
+            : {}),
 
-        summary: [
-          {
-            $group: {
-              _id: null,
-
-              totalOrderValue: {
-                $sum: {
-                  $sum: {
-                    $map: {
-                      input: {
-                        $ifNull: ['$allSaleItems', []],
-                      },
-                      as: 'item',
-                      in: {
-                        $ifNull: ['$$item.totalValue', 0],
-                      },
+          ...(searchText
+            ? {
+                $or: [
+                  {
+                    'customer.name': {
+                      $regex: searchText,
+                      $options: 'i',
                     },
                   },
-                },
-              },
-
-              totalCases: {
-                $sum: {
-                  $sum: {
-                    $map: {
-                      input: {
-                        $ifNull: ['$allSaleItems', []],
-                      },
-                      as: 'item',
-                      in: {
-                        $add: [
-                          {
-                            $ifNull: ['$$item.caseQty', 0],
-                          },
-                          {
-                            $cond: [
-                              {
-                                $gt: ['$$item.unitQtyInCase', 0],
-                              },
-                              {
-                                $divide: [
-                                  {
-                                    $ifNull: ['$$item.pieceQty', 0],
-                                  },
-                                  '$$item.unitQtyInCase',
-                                ],
-                              },
-                              0,
-                            ],
-                          },
-                        ],
-                      },
+                  {
+                    'customer.mobile': {
+                      $regex: searchText,
+                      $options: 'i',
                     },
                   },
+                ],
+              }
+            : {}),
+        },
+      },
+
+      /* ======================================================
+       * VISITS
+       * ====================================================== */
+      {
+        $lookup: {
+          from: 'shop_visits',
+          let: {
+            customerId: '$customer.customerId',
+            routeSessionId: routeSessionId || null,
+            todayStart,
+            todayEnd,
+          },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    {
+                      $eq: ['$outletId', '$$customerId'],
+                    },
+                    {
+                      $eq: ['$status', ShopVisitStatus.COMPLETED],
+                    },
+                    {
+                      $or: [
+                        {
+                          $and: [
+                            {
+                              $gte: ['$checkOutTime', '$$todayStart'],
+                            },
+                            {
+                              $lte: ['$checkOutTime', '$$todayEnd'],
+                            },
+                          ],
+                        },
+                        {
+                          $and: [
+                            {
+                              $gte: ['$checkInTime', '$$todayStart'],
+                            },
+                            {
+                              $lte: ['$checkInTime', '$$todayEnd'],
+                            },
+                          ],
+                        },
+                      ],
+                    },
+                    {
+                      $cond: [
+                        {
+                          $or: [
+                            {
+                              $eq: ['$$routeSessionId', null],
+                            },
+                            {
+                              $eq: ['$$routeSessionId', ''],
+                            },
+                          ],
+                        },
+                        true,
+                        {
+                          $eq: ['$routeSessionId', '$$routeSessionId'],
+                        },
+                      ],
+                    },
+                  ],
                 },
               },
-
-              totalVisitedShop: {
-                $sum: '$visitCountForSummary',
+            },
+            {
+              $sort: {
+                createdAt: -1,
               },
+            },
+          ],
+          as: 'visits',
+        },
+      },
 
-              totalProductiveCall: {
-                $sum: '$productiveCallCountForSummary',
+      {
+        $addFields: {
+          visit: {
+            $arrayElemAt: ['$visits', 0],
+          },
+          visitIds: {
+            $map: {
+              input: {
+                $ifNull: ['$visits', []],
               },
+              as: 'visit',
+              in: '$$visit.visitId',
+            },
+          },
+        },
+      },
 
-              totalNonProductiveCall: {
-                $sum: '$nonProductiveCallCountForSummary',
+      /* ======================================================
+       * SALES
+       * ====================================================== */
+      {
+        $lookup: {
+          from: 'sales',
+          let: {
+            visitIds: '$visitIds',
+          },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $in: ['$visitId', '$$visitIds'],
+                },
               },
+            },
+            {
+              $sort: {
+                createdAt: -1,
+              },
+            },
+          ],
+          as: 'sales',
+        },
+      },
 
-              totalNonSaleCall: {
-                $sum: '$nonSaleCallCountForSummary',
+      {
+        $addFields: {
+          sale: {
+            $arrayElemAt: ['$sales', 0],
+          },
+          saleIds: {
+            $map: {
+              input: {
+                $ifNull: ['$sales', []],
+              },
+              as: 'sale',
+              in: '$$sale.saleId',
+            },
+          },
+          saleVisitIds: {
+            $setUnion: [
+              {
+                $map: {
+                  input: {
+                    $ifNull: ['$sales', []],
+                  },
+                  as: 'sale',
+                  in: '$$sale.visitId',
+                },
+              },
+              [],
+            ],
+          },
+        },
+      },
+
+      /* ---------------- ALL SALE ITEMS FOR SUMMARY ---------------- */
+      {
+        $lookup: {
+          from: 'sale_items',
+          let: {
+            saleIds: '$saleIds',
+          },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $in: ['$saleId', '$$saleIds'],
+                },
+              },
+            },
+          ],
+          as: 'allSaleItems',
+        },
+      },
+
+      {
+        $addFields: {
+          saleItems: {
+            $filter: {
+              input: {
+                $ifNull: ['$allSaleItems', []],
+              },
+              as: 'item',
+              cond: {
+                $eq: ['$$item.saleId', '$sale.saleId'],
               },
             },
           },
+        },
+      },
 
-          {
-            $addFields: {
-              LPSC: {
-                $cond: [
-                  {
-                    $gt: ['$totalVisitedShop', 0],
+      /* ======================================================
+       * NON-SALE
+       * ====================================================== */
+      {
+        $lookup: {
+          from: 'non_sale',
+          let: {
+            visitIds: '$visitIds',
+          },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $in: ['$visitId', '$$visitIds'],
+                },
+              },
+            },
+            {
+              $sort: {
+                createdAt: -1,
+              },
+            },
+          ],
+          as: 'nonSales',
+        },
+      },
+
+      {
+        $addFields: {
+          nonSale: {
+            $arrayElemAt: ['$nonSales', 0],
+          },
+          nonSaleVisitIds: {
+            $setUnion: [
+              {
+                $map: {
+                  input: {
+                    $ifNull: ['$nonSales', []],
                   },
+                  as: 'nonSale',
+                  in: '$$nonSale.visitId',
+                },
+              },
+              [],
+            ],
+          },
+        },
+      },
+
+      /* ---------------- COMPUTED ---------------- */
+      {
+        $addFields: {
+          sequence: '$mappings.sequence',
+
+          isVisited: {
+            $gt: [
+              {
+                $size: {
+                  $ifNull: ['$visits', []],
+                },
+              },
+              0,
+            ],
+          },
+
+          visitedAt: {
+            $ifNull: ['$visit.checkOutTime', '$visit.checkInTime'],
+          },
+
+          visitStatus: {
+            $ifNull: ['$visit.status', 'NOT_VISITED'],
+          },
+
+          hasSale: {
+            $gt: [
+              {
+                $size: {
+                  $ifNull: ['$sales', []],
+                },
+              },
+              0,
+            ],
+          },
+
+          hasNonSale: {
+            $gt: [
+              {
+                $size: {
+                  $ifNull: ['$nonSales', []],
+                },
+              },
+              0,
+            ],
+          },
+
+          isNonSale: {
+            $and: [
+              {
+                $gt: [
                   {
-                    $round: [
-                      {
-                        $divide: ['$totalCases', '$totalVisitedShop'],
-                      },
-                      2,
-                    ],
+                    $size: {
+                      $ifNull: ['$visits', []],
+                    },
                   },
                   0,
                 ],
               },
+              {
+                $gt: [
+                  {
+                    $size: {
+                      $ifNull: ['$nonSales', []],
+                    },
+                  },
+                  0,
+                ],
+              },
+              {
+                $eq: [
+                  {
+                    $size: {
+                      $ifNull: ['$sales', []],
+                    },
+                  },
+                  0,
+                ],
+              },
+            ],
+          },
+
+          nonSaleReason: {
+            $cond: [
+              {
+                $and: [
+                  {
+                    $gt: [
+                      {
+                        $size: {
+                          $ifNull: ['$nonSales', []],
+                        },
+                      },
+                      0,
+                    ],
+                  },
+                  {
+                    $eq: [
+                      {
+                        $size: {
+                          $ifNull: ['$sales', []],
+                        },
+                      },
+                      0,
+                    ],
+                  },
+                ],
+              },
+              '$nonSale.reason',
+              null,
+            ],
+          },
+
+          visitCountForSummary: {
+            $size: {
+              $ifNull: ['$visits', []],
             },
           },
 
-          {
-            $project: {
-              _id: 0,
-              totalOrderValue: {
-                $round: ['$totalOrderValue', 2],
-              },
-              totalCases: {
-                $round: ['$totalCases', 2],
-              },
-              totalVisitedShop: 1,
-              totalProductiveCall: 1,
-              totalNonProductiveCall: 1,
-              totalNonSaleCall: 1,
-              LPSC: 1,
+          productiveCallCountForSummary: {
+            $size: {
+              $ifNull: ['$saleVisitIds', []],
             },
           },
-        ],
+
+          nonProductiveCallCountForSummary: {
+            $size: {
+              $filter: {
+                input: {
+                  $ifNull: ['$visitIds', []],
+                },
+                as: 'visitId',
+                cond: {
+                  $not: {
+                    $in: ['$$visitId', '$saleVisitIds'],
+                  },
+                },
+              },
+            },
+          },
+
+          nonSaleCallCountForSummary: {
+            $size: {
+              $filter: {
+                input: {
+                  $ifNull: ['$nonSaleVisitIds', []],
+                },
+                as: 'visitId',
+                cond: {
+                  $not: {
+                    $in: ['$$visitId', '$saleVisitIds'],
+                  },
+                },
+              },
+            },
+          },
+        },
       },
-    },
-  ];
 
-  /* ======================================================
-   * 3️⃣ EXECUTE
-   * ====================================================== */
-  const result = await this.model.aggregate(pipeline);
+      /* ---------------- VISIT FILTER ---------------- */
+      ...(visitStatus === 'VISITED'
+        ? [
+            {
+              $match: {
+                isVisited: true,
+              },
+            },
+          ]
+        : visitStatus === 'NOT_VISITED'
+          ? [
+              {
+                $match: {
+                  isVisited: false,
+                },
+              },
+            ]
+          : []),
 
-  const data = result?.[0]?.data || [];
+      /* ---------------- FINAL SHAPE ---------------- */
+      {
+        $replaceRoot: {
+          newRoot: {
+            $mergeObjects: [
+              '$customer',
+              {
+                sequence: '$sequence',
 
-  const total = result?.[0]?.meta?.[0]?.total || 0;
+                isVisited: '$isVisited',
+                visitedAt: '$visitedAt',
+                visitStatus: '$visitStatus',
 
-  const summary = result?.[0]?.summary?.[0] || {
-    totalOrderValue: 0,
-    totalCases: 0,
-    totalVisitedShop: 0,
-    totalProductiveCall: 0,
-    totalNonProductiveCall: 0,
-    totalNonSaleCall: 0,
-    LPSC: 0,
-  };
+                hasSale: '$hasSale',
+                sale: '$sale',
+                saleItems: '$saleItems',
 
-  /* ======================================================
-   * 4️⃣ RESPONSE
-   * ====================================================== */
-  return {
-    statusCode: HttpStatus.OK,
-    message: ROUTE.FETCHED,
+                hasNonSale: '$hasNonSale',
+                isNonSale: '$isNonSale',
+                nonSaleReason: '$nonSaleReason',
 
-    data: {
-      data,
-      summary,
-    },
+                /**
+                 * UI/debug fields
+                 */
+                visitCount: '$visitCountForSummary',
+                saleVisitCount: '$productiveCallCountForSummary',
 
-    meta: {
-      page,
-      limit,
-      total,
-    },
-  };
-}
+                /**
+                 * Required for summary facet.
+                 * These must stay until after $facet.
+                 */
+                allSaleItems: '$allSaleItems',
+                visitCountForSummary: '$visitCountForSummary',
+                productiveCallCountForSummary: '$productiveCallCountForSummary',
+                nonProductiveCallCountForSummary:
+                  '$nonProductiveCallCountForSummary',
+                nonSaleCallCountForSummary: '$nonSaleCallCountForSummary',
+              },
+            ],
+          },
+        },
+      },
+
+      /* ---------------- SORT ---------------- */
+      {
+        $sort: {
+          sequence: 1,
+        },
+      },
+
+      /* ---------------- FACET ---------------- */
+      {
+        $facet: {
+          data: [
+            {
+              $skip: (page - 1) * limit,
+            },
+            {
+              $limit: limit,
+            },
+
+            /**
+             * Remove summary-only fields from row response.
+             */
+            {
+              $project: {
+                allSaleItems: 0,
+                visitCountForSummary: 0,
+                productiveCallCountForSummary: 0,
+                nonProductiveCallCountForSummary: 0,
+                nonSaleCallCountForSummary: 0,
+              },
+            },
+          ],
+
+          meta: [
+            {
+              $count: 'total',
+            },
+          ],
+
+          summary: [
+            {
+              $group: {
+                _id: null,
+
+                totalOrderValue: {
+                  $sum: {
+                    $sum: {
+                      $map: {
+                        input: {
+                          $ifNull: ['$allSaleItems', []],
+                        },
+                        as: 'item',
+                        in: {
+                          $ifNull: ['$$item.totalValue', 0],
+                        },
+                      },
+                    },
+                  },
+                },
+
+                totalCases: {
+                  $sum: {
+                    $sum: {
+                      $map: {
+                        input: {
+                          $ifNull: ['$allSaleItems', []],
+                        },
+                        as: 'item',
+                        in: {
+                          $add: [
+                            {
+                              $ifNull: ['$$item.caseQty', 0],
+                            },
+                            {
+                              $cond: [
+                                {
+                                  $gt: ['$$item.unitQtyInCase', 0],
+                                },
+                                {
+                                  $divide: [
+                                    {
+                                      $ifNull: ['$$item.pieceQty', 0],
+                                    },
+                                    '$$item.unitQtyInCase',
+                                  ],
+                                },
+                                0,
+                              ],
+                            },
+                          ],
+                        },
+                      },
+                    },
+                  },
+                },
+
+                totalVisitedShop: {
+                  $sum: '$visitCountForSummary',
+                },
+
+                totalProductiveCall: {
+                  $sum: '$productiveCallCountForSummary',
+                },
+
+                totalNonProductiveCall: {
+                  $sum: '$nonProductiveCallCountForSummary',
+                },
+
+                totalNonSaleCall: {
+                  $sum: '$nonSaleCallCountForSummary',
+                },
+              },
+            },
+
+            {
+              $addFields: {
+                LPSC: {
+                  $cond: [
+                    {
+                      $gt: ['$totalVisitedShop', 0],
+                    },
+                    {
+                      $round: [
+                        {
+                          $divide: ['$totalCases', '$totalVisitedShop'],
+                        },
+                        2,
+                      ],
+                    },
+                    0,
+                  ],
+                },
+              },
+            },
+
+            {
+              $project: {
+                _id: 0,
+                totalOrderValue: {
+                  $round: ['$totalOrderValue', 2],
+                },
+                totalCases: {
+                  $round: ['$totalCases', 2],
+                },
+                totalVisitedShop: 1,
+                totalProductiveCall: 1,
+                totalNonProductiveCall: 1,
+                totalNonSaleCall: 1,
+                LPSC: 1,
+              },
+            },
+          ],
+        },
+      },
+    ];
+
+    /* ======================================================
+     * 3️⃣ EXECUTE
+     * ====================================================== */
+    const result = await this.model.aggregate(pipeline);
+
+    const data = result?.[0]?.data || [];
+
+    const total = result?.[0]?.meta?.[0]?.total || 0;
+
+    const summary = result?.[0]?.summary?.[0] || {
+      totalOrderValue: 0,
+      totalCases: 0,
+      totalVisitedShop: 0,
+      totalProductiveCall: 0,
+      totalNonProductiveCall: 0,
+      totalNonSaleCall: 0,
+      LPSC: 0,
+    };
+
+    /* ======================================================
+     * 4️⃣ RESPONSE
+     * ====================================================== */
+    return {
+      statusCode: HttpStatus.OK,
+      message: ROUTE.FETCHED,
+
+      data: {
+        data,
+        summary,
+      },
+
+      meta: {
+        page,
+        limit,
+        total,
+      },
+    };
+  }
 
   async findByRouteId(routeId: string) {
     const doc = await this.findOne({ routeId }, { lean: true });

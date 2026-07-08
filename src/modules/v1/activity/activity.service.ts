@@ -52,6 +52,8 @@ export class ActivityService extends MongoRepository<Activity> {
     return this.withTransaction(async (session) => {
       const ctx = RequestContextStore.getStore();
 
+      const now = new Date();
+
       const newActivityPayload: Partial<Activity> = {
         userId: ctx?.userId,
         userName: ctx?.name,
@@ -59,75 +61,131 @@ export class ActivityService extends MongoRepository<Activity> {
         vanName: (payload as any).vanName || ctx?.vanName,
         name: payload.name,
         description: payload.description || '',
-        startTime: new Date(),
+        startTime: now,
         startLocation: payload.startLocation,
         workSessionId: payload.workSessionId,
+        status: ActivityStatus.ACTIVE,
       };
 
+      /* ======================================================
+       * COMPLETE OLD ACTIVE ACTIVITIES
+       * ====================================================== */
       await this.updateMany(
         {
           workSessionId: payload.workSessionId,
           status: ActivityStatus.ACTIVE,
         },
-        { status: ActivityStatus.COMPLETED, endTime: new Date() },
+        {
+          $set: {
+            status: ActivityStatus.COMPLETED,
+            endTime: now,
+          },
+        },
         { session },
       );
 
+      /* ======================================================
+       * COMPLETE OLD ACTIVE ROUTE SESSIONS
+       * ====================================================== */
       try {
-        await this.routeSessionService.markCompleted(
-          payload.workSessionId,
+        await this.routeSessionService.updateMany(
           {
-            status: RouteSessionStatus.COMPLETED,
-            endTime: new Date(),
+            workSessionId: payload.workSessionId,
+            status: RouteSessionStatus.ACTIVE,
           },
-          session,
+          {
+            $set: {
+              status: RouteSessionStatus.COMPLETED,
+              endTime: now,
+            },
+          },
+          { session },
         );
-      } catch (error) {}
+      } catch (error) {
+        // Do not block activity creation if route session completion fails
+      }
 
-      // if (payload.routeId) {
-      //   const newRouteSession: CreateRouteSessionDto = {
-      //     workSessionId: payload.workSessionId,
-      //     routeId: payload.routeId,
-      //     totalShops: payload.totalShops || 0,
-      //     routeName: payload.routeName || '',
-      //   };
-
-      //   await this.routeSessionService.create(newRouteSession, { session });
-      // }
+      /* ======================================================
+       * CREATE / ACTIVATE ROUTE SESSION
+       * ====================================================== */
       if (payload.routeId) {
-        const newRouteSession: CreateRouteSessionDto = {
-          workSessionId: payload.workSessionId,
-          routeId: payload.routeId,
-          totalShops: payload.totalShops || 0,
-          routeName: payload.routeName || '',
-          customerCategoryId: payload.customerCategoryId,
-        };
+        const existingRouteSession = await this.routeSessionService.findOne(
+          {
+            workSessionId: payload.workSessionId,
+            routeId: payload.routeId,
+          },
+          {
+            session,
+            includeDeleted: true,
+          },
+        );
 
-        await this.routeSessionService.create(newRouteSession, { session });
+        if (existingRouteSession) {
+          await this.routeSessionService.updateOne(
+            {
+              workSessionId: payload.workSessionId,
+              routeId: payload.routeId,
+            },
+            {
+              $set: {
+                status: RouteSessionStatus.ACTIVE,
+                endTime: null,
+                isDeleted: false,
+
+                routeName:
+                  payload.routeName || existingRouteSession.routeName || '',
+
+                totalShops:
+                  payload.totalShops || existingRouteSession.totalShops || 0,
+
+                customerCategoryId:
+                  payload.customerCategoryId ||
+                  existingRouteSession.customerCategoryId,
+              },
+            },
+            {
+              session,
+              includeDeleted: true,
+            },
+          );
+        } else {
+          const newRouteSession: CreateRouteSessionDto = {
+            workSessionId: payload.workSessionId,
+            routeId: payload.routeId,
+            totalShops: payload.totalShops || 0,
+            routeName: payload.routeName || '',
+            customerCategoryId: payload.customerCategoryId,
+          };
+
+          await this.routeSessionService.create(newRouteSession, { session });
+        }
 
         /* ======================================================
-         * CREATE VAN DAILY STOCK
+         * CREATE VAN DAILY STOCK ONLY ONCE PER WORK SESSION
          * ====================================================== */
-
-        const vanId: string = payload.vanId;
+        const vanId: any = payload.vanId || ctx?.vanId;
 
         try {
           const existingDailyStock = await this.vanDailyStockService.findOne(
-            { workSessionId: payload.workSessionId },
-            { session },
+            {
+              workSessionId: payload.workSessionId,
+            },
+            {
+              session,
+            },
           );
 
-          if (existingDailyStock) {
-            // A route change within the same work session must not reset stock.
-          } else {
+          if (!existingDailyStock) {
             const erpClosing =
               await this.vanErpClosingService.getLatestOpeningStock(vanId);
+
             const response = erpClosing.length
               ? null
               : await this.inventoryService.findByVanId(vanId, {
                   page: 1,
                   limit: 10000,
                 });
+
             const inventories = erpClosing.length
               ? erpClosing.map((item: any) => ({
                   ...item,
@@ -135,18 +193,35 @@ export class ActivityService extends MongoRepository<Activity> {
                     Number(item.closingCases || 0) *
                     Number(item.unitQtyInCase || 1),
                 }))
-              : response?.data?.products?.filter((item) => item.quantity > 0) ||
-                [];
+              : response?.data?.products?.filter(
+                  (item: any) => Number(item.quantity || 0) > 0,
+                ) || [];
 
+            /* ======================================================
+             * IF ERP CLOSING EXISTS, RESET VAN INVENTORY FROM ERP
+             * ====================================================== */
             if (erpClosing.length) {
               await this.inventoryService.updateMany(
-                { vanId },
-                { $set: { quantity: 0, reservedQuantity: 0 } },
-                { session },
+                {
+                  vanId,
+                },
+                {
+                  $set: {
+                    quantity: 0,
+                    reservedQuantity: 0,
+                  },
+                },
+                {
+                  session,
+                },
               );
+
               await this.inventoryService.bulkUpdate(
                 inventories.map((item: any) => ({
-                  filter: { vanId, productId: item.productId },
+                  filter: {
+                    vanId,
+                    productId: item.productId,
+                  },
                   update: {
                     $set: {
                       quantity: item.quantity,
@@ -161,19 +236,26 @@ export class ActivityService extends MongoRepository<Activity> {
                     },
                   },
                 })),
-                { session, upsert: true, includeDeleted: true },
+                {
+                  session,
+                  upsert: true,
+                  includeDeleted: true,
+                },
               );
             }
 
+            /* ======================================================
+             * CREATE VAN DAILY STOCK SNAPSHOT
+             * ====================================================== */
             if (inventories.length) {
               const today = new Date();
               today.setHours(0, 0, 0, 0);
 
-              const dailyStocks = inventories.map((inv) => ({
+              const dailyStocks = inventories.map((inv: any) => ({
                 vanDailyStockId: IdGenerator.generate('VDS', 8),
 
                 date: today,
-                vanId: vanId,
+                vanId,
                 employeeId: ctx?.userId,
 
                 productId: inv.productId,
@@ -184,8 +266,10 @@ export class ActivityService extends MongoRepository<Activity> {
                 outQty: 0,
                 adjustmentQty: 0,
                 closingQty: inv.quantity || 0,
+
                 pieceNetWeight: inv.pieceNetWeight,
                 piecePrice: inv.piecePrice,
+
                 workSessionId: payload.workSessionId,
                 status: VanDailyStockStatus.DRAFT,
               }));
@@ -198,9 +282,14 @@ export class ActivityService extends MongoRepository<Activity> {
                     productId: stock.productId,
                     workSessionId: stock.workSessionId,
                   },
-                  update: { $setOnInsert: stock },
+                  update: {
+                    $setOnInsert: stock,
+                  },
                 })),
-                { session, upsert: true },
+                {
+                  session,
+                  upsert: true,
+                },
               );
             }
           }
@@ -210,12 +299,17 @@ export class ActivityService extends MongoRepository<Activity> {
         }
       }
 
+      /* ======================================================
+       * CREATE NEW ACTIVITY
+       * ====================================================== */
       const doc = await this.save(
         {
           activityId: IdGenerator.generate('ACTI', 8),
           ...newActivityPayload,
         },
-        { session },
+        {
+          session,
+        },
       );
 
       return doc;
