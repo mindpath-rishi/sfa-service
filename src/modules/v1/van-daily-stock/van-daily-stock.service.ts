@@ -632,24 +632,290 @@ export class VanDailyStockService extends MongoRepository<VanDailyStock> {
   //   }
   // }
 
+  // async getDayEndSummary(vanId: string, workSessionId?: string, date?: Date) {
+  //   console.log(
+  //     vanId,
+  //     workSessionId,
+  //     date,
+  //     '=================getDayEndSummary called=================',
+  //   );
+  //   try {
+  //     const targetDate = new Date(date || new Date());
+  //     targetDate.setHours(0, 0, 0, 0);
+
+  //     const result = await this.model.aggregate([
+  //       {
+  //         $match: {
+  //           vanId,
+  //           workSessionId,
+  //           date: { $gte: targetDate },
+  //         },
+  //       },
+  //       {
+  //         $lookup: {
+  //           from: 'product_master',
+  //           localField: 'productId',
+  //           foreignField: 'productId',
+  //           as: 'product',
+  //         },
+  //       },
+  //       {
+  //         $unwind: {
+  //           path: '$product',
+  //           preserveNullAndEmptyArrays: true,
+  //         },
+  //       },
+  //       {
+  //         $addFields: {
+  //           productName: '$product.name',
+
+  //           openingValue: { $multiply: ['$openingQty', '$piecePrice'] },
+  //           receivedValue: { $multiply: ['$inQty', '$piecePrice'] },
+  //           soldValue: { $multiply: ['$outQty', '$piecePrice'] },
+  //           closingValue: { $multiply: ['$closingQty', '$piecePrice'] },
+
+  //           openingWeight: { $multiply: ['$openingQty', '$pieceNetWeight'] },
+  //           receivedWeight: { $multiply: ['$inQty', '$pieceNetWeight'] },
+  //           soldWeight: { $multiply: ['$outQty', '$pieceNetWeight'] },
+  //           closingWeight: { $multiply: ['$closingQty', '$pieceNetWeight'] },
+
+  //           openingCases: {
+  //             $floor: { $divide: ['$openingQty', '$unitQtyInCase'] },
+  //           },
+  //           openingPieces: { $mod: ['$openingQty', '$unitQtyInCase'] },
+
+  //           inCases: { $floor: { $divide: ['$inQty', '$unitQtyInCase'] } },
+  //           inPieces: { $mod: ['$inQty', '$unitQtyInCase'] },
+
+  //           outCases: { $floor: { $divide: ['$outQty', '$unitQtyInCase'] } },
+  //           outPieces: { $mod: ['$outQty', '$unitQtyInCase'] },
+
+  //           closingCases: {
+  //             $floor: { $divide: ['$closingQty', '$unitQtyInCase'] },
+  //           },
+  //           closingPieces: { $mod: ['$closingQty', '$unitQtyInCase'] },
+  //         },
+  //       },
+  //       {
+  //         $group: {
+  //           _id: null,
+  //           openingQty: { $sum: '$openingQty' },
+  //           inQty: { $sum: '$inQty' },
+  //           outQty: { $sum: '$outQty' },
+  //           closingQty: { $sum: '$closingQty' },
+
+  //           openingValue: { $sum: '$openingValue' },
+  //           receivedValue: { $sum: '$receivedValue' },
+  //           soldValue: { $sum: '$soldValue' },
+  //           closingValue: { $sum: '$closingValue' },
+
+  //           openingWeight: { $sum: '$openingWeight' },
+  //           receivedWeight: { $sum: '$receivedWeight' },
+  //           soldWeight: { $sum: '$soldWeight' },
+  //           closingWeight: { $sum: '$closingWeight' },
+
+  //           products: {
+  //             $push: {
+  //               productId: '$productId',
+  //               productName: '$productName',
+  //               unitQtyInCase: '$unitQtyInCase',
+
+  //               openingQty: '$openingQty',
+  //               openingCases: '$openingCases',
+  //               openingPieces: '$openingPieces',
+  //               openingValue: '$openingValue',
+  //               openingWeight: '$openingWeight',
+
+  //               inQty: '$inQty',
+  //               inCases: '$inCases',
+  //               inPieces: '$inPieces',
+  //               receivedValue: '$receivedValue',
+  //               receivedWeight: '$receivedWeight',
+
+  //               outQty: '$outQty',
+  //               outCases: '$outCases',
+  //               outPieces: '$outPieces',
+  //               soldValue: '$soldValue',
+  //               soldWeight: '$soldWeight',
+
+  //               closingQty: '$closingQty',
+  //               closingCases: '$closingCases',
+  //               closingPieces: '$closingPieces',
+  //               closingValue: '$closingValue',
+  //               closingWeight: '$closingWeight',
+  //             },
+  //           },
+  //         },
+  //       },
+  //     ]);
+
+  //     const data = result[0] || {};
+
+  //     /* ================= FIXED SUMMARY CALC ================= */
+
+  //     let openingCases = 0;
+  //     let openingPieces = 0;
+  //     let inCases = 0;
+  //     let inPieces = 0;
+  //     let outCases = 0;
+  //     let outPieces = 0;
+  //     let closingCases = 0;
+  //     let closingPieces = 0;
+
+  //     for (const p of data.products || []) {
+  //       openingCases += p.openingCases || 0;
+  //       openingPieces += p.openingPieces || 0;
+
+  //       inCases += p.inCases || 0;
+  //       inPieces += p.inPieces || 0;
+
+  //       outCases += p.outCases || 0;
+  //       outPieces += p.outPieces || 0;
+
+  //       closingCases += p.closingCases || 0;
+  //       closingPieces += p.closingPieces || 0;
+
+  //       // per product items
+  //       p.openingItems = (p.openingCases || 0) + (p.openingPieces || 0);
+  //       p.receivedItems = (p.inCases || 0) + (p.inPieces || 0);
+  //       p.soldItems = (p.outCases || 0) + (p.outPieces || 0);
+  //       p.closingItems = (p.closingCases || 0) + (p.closingPieces || 0);
+  //     }
+
+  //     const openingItems = openingCases + openingPieces;
+  //     const receivedItems = inCases + inPieces;
+  //     const soldItems = outCases + outPieces;
+  //     const closingItems = closingCases + closingPieces;
+
+  //     /* ================= RESPONSE ================= */
+
+  //     return {
+  //       statusCode: 200,
+  //       message: 'Day end summary fetched successfully',
+  //       data: {
+  //         summary: {
+  //           opening: {
+  //             qty: data.openingQty || 0,
+  //             cases: openingCases,
+  //             pieces: openingPieces,
+  //             items: openingItems,
+  //             value: data.openingValue || 0,
+  //             weight: data.openingWeight || 0,
+  //           },
+  //           received: {
+  //             qty: data.inQty || 0,
+  //             cases: inCases,
+  //             pieces: inPieces,
+  //             items: receivedItems,
+  //             value: data.receivedValue || 0,
+  //             weight: data.receivedWeight || 0,
+  //           },
+  //           sold: {
+  //             qty: data.outQty || 0,
+  //             cases: outCases,
+  //             pieces: outPieces,
+  //             items: soldItems,
+  //             value: data.soldValue || 0,
+  //             weight: data.soldWeight || 0,
+  //           },
+  //           closing: {
+  //             qty: data.closingQty || 0,
+  //             cases: closingCases,
+  //             pieces: closingPieces,
+  //             items: closingItems,
+  //             value: data.closingValue || 0,
+  //             weight: data.closingWeight || 0,
+  //           },
+  //         },
+  //         products: data.products || [],
+  //       },
+  //     };
+  //   } catch (error) {
+  //     throw error;
+  //   }
+  // }
+
   async getDayEndSummary(vanId: string, workSessionId?: string, date?: Date) {
-    console.log(
-      vanId,
-      workSessionId,
-      date,
-      '=================getDayEndSummary called=================',
-    );
     try {
+      /**
+       * ======================================================
+       * 1. RESOLVE TARGET DATE
+       * ======================================================
+       */
       const targetDate = new Date(date || new Date());
       targetDate.setHours(0, 0, 0, 0);
 
+      const endDate = new Date(targetDate);
+      endDate.setHours(23, 59, 59, 999);
+
+      /**
+       * ======================================================
+       * 2. GET ACTIVE ROUTE SESSION FROM WORK SESSION
+       * ======================================================
+       */
+      let customerCategoryId = '';
+
+      if (workSessionId) {
+        const activeRouteSession = await this.model.db
+          .collection('route_sessions')
+          .findOne({
+            workSessionId,
+            vanId,
+            status: 'ACTIVE',
+            isDeleted: { $ne: true },
+          });
+
+        const routeId = String(activeRouteSession?.routeId ?? '');
+
+        if (routeId) {
+          const route = await this.model.db.collection('route_master').findOne({
+            routeId,
+            isDeleted: { $ne: true },
+          });
+
+          customerCategoryId = String(
+            route?.customerCategoryId ??
+              activeRouteSession?.customerCategoryId ??
+              '',
+          );
+        } else {
+          customerCategoryId = String(
+            activeRouteSession?.customerCategoryId ?? '',
+          );
+        }
+      }
+
+      /**
+       * ======================================================
+       * 3. BUILD MATCH FILTER
+       * ======================================================
+       */
+      const matchFilter: Record<string, unknown> = {
+        vanId,
+        date: {
+          $gte: targetDate,
+          $lte: endDate,
+        },
+        isDeleted: { $ne: true },
+      };
+
+      if (workSessionId) {
+        matchFilter.workSessionId = workSessionId;
+      }
+
+      /**
+       * ======================================================
+       * 4. DAY END SUMMARY
+       *
+       * Price priority:
+       * 1. price_master by productId + customerCategoryId
+       * 2. latest effectiveDate
+       * 3. fallback van_daily_stock.piecePrice
+       * ======================================================
+       */
       const result = await this.model.aggregate([
         {
-          $match: {
-            vanId,
-            workSessionId,
-            date: { $gte: targetDate },
-          },
+          $match: matchFilter,
         },
         {
           $lookup: {
@@ -665,40 +931,221 @@ export class VanDailyStockService extends MongoRepository<VanDailyStock> {
             preserveNullAndEmptyArrays: true,
           },
         },
+
+        /**
+         * ======================================================
+         * PRICE LIST LOOKUP
+         * ======================================================
+         */
+        {
+          $lookup: {
+            from: 'price_master',
+            let: {
+              productId: '$productId',
+              customerCategoryId: customerCategoryId,
+            },
+            pipeline: [
+              {
+                $match: {
+                  $expr: {
+                    $and: [
+                      {
+                        $eq: ['$productId', '$$productId'],
+                      },
+                      {
+                        $eq: ['$customerCategoryId', '$$customerCategoryId'],
+                      },
+                      {
+                        $ne: ['$isDeleted', true],
+                      },
+                      {
+                        $ne: ['$status', 'INACTIVE'],
+                      },
+                    ],
+                  },
+                },
+              },
+              {
+                $addFields: {
+                  effectiveDateForSort: {
+                    $convert: {
+                      input: '$effectiveDate',
+                      to: 'date',
+                      onError: new Date(0),
+                      onNull: new Date(0),
+                    },
+                  },
+                  updatedAtForSort: {
+                    $convert: {
+                      input: '$updatedAt',
+                      to: 'date',
+                      onError: new Date(0),
+                      onNull: new Date(0),
+                    },
+                  },
+                },
+              },
+              {
+                $match: {
+                  effectiveDateForSort: {
+                    $lte: new Date(),
+                  },
+                },
+              },
+              {
+                $sort: {
+                  effectiveDateForSort: -1,
+                  updatedAtForSort: -1,
+                  _id: -1,
+                },
+              },
+              {
+                $limit: 1,
+              },
+            ],
+            as: 'priceList',
+          },
+        },
+        {
+          $unwind: {
+            path: '$priceList',
+            preserveNullAndEmptyArrays: true,
+          },
+        },
+
+        /**
+         * ======================================================
+         * NORMALIZE PRICE
+         *
+         * Supports multiple possible price fields:
+         * - piecePrice
+         * - priceInclVatPiece
+         * - priceExclVatPiece
+         * - priceInclVat / unitQtyInCase
+         * - priceExclVat / unitQtyInCase
+         * - fallback vanDailyStock.piecePrice
+         * ======================================================
+         */
         {
           $addFields: {
             productName: '$product.name',
 
-            openingValue: { $multiply: ['$openingQty', '$piecePrice'] },
-            receivedValue: { $multiply: ['$inQty', '$piecePrice'] },
-            soldValue: { $multiply: ['$outQty', '$piecePrice'] },
-            closingValue: { $multiply: ['$closingQty', '$piecePrice'] },
+            resolvedPiecePrice: {
+              $ifNull: [
+                '$priceList.piecePrice',
+                {
+                  $ifNull: [
+                    '$priceList.priceInclVatPiece',
+                    {
+                      $ifNull: [
+                        '$priceList.priceExclVatPiece',
+                        {
+                          $ifNull: [
+                            {
+                              $cond: [
+                                {
+                                  $gt: ['$unitQtyInCase', 0],
+                                },
+                                {
+                                  $divide: [
+                                    {
+                                      $ifNull: [
+                                        '$priceList.priceInclVat',
+                                        '$priceList.priceExclVat',
+                                      ],
+                                    },
+                                    '$unitQtyInCase',
+                                  ],
+                                },
+                                null,
+                              ],
+                            },
+                            '$piecePrice',
+                          ],
+                        },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          },
+        },
 
-            openingWeight: { $multiply: ['$openingQty', '$pieceNetWeight'] },
-            receivedWeight: { $multiply: ['$inQty', '$pieceNetWeight'] },
-            soldWeight: { $multiply: ['$outQty', '$pieceNetWeight'] },
-            closingWeight: { $multiply: ['$closingQty', '$pieceNetWeight'] },
+        /**
+         * ======================================================
+         * CALCULATIONS USING RESOLVED PRICE
+         * ======================================================
+         */
+        {
+          $addFields: {
+            openingValue: {
+              $multiply: ['$openingQty', '$resolvedPiecePrice'],
+            },
+            receivedValue: {
+              $multiply: ['$inQty', '$resolvedPiecePrice'],
+            },
+            soldValue: {
+              $multiply: ['$outQty', '$resolvedPiecePrice'],
+            },
+            closingValue: {
+              $multiply: ['$closingQty', '$resolvedPiecePrice'],
+            },
+
+            openingWeight: {
+              $multiply: ['$openingQty', '$pieceNetWeight'],
+            },
+            receivedWeight: {
+              $multiply: ['$inQty', '$pieceNetWeight'],
+            },
+            soldWeight: {
+              $multiply: ['$outQty', '$pieceNetWeight'],
+            },
+            closingWeight: {
+              $multiply: ['$closingQty', '$pieceNetWeight'],
+            },
 
             openingCases: {
-              $floor: { $divide: ['$openingQty', '$unitQtyInCase'] },
+              $floor: {
+                $divide: ['$openingQty', '$unitQtyInCase'],
+              },
             },
-            openingPieces: { $mod: ['$openingQty', '$unitQtyInCase'] },
+            openingPieces: {
+              $mod: ['$openingQty', '$unitQtyInCase'],
+            },
 
-            inCases: { $floor: { $divide: ['$inQty', '$unitQtyInCase'] } },
-            inPieces: { $mod: ['$inQty', '$unitQtyInCase'] },
+            inCases: {
+              $floor: {
+                $divide: ['$inQty', '$unitQtyInCase'],
+              },
+            },
+            inPieces: {
+              $mod: ['$inQty', '$unitQtyInCase'],
+            },
 
-            outCases: { $floor: { $divide: ['$outQty', '$unitQtyInCase'] } },
-            outPieces: { $mod: ['$outQty', '$unitQtyInCase'] },
+            outCases: {
+              $floor: {
+                $divide: ['$outQty', '$unitQtyInCase'],
+              },
+            },
+            outPieces: {
+              $mod: ['$outQty', '$unitQtyInCase'],
+            },
 
             closingCases: {
-              $floor: { $divide: ['$closingQty', '$unitQtyInCase'] },
+              $floor: {
+                $divide: ['$closingQty', '$unitQtyInCase'],
+              },
             },
-            closingPieces: { $mod: ['$closingQty', '$unitQtyInCase'] },
+            closingPieces: {
+              $mod: ['$closingQty', '$unitQtyInCase'],
+            },
           },
         },
         {
           $group: {
             _id: null,
+
             openingQty: { $sum: '$openingQty' },
             inQty: { $sum: '$inQty' },
             outQty: { $sum: '$outQty' },
@@ -718,7 +1165,11 @@ export class VanDailyStockService extends MongoRepository<VanDailyStock> {
               $push: {
                 productId: '$productId',
                 productName: '$productName',
+
+                customerCategoryId: customerCategoryId,
+
                 unitQtyInCase: '$unitQtyInCase',
+                piecePrice: '$resolvedPiecePrice',
 
                 openingQty: '$openingQty',
                 openingCases: '$openingCases',
@@ -751,8 +1202,11 @@ export class VanDailyStockService extends MongoRepository<VanDailyStock> {
 
       const data = result[0] || {};
 
-      /* ================= FIXED SUMMARY CALC ================= */
-
+      /**
+       * ======================================================
+       * SUMMARY CASE / PIECE CALCULATION
+       * ======================================================
+       */
       let openingCases = 0;
       let openingPieces = 0;
       let inCases = 0;
@@ -775,7 +1229,6 @@ export class VanDailyStockService extends MongoRepository<VanDailyStock> {
         closingCases += p.closingCases || 0;
         closingPieces += p.closingPieces || 0;
 
-        // per product items
         p.openingItems = (p.openingCases || 0) + (p.openingPieces || 0);
         p.receivedItems = (p.inCases || 0) + (p.inPieces || 0);
         p.soldItems = (p.outCases || 0) + (p.outPieces || 0);
@@ -787,12 +1240,11 @@ export class VanDailyStockService extends MongoRepository<VanDailyStock> {
       const soldItems = outCases + outPieces;
       const closingItems = closingCases + closingPieces;
 
-      /* ================= RESPONSE ================= */
-
       return {
         statusCode: 200,
         message: 'Day end summary fetched successfully',
         data: {
+          customerCategoryId,
           summary: {
             opening: {
               qty: data.openingQty || 0,
