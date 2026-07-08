@@ -953,7 +953,7 @@ export class VanDailyStockService extends MongoRepository<VanDailyStock> {
                         $eq: ['$productId', '$$productId'],
                       },
                       {
-                        $eq: ['$customerCategoryId', '$$customerCategoryId'],
+                        $eq: ['$categoryCode', '$$customerCategoryId'],
                       },
                       {
                         $ne: ['$isDeleted', true],
