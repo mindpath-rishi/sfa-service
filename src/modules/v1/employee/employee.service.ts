@@ -9225,7 +9225,8 @@ export class EmployeeService extends MongoRepository<Employee> {
           },
           status: RouteCustomerMappingStatus.ACTIVE,
           effectiveFrom: {
-            $lte: fromDate,
+            $gte: startDate,
+            $lte: endDate,
           },
           // $or: [
           //   { effectiveTo: null },
