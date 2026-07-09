@@ -57,7 +57,7 @@ export class WorkSession {
   userName!: string;
 
   // User who started the session
-  @Prop({ required: true, type: String })
+  @Prop({ type: String })
   vanId!: string;
 
   // User name (for quick reference)
