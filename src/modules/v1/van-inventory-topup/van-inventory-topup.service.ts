@@ -832,43 +832,62 @@ export class VanInventoryTopupService extends MongoRepository<VanInventoryTopup>
     const pendingTopups = await this.findLean({
       status: VanInventoryTopupStatus.SUBMITTED,
     });
+
     let approved = 0;
 
     for (const topup of pendingTopups) {
       const items = await this.vanInventoryTopupItemService.findLean({
         vanInventoryTopupId: topup.vanInventoryTopupId,
       });
+
       const stockIds = items
         .map((item) => item.erpStockId)
         .filter(Boolean) as string[];
+
       if (!stockIds.length) continue;
 
       await this.vanInventoryTopupItemService.updateMany(
         { vanInventoryTopupId: topup.vanInventoryTopupId },
         {
-          $set: { erpStockTakeLastCheckedAt: new Date() },
-          $inc: { erpStockTakeSyncAttempts: 1 },
+          $set: {
+            erpStockTakeLastCheckedAt: new Date(),
+          },
+          $inc: {
+            erpStockTakeSyncAttempts: 1,
+          },
         },
       );
 
       const binds: Record<string, string> = {};
+
       const placeholders = stockIds.map((stockId, index) => {
         const key = `stockId${index}`;
         binds[key] = stockId;
         return `:${key}`;
       });
-      let rows: any[];
+
+      let rows: any[] = [];
+
       try {
         rows = await this.oracleRepository.query<any>(
-          `SELECT
-           VC_STOCK_ID AS "stockId",
-           VC_ITEM_CODE AS "itemCode",
-           NU_AVAILABLE_QTY_CS AS "approvedCases",
-           NU_AVAILABLE_QTY_PCS AS "approvedPieces",
-           DT_STOCK_DATE AS "stockDate"
-         FROM VAN_STOCK_TAKE
-         WHERE VC_STOCK_ID IN (${placeholders.join(', ')})
-           AND NVL(CH_SYNC_STATUS, 'N') IN ('N', 'Y')`,
+          `
+        SELECT
+          VC_STOCK_ID AS "stockId",
+          VC_ITEM_CODE AS "itemCode",
+          NU_QTY_CASES AS "approvedCases",
+          NU_QTY_PCS AS "approvedPieces",
+          DT_TRANS_DATE AS "stockDate",
+          VC_TRANS_NO AS "transferNo",
+          VC_INDENT_ID AS "indentId",
+          CH_APPROVE AS "approveStatus",
+          CH_STK_CANCEL AS "cancelStatus",
+          VC_FROM_WH_CODE AS "fromWarehouseCode",
+          VC_TO_WH_CODE AS "toWarehouseCode"
+        FROM VAN_STOCK_TRANSFER
+        WHERE VC_STOCK_ID IN (${placeholders.join(', ')})
+          AND NVL(CH_APPROVE, 'N') = 'Y'
+          AND NVL(CH_STK_CANCEL, 'N') <> 'Y'
+        `,
           binds,
         );
       } catch (error) {
@@ -882,13 +901,16 @@ export class VanInventoryTopupService extends MongoRepository<VanInventoryTopup>
             },
           },
         );
+
         continue;
       }
+
       const rowsByStockId = new Map(
         rows.map((row) => [String(row.stockId), row]),
       );
+
       const allItemsApproved = stockIds.every((stockId) =>
-        rowsByStockId.has(stockId),
+        rowsByStockId.has(String(stockId)),
       );
 
       let totalApprovedQty = 0;
@@ -899,6 +921,7 @@ export class VanInventoryTopupService extends MongoRepository<VanInventoryTopup>
 
       for (const item of items) {
         const row = rowsByStockId.get(String(item.erpStockId));
+
         if (!row) {
           await this.vanInventoryTopupItemService.updateOne(
             {
@@ -912,13 +935,19 @@ export class VanInventoryTopupService extends MongoRepository<VanInventoryTopup>
               },
             },
           );
+
           continue;
         }
-        const approvedCaseQty = Number(row?.approvedCases || 0);
-        const approvedPieceQty = Number(row?.approvedPieces || 0);
-        const approvedQty =
-          approvedCaseQty * Number(item.unitQtyInCase || 1) + approvedPieceQty;
+
+        const approvedCaseQty = Number(row.approvedCases || 0);
+        const approvedPieceQty = Number(row.approvedPieces || 0);
+
+        const unitQtyInCase = Number(item.unitQtyInCase || 1);
+
+        const approvedQty = approvedCaseQty * unitQtyInCase + approvedPieceQty;
+
         const approvedWeight = approvedQty * Number(item.pieceNetWeight || 0);
+
         const approvedValue = approvedQty * Number(item.piecePrice || 0);
 
         await this.vanInventoryTopupItemService.updateOne(
@@ -933,8 +962,13 @@ export class VanInventoryTopupService extends MongoRepository<VanInventoryTopup>
               approvedQty,
               approvedWeight,
               approvedValue,
-              erpStockDate: row?.stockDate || new Date(),
+
+              erpStockDate: row.stockDate || new Date(),
+              erpTransferNo: row.transferNo,
+              erpIndentId: row.indentId,
+
               erpStockTakeSyncStatus: VanInventoryTopupErpSyncStatus.SYNCED,
+
               erpStockTakeSyncedAt: new Date(),
               erpStockTakeSyncError: null,
             },
@@ -962,6 +996,7 @@ export class VanInventoryTopupService extends MongoRepository<VanInventoryTopup>
             totalApprovedQty,
             totalApprovedWeight,
             totalApprovedValue,
+
             erpApprovedAt: new Date(),
             status: VanInventoryTopupStatus.APPROVED,
           },
@@ -971,12 +1006,16 @@ export class VanInventoryTopupService extends MongoRepository<VanInventoryTopup>
 
       if (updated) {
         approved += 1;
+
         await this.oracleRepository.executeMany(
-          `UPDATE VAN_STOCK_TAKE
-           SET CH_USED = 'Y', DT_MOD_DATE = SYSDATE
-           WHERE VC_STOCK_ID = :stockId`,
+          `
+        UPDATE VAN_STOCK_TRANSFER
+        SET DT_MOD_DATE = SYSDATE
+        WHERE VC_STOCK_ID = :stockId
+        `,
           stockIds.map((stockId) => ({ stockId })),
         );
+
         await this.notifySalesmanTopupAwaitingAcceptance(updated);
       }
     }
@@ -984,7 +1023,10 @@ export class VanInventoryTopupService extends MongoRepository<VanInventoryTopup>
     return {
       statusCode: HttpStatus.OK,
       message: 'ERP top-up approvals synced successfully',
-      data: { checked: pendingTopups.length, approved },
+      data: {
+        checked: pendingTopups.length,
+        approved,
+      },
     };
   }
 
