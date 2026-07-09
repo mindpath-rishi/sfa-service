@@ -1316,7 +1316,7 @@ export class VanInventoryTopupService extends MongoRepository<VanInventoryTopup>
          */
         const activeWorkSession = await this.workSessionService.findOne(
           {
-            employeeId: acceptedBy,
+            userId: acceptedBy,
             status: WorkSessionStatus.ACTIVE,
           },
           {
