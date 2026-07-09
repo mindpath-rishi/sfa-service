@@ -247,9 +247,6 @@ export class RouteSessionService extends MongoRepository<RouteSession> {
               userId: ctx?.userId,
               userName: ctx?.name,
 
-              vanId: ctx?.vanId,
-              vanName: ctx?.vanName,
-
               startTime: new Date(),
 
               status: RouteSessionStatus.ACTIVE,
