@@ -23,7 +23,7 @@ import { TargetQueryDto } from './dto/target-query.dto';
 import { BulkUploadTargetsDto } from './dto/bulk-upload-targets.dto';
 import * as XLSX from 'xlsx';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import { FocusedPackTarget } from 'src/core/database/mongo/schema/focused-pack-target.schema';
 import { CreateFocusedPackTargetDto } from './dto/create-focused-pack-target.dto';
 import { UpdateFocusedPackTargetDto } from './dto/update-focused-pack-target.dto';
@@ -682,13 +682,26 @@ export class TargetService extends MongoRepository<Target> {
     };
   }
 
-  async update(userId: string, dto: UpdateTargetDto) {
+  async update(idOrUserId: string, dto: UpdateTargetDto) {
     try {
       return await this.withTransaction(async (session) => {
-        const doc = await this.updateOne({ userId }, dto, {
-          session,
-          new: true,
-        });
+        const existing = Types.ObjectId.isValid(idOrUserId)
+          ? await this.model
+              .findOne({ _id: idOrUserId, isDeleted: false })
+              .session(session)
+          : await this.findOne({ userId: idOrUserId }, { session });
+
+        if (!existing) throw new NotFoundException(TARGET.NOT_FOUND);
+
+        const startDate = dto.startDate ?? existing.startDate;
+        const endDate = dto.endDate ?? existing.endDate;
+        this.validateTargetPeriod(startDate, endDate);
+
+        const doc = await this.model.findOneAndUpdate(
+          { _id: existing._id, isDeleted: false },
+          dto,
+          { session, new: true },
+        );
 
         if (!doc) throw new NotFoundException(TARGET.NOT_FOUND);
 
