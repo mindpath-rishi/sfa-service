@@ -11,11 +11,8 @@
  */
 
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsString, IsNumber, IsEnum } from 'class-validator';
-import {
-  PriceType,
-  ProductStatus,
-} from 'src/shared/enums/product.enums';
+import { IsOptional, IsString, IsNumber, IsEnum, IsIn } from 'class-validator';
+import { PriceType, ProductStatus } from 'src/shared/enums/product.enums';
 
 export class ProductUpdateDto {
   /**
@@ -51,12 +48,32 @@ export class ProductUpdateDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsNumber()
+  casePrice?: number;
+
+  /**
+   * Price
+   * -----
+   * Deprecated alias for casePrice.
+   */
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
   price?: number;
 
   /**
    * Net Weight
    * ----------
    * Purpose : Update product weight
+   */
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  caseNetWeight?: number;
+
+  /**
+   * Net Weight
+   * ----------
+   * Deprecated alias for piece net weight.
    */
   @ApiPropertyOptional()
   @IsOptional()
@@ -92,6 +109,17 @@ export class ProductUpdateDto {
   @IsOptional()
   @IsString()
   unitSize?: string;
+
+  /**
+   * Focused Pack
+   * ------------
+   * Purpose : Update focused pack flag
+   * Example : Y, N
+   */
+  @ApiPropertyOptional({ enum: ['Y', 'N'] })
+  @IsOptional()
+  @IsIn(['Y', 'N'])
+  isFocusedPack?: string;
 
   /**
    * Quantity Per Case

@@ -24,6 +24,7 @@ import {
   NotFoundException,
   ConflictException,
   HttpStatus,
+  BadRequestException,
 } from '@nestjs/common';
 
 import { MongoService } from 'src/core/database/mongo/mongo.service';
@@ -50,6 +51,8 @@ import { Van, VanSchema } from 'src/core/database/mongo/schema/van.schema';
 
 const REPORT_TIMEZONE =
   process.env.APP_TIMEZONE || process.env.TZ || 'Asia/Kolkata';
+
+const round4 = (value: number) => Number(value.toFixed(4));
 
 @Injectable()
 export class ProductService extends MongoRepository<Product> {
@@ -257,6 +260,20 @@ export class ProductService extends MongoRepository<Product> {
    */
   async create(payload: ProductCreateDto) {
     return this.withTransaction(async (session) => {
+      const unitQtyInCase = payload.unitQtyInCase || 1;
+      const casePrice = payload.casePrice ?? payload.price;
+      const caseNetWeight =
+        payload.caseNetWeight ??
+        (payload.netWeight !== undefined
+          ? payload.netWeight * unitQtyInCase
+          : undefined);
+
+      if (casePrice === undefined || caseNetWeight === undefined) {
+        throw new BadRequestException(
+          'casePrice and caseNetWeight are required',
+        );
+      }
+
       // Check existing product (including soft-deleted)
       const existing = await this.findOne(
         {
@@ -283,14 +300,15 @@ export class ProductService extends MongoRepository<Product> {
             categoryId: payload.categoryId,
             parentCategoryId: payload.parentCategoryId,
             productSysCode: payload.productSysCode,
-            casePrice: payload.price,
-            piecePrice: payload.price / (payload.unitQtyInCase || 1),
-            caseNetWeight: payload.netWeight * (payload.unitQtyInCase || 1),
-            pieceNetWeight: payload.netWeight,
+            casePrice,
+            piecePrice: round4(casePrice / unitQtyInCase),
+            caseNetWeight,
+            pieceNetWeight: round4(caseNetWeight / unitQtyInCase),
             priceType: payload.priceType,
             unitType: payload.unitType,
             unitSize: payload.unitSize,
-            unitQtyInCase: payload.unitQtyInCase,
+            isFocusedPack: payload.isFocusedPack ?? 'N',
+            unitQtyInCase,
             status: 'ACTIVE',
             isDeleted: false,
           },
@@ -313,14 +331,15 @@ export class ProductService extends MongoRepository<Product> {
           categoryId: payload.categoryId,
           parentCategoryId: payload.parentCategoryId,
           productSysCode: payload.productSysCode,
-          casePrice: payload.price,
-          piecePrice: payload.price / (payload.unitQtyInCase || 1),
-          caseNetWeight: payload.netWeight * (payload.unitQtyInCase || 1),
-          pieceNetWeight: payload.netWeight,
+          casePrice,
+          piecePrice: round4(casePrice / unitQtyInCase),
+          caseNetWeight,
+          pieceNetWeight: round4(caseNetWeight / unitQtyInCase),
           priceType: payload.priceType,
           unitType: payload.unitType,
           unitSize: payload.unitSize,
-          unitQtyInCase: payload.unitQtyInCase,
+          isFocusedPack: payload.isFocusedPack ?? 'N',
+          unitQtyInCase,
         },
         { session },
       );
@@ -358,10 +377,6 @@ export class ProductService extends MongoRepository<Product> {
     const toNumberSafe = (value: any, defaultValue = 0): number => {
       const numberValue = Number(value);
       return Number.isFinite(numberValue) ? numberValue : defaultValue;
-    };
-
-    const round4 = (value: number): number => {
-      return Number(value.toFixed(4));
     };
 
     const rows = await this.oracleRepository.query<any>(
@@ -1727,13 +1742,47 @@ export class ProductService extends MongoRepository<Product> {
    * Purpose : Update product master data
    */
   async update(productId: string, payload: ProductUpdateDto) {
-    const { price, netWeight, ...values } = payload;
+    const {
+      price,
+      netWeight,
+      casePrice,
+      caseNetWeight,
+      unitQtyInCase,
+      ...values
+    } = payload;
+    const existing = await this.findOne({ productId });
+
+    if (!existing) {
+      throw new NotFoundException(PRODUCT.NOT_FOUND);
+    }
+
+    const nextUnitQtyInCase = unitQtyInCase ?? existing.unitQtyInCase;
+    const nextCasePrice = casePrice ?? price ?? existing.casePrice;
+    const nextCaseNetWeight =
+      caseNetWeight ??
+      (netWeight !== undefined
+        ? netWeight * nextUnitQtyInCase
+        : existing.caseNetWeight);
+    const shouldSyncDerivedValues =
+      casePrice !== undefined ||
+      price !== undefined ||
+      caseNetWeight !== undefined ||
+      netWeight !== undefined ||
+      unitQtyInCase !== undefined;
+
     const product = await this.updateOne(
       { productId },
       {
         ...values,
-        ...(price !== undefined ? { casePrice: price } : {}),
-        ...(netWeight !== undefined ? { pieceNetWeight: netWeight } : {}),
+        ...(unitQtyInCase !== undefined ? { unitQtyInCase } : {}),
+        ...(shouldSyncDerivedValues
+          ? {
+              casePrice: nextCasePrice,
+              piecePrice: round4(nextCasePrice / nextUnitQtyInCase),
+              caseNetWeight: nextCaseNetWeight,
+              pieceNetWeight: round4(nextCaseNetWeight / nextUnitQtyInCase),
+            }
+          : {}),
       },
     );
 
