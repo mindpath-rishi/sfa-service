@@ -726,7 +726,7 @@ export class VanInventoryTopupService extends MongoRepository<VanInventoryTopup>
          )`,
           {
             transferNo: topup.vanInventoryTopupId,
-            toWarehouseCode: topup.toWarehouseCode,
+            toWarehouseCode: topup.vanId,
             fromWarehouseCode: topup.fromWarehouseCode,
             transferDate: topup.date,
             itemCode: item.productId,
@@ -744,43 +744,42 @@ export class VanInventoryTopupService extends MongoRepository<VanInventoryTopup>
 
         synced++;
 
-        await this.vanInventoryTopupItemService.updateOne(
-          {
-            vanInventoryTopupId: topup.vanInventoryTopupId,
-            productId: item.productId,
-          },
-          {
-            $set: {
-              erpTransferSyncStatus: VanInventoryTopupErpSyncStatus.SYNCED,
-              erpTransferSyncedAt: new Date(),
-              erpTransferSyncError: null,
-            },
-            $inc: {
-              erpTransferSyncAttempts: 1,
-            },
-          },
-          { session },
-        );
+        // await this.vanInventoryTopupItemService.updateOne(
+        //   {
+        //     vanInventoryTopupId: topup.vanInventoryTopupId,
+        //     productId: item.productId,
+        //   },
+        //   {
+        //     $set: {
+        //       erpTransferSyncStatus: VanInventoryTopupErpSyncStatus.SYNCED,
+        //       erpTransferSyncedAt: new Date(),
+        //       erpTransferSyncError: null,
+        //     },
+        //     $inc: {
+        //       erpTransferSyncAttempts: 1,
+        //     },
+        //   },
+        //   { session },
+        // );
       } catch (error) {
-        failed++;
-
-        await this.vanInventoryTopupItemService.updateOne(
-          {
-            vanInventoryTopupId: topup.vanInventoryTopupId,
-            productId: item.productId,
-          },
-          {
-            $set: {
-              erpTransferSyncStatus: VanInventoryTopupErpSyncStatus.FAILED,
-              erpTransferSyncError:
-                error instanceof Error ? error.message : String(error),
-            },
-            $inc: {
-              erpTransferSyncAttempts: 1,
-            },
-          },
-          { session },
-        );
+        // failed++;
+        // await this.vanInventoryTopupItemService.updateOne(
+        //   {
+        //     vanInventoryTopupId: topup.vanInventoryTopupId,
+        //     productId: item.productId,
+        //   },
+        //   {
+        //     $set: {
+        //       erpTransferSyncStatus: VanInventoryTopupErpSyncStatus.FAILED,
+        //       erpTransferSyncError:
+        //         error instanceof Error ? error.message : String(error),
+        //     },
+        //     $inc: {
+        //       erpTransferSyncAttempts: 1,
+        //     },
+        //   },
+        //   { session },
+        // );
       }
     }
 
