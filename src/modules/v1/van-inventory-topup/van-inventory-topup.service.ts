@@ -1606,6 +1606,68 @@ export class VanInventoryTopupService extends MongoRepository<VanInventoryTopup>
     const stockDate = new Date(topup.date || new Date());
     stockDate.setHours(0, 0, 0, 0);
 
+    // const dailyStockUpdates = items
+    //   .filter((item) => Number(item.approvedQty || 0) > 0)
+    //   .map((item) => {
+    //     const approvedQty = Number(item.approvedQty || 0);
+    //     const approvedCases = Number(item.approvedCaseQty || 0);
+    //     const approvedPieces = Number(item.approvedPieceQty || 0);
+
+    //     return {
+    //       filter: {
+    //         date: stockDate,
+    //         vanId: topup.vanId,
+    //         productId: item.productId,
+    //         workSessionId,
+    //       },
+    //       update: {
+    //         $set: {
+    //           employeeId: topup.employeeId,
+    //           workSessionId,
+    //           routeSessionId,
+    //           updatedAt: new Date(),
+    //         },
+    //         $setOnInsert: {
+    //           vanDailyStockId: IdGenerator.generate('VDS', 8),
+    //           date: stockDate,
+    //           vanId: topup.vanId,
+    //           productId: item.productId,
+
+    //           unitQtyInCase: Number(item.unitQtyInCase || 1),
+    //           piecePrice: Number(item.piecePrice || 0),
+    //           pieceNetWeight: Number(item.pieceNetWeight || 0),
+
+    //           openingQty: 0,
+    //           openingCases: 0,
+    //           openingPieces: 0,
+
+    //           outQty: 0,
+    //           outCases: 0,
+    //           outPieces: 0,
+
+    //           adjustmentQty: 0,
+    //           adjustmentCases: 0,
+    //           adjustmentPieces: 0,
+
+    //           closingQty: 0,
+    //           closingCases: 0,
+    //           closingPieces: 0,
+
+    //           status: VanDailyStockStatus.DRAFT,
+    //         },
+    //         $inc: {
+    //           inQty: approvedQty,
+    //           inCases: approvedCases,
+    //           inPieces: approvedPieces,
+
+    //           closingQty: approvedQty,
+    //           closingCases: approvedCases,
+    //           closingPieces: approvedPieces,
+    //         },
+    //       },
+    //     };
+    //   });
+
     const dailyStockUpdates = items
       .filter((item) => Number(item.approvedQty || 0) > 0)
       .map((item) => {
@@ -1649,10 +1711,6 @@ export class VanInventoryTopupService extends MongoRepository<VanInventoryTopup>
               adjustmentCases: 0,
               adjustmentPieces: 0,
 
-              closingQty: 0,
-              closingCases: 0,
-              closingPieces: 0,
-
               status: VanDailyStockStatus.DRAFT,
             },
             $inc: {
@@ -1667,7 +1725,6 @@ export class VanInventoryTopupService extends MongoRepository<VanInventoryTopup>
           },
         };
       });
-
     if (dailyStockUpdates.length) {
       await this.vanDailyStockService.bulkUpdate(dailyStockUpdates, {
         session,
