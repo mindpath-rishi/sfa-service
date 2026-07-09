@@ -259,6 +259,167 @@ export class VanInventoryTopupService extends MongoRepository<VanInventoryTopup>
   //   }
   // }
 
+  // async create(payload: CreateVanInventoryTopupDto) {
+  //   try {
+  //     return await this.withTransaction(async (session) => {
+  //       /* ======================================================
+  //        * 1. DUPLICATE VALIDATION
+  //        * ====================================================== */
+  //       if (payload.items?.length) {
+  //         const seen = new Set();
+
+  //         for (const item of payload.items) {
+  //           if (seen.has(item.productId)) {
+  //             throw new ConflictException(
+  //               `Duplicate product in items: ${item.productId}`,
+  //             );
+  //           }
+  //           seen.add(item.productId);
+  //         }
+  //       }
+
+  //       /* ======================================================
+  //        * 2. PROCESS ITEMS
+  //        * ====================================================== */
+  //       let totalRequestedQty = 0;
+  //       let totalRequestedWeight = 0;
+  //       let totalRequestedValue = 0;
+  //       let totalRequestedCases = 0;
+  //       let totalRequestedPieces = 0;
+
+  //       let totalApprovedQty = 0;
+  //       let totalApprovedWeight = 0;
+  //       let totalApprovedValue = 0;
+  //       let totalApprovedCases = 0;
+  //       let totalApprovedPieces = 0;
+
+  //       const processedItems: any[] = [];
+
+  //       for (const item of payload.items) {
+  //         const response = await this.productService.findByProductId(
+  //           item.productId,
+  //         );
+  //         const product = response?.data;
+
+  //         if (!product) {
+  //           throw new BadRequestException(
+  //             `Product not found: ${item.productId}`,
+  //           );
+  //         }
+
+  //         const unitQtyInCase = product.unitQtyInCase || 1;
+  //         const unitType = product.unitType || 'CS';
+  //         // The mobile cart carries the applicable category-aware price.
+  //         // Product master `casePrice` can legitimately be 0 when prices are
+  //         // maintained only in price_master, so discarding item prices made
+  //         // otherwise valid top-up requests show a value of zero.
+  //         const casePrice = Number(item.casePrice ?? product.casePrice ?? 0);
+  //         const piecePrice = Number(
+  //           item.piecePrice ?? product.piecePrice ?? casePrice / unitQtyInCase,
+  //         );
+  //         const pieceWeight = Number(
+  //           item.pieceNetWeight ?? product.pieceNetWeight ?? 0,
+  //         );
+  //         const requestedCaseQty = Number(item.requestedCaseQty || 0);
+  //         const requestedPieceQty = Number(item.requestedPieceQty || 0);
+  //         const requestedQty =
+  //           requestedCaseQty * unitQtyInCase + requestedPieceQty;
+
+  //         const requestedWeight = requestedQty * pieceWeight;
+  //         const requestedValue =
+  //           requestedCaseQty * casePrice + requestedPieceQty * piecePrice;
+
+  //         totalRequestedQty += requestedQty;
+  //         totalRequestedWeight += requestedWeight;
+  //         totalRequestedValue += requestedValue;
+  //         totalRequestedCases += requestedCaseQty;
+  //         totalRequestedPieces += requestedPieceQty;
+
+  //         processedItems.push({
+  //           vanInventoryTopupId: '',
+  //           productId: item.productId,
+  //           productName: product.name,
+  //           compCode: product.compCode || item.compCode,
+
+  //           requestedQty,
+  //           requestedWeight,
+  //           requestedValue,
+  //           requestedCaseQty,
+  //           requestedPieceQty,
+
+  //           approvedQty: 0,
+  //           approvedWeight: 0,
+  //           approvedValue: 0,
+  //           approvedCaseQty: 0,
+  //           approvedPieceQty: 0,
+
+  //           casePrice,
+  //           piecePrice,
+
+  //           pieceNetWeight: pieceWeight,
+  //           caseNetWeight: pieceWeight * unitQtyInCase,
+
+  //           unitQtyInCase,
+  //           unitType,
+  //         });
+  //       }
+
+  //       /* ======================================================
+  //        * 4. CREATE HEADER
+  //        * ====================================================== */
+  //       const vanInventoryTopupId = IdGenerator.generate('INVTOP', 8);
+  //       const erpRequestedAt = new Date();
+
+  //       const doc = await this.save(
+  //         {
+  //           vanInventoryTopupId,
+  //           ...payload,
+  //           totalRequestedQty,
+  //           totalRequestedWeight,
+  //           totalRequestedValue,
+  //           totalRequestedCases,
+  //           totalRequestedPieces,
+  //           totalApprovedQty,
+  //           totalApprovedWeight,
+  //           totalApprovedValue,
+  //           totalApprovedCases,
+  //           totalApprovedPieces,
+  //           erpRequestNo: vanInventoryTopupId,
+  //           erpRequestedAt,
+  //           status: VanInventoryTopupStatus.SUBMITTED,
+  //         },
+  //         { session },
+  //       );
+
+  //       /* ======================================================
+  //        * 5. INSERT ITEMS
+  //        * ====================================================== */
+  //       const itemsToInsert = processedItems.map((item, index) => ({
+  //         ...item,
+  //         vanInventoryTopupId,
+  //         erpStockId: `${vanInventoryTopupId}-${index + 1}`,
+  //         erpRequestSyncStatus: VanInventoryTopupErpSyncStatus.PENDING,
+  //         erpStockTakeSyncStatus: VanInventoryTopupErpSyncStatus.PENDING,
+  //       }));
+
+  //       await this.vanInventoryTopupItemService.insertMany(
+  //         itemsToInsert,
+  //         session,
+  //       );
+
+  //       await this.exportItemsToErpStockRequest(doc, itemsToInsert, session);
+
+  //       return {
+  //         statusCode: HttpStatus.CREATED,
+  //         message: VAN_INVENTORY_TOPUP.CREATED,
+  //         data: doc,
+  //       };
+  //     });
+  //   } catch (error) {
+  //     this.handleDuplicateError(error);
+  //   }
+  // }
+
   async create(payload: CreateVanInventoryTopupDto) {
     try {
       return await this.withTransaction(async (session) => {
@@ -309,10 +470,7 @@ export class VanInventoryTopupService extends MongoRepository<VanInventoryTopup>
 
           const unitQtyInCase = product.unitQtyInCase || 1;
           const unitType = product.unitType || 'CS';
-          // The mobile cart carries the applicable category-aware price.
-          // Product master `casePrice` can legitimately be 0 when prices are
-          // maintained only in price_master, so discarding item prices made
-          // otherwise valid top-up requests show a value of zero.
+
           const casePrice = Number(item.casePrice ?? product.casePrice ?? 0);
           const piecePrice = Number(
             item.piecePrice ?? product.piecePrice ?? casePrice / unitQtyInCase,
@@ -320,6 +478,7 @@ export class VanInventoryTopupService extends MongoRepository<VanInventoryTopup>
           const pieceWeight = Number(
             item.pieceNetWeight ?? product.pieceNetWeight ?? 0,
           );
+
           const requestedCaseQty = Number(item.requestedCaseQty || 0);
           const requestedPieceQty = Number(item.requestedPieceQty || 0);
           const requestedQty =
@@ -365,7 +524,7 @@ export class VanInventoryTopupService extends MongoRepository<VanInventoryTopup>
         }
 
         /* ======================================================
-         * 4. CREATE HEADER
+         * 3. CREATE HEADER
          * ====================================================== */
         const vanInventoryTopupId = IdGenerator.generate('INVTOP', 8);
         const erpRequestedAt = new Date();
@@ -392,7 +551,7 @@ export class VanInventoryTopupService extends MongoRepository<VanInventoryTopup>
         );
 
         /* ======================================================
-         * 5. INSERT ITEMS
+         * 4. INSERT ITEMS
          * ====================================================== */
         const itemsToInsert = processedItems.map((item, index) => ({
           ...item,
@@ -400,6 +559,7 @@ export class VanInventoryTopupService extends MongoRepository<VanInventoryTopup>
           erpStockId: `${vanInventoryTopupId}-${index + 1}`,
           erpRequestSyncStatus: VanInventoryTopupErpSyncStatus.PENDING,
           erpStockTakeSyncStatus: VanInventoryTopupErpSyncStatus.PENDING,
+          erpTransferSyncStatus: VanInventoryTopupErpSyncStatus.PENDING,
         }));
 
         await this.vanInventoryTopupItemService.insertMany(
@@ -407,7 +567,13 @@ export class VanInventoryTopupService extends MongoRepository<VanInventoryTopup>
           session,
         );
 
-        await this.exportItemsToErpStockRequest(doc, itemsToInsert, session);
+        /* ======================================================
+         * 5. EXPORT TO ERP
+         * ====================================================== */
+        await Promise.all([
+          this.exportItemsToErpStockRequest(doc, itemsToInsert, session),
+          this.exportItemsToErpStockTransfer(doc, itemsToInsert, session),
+        ]);
 
         return {
           statusCode: HttpStatus.CREATED,
@@ -503,6 +669,126 @@ export class VanInventoryTopupService extends MongoRepository<VanInventoryTopup>
     }
 
     return { checked: items.length, synced, failed };
+  }
+
+  private async exportItemsToErpStockTransfer(
+    topup: any,
+    items: any[],
+    session?: any,
+  ) {
+    let synced = 0;
+    let failed = 0;
+
+    for (const item of items) {
+      try {
+        if (!this.oracleRepository.isEnabled()) {
+          throw new Error('OracleDB is disabled');
+        }
+
+        await this.oracleRepository.execute(
+          `MERGE INTO VAN_STOCK_TRANSFER target
+         USING (
+           SELECT
+             :stockId AS VC_STOCK_ID
+           FROM DUAL
+         ) source
+         ON (target.VC_STOCK_ID = source.VC_STOCK_ID)
+         WHEN NOT MATCHED THEN
+         INSERT (
+           VC_TRANS_NO,
+           VC_TO_WH_CODE,
+           VC_FROM_WH_CODE,
+           DT_TRANS_DATE,
+           VC_ITEM_CODE,
+           NU_QTY_CASES,
+           NU_QTY_PCS,
+           VC_STOCK_ID,
+           DT_MOD_DATE,
+           DT_CREATE_DATETIME,
+           CH_APPROVE,
+           VC_INDENT_ID,
+           CH_STK_CANCEL
+         )
+         VALUES (
+           :transferNo,
+           :toWarehouseCode,
+           :fromWarehouseCode,
+           :transferDate,
+           :itemCode,
+           :caseQty,
+           :pieceQty,
+           :stockId,
+           :modifiedDate,
+           :createdDateTime,
+           :approved,
+           :indentId,
+           :stockCancel
+         )`,
+          {
+            transferNo: topup.vanInventoryTopupId,
+            toWarehouseCode: topup.toWarehouseCode,
+            fromWarehouseCode: topup.fromWarehouseCode,
+            transferDate: topup.date,
+            itemCode: item.productId,
+            caseQty: Number(item.requestedCaseQty || 0),
+            pieceQty: Number(item.requestedPieceQty || 0),
+            stockId: item.erpStockId,
+            modifiedDate: new Date(),
+            createdDateTime: new Date().toISOString(),
+            approved: 'Y',
+            indentId: topup.indentId || null,
+            stockCancel: 'N',
+          },
+          { autoCommit: true },
+        );
+
+        synced++;
+
+        await this.vanInventoryTopupItemService.updateOne(
+          {
+            vanInventoryTopupId: topup.vanInventoryTopupId,
+            productId: item.productId,
+          },
+          {
+            $set: {
+              erpTransferSyncStatus: VanInventoryTopupErpSyncStatus.SYNCED,
+              erpTransferSyncedAt: new Date(),
+              erpTransferSyncError: null,
+            },
+            $inc: {
+              erpTransferSyncAttempts: 1,
+            },
+          },
+          { session },
+        );
+      } catch (error) {
+        failed++;
+
+        await this.vanInventoryTopupItemService.updateOne(
+          {
+            vanInventoryTopupId: topup.vanInventoryTopupId,
+            productId: item.productId,
+          },
+          {
+            $set: {
+              erpTransferSyncStatus: VanInventoryTopupErpSyncStatus.FAILED,
+              erpTransferSyncError:
+                error instanceof Error ? error.message : String(error),
+            },
+            $inc: {
+              erpTransferSyncAttempts: 1,
+            },
+          },
+          { session },
+        );
+      }
+    }
+
+    return {
+      checked: items.length,
+      synced,
+      failed,
+    };
   }
 
   async syncTopupRequestsToERP() {

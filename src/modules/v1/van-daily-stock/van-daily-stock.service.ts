@@ -862,7 +862,7 @@ export class VanDailyStockService extends MongoRepository<VanDailyStock> {
           .findOne({
             workSessionId,
             vanId,
-            status: 'ACTIVE',
+            // status: 'ACTIVE',
             isDeleted: { $ne: true },
           });
 
