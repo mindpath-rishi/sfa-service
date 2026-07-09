@@ -155,6 +155,8 @@ export class ActivityService extends MongoRepository<Activity> {
             totalShops: payload.totalShops || 0,
             routeName: payload.routeName || '',
             customerCategoryId: payload.customerCategoryId,
+            vanId: payload.vanId,
+            vanName: payload.vanName || ctx?.vanName || '',
           };
 
           await this.routeSessionService.create(newRouteSession, { session });
