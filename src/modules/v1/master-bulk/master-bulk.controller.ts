@@ -31,8 +31,25 @@ export class MasterBulkController {
   }
 
   @Get('export/:entity')
-  async export(@Param('entity') entity: string, @Query('fileType') fileType: 'xlsx' | 'csv' | 'pdf' = 'xlsx', @Query('type') type: string | undefined, @Res() res: Response) {
-    const file = await this.service.export(entity, fileType, type);
+  async export(
+    @Param('entity') entity: string,
+    @Query() query: Record<string, string>,
+    @Res() res: Response,
+  ) {
+    const {
+      fileType = 'xlsx',
+      type,
+      ...filters
+    } = query as Record<string, string> & {
+      fileType?: 'xlsx' | 'csv' | 'pdf';
+      type?: string;
+    };
+    const file = await this.service.export(
+      entity,
+      fileType as 'xlsx' | 'csv' | 'pdf',
+      type,
+      filters,
+    );
     res.setHeader('Content-Type', file.mimeType);
     res.setHeader('Content-Disposition', `attachment; filename="${file.fileName}"`);
     res.send(file.buffer);

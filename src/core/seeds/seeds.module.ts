@@ -18,6 +18,7 @@ import { EmployeeService } from 'src/modules/v1/employee/employee.service';
 import { RoleService } from 'src/modules/v1/role/role.service';
 import { RoleModule } from 'src/modules/v1/role/role.module';
 import { EmployeeModule } from 'src/modules/v1/employee/employee.module';
+import { PositionModule } from 'src/modules/v1/position/position.module';
 
 @Module({
   imports: [
@@ -31,6 +32,7 @@ import { EmployeeModule } from 'src/modules/v1/employee/employee.module';
     ]),
     RoleModule,
     EmployeeModule,
+    PositionModule,
   ],
   providers: [PermissionsSeeder, SuperAdminSeeder, RoleSeeder, SeederRunner],
   exports: [SeederRunner],

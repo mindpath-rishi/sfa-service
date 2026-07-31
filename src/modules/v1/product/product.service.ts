@@ -39,6 +39,7 @@ import { ProductQueryDto } from './dto/product-query.dto';
 import { PRODUCT } from './product.constants';
 import { ProductCreateDto } from './dto/create-product.dto';
 import { ProductUpdateDto } from './dto/update-product.dto';
+import { BulkUpdateFocusedPackDto } from './dto/bulk-update-focused-pack.dto';
 import { RequestContextStore } from 'src/core/context/request-context';
 import { OracleRepository } from 'src/core/database/oracle/oracle.repository';
 import { PriceType, ProductStatus } from 'src/shared/enums/product.enums';
@@ -48,6 +49,12 @@ import {
   ProductCategorySchema,
 } from 'src/core/database/mongo/schema/product-category';
 import { Van, VanSchema } from 'src/core/database/mongo/schema/van.schema';
+import {
+  WorkSession,
+  WorkSessionSchema,
+} from 'src/core/database/mongo/schema/work-session.schema';
+import { WorkSessionStatus } from 'src/shared/enums/work-session.enums';
+import { SchemeService } from '../scheme/scheme.service';
 
 const REPORT_TIMEZONE =
   process.env.APP_TIMEZONE || process.env.TZ || 'Asia/Kolkata';
@@ -58,10 +65,12 @@ const round4 = (value: number) => Number(value.toFixed(4));
 export class ProductService extends MongoRepository<Product> {
   private readonly productCategoryModel;
   private readonly vanModel;
+  private readonly workSessionModel;
 
   constructor(
     mongo: MongoService,
     private readonly oracleRepository: OracleRepository,
+    private readonly schemeService: SchemeService,
   ) {
     super(mongo.getModel(Product.name, ProductSchema));
     this.productCategoryModel = mongo.getModel(
@@ -69,6 +78,71 @@ export class ProductService extends MongoRepository<Product> {
       ProductCategorySchema,
     );
     this.vanModel = mongo.getModel(Van.name, VanSchema);
+    this.workSessionModel = mongo.getModel(WorkSession.name, WorkSessionSchema);
+  }
+
+  private async attachApplicableSchemes(
+    products: any[],
+    query: ProductQueryDto,
+    fallbackVanId?: string | null,
+  ) {
+    if (query.includeSchemes !== 'true' || !products.length) return products;
+
+    const schemesByProduct =
+      await this.schemeService.findApplicableSchemesForProducts(products, {
+        provinceId: query.provinceId,
+        routeId: query.routeId,
+        vanId: query.vanId || fallbackVanId || undefined,
+      });
+
+    return products.map((product) => ({
+      ...product,
+      applicableSchemes: schemesByProduct.get(product.productId) ?? [],
+    }));
+  }
+
+  private async attachCategoryNames(products: any[]) {
+    if (!products.length) return products;
+
+    const categoryIds = [
+      ...new Set(
+        products
+          .flatMap((product) => [product.parentCategoryId, product.categoryId])
+          .filter(Boolean)
+          .map(String),
+      ),
+    ];
+
+    const categories = categoryIds.length
+      ? await this.productCategoryModel
+          .find({
+            categoryId: { $in: categoryIds },
+            isDeleted: false,
+          })
+          .select({ categoryId: 1, name: 1, _id: 0 })
+          .lean()
+      : [];
+
+    const categoryNameById = new Map(
+      categories.map((category: any) => [
+        String(category.categoryId),
+        category.name,
+      ]),
+    );
+
+    return products.map((product) => ({
+      ...product,
+      parentCategory:
+        categoryNameById.get(String(product.parentCategoryId || '')) ||
+        product.parentCategoryName ||
+        product.parentCategoryId ||
+        '',
+      subCategory:
+        categoryNameById.get(String(product.categoryId || '')) ||
+        product.categoryName ||
+        product.categoryId ||
+        '',
+    }));
   }
 
   private getExportColumns(columns?: string) {
@@ -77,7 +151,7 @@ export class ProductService extends MongoRepository<Product> {
       { key: 'productId', title: 'Product ID' },
       { key: 'productSysCode', title: 'System Code' },
       { key: 'compCode', title: 'Company Code' },
-      { key: 'categoryId', title: 'Category' },
+      { key: 'categoryId', title: 'Sub Category' },
       { key: 'parentCategoryId', title: 'Parent Category' },
       { key: 'casePrice', title: 'Case Price' },
       { key: 'piecePrice', title: 'Piece Price' },
@@ -572,9 +646,7 @@ export class ProductService extends MongoRepository<Product> {
         productSysCode: product.productSysCode || '',
         compCode: product.compCode || '',
         categoryId:
-          categoryNameById.get(product.parentCategoryId) ||
-          product.parentCategoryId ||
-          '',
+          categoryNameById.get(product.categoryId) || product.categoryId || '',
         parentCategoryId:
           categoryNameById.get(product.parentCategoryId) ||
           product.parentCategoryId ||
@@ -623,6 +695,104 @@ export class ProductService extends MongoRepository<Product> {
       fileName: 'product-listing.xlsx',
       mimeType:
         'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    };
+  }
+
+  async getFocusedPackTemplate() {
+    const products = await this.findLean(
+      {},
+      { sort: { name: 1, productSysCode: 1 } },
+    );
+    const rows = [
+      ['Name', 'Product Code', 'isFocusedPack'],
+      ...products.map((product: any) => [
+        product.name || '',
+        product.productSysCode || '',
+        product.isFocusedPack === 'Y' ? 'Y' : 'N',
+      ]),
+    ];
+    const workbook = XLSX.utils.book_new();
+    const worksheet = XLSX.utils.aoa_to_sheet(rows);
+    worksheet['!cols'] = [{ wch: 42 }, { wch: 24 }, { wch: 18 }];
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Focused Packs');
+
+    return {
+      buffer: XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' }),
+      fileName: 'focused-pack-products-template.xlsx',
+      mimeType:
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    };
+  }
+
+  async bulkUpdateFocusedPacks(dto: BulkUpdateFocusedPackDto) {
+    const productCodes = dto.items.map((item) => item.productCode.trim());
+    const products = await this.findLean({
+      productSysCode: { $in: productCodes },
+    });
+    const productByCode = new Map(
+      products.map((product: any) => [product.productSysCode, product]),
+    );
+    const seenCodes = new Set<string>();
+    const operations: any[] = [];
+    const results: Array<{
+      row: number;
+      status: 'UPDATED' | 'FAILED';
+      productCode: string;
+      message?: string;
+    }> = [];
+
+    for (const [index, item] of dto.items.entries()) {
+      const productCode = item.productCode.trim();
+      const row = index + 1;
+
+      if (seenCodes.has(productCode)) {
+        results.push({
+          row,
+          status: 'FAILED',
+          productCode,
+          message: 'Duplicate Product Code in upload',
+        });
+        continue;
+      }
+      seenCodes.add(productCode);
+
+      if (!productByCode.has(productCode)) {
+        results.push({
+          row,
+          status: 'FAILED',
+          productCode,
+          message: 'Product Code not found',
+        });
+        continue;
+      }
+
+      operations.push({
+        updateOne: {
+          filter: { productSysCode: productCode },
+          update: { $set: { isFocusedPack: item.isFocusedPack } },
+        },
+      });
+      results.push({ row, status: 'UPDATED', productCode });
+    }
+
+    if (operations.length) {
+      await this.model.bulkWrite(operations, { ordered: false });
+    }
+
+    const updated = results.filter(
+      (result) => result.status === 'UPDATED',
+    ).length;
+    const failed = results.length - updated;
+
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'Focused Pack bulk upload processed',
+      data: {
+        total: dto.items.length,
+        updated,
+        failed,
+        results,
+      },
     };
   }
 
@@ -1133,18 +1303,27 @@ export class ProductService extends MongoRepository<Product> {
      *
      * This replaces expensive van lookup inside aggregation.
      */
-    const userVan = await this.vanModel
+    const activeWorkSession = await this.workSessionModel
       .findOne({
-        associatedUsers: userId,
-        isDeleted: false,
+        userId,
+        status: WorkSessionStatus.ACTIVE,
+        isDeleted: { $ne: true },
       })
-      .select({
-        vanId: 1,
-        _id: 0,
-      })
+      .select('vanId')
+      .sort({ createdAt: -1 })
       .lean();
-
-    const userVanId = userVan?.vanId || null;
+    const userVanId = activeWorkSession?.vanId || ctx?.vanId || null;
+    const requestedVanId = query.vanId || userVanId;
+    const requestedVan = requestedVanId
+      ? await this.vanModel
+          .findOne({
+            vanId: requestedVanId,
+            isDeleted: { $ne: true },
+          })
+          .select('categoryIds')
+          .lean()
+      : null;
+    const vanCategoryIds = requestedVan?.categoryIds ?? [];
 
     /**
      * ================= BUILD PRODUCT MATCH =================
@@ -1152,6 +1331,19 @@ export class ProductService extends MongoRepository<Product> {
     const match: any = {
       isDeleted: false,
     };
+
+    if (query.vanId) {
+      match.$and = vanCategoryIds.length
+        ? [
+            {
+              $or: [
+                { categoryId: { $in: vanCategoryIds } },
+                { parentCategoryId: { $in: vanCategoryIds } },
+              ],
+            },
+          ]
+        : [{ _id: { $exists: false } }];
+    }
 
     if (status) {
       match.status = status;
@@ -1215,7 +1407,11 @@ export class ProductService extends MongoRepository<Product> {
       ];
 
       if (match.$or) {
-        match.$and = [{ $or: match.$or }, { $or: searchFilters }];
+        match.$and = [
+          ...(match.$and ?? []),
+          { $or: match.$or },
+          { $or: searchFilters },
+        ];
         delete match.$or;
       } else {
         match.$or = searchFilters;
@@ -1367,11 +1563,17 @@ export class ProductService extends MongoRepository<Product> {
 
       const items = result?.items ?? [];
       const total = result?.meta?.[0]?.total ?? 0;
+      const itemsWithCategories = await this.attachCategoryNames(items);
+      const itemsWithSchemes = await this.attachApplicableSchemes(
+        itemsWithCategories,
+        query,
+        userVanId,
+      );
 
       return {
         statusCode: HttpStatus.OK,
         message: PRODUCT.FETCHED,
-        data: items,
+        data: itemsWithSchemes,
         meta: {
           total,
           page: pageNumber,
@@ -1563,11 +1765,17 @@ export class ProductService extends MongoRepository<Product> {
 
     const items = result?.items ?? [];
     const total = result?.meta?.[0]?.total ?? 0;
+    const itemsWithCategories = await this.attachCategoryNames(items);
+    const itemsWithSchemes = await this.attachApplicableSchemes(
+      itemsWithCategories,
+      query,
+      userVanId,
+    );
 
     return {
       statusCode: HttpStatus.OK,
       message: PRODUCT.FETCHED,
-      data: items,
+      data: itemsWithSchemes,
       meta: {
         total,
         page: pageNumber,
@@ -1603,7 +1811,7 @@ export class ProductService extends MongoRepository<Product> {
       return {
         statusCode: HttpStatus.OK,
         message: PRODUCT.FETCHED,
-        data: product,
+        data: (await this.attachCategoryNames([product]))[0],
       };
     }
 
@@ -1732,7 +1940,7 @@ export class ProductService extends MongoRepository<Product> {
     return {
       statusCode: HttpStatus.OK,
       message: PRODUCT.FETCHED,
-      data: product,
+      data: (await this.attachCategoryNames([product]))[0],
     };
   }
 

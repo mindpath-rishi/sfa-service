@@ -36,7 +36,7 @@ export class CreateFocusedPackTargetDto {
   @Min(0)
   targetCases?: number;
 
-  @ApiPropertyOptional({ default: 0 })
+  @ApiPropertyOptional({ default: 0, description: 'Target weight in KG' })
   @IsOptional()
   @IsNumber()
   @Min(0)

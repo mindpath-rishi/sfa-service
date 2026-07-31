@@ -33,14 +33,15 @@ import { VanDailyStockService } from '../van-daily-stock/van-daily-stock.service
 import { StockCountService } from '../stock-count/stock-count.service';
 import { StockCountStatus } from 'src/shared/enums/stock-count.enums';
 import { StockCountItemService } from '../stock-count-item/stock-count-item.service';
-import { Van } from 'src/core/database/mongo/schema/van.schema';
-import { VanInventoryService } from '../van-inventory/van-inventory.service';
-import { InventoryTransaction } from 'src/core/database/mongo/schema/inventory-transaction.schema';
-import { InventoryTransactionService } from '../inventory-transaction/inventory-transaction.service';
+import { Van, VanSchema } from 'src/core/database/mongo/schema/van.schema';
+import { Model } from 'mongoose';
 import { LeaveService } from '../leave/leave.service';
+import { StockUnloadRequestService } from '../stock-unload-request/stock-unload-request.service';
 
 @Injectable()
 export class WorkSessionService extends MongoRepository<WorkSession> {
+  private readonly vanModel: Model<Van>;
+
   constructor(
     mongo: MongoService,
     private readonly activityService: ActivityService,
@@ -48,11 +49,11 @@ export class WorkSessionService extends MongoRepository<WorkSession> {
     private readonly vanDailyStockService: VanDailyStockService,
     private readonly stockCountService: StockCountService,
     private readonly stockCountItemService: StockCountItemService,
-    private readonly inventoryService: VanInventoryService,
-    private readonly inventoryTransactionService: InventoryTransactionService,
     private readonly leaveService: LeaveService,
+    private readonly stockUnloadRequestService: StockUnloadRequestService,
   ) {
     super(mongo.getModel(WorkSession.name, WorkSessionSchema));
+    this.vanModel = mongo.getModel(Van.name, VanSchema);
   }
 
   private normalizeLocation(location?: any) {
@@ -104,12 +105,22 @@ export class WorkSessionService extends MongoRepository<WorkSession> {
         const dayStartLocation = this.normalizeLocation(
           payload.dayStartLocation || (payload as any).startLocation,
         );
+        const vanId = payload.vanId || ctx?.vanId;
+        const van = vanId
+          ? await this.vanModel
+              .findOne({ vanId, isDeleted: { $ne: true } })
+              .select('name driverEmployeeId driverName')
+              .session(session)
+              .lean()
+          : undefined;
 
         const newWork: Partial<WorkSession> = {
           userId: ctx?.userId,
           userName: ctx?.name,
-          vanId: payload.vanId || ctx?.vanId,
-          vanName: ctx?.vanName,
+          vanId,
+          vanName: van?.name || ctx?.vanName,
+          driverEmployeeId: van?.driverEmployeeId,
+          driverName: van?.driverName,
           dayStartTime: new Date(),
           dayStartImageMediaId: payload.dayStartImageMediaId,
           dayStartImageUrl: payload.dayStartImageUrl,
@@ -339,6 +350,7 @@ export class WorkSessionService extends MongoRepository<WorkSession> {
           vanChangeStatus: '$vanChangeRequest.status',
           requestedVanId: '$vanChangeRequest.requestedVanId',
           requestedVanName: '$vanChangeRequest.requestedVanName',
+          vanChangeRouteSelectedAt: '$vanChangeRequest.routeSelectedAt',
 
           // // ✅ activity details
           // activeActivity: {
@@ -632,6 +644,8 @@ export class WorkSessionService extends MongoRepository<WorkSession> {
         const summary: any = summaryRes?.data?.summary;
         const products = summaryRes?.data?.products || [];
 
+        let unloadRequest;
+
         if (summary && products.length) {
           /* ======================================================
            * 5. CHECK EXISTING STOCK COUNT
@@ -737,72 +751,34 @@ export class WorkSessionService extends MongoRepository<WorkSession> {
 
             await this.stockCountItemService.bulkCreate(items, { session });
           }
-          const carryForward = payload?.carryForwardStock === true;
+        }
 
-          console.log('Carry Forward Stock:', carryForward);
+        const carryForward = payload?.carryForwardStock === true;
+        console.log('Carry Forward Stock:', carryForward);
 
-          if (!carryForward) {
-            /* ============================================
-             * 1. GET CURRENT INVENTORY BEFORE RESET
-             * ============================================ */
-            const inventories = await this.inventoryService.find({ vanId });
-
-            console.log(
-              inventories,
-              '==================current inventories=================',
-            );
-
-            /* ============================================
-             * 2. CREATE TRANSACTIONS (OUT)
-             * ============================================ */
-            const transactions = inventories
-              .filter((inv) => inv.quantity > 0)
-              .map((inv) => ({
-                transactionId: IdGenerator.generate(
-                  'INVENTORY_TRANSACTION',
-                  12,
-                ),
-                productId: inv.productId,
-                vanId: inv.vanId,
-                employeeId: ctx?.userId,
-                warehouseId: payload?.warehouseId || 'WH-001',
-
-                transactionType: 'UNLOAD',
-                direction: 'OUT',
-
-                quantity: inv.quantity,
-                cases: 0, // or calculate if needed
-                pieces: 0, // or calculate if needed
-
-                referenceNo: workSessionId,
-                remark: 'Day end stock reset (No Carry Forward)',
-
-                transactionDate: new Date(),
-                status: 'POSTED',
-              }));
-
-            if (transactions.length) {
-              await this.inventoryTransactionService.bulkCreate(
-                transactions as any,
-                { session },
-              );
-            }
-
-            /* ============================================
-             * 3. RESET INVENTORY
-             * ============================================ */
-            await this.inventoryService.updateMany(
-              { vanId },
-              {
-                $set: {
-                  quantity: 0,
-                  reservedQuantity: 0,
-                  updatedAt: new Date(),
-                },
-              },
-              { session },
-            );
-          }
+        if (!carryForward) {
+          unloadRequest = await this.stockUnloadRequestService.createFromDayEnd(
+            {
+              workSessionId,
+              vanId,
+              employeeId: ctx?.userId!,
+              warehouseId: payload?.warehouseId,
+              totalQuantity: summary?.closing?.qty || 0,
+              totalCases: summary?.closing?.cases || 0,
+              totalPieces: summary?.closing?.pieces || 0,
+              totalValue: summary?.closing?.value || 0,
+              items: products.map((product: any) => ({
+                productId: String(product?.productId || ''),
+                productName: product?.productName,
+                quantity: product?.closingQty || 0,
+                cases: product?.closingCases || 0,
+                pieces: product?.closingPieces || 0,
+                value: product?.closingValue || 0,
+                unitQtyInCase: product?.unitQtyInCase || 0,
+              })),
+            },
+            session,
+          );
         }
 
         /* ======================================================
@@ -811,7 +787,15 @@ export class WorkSessionService extends MongoRepository<WorkSession> {
         return {
           statusCode: HttpStatus.OK,
           message: WORK_SESSION.UPDATED,
-          data: workSession,
+          data: {
+            workSession,
+            unloadRequest: unloadRequest
+              ? {
+                  unloadRequestId: unloadRequest.unloadRequestId,
+                  status: unloadRequest.status,
+                }
+              : undefined,
+          },
         };
       });
     } catch (error) {
@@ -1128,6 +1112,36 @@ export class WorkSessionService extends MongoRepository<WorkSession> {
           preserveNullAndEmptyArrays: true,
         },
       },
+      {
+        $lookup: {
+          from: 'route_master',
+          localField: 'selectedRoute.routeId',
+          foreignField: 'routeId',
+          as: 'selectedRouteMaster',
+        },
+      },
+      {
+        $unwind: {
+          path: '$selectedRouteMaster',
+          preserveNullAndEmptyArrays: true,
+        },
+      },
+      {
+        $addFields: {
+          selectedRoute: {
+            $cond: [
+              { $ifNull: ['$selectedRoute', false] },
+              {
+                $mergeObjects: [
+                  { $ifNull: ['$selectedRouteMaster', {}] },
+                  '$selectedRoute',
+                ],
+              },
+              null,
+            ],
+          },
+        },
+      },
 
       /* ===== 8. LATEST VAN CHANGE REQUEST ===== */
       {
@@ -1180,6 +1194,21 @@ export class WorkSessionService extends MongoRepository<WorkSession> {
     const result = await this.model.aggregate(pipeline);
 
     const doc = result?.[0];
+
+    if (doc) {
+      const vanChangeApproved = doc.vanChangeStatus === 'APPROVED';
+      const routeUsesApprovedVan =
+        Boolean(doc.selectedRoute) &&
+        String(doc.selectedRoute?.vanId || '') ===
+          String(doc.requestedVanId || '');
+      const routeSelectionHandled =
+        Boolean(doc.vanChangeRouteSelectedAt) || routeUsesApprovedVan;
+
+      doc.vanChangeActionTaken = vanChangeApproved
+        ? routeSelectionHandled
+        : false;
+      doc.vanChangeRequiresAction = vanChangeApproved && !routeSelectionHandled;
+    }
 
     /* ======================================================
      * IF WORK SESSION NOT FOUND

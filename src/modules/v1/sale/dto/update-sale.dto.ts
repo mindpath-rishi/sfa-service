@@ -6,45 +6,13 @@ import {
 
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import {
-  ArrayMinSize,
-  IsArray,
   IsDate,
   IsEnum,
   IsNumber,
   IsOptional,
   IsString,
-  ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-
-export class UpdateSaleEmployeeDto {
-  @ApiPropertyOptional({
-    type: String,
-    description: 'Business identifier for employee',
-    example: 'EMP001',
-  })
-  @IsOptional()
-  @IsString()
-  employeeId?: string;
-
-  @ApiPropertyOptional({
-    type: String,
-    description: 'Employee name',
-    example: 'Ramesh',
-  })
-  @IsOptional()
-  @IsString()
-  employeeName?: string;
-
-  @ApiPropertyOptional({
-    type: String,
-    description: 'Employee role in sale',
-    example: 'SALESMAN',
-  })
-  @IsOptional()
-  @IsString()
-  role?: string;
-}
 
 export class UpdateSaleDto {
   /**
@@ -80,29 +48,6 @@ export class UpdateSaleDto {
   @IsOptional()
   @IsString()
   customerName?: string;
-
-  @ApiPropertyOptional({
-    type: [UpdateSaleEmployeeDto],
-    description: 'Employees involved in sale',
-    example: [
-      {
-        employeeId: 'EMP001',
-        employeeName: 'Ramesh',
-        role: 'SALESMAN',
-      },
-      {
-        employeeId: 'EMP002',
-        employeeName: 'Suresh',
-        role: 'DRIVER',
-      },
-    ],
-  })
-  @IsOptional()
-  @IsArray()
-  @ArrayMinSize(1)
-  @ValidateNested({ each: true })
-  @Type(() => UpdateSaleEmployeeDto)
-  employees?: UpdateSaleEmployeeDto[];
 
   @ApiPropertyOptional({ type: Date })
   @IsOptional()

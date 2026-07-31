@@ -71,6 +71,7 @@ export class AuditLog extends Document {
     error?: string;
     serverId?: string;
     version?: number;
+    breakdownReason?: string;
   };
 }
 

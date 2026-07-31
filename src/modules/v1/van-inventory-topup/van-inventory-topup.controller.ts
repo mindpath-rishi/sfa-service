@@ -26,6 +26,7 @@ import {
   Patch,
   Post,
   Query,
+  SetMetadata,
 } from '@nestjs/common';
 import { ApiBody, ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger';
 
@@ -51,7 +52,7 @@ import { CreateVanInventoryTopupDto } from './dto/create-van-inventory-topup.dto
 import { UpdateVanInventoryTopupDto } from './dto/update-van-inventory-topup.dto';
 import { VanInventoryTopupQueryDto } from './dto/van-inventory-topup-query.dto';
 import { VAN_INVENTORY_TOPUP } from './van-inventory-topup.constants';
-import { Public } from 'src/core/decorators/public.decorator';
+import { IS_PUBLIC_KEY, Public } from 'src/core/decorators/public.decorator';
 
 @ApiTags('Van-inventory-topup')
 @FeatureFlag(API_MODULE_ENABLE_KEYS.VAN_INVENTORY_TOPUP)
@@ -106,6 +107,43 @@ export class VanInventoryTopupController {
   @Permissions('VAN_INVENTORY_TOPUP_VIEW')
   async findAll(@Query() query: VanInventoryTopupQueryDto) {
     return this.service.findAll(query);
+  }
+
+  /**
+   * Approve a submitted top-up from the admin panel
+   * ------------------------------------------------
+   */
+  @Permissions('VAN_INVENTORY_TOPUP_UPDATE')
+  @SetMetadata(IS_PUBLIC_KEY, false)
+  @Patch(':vanInventoryTopupId/admin/approve')
+  @ApiOperation({ summary: 'Approve a submitted top-up request as admin' })
+  @ApiParam({
+    name: 'vanInventoryTopupId',
+    description: 'VanInventoryTopup vanInventoryTopupId',
+  })
+  async adminApprove(
+    @Param('vanInventoryTopupId') vanInventoryTopupId: string,
+  ) {
+    return this.service.adminApprove(vanInventoryTopupId);
+  }
+
+  /**
+   * Reject a submitted top-up from the admin panel
+   * -----------------------------------------------
+   */
+  @Permissions('VAN_INVENTORY_TOPUP_UPDATE')
+  @SetMetadata(IS_PUBLIC_KEY, false)
+  @Patch(':vanInventoryTopupId/admin/reject')
+  @ApiOperation({ summary: 'Reject a submitted top-up request as admin' })
+  @ApiParam({
+    name: 'vanInventoryTopupId',
+    description: 'VanInventoryTopup vanInventoryTopupId',
+  })
+  async adminReject(
+    @Param('vanInventoryTopupId') vanInventoryTopupId: string,
+    @Body() body: { reason?: string },
+  ) {
+    return this.service.adminReject(vanInventoryTopupId, body?.reason);
   }
 
   /**

@@ -16,8 +16,14 @@ import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IsEnum, IsOptional, IsString, MaxLength } from 'class-validator';
 import { Status } from 'src/shared/enums/app.enums';
 import { PaginationDto } from 'src/shared/dto/pagination.dto';
+import { EmployeeType } from 'src/shared/enums/employee.enums';
 
 export class EmployeeQueryDto extends PaginationDto {
+  @ApiPropertyOptional({ enum: EmployeeType })
+  @IsOptional()
+  @IsEnum(EmployeeType)
+  employeeType?: EmployeeType;
+
   /**
    * Employee Status
    * ---------------
@@ -44,14 +50,6 @@ export class EmployeeQueryDto extends PaginationDto {
   @IsOptional()
   @IsString()
   roleId?: string;
-
-  @ApiPropertyOptional({
-    example: 'DESIG-001',
-    description: 'Filter employees by designation ID',
-  })
-  @IsOptional()
-  @IsString()
-  designationId?: string;
 
   /**
    * Reports To

@@ -14,6 +14,7 @@ import { EmployeeService } from 'src/modules/v1/employee/employee.service';
 import { RoleService } from 'src/modules/v1/role/role.service';
 import { Status } from 'src/shared/enums/app.enums';
 import { UserStatus } from 'src/modules/v1/user/user.enum';
+import { PositionService } from 'src/modules/v1/position/position.service';
 
 @Injectable()
 export class PermissionsGuard implements CanActivate {
@@ -21,6 +22,7 @@ export class PermissionsGuard implements CanActivate {
     private readonly reflector: Reflector,
     private readonly employeeService: EmployeeService,
     private readonly roleService: RoleService,
+    private readonly positionService: PositionService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -74,8 +76,15 @@ export class PermissionsGuard implements CanActivate {
     /* ======================================================
      * ROLE VALIDATION
      * ====================================================== */
+    const position = await this.positionService.findOne(
+      { employeeId: employee.employeeId, isDeleted: false },
+      { lean: true },
+    );
+    if (!position?.roleId) {
+      throw new ForbiddenException('Position role not found');
+    }
     const role = await this.roleService.findOne(
-      { roleId: employee.roleId, isDeleted: false },
+      { roleId: position.roleId, isDeleted: false },
       { lean: true },
     );
 

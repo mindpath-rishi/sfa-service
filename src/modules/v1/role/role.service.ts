@@ -32,7 +32,6 @@ import { ROLE } from './role.constants';
 import { Role, RoleSchema } from 'src/core/database/mongo/schema/role.schema';
 import { MongoRepository } from 'src/core/database/mongo/mongo.repository';
 import { MongoService } from 'src/core/database/mongo/mongo.service';
-import { IdGenerator } from 'src/shared/utils/id-generator.utils';
 import { Status } from 'src/shared/enums/app.enums';
 import { normalizeRoleName } from './role.uitls';
 import * as XLSX from 'xlsx';
@@ -47,13 +46,7 @@ export class RoleService extends MongoRepository<Role> {
   }
 
   private buildRoleFilter(query: RoleQueryDto) {
-    const {
-      status,
-      searchText,
-      maxAssociatedVans,
-      maxAssociatedVansLte,
-      maxAssociatedVansGte,
-    } = query;
+    const { status, searchText } = query;
     const filter: any = {};
 
     if (status) {
@@ -66,26 +59,8 @@ export class RoleService extends MongoRepository<Role> {
         { roleId: regex },
         { name: regex },
         { displayName: regex },
-        { reportingTo: regex },
+        { description: regex },
       ];
-    }
-
-    if (maxAssociatedVans !== undefined) {
-      filter.maxAssociatedVans = maxAssociatedVans;
-    }
-
-    if (maxAssociatedVansLte !== undefined) {
-      filter.maxAssociatedVans = {
-        ...(filter.maxAssociatedVans || {}),
-        $lte: maxAssociatedVansLte,
-      };
-    }
-
-    if (maxAssociatedVansGte !== undefined) {
-      filter.maxAssociatedVans = {
-        ...(filter.maxAssociatedVans || {}),
-        $gte: maxAssociatedVansGte,
-      };
     }
 
     return filter;
@@ -96,11 +71,7 @@ export class RoleService extends MongoRepository<Role> {
       primary: 'displayName',
       name: 'displayName',
       roleId: 'roleId',
-      owner: 'reportingTo',
-      reportingTo: 'reportingTo',
       permissions: 'permissions',
-      metric: 'maxAssociatedVans',
-      maxAssociatedVans: 'maxAssociatedVans',
     };
     const sortField = query.sortBy ? sortMap[query.sortBy] : undefined;
 
@@ -114,9 +85,7 @@ export class RoleService extends MongoRepository<Role> {
       { key: 'primary', title: 'Role' },
       { key: 'roleId', title: 'Role ID' },
       { key: 'description', title: 'Description' },
-      { key: 'owner', title: 'Reporting Role' },
       { key: 'permissions', title: 'Permissions' },
-      { key: 'metric', title: 'Van Limit' },
       { key: 'status', title: 'Status' },
     ];
     const requested = columns
@@ -322,9 +291,7 @@ export class RoleService extends MongoRepository<Role> {
           displayName: dto.name.trim(),
           name: normalizedName,
           description: dto.description,
-          reportingTo: dto.reportingTo,
           permissions: dto.permissions,
-          maxAssociatedVans: dto.maxAssociatedVans ?? 0,
           status: dto.status ?? Status.ACTIVE,
           isSystemAdmin: dto.isSystemAdmin ?? false,
           isDeleted: false,
@@ -340,13 +307,11 @@ export class RoleService extends MongoRepository<Role> {
 
     // Fresh role creation
     const role = await this.save({
-      roleId: IdGenerator.roleId(),
+      roleId: normalizedName,
       name: normalizedName,
       displayName: dto.name.trim(),
       description: dto.description,
-      reportingTo: dto.reportingTo,
       permissions: dto.permissions,
-      maxAssociatedVans: dto.maxAssociatedVans ?? 0,
       status: dto.status ?? Status.ACTIVE,
       isSystemAdmin: dto.isSystemAdmin ?? false,
     });
@@ -366,8 +331,7 @@ export class RoleService extends MongoRepository<Role> {
    * Supports:
    * - Status filtering
    * - Free-text search
-   * - Van association limit filters
-   * - Pagination & sorting
+ * - Pagination & sorting
    */
   async findAll(query: RoleQueryDto) {
     const {
@@ -397,29 +361,14 @@ export class RoleService extends MongoRepository<Role> {
     const roles = await this.findLean(this.buildRoleFilter(query), {
       sort: this.getRoleSort(query),
     });
-    const allRoles = await this.findLean({});
-    const roleNameById = new Map(
-      allRoles.map((role: any) => [
-        role.roleId,
-        role.displayName || role.name || role.roleId,
-      ]),
-    );
     const exportRows = roles.map((role: any) => {
       const values: Record<string, string> = {
         primary: role.displayName || role.name || '',
         roleId: role.roleId || '',
         description: role.description || '',
-        owner:
-          (role.reportingTo && roleNameById.get(role.reportingTo)) ||
-          role.reportingTo ||
-          '',
         permissions: Array.isArray(role.permissions)
           ? role.permissions.join(', ')
           : '',
-        metric:
-          role.maxAssociatedVans === -1
-            ? 'Unlimited'
-            : String(role.maxAssociatedVans ?? 0),
         status: role.status || '',
       };
 

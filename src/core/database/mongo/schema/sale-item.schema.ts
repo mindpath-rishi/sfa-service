@@ -39,6 +39,9 @@ export class SaleItem {
   @Prop({ type: String, required: true, index: true })
   customerCategoryId!: string;
 
+  @Prop({ type: String, enum: ['Y', 'N'], default: 'N' })
+  isFocusedPack!: string;
+
   /* ================= QUANTITY ================= */
 
   @Prop({ type: Number, default: 0 })
@@ -90,7 +93,46 @@ export class SaleItem {
   totalNetWeight!: number;
 
   @Prop({ type: Number, default: 0 })
+  grossValue!: number;
+
+  @Prop({ type: Number, default: 0 })
   totalValue!: number;
+
+  /* ================= SCHEME ================= */
+
+  // Applied scheme reference, if any category/sub-category/product/province/route/van wise scheme matched this line
+  @Prop({ type: String, ref: 'Scheme' })
+  schemeId?: string;
+
+  @Prop({ type: String, trim: true })
+  schemeName?: string;
+
+  @Prop({ type: String, trim: true })
+  schemeType?: string;
+
+  @Prop({ type: Number, default: 0 })
+  schemeMinimumQuantity?: number;
+
+  @Prop({ type: Number })
+  schemeDiscountPercent?: number;
+
+  @Prop({ type: Number })
+  schemeDiscountValue?: number;
+
+  @Prop({ type: Number })
+  schemeBuyQty?: number;
+
+  @Prop({ type: Number, default: 0 })
+  schemeDiscountAmount?: number;
+
+  @Prop({ type: Number, default: 0 })
+  schemeFreeQty?: number;
+
+  @Prop({ type: String })
+  schemeFreeProductId?: string;
+
+  @Prop({ type: String, trim: true })
+  schemeFreeProductName?: string;
 
   /* ================= CONVERSION ================= */
 

@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Injectable,
   NotFoundException,
   ConflictException,
@@ -144,6 +145,24 @@ export class RouteSessionService extends MongoRepository<RouteSession> {
         async (session) => {
           const ctx = RequestContextStore.getStore();
 
+          const currentActiveRoute = await this.findOne(
+            {
+              workSessionId: payload.workSessionId,
+              userId: ctx?.userId,
+              status: RouteSessionStatus.ACTIVE,
+            },
+            { session },
+          );
+
+          if (
+            currentActiveRoute &&
+            currentActiveRoute.routeId !== payload.routeId
+          ) {
+            throw new BadRequestException(
+              'Route changes require manager approval',
+            );
+          }
+
           /* ======================================================
            * COMPLETE OTHER ACTIVE SESSIONS
            * ====================================================== */
@@ -273,6 +292,90 @@ export class RouteSessionService extends MongoRepository<RouteSession> {
     } catch (error) {
       this.handleDuplicateError(error);
     }
+  }
+
+  async activateApprovedRoute(
+    payload: CreateRouteSessionDto,
+    user: { userId: string; userName?: string },
+    options?: { session?: ClientSession },
+  ) {
+    return this.withTransaction(async (session) => {
+      await this.updateMany(
+        {
+          workSessionId: payload.workSessionId,
+          userId: user.userId,
+          status: RouteSessionStatus.ACTIVE,
+        },
+        {
+          $set: {
+            status: RouteSessionStatus.COMPLETED,
+            isActive: false,
+            endTime: new Date(),
+          },
+        },
+        { session },
+      );
+
+      const existing = await this.findOne(
+        {
+          workSessionId: payload.workSessionId,
+          userId: user.userId,
+          routeId: payload.routeId,
+        },
+        { session, includeDeleted: true },
+      );
+
+      if (existing) {
+        await this.updateById(
+          existing._id.toString(),
+          {
+            ...payload,
+            userId: user.userId,
+            userName: user.userName,
+            status: RouteSessionStatus.ACTIVE,
+            isActive: true,
+            isDeleted: false,
+            startTime: new Date(),
+            endTime: null,
+            sessionDate: new Date(),
+          },
+          { session },
+        );
+
+        return {
+          statusCode: HttpStatus.OK,
+          message: ROUTE_SESSION.REOPEN,
+          data: {
+            ...existing.toObject(),
+            ...payload,
+            status: RouteSessionStatus.ACTIVE,
+            isActive: true,
+            startTime: new Date(),
+            endTime: null,
+          },
+        };
+      }
+
+      const routeSession = await this.save(
+        {
+          routeSessionId: IdGenerator.generate('ROUT', 8),
+          userId: user.userId,
+          userName: user.userName,
+          startTime: new Date(),
+          status: RouteSessionStatus.ACTIVE,
+          isActive: true,
+          sessionDate: new Date(),
+          ...payload,
+        },
+        { session },
+      );
+
+      return {
+        statusCode: HttpStatus.CREATED,
+        message: ROUTE_SESSION.CREATED,
+        data: routeSession,
+      };
+    }, options?.session);
   }
 
   async findAll(query: RouteSessionQueryDto) {

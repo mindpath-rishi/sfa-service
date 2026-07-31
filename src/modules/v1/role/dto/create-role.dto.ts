@@ -20,8 +20,6 @@ import {
   IsArray,
   IsOptional,
   ArrayUnique,
-  IsInt,
-  Min,
   MaxLength,
   IsBoolean,
   IsEnum,
@@ -65,20 +63,6 @@ export class CreateRoleDto {
   description?: string;
 
   /**
-   * Reporting Role
-   * --------------
-   * Purpose : Role ID this role reports to
-   */
-  @ApiProperty({
-    example: 'RID-001',
-    description: 'Reporting role ID',
-    required: false,
-  })
-  @IsOptional()
-  @IsString()
-  reportingTo?: string;
-
-  /**
    * Permissions
    * -----------
    * Purpose : Define permissions granted to this role
@@ -96,32 +80,6 @@ export class CreateRoleDto {
   @ArrayUnique()
   @IsString({ each: true })
   permissions!: string[];
-
-  /**
-   * Max Associated Vans
-   * -------------------
-   * Purpose : Limit operational scope for users of this role
-   *
-   * Rules:
-   * - -1 = Unlimited access
-   * -  0 = No access
-   * - >0 = Maximum number of vans
-   *
-   * Notes:
-   * - Optional
-   * - Defaults to 0 if omitted
-   */
-  @ApiProperty({
-    example: 3,
-    description:
-      'Maximum number of vans allowed (-1 = unlimited, 0 = none)',
-    required: false,
-    minimum: -1,
-  })
-  @IsOptional()
-  @IsInt()
-  @Min(-1)
-  maxAssociatedVans?: number;
 
   @ApiProperty({
     example: 'ACTIVE',

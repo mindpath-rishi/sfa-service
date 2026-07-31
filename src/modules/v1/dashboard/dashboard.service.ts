@@ -90,7 +90,7 @@ export class DashboardService {
         query,
         'date',
         currentRange,
-        'employees.employeeId',
+        'positionHierarchy.employeeId',
       ),
       status: SaleStatus.COMPLETED,
     };
@@ -99,7 +99,7 @@ export class DashboardService {
         query,
         'date',
         previousRange,
-        'employees.employeeId',
+        'positionHierarchy.employeeId',
       ),
       status: SaleStatus.COMPLETED,
     };
@@ -281,7 +281,6 @@ export class DashboardService {
     const van = await this.vanModel
       .findOne({
         vanId: query.vanId,
-        ...(query.employeeId ? { associatedUsers: query.employeeId } : {}),
         isDeleted: { $ne: true },
       })
       .lean();

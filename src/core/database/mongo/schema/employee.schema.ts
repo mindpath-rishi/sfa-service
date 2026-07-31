@@ -6,7 +6,6 @@
  *
  * Contains:
  * - Employee identity and contact details
- * - Role reference for RBAC
  * - Employee reporting hierarchy
  * - Permission overrides
  * - Account status
@@ -19,6 +18,7 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument } from 'mongoose';
 import { UserStatus } from 'src/modules/v1/user/user.enum';
+import { EmployeeType } from 'src/shared/enums/employee.enums';
 
 export type EmployeeDocument = HydratedDocument<Employee>;
 
@@ -37,6 +37,23 @@ export class Employee {
     type: String,
   })
   employeeId!: string;
+
+  @Prop({
+    type: String,
+    enum: EmployeeType,
+    default: EmployeeType.STAFF,
+    required: true,
+    index: true,
+  })
+  employeeType!: EmployeeType;
+
+  @Prop({
+    required: false,
+    trim: true,
+    index: true,
+    type: String,
+  })
+  manNumber?: string;
 
   // Optional contact mobile number
   @Prop({
@@ -74,45 +91,8 @@ export class Employee {
   profileImageUrl?: string;
 
   /* ======================================================
-   * AUTHORIZATION
-   * ====================================================== */
-
-  // Role reference used for RBAC
-  @Prop({
-    required: true,
-    index: true,
-    type: String,
-  })
-  roleId!: string;
-
-  /* ======================================================
-   * DESIGNATION
-   * ====================================================== */
-
-  // Designation reference that owns territory assignment
-  @Prop({
-    required: false,
-    ref: 'designation_master',
-    index: true,
-    type: String,
-  })
-  designationId?: string;
-
-  /* ======================================================
    * HIERARCHY
    * ====================================================== */
-
-  // Direct reporting manager
-  // Example:
-  // Salesman -> Team Leader
-  // Team Leader -> Manager
-  // Manager -> Category Manager
-  @Prop({
-    required: false,
-    index: true,
-    type: String,
-  })
-  reportingEmployeeId?: string;
 
   // Complete reporting chain
   // Example for Salesman:
@@ -150,10 +130,6 @@ export class Employee {
     deny: string[];
   };
 
-  // Explicitly granted by MIS for field salesmen who may work without internet.
-  @Prop({ type: Boolean, default: false, index: true })
-  offlineAccessAllowed!: boolean;
-
   /* ======================================================
    * STATUS
    * ====================================================== */
@@ -171,7 +147,5 @@ export const EmployeeSchema = SchemaFactory.createForClass(Employee);
 
 // Useful indexes
 EmployeeSchema.index({ employeeId: 1 }, { unique: true });
-EmployeeSchema.index({ roleId: 1 });
-EmployeeSchema.index({ designationId: 1 });
-EmployeeSchema.index({ reportingEmployeeId: 1 });
+EmployeeSchema.index({ manNumber: 1 });
 EmployeeSchema.index({ hierarchyPath: 1 });

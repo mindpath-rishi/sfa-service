@@ -30,7 +30,7 @@ export const API_MODULE = {
   PERMISSION: 'permission',
   MEDIA: 'media',
   VAN: 'van',
-  DESIGNATION: 'designation',
+  POSITION: 'position',
   MARKET: 'market',
   PROVINCE: 'province',
   COUNTRY: 'country',
@@ -56,6 +56,7 @@ export const API_MODULE = {
   ACTIVITY: 'activity',
   WORK_SESSION: 'work-session',
   VAN_CHANGE_REQUEST: 'van-change-request',
+  ROUTE_CHANGE_REQUEST: 'route-change-request',
   OUTLET_VERIFICATION: 'outlet-verification',
   ROUTE_SESSION: 'route-session',
   SHOP_VISIT: 'shop-visit',
@@ -68,6 +69,7 @@ export const API_MODULE = {
   TARGET: 'target',
   PRICE: 'price',
   VAN_ERP_CLOSING: 'van-erp-closing',
+  SCHEME: 'scheme',
 };
 
 export const API_MODULE_ENABLE_KEYS = {
@@ -91,7 +93,7 @@ export const API_MODULE_ENABLE_KEYS = {
   PERMISSION: 'ENABLE_PERMISSION_MODULE',
   MEDIA: 'ENABLE_MEDIA_MODULE',
   VAN: 'ENABLE_VAN_MODULE',
-  DESIGNATION: 'ENABLE_DESIGNATION_MODULE',
+  POSITION: 'ENABLE_POSITION_MODULE',
   MARKET: 'ENABLE_MARKET_MODULE',
   PROVINCE: 'ENABLE_PROVINCE_MODULE',
   COUNTRY: 'ENABLE_COUNTRY_MODULE',
@@ -127,4 +129,5 @@ export const API_MODULE_ENABLE_KEYS = {
   TARGET: 'ENABLE_TARGET_MODULE',
   PRICE: 'ENABLE_PRICE_MODULE',
   VAN_ERP_CLOSING: 'ENABLE_VAN_ERP_CLOSING_MODULE',
+  SCHEME: 'ENABLE_SCHEME_MODULE',
 };

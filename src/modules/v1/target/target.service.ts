@@ -45,6 +45,7 @@ export class TargetService extends MongoRepository<Target> {
 
   async upsertFocusedPackTarget(payload: CreateFocusedPackTargetDto) {
     this.validateTargetPeriod(payload.startDate, payload.endDate);
+    const storedPayload = this.toStoredWeight(payload);
     const data = await this.focusedPackTargetModel.findOneAndUpdate(
       {
         userId: payload.userId,
@@ -52,14 +53,14 @@ export class TargetService extends MongoRepository<Target> {
         startDate: payload.startDate,
         endDate: payload.endDate,
       },
-      { $set: payload },
+      { $set: storedPayload },
       { upsert: true, new: true, setDefaultsOnInsert: true },
     );
 
     return {
       statusCode: HttpStatus.OK,
       message: 'Focused Pack target saved successfully',
-      data,
+      data: this.toKgWeight(data),
     };
   }
 
@@ -97,7 +98,7 @@ export class TargetService extends MongoRepository<Target> {
     return {
       statusCode: HttpStatus.OK,
       message: 'Focused Pack targets fetched successfully',
-      data: items,
+      data: items.map((item) => this.toKgWeight(item)),
       meta: {
         total,
         page: safePage,
@@ -117,7 +118,7 @@ export class TargetService extends MongoRepository<Target> {
     return {
       statusCode: HttpStatus.OK,
       message: 'Focused Pack target fetched successfully',
-      data,
+      data: this.toKgWeight(data),
     };
   }
 
@@ -137,14 +138,14 @@ export class TargetService extends MongoRepository<Target> {
 
     const data = await this.focusedPackTargetModel.findByIdAndUpdate(
       id,
-      { $set: payload },
+      { $set: this.toStoredWeight(payload) },
       { new: true, runValidators: true },
     );
 
     return {
       statusCode: HttpStatus.OK,
       message: 'Focused Pack target updated successfully',
-      data,
+      data: this.toKgWeight(data),
     };
   }
 
@@ -184,7 +185,7 @@ export class TargetService extends MongoRepository<Target> {
         const exists = await this.focusedPackTargetModel.exists(filter);
         await this.focusedPackTargetModel.findOneAndUpdate(
           filter,
-          { $set: item },
+          { $set: this.toStoredWeight(item) },
           {
             upsert: true,
             new: true,
@@ -231,6 +232,24 @@ export class TargetService extends MongoRepository<Target> {
     }
   }
 
+  private toStoredWeight<T extends { targetTonnage?: number }>(value: T): T {
+    if (value.targetTonnage === undefined) return value;
+    return {
+      ...value,
+      targetTonnage: Number(value.targetTonnage) / 1000,
+    };
+  }
+
+  private toKgWeight(value: any) {
+    if (!value) return value;
+    const plain =
+      typeof value.toObject === 'function' ? value.toObject() : value;
+    return {
+      ...plain,
+      targetTonnage: Number(plain.targetTonnage || 0) * 1000,
+    };
+  }
+
   async create(payload: CreateTargetDto) {
     try {
       return await this.withTransaction(async (session) => {
@@ -261,7 +280,7 @@ export class TargetService extends MongoRepository<Target> {
           await this.updateById(
             existing._id.toString(),
             {
-              ...payload,
+              ...this.toStoredWeight(payload),
               isDeleted: false,
             },
             { session },
@@ -274,12 +293,12 @@ export class TargetService extends MongoRepository<Target> {
           };
         }
 
-        const doc = await this.save(payload, { session });
+        const doc = await this.save(this.toStoredWeight(payload), { session });
 
         return {
           statusCode: HttpStatus.CREATED,
           message: TARGET.CREATED,
-          data: doc,
+          data: this.toKgWeight(doc),
         };
       });
     } catch (error) {
@@ -306,6 +325,7 @@ export class TargetService extends MongoRepository<Target> {
             'End date must be on or after start date',
           );
         }
+        const storedItem = this.toStoredWeight(item);
 
         const filter: FilterQuery<Target> = {
           userId: item.userId,
@@ -317,7 +337,7 @@ export class TargetService extends MongoRepository<Target> {
         const existing = await this.findOne(filter, { includeDeleted: true });
 
         if (!existing) {
-          const doc = await this.save(item);
+          await this.save(storedItem);
           created += 1;
           results.push({
             row: index + 1,
@@ -330,7 +350,7 @@ export class TargetService extends MongoRepository<Target> {
 
         const changed =
           existing.isDeleted ||
-          Object.entries(item).some(([key, value]) => {
+          Object.entries(storedItem).some(([key, value]) => {
             const current = existing.get(key);
             if (value instanceof Date)
               return new Date(current).getTime() !== value.getTime();
@@ -339,7 +359,7 @@ export class TargetService extends MongoRepository<Target> {
 
         if (changed) {
           await this.updateById(existing._id.toString(), {
-            ...item,
+            ...storedItem,
             isDeleted: false,
           });
           updated += 1;
@@ -418,7 +438,7 @@ export class TargetService extends MongoRepository<Target> {
     return {
       statusCode: HttpStatus.OK,
       message: TARGET.FETCHED,
-      data: result.items,
+      data: result.items.map((item) => this.toKgWeight(item)),
       meta: result.meta,
     };
   }
@@ -439,7 +459,7 @@ export class TargetService extends MongoRepository<Target> {
       { key: 'parentCategory', title: 'Parent Category' },
       { key: 'category', title: 'Child Category' },
       { key: 'targetCases', title: 'Cases' },
-      { key: 'targetTonnage', title: 'Tonnage' },
+      { key: 'targetTonnage', title: 'KG' },
       { key: 'targetValue', title: 'Value' },
       { key: 'uboTarget', title: 'UBO Target' },
       { key: 'startDate', title: 'Start Date' },
@@ -463,7 +483,7 @@ export class TargetService extends MongoRepository<Target> {
           parentCategory: target.parentCategory || '',
           category: target.category || '',
           targetCases: String(target.targetCases ?? 0),
-          targetTonnage: String(target.targetTonnage ?? 0),
+          targetTonnage: String(Number(target.targetTonnage ?? 0) * 1000),
           targetValue: String(target.targetValue ?? 0),
           uboTarget: String(target.uboTarget ?? 0),
           startDate: target.startDate
@@ -511,7 +531,7 @@ export class TargetService extends MongoRepository<Target> {
         target.category || '',
         target.description || '',
         Number(target.targetCases ?? 0),
-        Number(target.targetTonnage ?? 0),
+        Number(target.targetTonnage ?? 0) * 1000,
         Number(target.targetValue ?? 0),
         Number(target.uboTarget ?? 0),
         target.startDate
@@ -678,7 +698,7 @@ export class TargetService extends MongoRepository<Target> {
     return {
       statusCode: HttpStatus.OK,
       message: TARGET.FETCHED,
-      data: doc,
+      data: this.toKgWeight(doc),
     };
   }
 
@@ -699,7 +719,7 @@ export class TargetService extends MongoRepository<Target> {
 
         const doc = await this.model.findOneAndUpdate(
           { _id: existing._id, isDeleted: false },
-          dto,
+          this.toStoredWeight(dto),
           { session, new: true },
         );
 
@@ -708,7 +728,7 @@ export class TargetService extends MongoRepository<Target> {
         return {
           statusCode: HttpStatus.OK,
           message: TARGET.UPDATED,
-          data: doc,
+          data: this.toKgWeight(doc),
         };
       });
     } catch (error) {
@@ -726,7 +746,7 @@ export class TargetService extends MongoRepository<Target> {
     return {
       statusCode: HttpStatus.OK,
       message: TARGET.DELETED,
-      data: existing,
+      data: this.toKgWeight(existing),
     };
   }
 

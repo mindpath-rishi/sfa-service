@@ -7,6 +7,7 @@ import { syncAuditPlugin } from '../database/mongo/plugins/sync-audit.plugin';
 import { auditPlugin } from '../database/mongo/plugins/audit-logs.plugin';
 import { EmployeeSchema } from '../database/mongo/schema/employee.schema';
 import { RoleSchema } from '../database/mongo/schema/role.schema';
+import { VanSchema } from '../database/mongo/schema/van.schema';
 
 export const mongoConfig = (
   uri: string,
@@ -31,6 +32,7 @@ export const mongoConfig = (
     connection.plugin(syncAuditPlugin);
     EmployeeSchema.plugin(auditPlugin, 'employees');
     RoleSchema.plugin(auditPlugin, 'roles');
+    VanSchema.plugin(auditPlugin, 'vans');
 
     logger.info(`MongoDB initial readyState: ${connection.readyState}`);
 

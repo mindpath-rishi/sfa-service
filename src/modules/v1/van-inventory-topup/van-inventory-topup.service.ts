@@ -433,12 +433,20 @@ export class VanInventoryTopupService extends MongoRepository<VanInventoryTopup>
           const seen = new Set();
 
           for (const item of payload.items) {
-            if (seen.has(item.productId)) {
-              throw new ConflictException(
-                `Duplicate product in items: ${item.productId}`,
+            const productIdentifier = String(item.productId || '').trim();
+
+            if (!productIdentifier) {
+              throw new BadRequestException(
+                'Every top-up item must have a product identifier',
               );
             }
-            seen.add(item.productId);
+
+            if (seen.has(productIdentifier)) {
+              throw new ConflictException(
+                `Duplicate product in items: ${productIdentifier}`,
+              );
+            }
+            seen.add(productIdentifier);
           }
         }
 
@@ -458,18 +466,33 @@ export class VanInventoryTopupService extends MongoRepository<VanInventoryTopup>
         let totalApprovedPieces = 0;
 
         const processedItems: any[] = [];
+        const resolvedProductIds = new Set<string>();
 
         for (const item of payload.items) {
-          const response = await this.productService.findByProductId(
-            item.productId,
+          const productIdentifier = String(item.productId || '').trim();
+          const product = await this.productService.findOne(
+            {
+              $or: [
+                { productId: productIdentifier },
+                { productSysCode: productIdentifier },
+              ],
+            },
+            { lean: true },
           );
-          const product = response?.data;
 
           if (!product) {
             throw new BadRequestException(
-              `Product not found: ${item.productId}`,
+              `Product not found for identifier: ${productIdentifier}`,
             );
           }
+
+          const productId = String(product.productId).trim();
+          if (resolvedProductIds.has(productId)) {
+            throw new ConflictException(
+              `Duplicate product in items: ${productId}`,
+            );
+          }
+          resolvedProductIds.add(productId);
 
           const unitQtyInCase = product.unitQtyInCase || 1;
           const unitType = product.unitType || 'CS';
@@ -499,7 +522,7 @@ export class VanInventoryTopupService extends MongoRepository<VanInventoryTopup>
 
           processedItems.push({
             vanInventoryTopupId: '',
-            productId: item.productId,
+            productId,
             productName: product.name,
             compCode: product.compCode || item.compCode,
 
@@ -1149,6 +1172,186 @@ export class VanInventoryTopupService extends MongoRepository<VanInventoryTopup>
       statusCode: HttpStatus.OK,
       message: VAN_INVENTORY_TOPUP.FETCHED,
       data: result[0],
+    };
+  }
+
+  async adminApprove(vanInventoryTopupId: string) {
+    const updated = await this.withTransaction(async (session) => {
+      const topup = await this.findOne({ vanInventoryTopupId }, { session });
+
+      if (!topup) {
+        throw new NotFoundException(VAN_INVENTORY_TOPUP.NOT_FOUND);
+      }
+      if (topup.status !== VanInventoryTopupStatus.SUBMITTED) {
+        throw new BadRequestException(
+          `Only submitted top-up requests can be approved. Current status is ${topup.status}`,
+        );
+      }
+
+      const items =
+        await this.vanInventoryTopupItemService.findAllByVanInventoryTopupId(
+          vanInventoryTopupId,
+          session,
+        );
+
+      if (!items.length) {
+        throw new BadRequestException('Top-up request has no items to approve');
+      }
+
+      let totalApprovedQty = 0;
+      let totalApprovedCases = 0;
+      let totalApprovedPieces = 0;
+      let totalApprovedWeight = 0;
+      let totalApprovedValue = 0;
+
+      const itemUpdates = items.map((item) => {
+        const approvedQty = Number(item.requestedQty || 0);
+        const approvedCaseQty = Number(item.requestedCaseQty || 0);
+        const approvedPieceQty = Number(item.requestedPieceQty || 0);
+        const approvedWeight = Number(item.requestedWeight || 0);
+        const approvedValue = Number(item.requestedValue || 0);
+
+        totalApprovedQty += approvedQty;
+        totalApprovedCases += approvedCaseQty;
+        totalApprovedPieces += approvedPieceQty;
+        totalApprovedWeight += approvedWeight;
+        totalApprovedValue += approvedValue;
+
+        return {
+          filter: {
+            vanInventoryTopupId,
+            productId: item.productId,
+          },
+          update: {
+            $set: {
+              approvedQty,
+              approvedCaseQty,
+              approvedPieceQty,
+              approvedWeight,
+              approvedValue,
+            },
+          },
+        };
+      });
+
+      await this.vanInventoryTopupItemService.bulkUpdate(itemUpdates, {
+        session,
+      });
+
+      const doc = await this.model.findOneAndUpdate(
+        {
+          vanInventoryTopupId,
+          status: VanInventoryTopupStatus.SUBMITTED,
+          isDeleted: { $ne: true },
+        } as any,
+        {
+          $set: {
+            status: VanInventoryTopupStatus.APPROVED,
+            totalApprovedQty,
+            totalApprovedCases,
+            totalApprovedPieces,
+            totalApprovedWeight,
+            totalApprovedValue,
+            adminResolvedAt: new Date(),
+            adminResolvedBy: RequestContextStore.getStore()?.userId,
+          },
+          $unset: {
+            adminRejectionReason: 1,
+          },
+        },
+        { new: true, session },
+      );
+
+      if (!doc) {
+        throw new BadRequestException(
+          'Top-up request is no longer available for approval',
+        );
+      }
+
+      return doc;
+    });
+
+    await this.notifySalesmanTopupAwaitingAcceptance(updated);
+
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'Top-up request approved successfully',
+      data: updated,
+    };
+  }
+
+  async adminReject(vanInventoryTopupId: string, reason?: string) {
+    const rejectionReason = reason?.trim();
+    if (!rejectionReason) {
+      throw new BadRequestException('Rejection reason is required');
+    }
+    if (rejectionReason.length > 500) {
+      throw new BadRequestException(
+        'Rejection reason cannot exceed 500 characters',
+      );
+    }
+
+    const updated = await this.withTransaction(async (session) => {
+      const topup = await this.findOne({ vanInventoryTopupId }, { session });
+
+      if (!topup) {
+        throw new NotFoundException(VAN_INVENTORY_TOPUP.NOT_FOUND);
+      }
+      if (topup.status !== VanInventoryTopupStatus.SUBMITTED) {
+        throw new BadRequestException(
+          `Only submitted top-up requests can be rejected. Current status is ${topup.status}`,
+        );
+      }
+
+      const doc = await this.model.findOneAndUpdate(
+        {
+          vanInventoryTopupId,
+          status: VanInventoryTopupStatus.SUBMITTED,
+          isDeleted: { $ne: true },
+        } as any,
+        {
+          $set: {
+            status: VanInventoryTopupStatus.REJECTED,
+            adminResolvedAt: new Date(),
+            adminResolvedBy: RequestContextStore.getStore()?.userId,
+            adminRejectionReason: rejectionReason,
+          },
+        },
+        { new: true, session },
+      );
+
+      if (!doc) {
+        throw new BadRequestException(
+          'Top-up request is no longer available for rejection',
+        );
+      }
+
+      return doc;
+    });
+
+    if (updated.employeeId) {
+      await this.notificationService.create({
+        recipientId: updated.employeeId,
+        title: 'Top-up rejected',
+        body: `${updated.vanName || 'Your van'} top-up was rejected: ${rejectionReason}`,
+        category: 'topup',
+        data: {
+          category: 'topup',
+          action: VanInventoryTopupStatus.REJECTED,
+          status: VanInventoryTopupStatus.REJECTED,
+          vanInventoryTopupId: updated.vanInventoryTopupId,
+          vanId: updated.vanId,
+          vanName: updated.vanName,
+          reason: rejectionReason,
+          route: `/topup/detail?id=${updated.vanInventoryTopupId}`,
+        },
+      });
+    }
+
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'Top-up request rejected successfully',
+      data: updated,
     };
   }
 

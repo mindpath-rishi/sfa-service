@@ -34,9 +34,22 @@ import {
   Employee,
   EmployeeSchema,
 } from 'src/core/database/mongo/schema/employee.schema';
+import {
+  Province,
+  ProvinceSchema,
+} from 'src/core/database/mongo/schema/province.schema';
+import {
+  Position,
+  PositionSchema,
+} from 'src/core/database/mongo/schema/position.schema';
 import { Role, RoleSchema } from 'src/core/database/mongo/schema/role.schema';
+import {
+  ProductCategory,
+  ProductCategorySchema,
+} from 'src/core/database/mongo/schema/product-category';
 import { CreateVanDto } from './dto/create-van.dto';
 import { UpdateVanDto } from './dto/update-van.dto';
+import { UpdateVanBreakdownDto } from './dto/update-van-breakdown.dto';
 import { VanQueryDto } from './dto/van-query.dto';
 import { VAN } from './van.constants';
 import { RequestContextStore } from 'src/core/context/request-context';
@@ -45,6 +58,7 @@ import { ChangeVanDto } from './van.controller';
 import { OracleRepository } from 'src/core/database/oracle/oracle.repository';
 import * as XLSX from 'xlsx';
 import { ClientSession } from 'mongoose';
+import { EmployeeType } from 'src/shared/enums/employee.enums';
 
 const REPORT_TIMEZONE =
   process.env.APP_TIMEZONE || process.env.TZ || 'Asia/Kolkata';
@@ -52,7 +66,10 @@ const REPORT_TIMEZONE =
 @Injectable()
 export class VanService extends MongoRepository<Van> {
   private readonly employeeModel;
+  private readonly provinceModel;
+  private readonly positionModel;
   private readonly roleModel;
+  private readonly productCategoryModel;
 
   constructor(
     mongo: MongoService,
@@ -60,106 +77,209 @@ export class VanService extends MongoRepository<Van> {
   ) {
     super(mongo.getModel(Van.name, VanSchema));
     this.employeeModel = mongo.getModel(Employee.name, EmployeeSchema);
+    this.provinceModel = mongo.getModel(Province.name, ProvinceSchema);
+    this.positionModel = mongo.getModel(Position.name, PositionSchema);
     this.roleModel = mongo.getModel(Role.name, RoleSchema);
+    this.productCategoryModel = mongo.getModel(
+      ProductCategory.name,
+      ProductCategorySchema,
+    );
   }
 
-  /**
-   * Van assignments can be edited from both employee and van masters. Keep the
-   * role limit invariant here as well so the van endpoint cannot bypass it.
-   */
-  private async validateAssociatedUsers(
-    associatedUsers?: string[],
-    excludedVanIds: string[] = [],
+  private async validateProvince(provinceId?: string, session?: ClientSession) {
+    if (!provinceId) return;
+
+    const provinceQuery = this.provinceModel
+      .findOne({ provinceId, status: 'ACTIVE', isDeleted: { $ne: true } })
+      .select('provinceId')
+      .lean();
+    if (session) provinceQuery.session(session);
+
+    if (!(await provinceQuery)) {
+      throw new BadRequestException(`Active province not found: ${provinceId}`);
+    }
+  }
+
+  private async validateProductCategories(
+    categoryIds?: string[],
     session?: ClientSession,
   ) {
-    if (associatedUsers === undefined) return;
+    if (categoryIds === undefined) return;
 
-    const employeeIds = [...new Set(associatedUsers.filter(Boolean))];
-    if (!employeeIds.length) return;
-
-    // Every assignment transaction writes the same employee documents first.
-    // MongoDB then rejects concurrent transactions targeting the same user,
-    // preventing two vans from both passing a stale limit check.
-    if (session) {
-      await this.employeeModel.updateMany(
-        { employeeId: { $in: employeeIds }, isDeleted: false },
-        { $set: { updatedAt: new Date() } },
-        { session },
+    const uniqueCategoryIds = [
+      ...new Set(categoryIds.map((categoryId) => categoryId.trim())),
+    ].filter(Boolean);
+    if (!uniqueCategoryIds.length) {
+      throw new BadRequestException(
+        'At least one product category must be associated with the van',
       );
     }
 
-    const employeeQuery = this.employeeModel
-      .find({ employeeId: { $in: employeeIds }, isDeleted: false })
-      .select('employeeId name roleId')
+    const categoriesQuery = this.productCategoryModel
+      .find({
+        categoryId: { $in: uniqueCategoryIds },
+        type: 'PARENT',
+        status: 'ACTIVE',
+        isDeleted: { $ne: true },
+      })
+      .select('categoryId')
       .lean();
-    if (session) employeeQuery.session(session);
-    const employees = (await employeeQuery) as Array<{
-      employeeId: string;
-      name?: string;
-      roleId: string;
-    }>;
-    const employeeById = new Map(
-      employees.map((employee) => [employee.employeeId, employee]),
+    if (session) categoriesQuery.session(session);
+
+    const categories = await categoriesQuery;
+    const foundCategoryIds = new Set(
+      categories.map((category: any) => category.categoryId),
     );
-    const missingEmployeeId = employeeIds.find(
-      (employeeId) => !employeeById.has(employeeId),
+    const missingCategoryIds = uniqueCategoryIds.filter(
+      (categoryId) => !foundCategoryIds.has(categoryId),
     );
 
-    if (missingEmployeeId) {
-      throw new BadRequestException(`Employee not found: ${missingEmployeeId}`);
+    if (missingCategoryIds.length) {
+      throw new BadRequestException(
+        `Active parent product categories not found: ${missingCategoryIds.join(', ')}`,
+      );
+    }
+  }
+
+  private async validateDriver(
+    driverEmployeeId: string,
+    currentVanId?: string,
+    session?: ClientSession,
+  ) {
+    const driverQuery = this.employeeModel
+      .findOne({
+        employeeId: driverEmployeeId,
+        employeeType: EmployeeType.SUPPORTING_STAFF,
+        status: 'ACTIVE',
+        isDeleted: { $ne: true },
+      })
+      .select('employeeId name')
+      .lean();
+    if (session) driverQuery.session(session);
+    const driver = await driverQuery;
+    if (!driver) {
+      throw new BadRequestException(
+        `Active supporting staff driver not found: ${driverEmployeeId}`,
+      );
     }
 
-    const roleIds = [...new Set(employees.map((employee) => employee.roleId))];
-    const roleQuery = this.roleModel
-      .find({ roleId: { $in: roleIds }, isDeleted: false })
-      .select('roleId maxAssociatedVans')
-      .lean();
-    if (session) roleQuery.session(session);
-    const roles = (await roleQuery) as Array<{
-      roleId: string;
-      maxAssociatedVans?: number;
-    }>;
-    const roleById = new Map(roles.map((role) => [role.roleId, role]));
-
-    const assignmentCountQuery = this.model.aggregate<{
-      _id: string;
-      count: number;
-    }>([
+    const mappedVan = await this.findOne(
       {
-        $match: {
-          isDeleted: false,
-          associatedUsers: { $in: employeeIds },
-          ...(excludedVanIds.length ? { vanId: { $nin: excludedVanIds } } : {}),
-        },
+        driverEmployeeId,
+        ...(currentVanId ? { vanId: { $ne: currentVanId } } : {}),
+        isDeleted: { $ne: true },
       },
-      { $unwind: '$associatedUsers' },
-      { $match: { associatedUsers: { $in: employeeIds } } },
-      { $group: { _id: '$associatedUsers', count: { $sum: 1 } } },
-    ]);
-    if (session) assignmentCountQuery.session(session);
-    const assignmentCounts = await assignmentCountQuery;
-    const countByEmployeeId = new Map(
-      assignmentCounts.map(({ _id, count }) => [_id, count]),
+      { session, lean: true },
+    );
+    if (mappedVan) {
+      throw new ConflictException(
+        `Driver ${driverEmployeeId} is already assigned to van ${mappedVan.vanId}`,
+      );
+    }
+    return driver;
+  }
+
+  private async getVanChangeEligibilityFilter(userId: string) {
+    const employee = await this.employeeModel
+      .findOne({
+        employeeId: userId,
+        status: 'ACTIVE',
+        isDeleted: { $ne: true },
+      })
+      .select('employeeId')
+      .lean();
+
+    if (!employee) {
+      throw new BadRequestException(
+        'An active employee position is required to change van',
+      );
+    }
+
+    const position = await this.positionModel
+      .findOne({
+        employeeId: userId,
+        status: 'ACTIVE',
+        isDeleted: { $ne: true },
+      })
+      .select('positionId provinceId reportTo vanIds')
+      .lean();
+
+    if (!position?.provinceId) {
+      throw new BadRequestException(
+        'The employee position must belong to an active province',
+      );
+    }
+    await this.validateProvince(position.provinceId);
+
+    const hierarchyVanIds = new Set<string>(position.vanIds || []);
+    const visitedPositionIds = new Set<string>([position.positionId]);
+    let reportTo = position.reportTo;
+
+    while (reportTo && !visitedPositionIds.has(reportTo)) {
+      visitedPositionIds.add(reportTo);
+
+      const reportingPosition = await this.positionModel
+        .findOne({
+          positionId: reportTo,
+          provinceId: position.provinceId,
+          status: 'ACTIVE',
+          isDeleted: { $ne: true },
+        })
+        .select('positionId reportTo vanIds')
+        .lean();
+
+      if (!reportingPosition) break;
+
+      for (const vanId of reportingPosition.vanIds || []) {
+        hierarchyVanIds.add(vanId);
+      }
+      reportTo = reportingPosition.reportTo;
+    }
+
+    return {
+      vanId: { $in: [...hierarchyVanIds] },
+      status: VanStatus.ACTIVE,
+      isDeleted: { $ne: true },
+    };
+  }
+
+  async getVanChangeOptions() {
+    const userId = RequestContextStore.getStore()?.userId;
+    if (!userId) {
+      throw new BadRequestException('Authenticated employee is required');
+    }
+
+    const vans = await this.findLean(
+      await this.getVanChangeEligibilityFilter(userId),
+      { sort: { name: 1 } },
     );
 
-    for (const employeeId of employeeIds) {
-      const employee = employeeById.get(employeeId)!;
-      const role = roleById.get(employee.roleId);
+    return {
+      statusCode: HttpStatus.OK,
+      message: VAN.FETCHED,
+      data: vans,
+      meta: {
+        total: vans.length,
+        page: 1,
+        limit: vans.length,
+        totalPages: vans.length ? 1 : 0,
+      },
+    };
+  }
 
-      if (!role) {
-        throw new BadRequestException(
-          `Role not found for employee ${employee.name || employeeId}.`,
-        );
-      }
+  async validateVanChangeOption(vanId: string, userId: string) {
+    const van = await this.findOne({
+      ...(await this.getVanChangeEligibilityFilter(userId)),
+      vanId,
+    });
 
-      const limit = role.maxAssociatedVans ?? 0;
-      const nextCount = (countByEmployeeId.get(employeeId) ?? 0) + 1;
-      if (limit !== -1 && nextCount > limit) {
-        throw new BadRequestException(
-          `${employee.name || employeeId}'s role allows only ${limit} associated van(s).`,
-        );
-      }
+    if (!van) {
+      throw new BadRequestException(
+        'Requested van is not available for this employee hierarchy',
+      );
     }
+
+    return van;
   }
 
   private normalizeVanPayload<T extends CreateVanDto | UpdateVanDto>(
@@ -176,12 +296,53 @@ export class VanService extends MongoRepository<Van> {
     };
   }
 
-  private buildVanFilter(query: VanQueryDto) {
+  private async syncSalesmanPositionCategories(
+    vanId: string,
+    categoryIds: string[],
+    session?: ClientSession,
+  ) {
+    const rolesQuery = this.roleModel
+      .find({
+        name: 'SALESMAN',
+        status: 'ACTIVE',
+        isDeleted: { $ne: true },
+      })
+      .select('roleId')
+      .lean();
+    if (session) rolesQuery.session(session);
+    const salesmanRoleIds = (await rolesQuery).map((role) => role.roleId);
+    if (!salesmanRoleIds.length) return;
+
+    await this.positionModel.updateMany(
+      {
+        roleId: { $in: salesmanRoleIds },
+        vanIds: vanId,
+        isDeleted: { $ne: true },
+      },
+      {
+        $set: {
+          parentCategoryId: [
+            ...new Set(categoryIds.map((categoryId) => categoryId.trim())),
+          ],
+        },
+      },
+      { session },
+    );
+  }
+
+  private async buildVanFilter(query: VanQueryDto) {
     const { searchText, status } = query;
     const filter: Record<string, any> = {};
 
     if (query.userId) {
-      filter.associatedUsers = { $in: [query.userId] };
+      const position = await this.positionModel
+        .findOne({
+          employeeId: query.userId,
+          isDeleted: { $ne: true },
+        })
+        .select('vanIds')
+        .lean();
+      filter.vanId = { $in: position?.vanIds || [] };
     }
 
     if (status) {
@@ -208,11 +369,11 @@ export class VanService extends MongoRepository<Van> {
       owner: 'driverName',
       metric: 'capacity',
       routes: 'associatedRoutes',
-      users: 'associatedUsers',
       madeYear: 'madeYear',
       name: 'name',
       vanNumber: 'vanNumber',
       driverName: 'driverName',
+      provinceId: 'provinceId',
       capacity: 'capacity',
       status: 'status',
       createdAt: 'createdAt',
@@ -229,9 +390,9 @@ export class VanService extends MongoRepository<Van> {
       { key: 'vanId', title: 'Van ID' },
       { key: 'secondary', title: 'Van Number' },
       { key: 'owner', title: 'Driver' },
-      { key: 'metric', title: 'Capacity' },
+      { key: 'provinceId', title: 'Province' },
+      { key: 'metric', title: 'Capacity (Cases)' },
       { key: 'madeYear', title: 'Made Year' },
-      { key: 'users', title: 'Associated Users' },
       { key: 'routes', title: 'Associated Routes' },
       { key: 'status', title: 'Status' },
     ];
@@ -441,14 +602,23 @@ export class VanService extends MongoRepository<Van> {
         throw new ConflictException(VAN.DUPLICATE);
       }
 
-      await this.validateAssociatedUsers(payload.associatedUsers, [], session);
+      await this.validateProductCategories(payload.categoryIds, session);
+      const driver = await this.validateDriver(
+        payload.driverEmployeeId,
+        undefined,
+        session,
+      );
+      const normalizedPayload = {
+        ...payload,
+        driverName: driver.name,
+      };
 
       // Restore soft-deleted van
       if (existing?.isDeleted) {
         await this.updateById(
           existing._id.toString(),
           this.normalizeVanPayload({
-            ...payload,
+            ...normalizedPayload,
             status: 'ACTIVE',
             isDeleted: false,
           } as CreateVanDto),
@@ -463,7 +633,7 @@ export class VanService extends MongoRepository<Van> {
       }
 
       // Create new van
-      const van = await this.save(this.normalizeVanPayload(payload), {
+      const van = await this.save(this.normalizeVanPayload(normalizedPayload), {
         session,
       });
 
@@ -558,7 +728,6 @@ export class VanService extends MongoRepository<Van> {
               vanNumber,
             },
             $setOnInsert: {
-              associatedUsers: [],
               associatedRoutes: [],
             },
           },
@@ -609,7 +778,7 @@ export class VanService extends MongoRepository<Van> {
   async findAll(query: VanQueryDto) {
     const { page = 1, limit = 20 } = query;
 
-    const result = await this.paginate(this.buildVanFilter(query), {
+    const result = await this.paginate(await this.buildVanFilter(query), {
       page,
       limit,
       sort: this.getSort(query),
@@ -628,9 +797,21 @@ export class VanService extends MongoRepository<Van> {
     query: VanQueryDto & { fileType?: 'excel' | 'pdf'; columns?: string },
   ) {
     const columns = this.getExportColumns(query.columns);
-    const vans = await this.findLean(this.buildVanFilter(query), {
+    const vans = await this.findLean(await this.buildVanFilter(query), {
       sort: this.getSort(query),
     });
+    const provinceIds = [
+      ...new Set(vans.map((van: any) => van.provinceId).filter(Boolean)),
+    ];
+    const provinces = provinceIds.length
+      ? await this.provinceModel
+          .find({ provinceId: { $in: provinceIds } })
+          .select('provinceId name')
+          .lean()
+      : [];
+    const provinceNameById = new Map(
+      provinces.map((province: any) => [province.provinceId, province.name]),
+    );
     const exportRows = vans.map((van: any) => {
       const routes = Array.isArray(van.associatedRoutes)
         ? van.associatedRoutes
@@ -640,11 +821,11 @@ export class VanService extends MongoRepository<Van> {
         vanId: van.vanId || '',
         secondary: van.vanNumber || '',
         owner: van.driverName || '',
+        provinceId: van.provinceId
+          ? provinceNameById.get(van.provinceId) || van.provinceId
+          : '',
         metric: van.capacity !== undefined ? String(van.capacity) : '',
         madeYear: van.madeYear !== undefined ? String(van.madeYear) : '',
-        users: Array.isArray(van.associatedUsers)
-          ? van.associatedUsers.join(', ')
-          : '',
         routes: routes
           .map((route: any) => {
             const fromDate = route.fromDate
@@ -767,9 +948,10 @@ export class VanService extends MongoRepository<Van> {
           name: { $first: '$name' },
           vanNumber: { $first: '$vanNumber' },
           driverName: { $first: '$driverName' },
+          provinceId: { $first: '$provinceId' },
+          categoryIds: { $first: '$categoryIds' },
           capacity: { $first: '$capacity' },
           madeYear: { $first: '$madeYear' },
-          associatedUsers: { $first: '$associatedUsers' },
           status: { $first: '$status' },
 
           routeData: {
@@ -795,9 +977,10 @@ export class VanService extends MongoRepository<Van> {
           name: { $first: '$name' },
           vanNumber: { $first: '$vanNumber' },
           driverName: { $first: '$driverName' },
+          provinceId: { $first: '$provinceId' },
+          categoryIds: { $first: '$categoryIds' },
           capacity: { $first: '$capacity' },
           madeYear: { $first: '$madeYear' },
-          associatedUsers: { $first: '$associatedUsers' },
           status: { $first: '$status' },
 
           routes: {
@@ -829,9 +1012,10 @@ export class VanService extends MongoRepository<Van> {
           name: 1,
           vanNumber: 1,
           driverName: 1,
+          provinceId: 1,
+          categoryIds: 1,
           capacity: 1,
           madeYear: 1,
-          associatedUsers: 1,
           status: 1,
           activeRoute: 1,
           routes: 1,
@@ -880,16 +1064,74 @@ export class VanService extends MongoRepository<Van> {
         }
       }
 
-      await this.validateAssociatedUsers(dto.associatedUsers, [vanId], session);
-      await this.updateOne({ vanId }, this.normalizeVanPayload(dto), {
-        session,
-      });
+      await this.validateProductCategories(dto.categoryIds, session);
+      const driver = dto.driverEmployeeId
+        ? await this.validateDriver(dto.driverEmployeeId, vanId, session)
+        : null;
+      await this.updateOne(
+        { vanId },
+        this.normalizeVanPayload({
+          ...dto,
+          ...(driver ? { driverName: driver.name } : {}),
+        }),
+        {
+          session,
+        },
+      );
+      if (dto.categoryIds !== undefined) {
+        await this.syncSalesmanPositionCategories(
+          vanId,
+          dto.categoryIds,
+          session,
+        );
+      }
     });
     const updated = await this.findByVanId(vanId);
 
     return {
       ...updated,
       message: VAN.UPDATED,
+    };
+  }
+
+  async updateBreakdown(dto: UpdateVanBreakdownDto) {
+    const vanIds = dto.vanIds.map((vanId) => vanId.trim()).filter(Boolean);
+    const vans = await this.findLean({ vanId: { $in: vanIds } });
+    const foundVanIds = new Set(vans.map((van) => van.vanId));
+    const missingVanIds = vanIds.filter((vanId) => !foundVanIds.has(vanId));
+
+    if (missingVanIds.length) {
+      throw new BadRequestException(
+        `Van not found: ${missingVanIds.join(', ')}`,
+      );
+    }
+
+    await Promise.all(
+      vanIds.map((vanId) => {
+        const query = this.model.updateOne(
+          { vanId, isDeleted: { $ne: true } },
+          {
+            $set: {
+              status: VanStatus.BREAKDOWN,
+              breakdownReason: dto.reason,
+            },
+          },
+        );
+        (query as any)._auditMetadata = {
+          breakdownReason: dto.reason,
+        };
+        return query.exec();
+      }),
+    );
+
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'Van breakdown updated successfully',
+      data: {
+        vanIds,
+        status: VanStatus.BREAKDOWN,
+        reason: dto.reason,
+      },
     };
   }
 
@@ -917,6 +1159,16 @@ export class VanService extends MongoRepository<Van> {
       }
 
       await this.softDelete({ vanId }, { session });
+      await this.model.updateOne(
+        { vanId },
+        { $unset: { driverEmployeeId: 1, driverName: 1 } },
+        { session },
+      );
+      await this.positionModel.updateMany(
+        { vanIds: vanId },
+        { $pull: { vanIds: vanId } },
+        { session },
+      );
 
       return existing;
     });
@@ -933,6 +1185,13 @@ export class VanService extends MongoRepository<Van> {
     const userId = ctx?.userId;
 
     const today = new Date();
+    const position = await this.positionModel
+      .findOne({
+        employeeId: userId,
+        isDeleted: { $ne: true },
+      })
+      .select('vanIds')
+      .lean();
 
     const pipeline: any[] = [
       /**
@@ -940,7 +1199,7 @@ export class VanService extends MongoRepository<Van> {
        */
       {
         $match: {
-          associatedUsers: { $in: [userId] },
+          vanId: { $in: position?.vanIds || [] },
           status: VanStatus.ACTIVE,
           isDeleted: false,
         },
@@ -1002,8 +1261,9 @@ export class VanService extends MongoRepository<Van> {
           vanId: '$vanId',
           vanName: '$name',
           vanNumber: '$vanNumber',
+          provinceId: '$provinceId',
+          categoryIds: '$categoryIds',
           status: '$status',
-          associatedUsers: '$associatedUsers',
           routeId: '$associatedRoutes.routeId',
           day: '$associatedRoutes.day',
           fromDate: '$associatedRoutes.fromDate',
@@ -1015,7 +1275,6 @@ export class VanService extends MongoRepository<Van> {
             distance: '$route.distance',
             day: '$route.day',
             status: '$route.status',
-            associatedUsers: '$associatedUsers',
             outletCount: '$route.outletCount',
             provinceId: '$route.provinceId',
             marketId: '$route.marketId',
@@ -1034,8 +1293,9 @@ export class VanService extends MongoRepository<Van> {
           vanName: { $first: '$vanName' },
           vanId: { $first: '$vanId' },
           vanNumber: { $first: '$vanNumber' },
+          provinceId: { $first: '$provinceId' },
+          categoryIds: { $first: '$categoryIds' },
           status: { $first: '$status' },
-          associatedUsers: { $first: '$associatedUsers' },
           routes: {
             $push: {
               routeId: '$routeId',
@@ -1058,6 +1318,8 @@ export class VanService extends MongoRepository<Van> {
           vanName: 1,
           vanId: 1,
           vanNumber: 1,
+          provinceId: 1,
+          categoryIds: 1,
           status: 1,
           routes: {
             $filter: {
@@ -1066,7 +1328,6 @@ export class VanService extends MongoRepository<Van> {
               cond: { $ne: ['$$mappedRoute.routeId', null] },
             },
           },
-          associatedUsers: '$associatedUsers',
         },
       },
     ];
@@ -1085,65 +1346,68 @@ export class VanService extends MongoRepository<Van> {
   }
 
   async changeVan(dto: ChangeVanDto) {
-    return this.withTransaction(async (session) => {
-      const { oldVanId, vanId, employeeId } = dto;
+    const { oldVanId, vanId, employeeId } = dto;
 
-      /* ============================================
-       * 1. VALIDATION
-       * ============================================ */
-      if (oldVanId === vanId) {
-        throw new Error('Old and new van cannot be same');
-      }
+    if (oldVanId === vanId) {
+      throw new BadRequestException('Old and new van cannot be same');
+    }
 
-      const oldVan = await this.model.findOne({ vanId: oldVanId }, null, {
-        session,
-      });
-      const newVan = await this.model.findOne({ vanId }, null, { session });
+    await this.validateVanChangeOption(vanId, employeeId);
 
-      if (!oldVan || !newVan) {
-        throw new Error('Van not found');
-      }
-
-      await this.validateAssociatedUsers(
-        [employeeId],
-        [oldVanId, vanId],
-        session,
-      );
-
-      /* ============================================
-       * 2. REMOVE FROM OLD VAN
-       * ============================================ */
-      await this.model.updateOne(
-        { vanId: oldVanId },
-        {
-          $pull: { associatedUsers: employeeId },
-        },
-        { session },
-      );
-
-      /* ============================================
-       * 3. ADD TO NEW VAN
-       * ============================================ */
-      await this.model.updateOne(
-        { vanId },
-        {
-          $addToSet: { associatedUsers: employeeId },
-        },
-        { session },
-      );
-
-      /* ============================================
-       * 4. RESPONSE
-       * ============================================ */
-      return {
-        statusCode: 200,
-        message: 'Van changed successfully',
-        data: {
-          oldVanId,
-          newVanId: vanId,
+    await this.withTransaction(async (session) => {
+      const employee = await this.employeeModel
+        .findOne({
           employeeId,
-        },
-      };
+          status: 'ACTIVE',
+          isDeleted: { $ne: true },
+        })
+        .select('employeeId')
+        .session(session)
+        .lean();
+
+      if (!employee) {
+        throw new BadRequestException(
+          'An active employee position is required to change van',
+        );
+      }
+
+      const position = await this.positionModel
+        .findOne({
+          employeeId,
+          status: 'ACTIVE',
+          isDeleted: { $ne: true },
+        })
+        .select('positionId vanIds')
+        .session(session)
+        .lean();
+
+      if (!position) {
+        throw new BadRequestException('Active employee position not found');
+      }
+
+      const nextVanIds = [
+        ...new Set(
+          (position.vanIds || [])
+            .filter((mappedVanId) => mappedVanId !== oldVanId)
+            .concat(vanId),
+        ),
+      ];
+
+      await this.positionModel.updateOne(
+        { positionId: position.positionId },
+        { $set: { vanIds: nextVanIds } },
+        { session },
+      );
     });
+
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'Van changed successfully',
+      data: {
+        oldVanId,
+        newVanId: vanId,
+        employeeId,
+      },
+    };
   }
 }

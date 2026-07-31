@@ -7,7 +7,10 @@
 
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import {
+  ArrayUnique,
+  ArrayMinSize,
   IsOptional,
+  IsNotEmpty,
   IsString,
   IsNumber,
   IsArray,
@@ -48,26 +51,35 @@ export class UpdateVanDto {
   @IsString()
   vanNumber?: string;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({
+    type: [String],
+    description: 'Active parent product categories associated with the van',
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayUnique()
+  @IsString({ each: true })
+  categoryIds?: string[];
+
+  @ApiPropertyOptional({
+    example: 1000,
+    description: 'Maximum van load capacity measured in cases',
+  })
   @IsOptional()
   @IsNumber()
   capacity?: number;
 
-  @ApiPropertyOptional({ example: 'Ramesh' })
+  @ApiPropertyOptional({ example: 'EID-DRIVER-001' })
   @IsOptional()
   @IsString()
-  driverName?: string;
+  @IsNotEmpty()
+  driverEmployeeId?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsNumber()
   madeYear?: number;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsArray()
-  @IsString({ each: true })
-  associatedUsers?: string[];
 
   @ApiPropertyOptional({ type: [UpdateVanRouteDto] })
   @IsOptional()

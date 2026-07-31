@@ -28,6 +28,7 @@ import { CustomerQueryDto } from '../customer/dto/customer-query.dto';
 import { CustomerStatus } from 'src/shared/enums/customer.enums';
 import { ShopVisitService } from '../shop-visit/shop-visit.service';
 import { ShopVisitStatus } from 'src/shared/enums/shop-visit.enums';
+import { SaleStatus } from 'src/shared/enums/sale.enums';
 import * as XLSX from 'xlsx';
 import { ClientSession } from 'mongoose';
 
@@ -1722,6 +1723,62 @@ export class RouteService extends MongoRepository<Route> {
         },
       },
 
+      /* ---------------- LAST ORDER ---------------- */
+      {
+        $lookup: {
+          from: 'sales',
+          let: {
+            customerId: '$customer.customerId',
+          },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    {
+                      $eq: ['$customerId', '$$customerId'],
+                    },
+                    {
+                      $eq: ['$status', SaleStatus.COMPLETED],
+                    },
+                  ],
+                },
+              },
+            },
+            {
+              $addFields: {
+                resolvedOrderDate: {
+                  $ifNull: ['$date', '$createdAt'],
+                },
+              },
+            },
+            {
+              $sort: {
+                resolvedOrderDate: -1,
+              },
+            },
+            {
+              $limit: 1,
+            },
+            {
+              $project: {
+                _id: 0,
+                resolvedOrderDate: 1,
+              },
+            },
+          ],
+          as: 'lastOrder',
+        },
+      },
+
+      {
+        $addFields: {
+          lastOrderDate: {
+            $arrayElemAt: ['$lastOrder.resolvedOrderDate', 0],
+          },
+        },
+      },
+
       /* ======================================================
        * VISITS
        * ====================================================== */
@@ -2146,6 +2203,7 @@ export class RouteService extends MongoRepository<Route> {
               '$customer',
               {
                 sequence: '$sequence',
+                lastOrderDate: '$lastOrderDate',
 
                 isVisited: '$isVisited',
                 visitedAt: '$visitedAt',

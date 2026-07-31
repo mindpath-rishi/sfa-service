@@ -4,7 +4,6 @@ import { ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsOptional,
   IsString,
-  MinLength,
   MaxLength,
   IsDate,
   IsNumber,
@@ -21,7 +20,6 @@ export class VanErpClosingQueryDto extends PaginationDto {
   @ApiPropertyOptional({ description: 'Search text', example: 'abc' })
   @IsOptional()
   @IsString()
-  @MinLength(2)
   @MaxLength(100)
   searchText?: string;
 

@@ -20,33 +20,61 @@ import {
 import { Type } from 'class-transformer';
 import { CreateSaleItemDto } from '../../sale-item/dto/create-sale-item.dto';
 
-export class CreateSaleEmployeeDto {
-  @ApiProperty({
-    type: String,
-    description: 'Business identifier for employee',
-    example: 'EMP001',
-  })
+export class AppliedSaleSchemeDto {
+  @ApiProperty({ type: String })
   @IsNotEmpty()
   @IsString()
-  employeeId!: string;
+  schemeId!: string;
 
-  @ApiProperty({
-    type: String,
-    description: 'Employee name',
-    example: 'Ramesh',
-  })
+  @ApiProperty({ type: String })
   @IsNotEmpty()
   @IsString()
-  employeeName!: string;
+  schemeName!: string;
 
-  @ApiProperty({
-    type: String,
-    description: 'Employee role in sale',
-    example: 'SALESMAN',
-  })
+  @ApiProperty({ type: String })
   @IsNotEmpty()
   @IsString()
-  role!: string;
+  schemeType!: string;
+
+  @ApiPropertyOptional({ type: Number, default: 0 })
+  @IsOptional()
+  @IsNumber()
+  minimumQuantity?: number;
+
+  @ApiPropertyOptional({ type: Number })
+  @IsOptional()
+  @IsNumber()
+  discountPercent?: number;
+
+  @ApiPropertyOptional({ type: Number })
+  @IsOptional()
+  @IsNumber()
+  discountValue?: number;
+
+  @ApiPropertyOptional({ type: Number })
+  @IsOptional()
+  @IsNumber()
+  buyQty?: number;
+
+  @ApiPropertyOptional({ type: Number, default: 0 })
+  @IsOptional()
+  @IsNumber()
+  discountAmount?: number;
+
+  @ApiPropertyOptional({ type: Number, default: 0 })
+  @IsOptional()
+  @IsNumber()
+  freeQty?: number;
+
+  @ApiPropertyOptional({ type: String })
+  @IsOptional()
+  @IsString()
+  freeProductId?: string;
+
+  @ApiPropertyOptional({ type: String })
+  @IsOptional()
+  @IsString()
+  freeProductName?: string;
 }
 
 export class CreateSaleDto {
@@ -102,31 +130,6 @@ export class CreateSaleDto {
   @IsString()
   customerName!: string;
 
-  @ApiProperty({
-    type: [CreateSaleEmployeeDto],
-    required: false,
-    description:
-      'Employees involved in sale. Ignored on create; derived from logged-in employee.',
-    example: [
-      {
-        employeeId: 'EMP001',
-        employeeName: 'Ramesh',
-        role: 'SALESMAN',
-      },
-      {
-        employeeId: 'EMP002',
-        employeeName: 'Suresh',
-        role: 'DRIVER',
-      },
-    ],
-  })
-  @IsOptional()
-  @IsArray()
-  @ArrayMinSize(1)
-  @ValidateNested({ each: true })
-  @Type(() => CreateSaleEmployeeDto)
-  employees?: CreateSaleEmployeeDto[];
-
   @ApiProperty({ type: Date })
   @IsNotEmpty()
   @Type(() => Date)
@@ -152,6 +155,45 @@ export class CreateSaleDto {
   @IsNotEmpty()
   @IsNumber()
   totalWeight!: number;
+
+  @ApiPropertyOptional({
+    type: Number,
+    description: 'Gross value before scheme discounts',
+  })
+  @IsOptional()
+  @IsNumber()
+  subtotal?: number;
+
+  @ApiPropertyOptional({
+    type: [String],
+    description: 'Applied scheme identifiers',
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  schemeIds?: string[];
+
+  @ApiPropertyOptional({ type: [String], description: 'Applied scheme names' })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  schemeNames?: string[];
+
+  @ApiPropertyOptional({ type: Number, description: 'Total scheme discount' })
+  @IsOptional()
+  @IsNumber()
+  schemeDiscountAmount?: number;
+
+  @ApiPropertyOptional({
+    type: [AppliedSaleSchemeDto],
+    description:
+      'Applied scheme snapshots. The server recalculates these from sale items before storage.',
+  })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => AppliedSaleSchemeDto)
+  schemes?: AppliedSaleSchemeDto[];
 
   @ApiPropertyOptional({ type: Number, default: 0 })
   @IsNotEmpty()

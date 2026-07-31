@@ -287,6 +287,50 @@ export class NotificationService extends MongoRepository<Notification> {
     );
   }
 
+  async markStockUnloadRequestResolved(
+    unloadRequestId: string,
+    status: 'APPROVED' | 'REJECTED',
+  ) {
+    await this.model.updateMany(
+      {
+        category: 'stock_unload',
+        'data.unloadRequestId': unloadRequestId,
+        'data.action': 'APPROVAL_REQUIRED',
+      } as any,
+      {
+        $set: {
+          isRead: true,
+          readAt: new Date(),
+          'data.action': status,
+          'data.status': status,
+          'data.resolvedAt': new Date(),
+        },
+      } as any,
+    );
+  }
+
+  async markRouteChangeRequestResolved(
+    routeChangeRequestId: string,
+    status: 'APPROVED' | 'REJECTED',
+  ) {
+    await this.model.updateMany(
+      {
+        category: 'route_change',
+        'data.routeChangeRequestId': routeChangeRequestId,
+        'data.action': 'APPROVAL_REQUIRED',
+      } as any,
+      {
+        $set: {
+          isRead: true,
+          readAt: new Date(),
+          'data.action': status,
+          'data.status': status,
+          'data.resolvedAt': new Date(),
+        },
+      } as any,
+    );
+  }
+
   async markOutletApprovalResolved(customerId: string, status: string) {
     await this.model.updateMany(
       { category: 'outlet_approval', 'data.customerId': customerId } as any,

@@ -2,7 +2,6 @@ import { ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsOptional,
   IsString,
-  MinLength,
   MaxLength,
   IsNumber,
   IsDate,
@@ -18,7 +17,6 @@ export class PriceQueryDto extends PaginationDto {
   @ApiPropertyOptional({ description: 'Search text', example: 'abc' })
   @IsOptional()
   @IsString()
-  @MinLength(2)
   @MaxLength(100)
   searchText?: string;
 

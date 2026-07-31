@@ -13,7 +13,6 @@ export class RoleSeeder {
         name: 'Super Admin',
         description: 'System owner with full privileges',
         permissions: [],
-        maxAssociatedVans: -1,
         isSystemAdmin: true,
       });
     } catch (err: any) {

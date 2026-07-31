@@ -64,7 +64,7 @@ export class Product {
   @Prop({ type: String })
   unitSize?: string;
 
-  @Prop({ type: String, default: 'N' })
+  @Prop({ type: String, enum: ['Y', 'N'], default: 'N' })
   isFocusedPack?: string;
 
   @Prop({ required: true, type: Number })

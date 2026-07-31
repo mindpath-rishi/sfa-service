@@ -516,10 +516,11 @@ export class CustomerService extends MongoRepository<Customer> {
         .lean(),
       this.findOne({ customerId }),
     ]);
-    if (!creator?.reportingEmployeeId || !customer) return;
+    const managerId = creator?.hierarchyPath?.at(-1);
+    if (!creator || !managerId || !customer) return;
 
     await this.notificationService.create({
-      recipientId: creator.reportingEmployeeId,
+      recipientId: managerId,
       title: 'New outlet awaiting approval',
       body: `${creator.name || 'An executive'} created ${customer.name}`,
       category: 'outlet_approval',
@@ -2110,7 +2111,6 @@ export class CustomerService extends MongoRepository<Customer> {
 
                 vanNumber,
 
-                associatedUsers: [],
 
                 associatedRoutes: [],
               });

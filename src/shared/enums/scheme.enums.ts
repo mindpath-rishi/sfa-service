@@ -1,0 +1,12 @@
+export enum SchemeStatus {
+  ACTIVE = 'ACTIVE',
+  INACTIVE = 'INACTIVE',
+  EXPIRED = 'EXPIRED',
+}
+
+export enum SchemeType {
+  DISCOUNT_PERCENT = 'DISCOUNT_PERCENT',
+  DISCOUNT_VALUE = 'DISCOUNT_VALUE',
+  BUY_X_GET_Y = 'BUY_X_GET_Y',
+  FREE_ITEM = 'FREE_ITEM',
+}

@@ -12,7 +12,6 @@ import {
   IsOptional,
   IsString,
   MaxLength,
-  MinLength,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { PaginationDto } from 'src/shared/dto/pagination.dto';
@@ -33,7 +32,6 @@ export class SaleQueryDto extends PaginationDto {
   })
   @IsOptional()
   @IsString()
-  @MinLength(2)
   @MaxLength(100)
   searchText?: string;
 
@@ -67,7 +65,7 @@ export class SaleQueryDto extends PaginationDto {
 
   @ApiPropertyOptional({
     type: String,
-    description: 'Filter by employee ID from employees array',
+    description: 'Filter by employee ID from position hierarchy',
   })
   @IsOptional()
   @IsString()
@@ -75,7 +73,7 @@ export class SaleQueryDto extends PaginationDto {
 
   @ApiPropertyOptional({
     type: String,
-    description: 'Filter by employee name from employees array',
+    description: 'Filter by employee name from position hierarchy',
   })
   @IsOptional()
   @IsString()
@@ -83,12 +81,12 @@ export class SaleQueryDto extends PaginationDto {
 
   @ApiPropertyOptional({
     type: String,
-    description: 'Filter by employee role from employees array',
-    example: 'SALESMAN',
+    description: 'Filter by position ID from position hierarchy',
+    example: 'P00001',
   })
   @IsOptional()
   @IsString()
-  employeeRole?: string;
+  positionId?: string;
 
   @ApiPropertyOptional({ type: Date })
   @IsOptional()

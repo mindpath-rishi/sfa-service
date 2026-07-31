@@ -38,7 +38,6 @@ describe('SyncService', () => {
         ownerId: 'salesman-1',
         version: 1,
         employeeId: 'salesman-1',
-        employees: [{ employeeId: 'salesman-1' }],
         date: new Date('2026-06-30T04:00:00.000Z'),
         status: 'COMPLETED',
       }),

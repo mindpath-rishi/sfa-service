@@ -1,25 +1,25 @@
 /**
  * Vans Collection
  * ---------------
- * Purpose : Vehicle master and assignment context
+ * Purpose : Vehicle master and route context
  * Used by : BACK_OFFICE / ADMIN / LOGISTICS
  *
  * Contains:
  * - Van identity and registration details
- * - Capacity and manufacture year
- * - Associated users
+ * - Province master association
+ * - Capacity in cases and manufacture year
  * - Associated routes (date-based)
  * - Operational status
  *
  * Notes:
- * - Vans are assigned to employees/drivers
+ * - Employee van availability is configured on the Position master
  * - Routes can be assigned with date ranges
  * - Soft deletes preserve audit history
  */
 
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument } from 'mongoose';
-import { VanStatus } from 'src/shared/enums/van.enums';
+import { VanBreakdownReason, VanStatus } from 'src/shared/enums/van.enums';
 
 export type VanDocument = HydratedDocument<Van>;
 
@@ -63,13 +63,34 @@ export class Van {
   @Prop({ required: true, unique: true, index: true, type: String })
   vanNumber!: string;
 
-  @Prop({ index: true, type: String })
-  driverName!: string;
+  @Prop({
+    required: false,
+    unique: true,
+    sparse: true,
+    type: String,
+    ref: 'Employee',
+  })
+  driverEmployeeId?: string;
+
+  @Prop({ required: false, index: true, type: String })
+  driverName?: string;
+
+  @Prop({
+    required: false,
+    index: true,
+    type: String,
+    ref: 'Province',
+  })
+  provinceId?: string;
+
+  @Prop({ type: [String], default: [], index: true })
+  categoryIds!: string[];
 
   /* ======================================================
    * SPECIFICATIONS
    * ====================================================== */
 
+  /** Maximum van load capacity measured in cases. */
   @Prop({ required: false, type: Number })
   capacity?: number;
 
@@ -79,12 +100,6 @@ export class Van {
   /* ======================================================
    * ASSOCIATIONS
    * ====================================================== */
-
-  @Prop({
-    type: [String],
-    default: [],
-  })
-  associatedUsers!: string[];
 
   /**
    * Routes associated with this van (date-based)
@@ -106,6 +121,9 @@ export class Van {
     required: true,
   })
   status!: VanStatus;
+
+  @Prop({ type: String, enum: VanBreakdownReason })
+  breakdownReason?: VanBreakdownReason;
 }
 
 export const VanSchema = SchemaFactory.createForClass(Van);

@@ -47,9 +47,17 @@ import { UserDevice } from 'src/core/database/mongo/schema/device.schema';
 import { Role } from 'src/core/database/mongo/schema/role.schema';
 import { VanService } from '../van/van.service';
 import { UpdateOwnProfileDto } from './dto/login.dto';
+import { VanStatus } from 'src/shared/enums/van.enums';
+import {
+  Position,
+  PositionSchema,
+} from 'src/core/database/mongo/schema/position.schema';
+import { EmployeeType } from 'src/shared/enums/employee.enums';
 
 @Injectable()
 export class UserService extends MongoRepository<User> {
+  private readonly positionModel;
+
   constructor(
     private readonly jwtService: JwtService,
     private readonly redis: RedisRepository,
@@ -63,6 +71,7 @@ export class UserService extends MongoRepository<User> {
     private readonly roleModel: Model<Role>,
   ) {
     super(mongo.getModel(User.name, UserSchema));
+    this.positionModel = mongo.getModel(Position.name, PositionSchema);
   }
 
   /* ======================================================
@@ -178,19 +187,43 @@ export class UserService extends MongoRepository<User> {
     if (!profile) {
       throw new ForbiddenException(USER.PROFILE_NOT_FOUND);
     }
+    if (profile.employeeType === EmployeeType.SUPPORTING_STAFF) {
+      throw new ForbiddenException('Supporting staff do not have app access');
+    }
 
-    const reportingEmployee = profile.reportingEmployeeId
+    const position = await this.positionModel
+      .findOne({
+        employeeId: profile.employeeId,
+        status: 'ACTIVE',
+        isDeleted: { $ne: true },
+      })
+      .select('positionId roleId reportTo offlineAccessAllowed')
+      .lean();
+    const reportingPosition = position?.reportTo
+      ? await this.positionModel
+          .findOne({
+            positionId: position.reportTo,
+            isDeleted: { $ne: true },
+          })
+          .select('employeeId')
+          .lean()
+      : null;
+    const reportingEmployee = reportingPosition?.employeeId
       ? await this.employeeModel
           .findOne({
-            employeeId: profile.reportingEmployeeId,
+            employeeId: reportingPosition.employeeId,
             isDeleted: { $ne: true },
           })
           .select({ employeeId: 1, name: 1 })
           .lean()
       : null;
 
+    if (!position?.roleId) {
+      throw new ForbiddenException('Position role not found');
+    }
+    const roleId = position.roleId;
     const role = await this.roleModel.findOne({
-      roleId: profile.roleId,
+      roleId,
       isDeleted: false,
     });
 
@@ -225,8 +258,8 @@ export class UserService extends MongoRepository<User> {
         type: 'USER',
         profileId: user.profileId,
         role: role.name,
-        roleId: profile.roleId,
-        offlineAccessAllowed: profile.offlineAccessAllowed === true,
+        roleId,
+        offlineAccessAllowed: position.offlineAccessAllowed === true,
         deviceId,
         createdAt: new Date().toISOString(),
       },
@@ -247,22 +280,24 @@ export class UserService extends MongoRepository<User> {
       60 * 60 * 24 * 7,
     );
 
-    const assignedVans = await this.vanService.findLean(
-      { associatedUsers: { $in: [user.profileId] } } as any,
-      { sort: { updatedAt: -1 } },
-    );
-    const vanId = assignedVans[0]?.vanId;
+    const assignedVans = await this.vanService.findAll({
+      userId: user.profileId,
+      status: VanStatus.ACTIVE,
+      page: 1,
+      limit: 1,
+    });
+    const vanId = assignedVans.data[0]?.vanId;
 
     const accessToken = this.jwtService.sign(
       {
         sub: user.profileId,
         role: role.name,
-        roleId: profile.roleId,
+        roleId,
         sid: sessionId,
         // deviceId,
         name: profile?.name,
         vanId,
-        offlineAccessAllowed: profile.offlineAccessAllowed === true,
+        offlineAccessAllowed: position.offlineAccessAllowed === true,
       },
       {
         expiresIn,
@@ -291,12 +326,14 @@ export class UserService extends MongoRepository<User> {
         profileId: user.profileId,
         profile: {
           ...profile.toObject(),
+          offlineAccessAllowed: position.offlineAccessAllowed === true,
+          roleId,
           manager: reportingEmployee?.name,
           managerName: reportingEmployee?.name,
           reportingEmployeeName: reportingEmployee?.name,
         },
         role: role.name,
-        roleId: profile.roleId,
+        roleId,
         vanId,
       },
       message: USER.LOGIN,
@@ -492,6 +529,39 @@ export class UserService extends MongoRepository<User> {
     };
   }
 
+  async resetPassword(profileId: string, newPassword: string) {
+    const user = await this.findOne({ profileId });
+    if (!user) {
+      throw new NotFoundException(USER.NOT_FOUND);
+    }
+
+    await this.updateById(user._id.toString(), {
+      password: await bcrypt.hash(newPassword, 10),
+    });
+
+    const activeDevices = await this.userDeviceModel
+      .find({ userId: profileId, isActive: true })
+      .select({ sessionId: 1, _id: 0 })
+      .lean();
+
+    await Promise.all([
+      ...activeDevices.flatMap((device) => [
+        this.redis.delete(`session:${device.sessionId}`),
+        this.redis.delete(`refresh:${device.sessionId}`),
+      ]),
+      this.userDeviceModel.updateMany(
+        { userId: profileId, isActive: true },
+        { $set: { isActive: false } },
+      ),
+    ]);
+
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'Password reset successfully',
+      data: { updated: true },
+    };
+  }
+
   async updateUserStatus(
     profileId: string,
     status: UserStatus,
@@ -520,8 +590,13 @@ export class UserService extends MongoRepository<User> {
       .findOne({ employeeId: profileId })
       .lean();
     if (!profile) throw new NotFoundException('Profile not found');
-    const role: any = profile.roleId
-      ? await this.roleModel.findOne({ roleId: profile.roleId }).lean()
+    const position: any = await this.positionModel
+      .findOne({ employeeId: profile.employeeId, isDeleted: { $ne: true } })
+      .select('roleId')
+      .lean();
+    const roleId = position?.roleId;
+    const role: any = roleId
+      ? await this.roleModel.findOne({ roleId }).lean()
       : null;
     return {
       statusCode: HttpStatus.OK,
@@ -531,9 +606,8 @@ export class UserService extends MongoRepository<User> {
         name: profile.name,
         email: profile.email || '',
         mobile: profile.mobile || '',
-        roleId: profile.roleId,
-        roleName: role?.displayName || role?.name || profile.roleId,
-        designationId: profile.designationId,
+        roleId,
+        roleName: role?.displayName || role?.name || roleId,
         status: profile.status,
         createdAt: profile.createdAt,
         updatedAt: profile.updatedAt,
@@ -598,6 +672,17 @@ export class UserService extends MongoRepository<User> {
       message: USER.DELETED,
       data: user,
     };
+  }
+
+  async disableUserIfExists(profileId: string, session?: ClientSession) {
+    await this.updateOne(
+      { profileId, isDeleted: { $ne: true } },
+      {
+        status: UserStatus.INACTIVE,
+        isDeleted: true,
+      },
+      { session },
+    );
   }
 
   async restoreUser(

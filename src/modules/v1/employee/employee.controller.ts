@@ -680,6 +680,17 @@ export class EmployeeController {
     return this.employeeService.getEmployeeStats(employeeId);
   }
 
+  @Permissions('EMPLOYEE_UPDATE')
+  @Patch(':employeeId/reset-password')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Reset employee password' })
+  @ApiParam({ name: 'employeeId', example: 'EID-1A2B3C4D' })
+  @ApiSuccessResponse({ updated: true }, 'Password reset successfully')
+  @ApiNotFoundResponse()
+  async resetPassword(@Param('employeeId') employeeId: string) {
+    return this.employeeService.resetPassword(employeeId);
+  }
+
   /**
    * Update Employee
    * ---------------

@@ -6,15 +6,17 @@
  *
  * Supports:
  * - Van identity
- * - Capacity and manufacture year
- * - User associations
+ * - Capacity in cases and manufacture year
  */
 
 import { ApiProperty } from '@nestjs/swagger';
 import {
+  ArrayUnique,
+  ArrayMinSize,
   IsString,
   IsNumber,
   IsOptional,
+  IsNotEmpty,
   IsArray,
   IsEnum,
   IsDateString,
@@ -63,9 +65,10 @@ export class CreateVanDto {
   @IsString()
   name!: string;
 
-  @ApiProperty({ example: 'Ramesh' })
+  @ApiProperty({ example: 'EID-DRIVER-001' })
   @IsString()
-  driverName!: string;
+  @IsNotEmpty()
+  driverEmployeeId!: string;
 
   /**
    * Van Number
@@ -77,13 +80,27 @@ export class CreateVanDto {
   @IsString()
   vanNumber!: string;
 
+  @ApiProperty({
+    type: [String],
+    description: 'Active parent product categories associated with the van',
+  })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayUnique()
+  @IsString({ each: true })
+  categoryIds!: string[];
+
   /**
-   * Capacity
+   * Capacity in Cases
    * --------
-   * Purpose : Load capacity
+   * Purpose : Maximum van load capacity measured in cases
    * Example : 1000
    */
-  @ApiProperty({ example: 1000, required: false })
+  @ApiProperty({
+    example: 1000,
+    required: false,
+    description: 'Maximum van load capacity measured in cases',
+  })
   @IsOptional()
   @IsNumber()
   capacity?: number;
@@ -98,21 +115,6 @@ export class CreateVanDto {
   @IsOptional()
   @IsNumber()
   madeYear?: number;
-
-  /**
-   * Associated Users
-   * ----------------
-   * Purpose : Users assigned to van
-   * Example : [{ "userId": "EID-001" }]
-   */
-  @ApiProperty({
-    example: ['EID-001'],
-    required: false,
-  })
-  @IsOptional()
-  @IsArray()
-  @IsString({ each: true })
-  associatedUsers?: string[];
 
   @ApiProperty({
     type: [VanRouteDto],

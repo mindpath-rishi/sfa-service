@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { CountryModule } from '../country/country.module';
 import { ProvinceModule } from '../province/province.module';
-import { DesignationModule } from '../designation/designation.module';
+import { PositionModule } from '../position/position.module';
 import { CustomerCategoryModule } from '../customer-category/customer-category.module';
 import { ChannelModule } from '../channel/channel.module';
 import { OutletTypeModule } from '../outlet-type/outlet-type.module';
@@ -10,9 +10,10 @@ import { ProductCategoryModule } from '../product-category/product-category.modu
 import { SegmentationModule } from '../segmentation/segmentation.module';
 import { MasterBulkController } from './master-bulk.controller';
 import { MasterBulkService } from './master-bulk.service';
+import { RoleModule } from '../role/role.module';
 
 @Module({
-  imports: [CountryModule, ProvinceModule, DesignationModule, CustomerCategoryModule, ChannelModule, OutletTypeModule, MarketModule, ProductCategoryModule, SegmentationModule],
+  imports: [CountryModule, ProvinceModule, PositionModule, CustomerCategoryModule, ChannelModule, OutletTypeModule, MarketModule, ProductCategoryModule, SegmentationModule, RoleModule],
   controllers: [MasterBulkController],
   providers: [MasterBulkService],
 })

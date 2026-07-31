@@ -64,6 +64,13 @@ export class WorkSession {
   @Prop({ type: String })
   vanName!: string;
 
+  // Driver assignment captured at day start for historical reporting
+  @Prop({ type: String })
+  driverEmployeeId?: string;
+
+  @Prop({ type: String })
+  driverName?: string;
+
   /* ======================================================
    * SESSION DETAILS
    * ====================================================== */

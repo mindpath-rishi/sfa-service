@@ -22,6 +22,7 @@ const COLLECTIONS = {
   salesmen: 'employees',
   stock: 'inventories',
   promotions: 'promotions',
+  schemes: 'scheme_master',
   orders: 'sales',
   orderItems: 'sale_items',
   collections: 'payments',
@@ -57,6 +58,7 @@ const ENTITY_ID_FIELDS: Record<keyof typeof COLLECTIONS, string> = {
   salesmen: 'employeeId',
   stock: 'inventoryId',
   promotions: 'promotionId',
+  schemes: 'schemeId',
   orders: 'saleId',
   orderItems: 'saleItemId',
   collections: 'paymentId',
@@ -89,6 +91,7 @@ const MASTER_ENTITIES = new Set([
   'salesmen',
   'stock',
   'promotions',
+  'schemes',
   'targets',
   'vanErpClosing',
 ]);
@@ -122,6 +125,7 @@ const GLOBAL_MASTER_ENTITIES = new Set([
   'segmentations',
   'priceLists',
   'promotions',
+  'schemes',
 ]);
 
 const ENTITY_DATE_FIELDS: Partial<Record<keyof typeof COLLECTIONS, string[]>> =
@@ -133,6 +137,7 @@ const ENTITY_DATE_FIELDS: Partial<Record<keyof typeof COLLECTIONS, string[]>> =
     visits: ['checkInTime', 'checkOutTime'],
     routeSessions: ['sessionDate', 'startTime', 'endTime'],
     targets: ['startDate', 'endDate'],
+    schemes: ['startDate', 'endDate'],
     vanDailyStock: ['date'],
     vanErpClosing: ['date', 'closeDate', 'modifiedDate', 'createdDate'],
     inventoryTransactions: ['transactionDate'],
@@ -185,6 +190,13 @@ const calculateOfflineSaleItem = (value: unknown) => {
   const piecePrice = toFiniteNumber(item.piecePrice, casePrice / unitQtyInCase);
   const pieceNetWeight = toFiniteNumber(item.pieceNetWeight);
   const quantity = caseQty * unitQtyInCase + pieceQty;
+  const grossValue = toFixed4(caseQty * casePrice + pieceQty * piecePrice);
+  const schemeDiscountAmount = toFixed4(
+    Math.min(
+      Math.max(toFiniteNumber(item.schemeDiscountAmount), 0),
+      grossValue,
+    ),
+  );
 
   return {
     ...item,
@@ -196,7 +208,9 @@ const calculateOfflineSaleItem = (value: unknown) => {
     quantity,
     netCases: toFixed4(quantity / unitQtyInCase),
     totalNetWeight: toFixed4(quantity * pieceNetWeight),
-    totalValue: toFixed4(caseQty * casePrice + pieceQty * piecePrice),
+    grossValue,
+    schemeDiscountAmount,
+    totalValue: toFixed4(grossValue - schemeDiscountAmount),
   };
 };
 
@@ -219,7 +233,7 @@ const normalizeOfflinePayload = (
 
   if (entity === 'orders') {
     payload.status ??= 'COMPLETED';
-    const items = Array.isArray(payload.items)
+    const items: Record<string, unknown>[] = Array.isArray(payload.items)
       ? payload.items.map(calculateOfflineSaleItem)
       : [];
 
@@ -244,6 +258,29 @@ const normalizeOfflinePayload = (
       );
       payload.totalValue = toFixed4(
         items.reduce((sum, item) => sum + toFiniteNumber(item.totalValue), 0),
+      );
+      payload.subtotal = toFixed4(
+        items.reduce((sum, item) => sum + toFiniteNumber(item.grossValue), 0),
+      );
+      payload.schemeDiscountAmount = toFixed4(
+        items.reduce(
+          (sum, item) => sum + toFiniteNumber(item.schemeDiscountAmount),
+          0,
+        ),
+      );
+      payload.schemeIds = Array.from(
+        new Set(
+          items
+            .map((item) => String(item.schemeId ?? '').trim())
+            .filter(Boolean),
+        ),
+      );
+      payload.schemeNames = Array.from(
+        new Set(
+          items
+            .map((item) => String(item.schemeName ?? '').trim())
+            .filter(Boolean),
+        ),
       );
       payload.netCases = toFixed4(
         items.reduce((sum, item) => sum + toFiniteNumber(item.netCases), 0),
@@ -398,11 +435,20 @@ export class SyncService {
       .collection('employees')
       .findOne(
         { employeeId, isDeleted: { $ne: true } },
-        { projection: { offlineAccessAllowed: 1, status: 1 } },
+        { projection: { employeeId: 1, status: 1 } },
       );
-    return (
-      employee?.status === 'ACTIVE' && employee.offlineAccessAllowed === true
-    );
+    if (employee?.status !== 'ACTIVE') return false;
+    const position = await this.connection
+      .collection('position_master')
+      .findOne(
+        {
+          employeeId,
+          status: 'ACTIVE',
+          isDeleted: { $ne: true },
+        },
+        { projection: { offlineAccessAllowed: 1 } },
+      );
+    return position?.offlineAccessAllowed === true;
   }
 
   private async notifyManagerOfOfflineOutlet(
@@ -412,7 +458,19 @@ export class SyncService {
     const creator = await this.connection
       .collection('employees')
       .findOne({ employeeId: ownerId, isDeleted: { $ne: true } });
-    const recipientId = String(creator?.reportingEmployeeId ?? '');
+    const position = await this.connection
+      .collection('position_master')
+      .findOne({
+        employeeId: ownerId,
+        isDeleted: { $ne: true },
+      });
+    const reportingPosition = position?.reportTo
+      ? await this.connection.collection('position_master').findOne({
+          positionId: position.reportTo,
+          isDeleted: { $ne: true },
+        })
+      : null;
+    const recipientId = String(reportingPosition?.employeeId ?? '');
     const customerId = String(payload.customerId ?? '');
     if (!recipientId || !customerId) return;
     await this.notificationService.create({
@@ -527,18 +585,30 @@ export class SyncService {
     requestedVanId?: string,
   ): Promise<SyncScope> {
     const vans = this.connection.collection('vans');
-    let van = requestedVanId
-      ? await vans.findOne({
-          vanId: requestedVanId,
-          associatedUsers: ownerId,
+    const position = await this.connection
+      .collection('position_master')
+      .findOne(
+        {
+          employeeId: ownerId,
           isDeleted: { $ne: true },
-        })
-      : null;
+        },
+        { projection: { vanIds: 1 } },
+      );
+    const assignedVanIds = Array.isArray(position?.vanIds)
+      ? position.vanIds.map(String)
+      : [];
+    let van =
+      requestedVanId && assignedVanIds.includes(requestedVanId)
+        ? await vans.findOne({
+            vanId: requestedVanId,
+            isDeleted: { $ne: true },
+          })
+        : null;
 
     // The token may contain the van that was assigned when the user logged in.
     // Fall back to the latest current assignment when that token value is stale.
     van ??= await vans.findOne(
-      { associatedUsers: ownerId, isDeleted: { $ne: true } },
+      { vanId: { $in: assignedVanIds }, isDeleted: { $ne: true } },
       { sort: { updatedAt: -1 } },
     );
 
@@ -610,7 +680,10 @@ export class SyncService {
     const sales = await this.connection
       .collection('sales')
       .find({
-        $or: [{ employeeId: ownerId }, { 'employees.employeeId': ownerId }],
+        $or: [
+          { employeeId: ownerId },
+          { 'positionHierarchy.employeeId': ownerId },
+        ],
         date: { $gte: threeMonthsAgo },
       })
       .project({ saleId: 1 })
@@ -639,9 +712,7 @@ export class SyncService {
       case 'routes':
         return { routeId: { $in: scope.routeIds } };
       case 'vans':
-        return scope.vanId
-          ? { vanId: scope.vanId, associatedUsers: ownerId }
-          : { _id: { $in: [] } };
+        return scope.vanId ? { vanId: scope.vanId } : { _id: { $in: [] } };
       case 'routeSessions':
       case 'leaves':
         return {
@@ -663,7 +734,10 @@ export class SyncService {
         return scope.vanId ? { vanId: scope.vanId } : { _id: { $in: [] } };
       case 'orders':
         return {
-          $or: [{ employeeId: ownerId }, { 'employees.employeeId': ownerId }],
+          $or: [
+            { employeeId: ownerId },
+            { 'positionHierarchy.employeeId': ownerId },
+          ],
           ...this.lastThreeMonthsFilter('date'),
         };
       case 'orderItems':
@@ -780,7 +854,10 @@ export class SyncService {
     }
     if (entity === 'orders') {
       return {
-        $or: [{ employeeId: ownerId }, { 'employees.employeeId': ownerId }],
+        $or: [
+          { employeeId: ownerId },
+          { 'positionHierarchy.employeeId': ownerId },
+        ],
       };
     }
     return {
@@ -1110,24 +1187,11 @@ export class SyncService {
           payload.employeeId = ownerId;
         }
         if (operation.entity === 'orders') {
-          // Dashboard queries use the canonical top-level employeeId, while
-          // older sales records use the employees array. Persist both so an
-          // offline-created order is visible through either API path.
+          // Keep the canonical owner for offline-created orders. The hierarchy
+          // snapshot is supplied by the order payload and remains the single
+          // source for position and reporting-chain details.
           payload.employeeId = ownerId;
-          const employees = Array.isArray(payload.employees)
-            ? payload.employees
-            : [];
-          if (
-            !employees.some(
-              (employee) =>
-                String(
-                  (employee as Record<string, unknown>)?.employeeId ?? '',
-                ) === ownerId,
-            )
-          ) {
-            employees.push({ employeeId: ownerId });
-          }
-          payload.employees = employees;
+          delete payload.employees;
         }
         const businessId = idField
           ? (payload[idField] ?? operation.localId)

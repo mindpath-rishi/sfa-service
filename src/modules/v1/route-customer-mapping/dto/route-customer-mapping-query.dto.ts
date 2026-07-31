@@ -7,7 +7,6 @@ import {
   IsString,
   MaxLength,
   Min,
-  MinLength,
 } from 'class-validator';
 import { PaginationDto } from 'src/shared/dto/pagination.dto';
 import { RouteCustomerMappingStatus } from 'src/shared/enums/route-customer-mapping.enums';
@@ -28,7 +27,6 @@ export class RouteCustomerMappingQueryDto extends PaginationDto {
   })
   @IsOptional()
   @IsString()
-  @MinLength(2)
   @MaxLength(100)
   searchText?: string;
 

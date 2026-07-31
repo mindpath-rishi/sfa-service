@@ -43,11 +43,16 @@ import {
   ProductCategory,
   ProductCategorySchema,
 } from 'src/core/database/mongo/schema/product-category';
+import {
+  Position,
+  PositionSchema,
+} from 'src/core/database/mongo/schema/position.schema';
 
 @Injectable()
 export class SaleService extends MongoRepository<Sale> {
   private readonly employeeModel: Model<Employee>;
   private readonly productCategoryModel: Model<ProductCategory>;
+  private readonly positionModel: Model<Position>;
 
   constructor(
     mongo: MongoService,
@@ -66,6 +71,7 @@ export class SaleService extends MongoRepository<Sale> {
       ProductCategory.name,
       ProductCategorySchema,
     );
+    this.positionModel = mongo.getModel(Position.name, PositionSchema);
   }
 
   async create(payload: CreateSaleDto) {
@@ -93,8 +99,6 @@ export class SaleService extends MongoRepository<Sale> {
           .select({
             employeeId: 1,
             name: 1,
-            roleId: 1,
-            hierarchyPath: 1,
           })
           .session(session)
           .lean()
@@ -106,9 +110,62 @@ export class SaleService extends MongoRepository<Sale> {
           );
         }
 
-        const hierarchyEmployeeIds = [
-          ...new Set([employee.employeeId, ...(employee.hierarchyPath ?? [])]),
-        ];
+        const currentPosition = await this.positionModel
+          .findOne({
+            employeeId: loggedInEmployeeId,
+            isDeleted: { $ne: true },
+          })
+          .select('positionId name employeeId reportTo hierarchyDepth')
+          .session(session)
+          .lean();
+
+        if (!currentPosition) {
+          throw new BadRequestException(
+            `Position not found for employee: ${loggedInEmployeeId}`,
+          );
+        }
+
+        const hierarchyPositions: Array<{
+          positionId: string;
+          name: string;
+          employeeId?: string;
+          reportTo?: string;
+          hierarchyDepth: number;
+        }> = [];
+        const visitedPositionIds = new Set<string>();
+        let hierarchyPosition: {
+          positionId: string;
+          name: string;
+          employeeId?: string;
+          reportTo?: string;
+          hierarchyDepth: number;
+        } | null = currentPosition;
+
+        while (hierarchyPosition) {
+          if (visitedPositionIds.has(hierarchyPosition.positionId)) {
+            throw new BadRequestException(
+              `Circular position hierarchy detected at ${hierarchyPosition.positionId}`,
+            );
+          }
+
+          visitedPositionIds.add(hierarchyPosition.positionId);
+          hierarchyPositions.push(hierarchyPosition);
+
+          if (!hierarchyPosition.reportTo) break;
+
+          hierarchyPosition = await this.positionModel
+            .findOne({
+              positionId: hierarchyPosition.reportTo,
+              isDeleted: { $ne: true },
+            })
+            .select('positionId name employeeId reportTo hierarchyDepth')
+            .session(session)
+            .lean();
+        }
+
+        const hierarchyEmployeeIds = hierarchyPositions
+          .map((position) => position.employeeId)
+          .filter((employeeId): employeeId is string => Boolean(employeeId));
 
         const hierarchyEmployees = await this.employeeModel
           .find({
@@ -118,7 +175,6 @@ export class SaleService extends MongoRepository<Sale> {
           .select({
             employeeId: 1,
             name: 1,
-            roleId: 1,
           })
           .session(session)
           .lean()
@@ -127,36 +183,31 @@ export class SaleService extends MongoRepository<Sale> {
         const hierarchyEmployeeById = new Map(
           hierarchyEmployees.map((employee) => [employee.employeeId, employee]),
         );
+        const positionHierarchy = hierarchyPositions.map((position) => {
+          const hierarchyEmployee = position.employeeId
+            ? hierarchyEmployeeById.get(position.employeeId)
+            : undefined;
 
-        const saleEmployees = hierarchyEmployeeIds
-          .map((employeeId) => {
-            const hierarchyEmployee = hierarchyEmployeeById.get(employeeId);
+          return {
+            level: position.hierarchyDepth,
+            positionId: position.positionId,
+            positionName: position.name,
+            employeeId: position.employeeId,
+            employeeName:
+              position.employeeId === loggedInEmployeeId
+                ? ctx?.name || hierarchyEmployee?.name || employee.name
+                : hierarchyEmployee?.name,
+          };
+        });
 
-            if (!hierarchyEmployee) return null;
-
-            return {
-              employeeId: hierarchyEmployee.employeeId,
-              employeeName:
-                hierarchyEmployee.employeeId === loggedInEmployeeId
-                  ? ctx?.name || hierarchyEmployee.name
-                  : hierarchyEmployee.name,
-              role:
-                hierarchyEmployee.employeeId === loggedInEmployeeId
-                  ? ctx?.role || hierarchyEmployee.roleId
-                  : hierarchyEmployee.roleId,
-            };
-          })
-          .filter(
-            (
-              employee,
-            ): employee is {
-              employeeId: string;
-              employeeName: string;
-              role: string;
-            } => Boolean(employee),
+        const primaryEmployee = positionHierarchy.find(
+          (position) => position.employeeId,
+        );
+        if (!primaryEmployee?.employeeId) {
+          throw new BadRequestException(
+            'No employee is assigned to the sales position hierarchy',
           );
-
-        const primaryEmployee = saleEmployees[0];
+        }
 
         if (
           type === SaleType.CASH &&
@@ -183,8 +234,28 @@ export class SaleService extends MongoRepository<Sale> {
         let totalPieces = 0;
         let totalQty = 0;
         let totalWeight = 0;
+        let subtotal = 0;
+        let schemeDiscountAmount = 0;
         let totalValue = 0;
         let netCases = 0;
+        const schemeIds = new Set<string>();
+        const schemeNames = new Set<string>();
+        const schemes = new Map<
+          string,
+          {
+            schemeId: string;
+            schemeName: string;
+            schemeType: string;
+            minimumQuantity: number;
+            discountPercent?: number;
+            discountValue?: number;
+            buyQty?: number;
+            discountAmount: number;
+            freeQty: number;
+            freeProductId?: string;
+            freeProductName?: string;
+          }
+        >();
 
         const processedItems: any[] = [];
 
@@ -195,10 +266,17 @@ export class SaleService extends MongoRepository<Sale> {
           const itemCustomerCategoryId =
             (item as any).customerCategoryId ||
             (rest as any).customerCategoryId;
+          const itemCompCode = String((item as any).compCode || '').trim();
 
           if (!itemCustomerCategoryId) {
             throw new BadRequestException(
               `Customer category is required for product: ${item.productId}`,
+            );
+          }
+
+          if (!itemCompCode) {
+            throw new BadRequestException(
+              `Company code is required for product: ${item.productId}`,
             );
           }
 
@@ -232,8 +310,15 @@ export class SaleService extends MongoRepository<Sale> {
 
           /* ================= VALUE ================= */
 
-          const itemValueRaw = caseQty * casePrice + pieceQty * piecePrice;
-          const itemValue = toFixed4(itemValueRaw);
+          const itemGrossValueRaw = caseQty * casePrice + pieceQty * piecePrice;
+          const itemGrossValue = toFixed4(itemGrossValueRaw);
+          const itemSchemeDiscount = toFixed4(
+            Math.min(
+              Math.max(Number((item as any).schemeDiscountAmount) || 0, 0),
+              itemGrossValue,
+            ),
+          );
+          const itemValue = toFixed4(itemGrossValue - itemSchemeDiscount);
 
           /* ================= WEIGHT ================= */
 
@@ -251,8 +336,46 @@ export class SaleService extends MongoRepository<Sale> {
           totalPieces += pieceQty;
           totalQty += quantity;
           totalWeight += itemWeight;
+          subtotal += itemGrossValue;
+          schemeDiscountAmount += itemSchemeDiscount;
           totalValue += itemValue;
           netCases += itemNetCases;
+
+          const schemeId = String((item as any).schemeId || '').trim();
+          const schemeName = String((item as any).schemeName || '').trim();
+          const schemeType = String((item as any).schemeType || '').trim();
+          const schemeMinimumQuantity = Math.max(
+            Number((item as any).schemeMinimumQuantity) || 0,
+            0,
+          );
+          const schemeFreeQty = Math.max(
+            Number((item as any).schemeFreeQty) || 0,
+            0,
+          );
+          if (schemeId) schemeIds.add(schemeId);
+          if (schemeName) schemeNames.add(schemeName);
+          if (schemeId && schemeName && schemeType) {
+            const existingScheme = schemes.get(schemeId);
+            schemes.set(schemeId, {
+              schemeId,
+              schemeName,
+              schemeType,
+              minimumQuantity: schemeMinimumQuantity,
+              discountPercent: (item as any).schemeDiscountPercent,
+              discountValue: (item as any).schemeDiscountValue,
+              buyQty: (item as any).schemeBuyQty,
+              discountAmount: toFixed4(
+                (existingScheme?.discountAmount ?? 0) + itemSchemeDiscount,
+              ),
+              freeQty: (existingScheme?.freeQty ?? 0) + schemeFreeQty,
+              freeProductId:
+                (item as any).schemeFreeProductId ||
+                existingScheme?.freeProductId,
+              freeProductName:
+                (item as any).schemeFreeProductName ||
+                existingScheme?.freeProductName,
+            });
+          }
 
           processedItems.push({
             saleId: '',
@@ -272,13 +395,27 @@ export class SaleService extends MongoRepository<Sale> {
             caseNetWeight,
 
             totalNetWeight: itemWeight,
+            grossValue: itemGrossValue,
             totalValue: itemValue,
+
+            schemeId: schemeId || undefined,
+            schemeName: schemeName || undefined,
+            schemeType: schemeType || undefined,
+            schemeMinimumQuantity,
+            schemeDiscountPercent: (item as any).schemeDiscountPercent,
+            schemeDiscountValue: (item as any).schemeDiscountValue,
+            schemeBuyQty: (item as any).schemeBuyQty,
+            schemeDiscountAmount: itemSchemeDiscount,
+            schemeFreeQty,
+            schemeFreeProductId: (item as any).schemeFreeProductId,
+            schemeFreeProductName: (item as any).schemeFreeProductName,
 
             categoryId: (item as any).categoryId || (rest as any).categoryId,
             parentCategoryId:
               (item as any).parentCategoryId || (rest as any).parentCategoryId,
             customerCategoryId: itemCustomerCategoryId,
-            compCode: (item as any).compCode || (rest as any).compCode,
+            compCode: itemCompCode,
+            isFocusedPack: product.isFocusedPack === 'Y' ? 'Y' : 'N',
 
             netCases: toFixed4(itemNetCases),
           });
@@ -287,6 +424,8 @@ export class SaleService extends MongoRepository<Sale> {
         /* ================= FINAL ROUNDING ================= */
 
         totalWeight = toFixed4(totalWeight);
+        subtotal = toFixed4(subtotal);
+        schemeDiscountAmount = toFixed4(schemeDiscountAmount);
         totalValue = toFixed4(totalValue);
         netCases = toFixed4(netCases);
 
@@ -342,12 +481,17 @@ export class SaleService extends MongoRepository<Sale> {
             saleId,
             ...rest,
 
-            employees: saleEmployees,
+            positionHierarchy,
 
             totalCases,
             totalPieces,
             totalQty,
             totalWeight,
+            subtotal,
+            schemeIds: Array.from(schemeIds),
+            schemeNames: Array.from(schemeNames),
+            schemeDiscountAmount,
+            schemes: Array.from(schemes.values()),
             totalValue,
 
             paidAmount,
@@ -536,7 +680,7 @@ export class SaleService extends MongoRepository<Sale> {
       customerName,
       employeeId,
       employeeName,
-      employeeRole,
+      positionId,
       status,
       type,
       paymentStatus,
@@ -559,15 +703,15 @@ export class SaleService extends MongoRepository<Sale> {
     if (paymentStatus) match.paymentStatus = paymentStatus;
 
     if (employeeId) {
-      match['employees.employeeId'] = employeeId;
+      match['positionHierarchy.employeeId'] = employeeId;
     }
 
     if (employeeName) {
-      match['employees.employeeName'] = toSafeRegex(employeeName);
+      match['positionHierarchy.employeeName'] = toSafeRegex(employeeName);
     }
 
-    if (employeeRole) {
-      match['employees.role'] = employeeRole;
+    if (positionId) {
+      match['positionHierarchy.positionId'] = positionId;
     }
 
     if (vanName) {
@@ -587,9 +731,9 @@ export class SaleService extends MongoRepository<Sale> {
         { customerId: regex },
         { vanName: regex },
         { vanId: regex },
-        { 'employees.employeeId': regex },
-        { 'employees.employeeName': regex },
-        { 'employees.role': regex },
+        { 'positionHierarchy.employeeId': regex },
+        { 'positionHierarchy.employeeName': regex },
+        { 'positionHierarchy.positionId': regex },
       ];
     }
 

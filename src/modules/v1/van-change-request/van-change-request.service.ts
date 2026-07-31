@@ -69,10 +69,10 @@ export class VanChangeRequestService extends MongoRepository<VanChangeRequest> {
     });
     if (pending) throw new ConflictException(VAN_CHANGE_REQUEST.DUPLICATE);
 
-    const requestedVan = await this.vanService.findOne({
-      vanId: payload.requestedVanId,
-    });
-    if (!requestedVan) throw new BadRequestException('Requested van not found');
+    const requestedVan = await this.vanService.validateVanChangeOption(
+      payload.requestedVanId,
+      workSession.userId,
+    );
 
     try {
       const request = await this.save({
@@ -139,10 +139,10 @@ export class VanChangeRequestService extends MongoRepository<VanChangeRequest> {
       if (payload.requestedVanId === request.currentVanId) {
         throw new BadRequestException('Requested van is already assigned');
       }
-      const van = await this.vanService.findOne({
-        vanId: payload.requestedVanId,
-      });
-      if (!van) throw new BadRequestException('Requested van not found');
+      const van = await this.vanService.validateVanChangeOption(
+        payload.requestedVanId,
+        request.userId,
+      );
       payload.requestedVanName =
         payload.requestedVanName || (van as any).name || (van as any).vanName;
     }
@@ -162,6 +162,10 @@ export class VanChangeRequestService extends MongoRepository<VanChangeRequest> {
     const request = await this.getPending(vanChangeRequestId);
     const ctx = RequestContextStore.getStore();
 
+    await this.vanService.validateVanChangeOption(
+      request.requestedVanId,
+      request.userId,
+    );
     await this.vanService.changeVan({
       oldVanId: request.currentVanId,
       employeeId: request.userId,
@@ -280,8 +284,7 @@ export class VanChangeRequestService extends MongoRepository<VanChangeRequest> {
       .findOne({ employeeId: request.userId })
       .lean();
     const hierarchyPath = employee?.hierarchyPath || [];
-    const managerId =
-      employee?.reportingEmployeeId || hierarchyPath[hierarchyPath.length - 1];
+    const managerId = hierarchyPath[hierarchyPath.length - 1];
     if (!managerId) return;
 
     await this.notificationService.create({

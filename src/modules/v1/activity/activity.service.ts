@@ -32,9 +32,16 @@ import { VanDailyStockStatus } from 'src/shared/enums/van-daily-stock.enums';
 import { VanDailyStockService } from '../van-daily-stock/van-daily-stock.service';
 import { VanErpClosingService } from '../van-erp-closing/van-erp-closing.service';
 import { VanInventoryStatus } from 'src/shared/enums/van-inventory.enums';
+import {
+  VanChangeRequest,
+  VanChangeRequestSchema,
+} from 'src/core/database/mongo/schema/van-change-request.schema';
+import { VanChangeRequestStatus } from 'src/shared/enums/van-change-request.enums';
 
 @Injectable()
 export class ActivityService extends MongoRepository<Activity> {
+  private readonly vanChangeRequestModel;
+
   constructor(
     mongo: MongoService,
     private readonly routeSessionService: RouteSessionService,
@@ -43,6 +50,10 @@ export class ActivityService extends MongoRepository<Activity> {
     private readonly vanErpClosingService: VanErpClosingService,
   ) {
     super(mongo.getModel(Activity.name, ActivitySchema));
+    this.vanChangeRequestModel = mongo.getModel(
+      VanChangeRequest.name,
+      VanChangeRequestSchema,
+    );
   }
 
   async create(
@@ -131,6 +142,9 @@ export class ActivityService extends MongoRepository<Activity> {
                 status: RouteSessionStatus.ACTIVE,
                 endTime: null,
                 isDeleted: false,
+                startTime: now,
+                vanId: payload.vanId,
+                vanName: payload.vanName || existingRouteSession.vanName || '',
 
                 routeName:
                   payload.routeName || existingRouteSession.routeName || '',
@@ -161,6 +175,17 @@ export class ActivityService extends MongoRepository<Activity> {
 
           await this.routeSessionService.create(newRouteSession, { session });
         }
+
+        await this.vanChangeRequestModel.findOneAndUpdate(
+          {
+            workSessionId: payload.workSessionId,
+            requestedVanId: payload.vanId,
+            status: VanChangeRequestStatus.APPROVED,
+            isDeleted: { $ne: true },
+          },
+          { $set: { routeSelectedAt: now } },
+          { session, sort: { createdAt: -1 } },
+        );
 
         /* ======================================================
          * CREATE VAN DAILY STOCK ONLY ONCE PER WORK SESSION

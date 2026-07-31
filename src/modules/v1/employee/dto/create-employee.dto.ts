@@ -7,7 +7,6 @@
  * Supports:
  * - Basic employee identity details
  * - Secure authentication credentials
- * - Role assignment
  * - Fine-grained permission overrides
  *
  * Notes:
@@ -26,9 +25,10 @@ import {
   IsArray,
   ArrayUnique,
   IsEnum,
-  IsBoolean,
+  ValidateIf,
 } from 'class-validator';
 import { UserStatus } from '../../user/user.enum';
+import { EmployeeType } from 'src/shared/enums/employee.enums';
 
 /**
  * Permission Overrides DTO
@@ -47,7 +47,7 @@ class PermissionOverridesDto {
    * -------------------
    * Purpose : Explicit permissions granted to the employee
    */
-  @ApiPropertyOptional({
+  @ApiProperty({
     description: 'Permissions explicitly granted to the employee',
     example: ['employee.read', 'employee.update'],
   })
@@ -62,7 +62,7 @@ class PermissionOverridesDto {
    * -----------------
    * Purpose : Explicit permissions revoked from the employee
    */
-  @ApiPropertyOptional({
+  @ApiProperty({
     description: 'Permissions explicitly revoked from the employee',
     example: ['employee.delete'],
   })
@@ -79,6 +79,34 @@ class PermissionOverridesDto {
  * Purpose : Validate request body for employee creation
  */
 export class CreateEmployeeDto {
+  @ApiPropertyOptional({
+    enum: EmployeeType,
+    default: EmployeeType.STAFF,
+    description:
+      'Staff use positions and app access; supporting staff do not receive either.',
+  })
+  @IsOptional()
+  @IsEnum(EmployeeType)
+  employeeType?: EmployeeType;
+
+  @ApiPropertyOptional({
+    example: 'EID-12345678',
+    description:
+      'Optional employee identifier. A unique identifier is generated when omitted.',
+  })
+  @IsOptional()
+  @IsString({ message: 'Employee ID must be a string' })
+  @IsNotEmpty({ message: 'Employee ID cannot be empty' })
+  employeeId?: string;
+
+  @ApiPropertyOptional({
+    example: 'MAN-001',
+    description: 'Optional employee MAN number',
+  })
+  @IsOptional()
+  @IsString({ message: 'MAN number must be a string' })
+  manNumber?: string;
+
   /**
    * Mobile Number
    * -------------
@@ -100,20 +128,21 @@ export class CreateEmployeeDto {
    * --------
    * Purpose : Unique login identifier for the employee
    */
-  @ApiProperty({
+  @ApiPropertyOptional({
     example: 'UserId',
-    description: 'Employee login ID',
+    description: 'Required only for staff employees',
   })
+  @ValidateIf((value) => value.employeeType !== EmployeeType.SUPPORTING_STAFF)
   @IsString({ message: 'Login ID must be a string' })
   @IsNotEmpty({ message: 'Login ID is required' })
-  loginId!: string;
+  loginId?: string;
 
   /**
    * Full Name
    * ---------
    * Purpose : Employee full name
    */
-  @ApiProperty({
+  @ApiPropertyOptional({
     example: 'John Doe',
     description: 'Employee full name',
   })
@@ -151,79 +180,23 @@ export class CreateEmployeeDto {
    *
    * Rules:
    * - Minimum 8 characters
-   * - Must include uppercase, lowercase, number, and special character
+   * - May use the standard initial password, or include uppercase,
+   *   lowercase, number, and special character
    */
-  @ApiProperty({
+  @ApiPropertyOptional({
     description:
-      'Strong password (min 8 chars, uppercase, lowercase, number, special character)',
-    example: 'Passw0rd@123',
+      'Required only for staff. Use Sfa@2026 or a strong password with uppercase, lowercase, number, and special character',
+    example: 'Sfa@2026',
   })
+  @ValidateIf((value) => value.employeeType !== EmployeeType.SUPPORTING_STAFF)
   @IsString({ message: 'Password must be a string' })
   @IsNotEmpty({ message: 'Password is required' })
   @MinLength(8, { message: 'Password must be at least 8 characters long' })
-  @Matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])/, {
+  @Matches(/^(?:Sfa@2026|(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&]).+)$/, {
     message:
-      'Password must include uppercase, lowercase, number, and special character',
+      'Password must be Sfa@2026 or include uppercase, lowercase, number, and special character',
   })
-  password!: string;
-
-  /**
-   * Role ID
-   * -------
-   * Purpose : Assign role to the employee
-   */
-  @ApiProperty({
-    example: 'ROLE_ADMIN',
-    description: 'Role identifier assigned to the employee',
-  })
-  @IsString({ message: 'roleId must be a string' })
-  @IsNotEmpty({ message: 'roleId is required' })
-  roleId!: string;
-
-  /**
-   * Designation ID
-   * --------------
-   * Purpose : Assign employee to a designation
-   */
-  @ApiPropertyOptional({
-    example: 'DESIG-001',
-    description: 'Designation identifier assigned to the employee',
-  })
-  @IsOptional()
-  @IsString({ message: 'designationId must be a string' })
-  designationId?: string;
-
-  /**
-   * Reporting Employee
-   * ------------------
-   * Purpose : Direct manager employeeId for hierarchy mapping
-   */
-  @ApiPropertyOptional({
-    example: 'EID-1A2B3C4D',
-    description: 'Direct reporting manager employeeId',
-  })
-  @IsOptional()
-  @IsString({ message: 'reportingEmployeeId must be a string' })
-  reportingEmployeeId?: string;
-
-  /**
-   * Assigned Van IDs
-   * ----------------
-   * Purpose : Assign vans to the employee by updating Van.associatedUsers
-   *
-   * Notes:
-   * - This is not stored on the employee document
-   */
-  @ApiPropertyOptional({
-    example: ['VID-001'],
-    description:
-      'Van IDs assigned to the employee. Stored on van.associatedUsers.',
-  })
-  @IsOptional()
-  @IsArray({ message: 'assignedVanIds must be an array of strings' })
-  @IsString({ each: true, message: 'assignedVanIds values must be strings' })
-  @ArrayUnique({ message: 'assignedVanIds values must be unique' })
-  assignedVanIds?: string[];
+  password?: string;
 
   @ApiPropertyOptional({
     enum: UserStatus,
@@ -248,12 +221,4 @@ export class CreateEmployeeDto {
   })
   @IsOptional()
   permissionOverrides?: PermissionOverridesDto;
-
-  @ApiPropertyOptional({
-    example: false,
-    description: 'Allow this salesman to use offline mode and synchronization',
-  })
-  @IsOptional()
-  @IsBoolean()
-  offlineAccessAllowed?: boolean;
 }

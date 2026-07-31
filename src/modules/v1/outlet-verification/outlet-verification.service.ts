@@ -88,7 +88,7 @@ export class OutletVerificationService extends MongoRepository<OutletVerificatio
         customerId,
         requestedByEmployeeId,
         requestedByEmployeeName: employee?.name,
-        assignedReviewerId: employee?.reportingEmployeeId,
+        assignedReviewerId: employee?.hierarchyPath?.at(-1),
         status: OutletVerificationStatus.PENDING,
       },
       { session },

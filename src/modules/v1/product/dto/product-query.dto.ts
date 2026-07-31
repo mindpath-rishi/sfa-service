@@ -45,6 +45,31 @@ export class ProductQueryDto extends PaginationDto {
   customerCategoryId?: string;
 
   @ApiPropertyOptional({
+    description: 'Include schemes applicable to each returned product',
+    example: 'true',
+  })
+  @IsOptional()
+  @IsIn(['true', 'false'])
+  includeSchemes?: string;
+
+  @ApiPropertyOptional({ description: 'Route used for scheme applicability' })
+  @IsOptional()
+  @IsString()
+  routeId?: string;
+
+  @ApiPropertyOptional({
+    description: 'Province used for scheme applicability',
+  })
+  @IsOptional()
+  @IsString()
+  provinceId?: string;
+
+  @ApiPropertyOptional({ description: 'Van used for scheme applicability' })
+  @IsOptional()
+  @IsString()
+  vanId?: string;
+
+  @ApiPropertyOptional({
     description:
       'Keep products that do not have a price for the requested customer category',
     example: 'true',

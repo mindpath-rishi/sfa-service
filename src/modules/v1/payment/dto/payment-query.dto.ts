@@ -9,7 +9,6 @@ import {
   IsOptional,
   IsString,
   MaxLength,
-  MinLength,
 } from 'class-validator';
 import { PaginationDto } from 'src/shared/dto/pagination.dto';
 import { string } from 'joi';
@@ -31,7 +30,6 @@ export class PaymentQueryDto extends PaginationDto {
   })
   @IsOptional()
   @IsString()
-  @MinLength(2)
   @MaxLength(100)
   searchText?: string;
 

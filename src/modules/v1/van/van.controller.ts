@@ -53,6 +53,7 @@ import { VanService } from './van.service';
 import { CreateVanDto } from './dto/create-van.dto';
 import { UpdateVanDto } from './dto/update-van.dto';
 import { VanQueryDto } from './dto/van-query.dto';
+import { UpdateVanBreakdownDto } from './dto/update-van-breakdown.dto';
 import { VAN } from './van.constants';
 import { Public } from 'src/core/decorators/public.decorator';
 
@@ -149,6 +150,16 @@ export class VanController {
     return this.vanService.getVanMappedRoutes();
   }
 
+  @Permissions('WORK_SESSION_CREATE')
+  @Get('change-options')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Get vans eligible for the logged-in salesman to request',
+  })
+  async getVanChangeOptions() {
+    return this.vanService.getVanChangeOptions();
+  }
+
   /**
    * Get Vans
    * --------
@@ -204,6 +215,15 @@ export class VanController {
       `attachment; filename="${file.fileName}"`,
     );
     res.send(file.buffer);
+  }
+
+  @Permissions('VAN_UPDATE')
+  @Patch('breakdown')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Update breakdown status for selected vans' })
+  @ApiBody({ type: UpdateVanBreakdownDto })
+  async updateBreakdown(@Body() dto: UpdateVanBreakdownDto) {
+    return this.vanService.updateBreakdown(dto);
   }
 
   /**

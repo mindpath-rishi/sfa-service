@@ -48,7 +48,10 @@ import { Sale } from 'src/core/database/mongo/schema/sale.schema';
 import { Payment } from 'src/core/database/mongo/schema/payment.schema';
 import { Model } from 'mongoose';
 import { ShopVisit } from 'src/core/database/mongo/schema/shop-visit.schema';
-import { ShopVisitStatus } from 'src/shared/enums/shop-visit.enums';
+import {
+  ShopVisitStatus,
+  ShopVisitType,
+} from 'src/shared/enums/shop-visit.enums';
 import { SaleStatus } from 'src/shared/enums/sale.enums';
 import { ActivityStatus } from 'src/shared/enums/activity.enums';
 import { Activity } from 'src/core/database/mongo/schema/activity.schema';
@@ -71,14 +74,23 @@ import { RouteSession } from 'src/core/database/mongo/schema/route-session.schem
 import { VanDailyStock } from 'src/core/database/mongo/schema/van-daily-stock.schema';
 import { RouteSessionStatus } from 'src/shared/enums/route-session.enums';
 import { Role } from 'src/core/database/mongo/schema/role.schema';
-import { Designation } from 'src/core/database/mongo/schema/designation.schema';
+import { Position } from 'src/core/database/mongo/schema/position.schema';
 import * as XLSX from 'xlsx';
 import { User } from 'src/core/database/mongo/schema/user.schema';
 import { FocusedPackTarget } from 'src/core/database/mongo/schema/focused-pack-target.schema';
 import { LiveLocationService } from '../live-location/live-location.service';
+import { EmployeeType } from 'src/shared/enums/employee.enums';
+import { Country } from 'src/core/database/mongo/schema/country.schema';
+import { Province } from 'src/core/database/mongo/schema/province.schema';
+import type { TimelineReportQueryDto } from '../report/dto/timeline-report-query.dto';
+import type { ProductPerformanceReportQueryDto } from '../report/dto/timeline-report-query.dto';
+import type { VehicleBreakdownReportQueryDto } from '../report/dto/timeline-report-query.dto';
+import { ProductCategory } from 'src/core/database/mongo/schema/product-category';
+import { Market } from 'src/core/database/mongo/schema/market.schema';
 
 const REPORT_TIMEZONE =
   process.env.APP_TIMEZONE || process.env.TZ || 'Asia/Kolkata';
+const DEFAULT_EMPLOYEE_PASSWORD = 'Sfa@2026';
 
 const parseCalendarDate = (value?: string) => {
   if (!value) return new Date();
@@ -138,63 +150,20 @@ export class EmployeeService extends MongoRepository<Employee> {
     private readonly vanDailyStockModel: Model<VanDailyStock>,
     @InjectModel(Role.name)
     private readonly roleModel: Model<Role>,
-    @InjectModel(Designation.name)
-    private readonly designationModel: Model<Designation>,
+    @InjectModel(Position.name)
+    private readonly positionModel: Model<Position>,
     @InjectModel(User.name)
     private readonly userModel: Model<User>,
+    @InjectModel(Country.name)
+    private readonly countryModel: Model<Country>,
+    @InjectModel(Province.name)
+    private readonly provinceModel: Model<Province>,
+    @InjectModel(ProductCategory.name)
+    private readonly productCategoryModel: Model<ProductCategory>,
+    @InjectModel(Market.name)
+    private readonly marketModel: Model<Market>,
   ) {
     super(mongo.getModel(Employee.name, EmployeeSchema));
-  }
-
-  private async validateAssignedVansForRole(
-    roleId?: string,
-    assignedVanIds?: string[],
-  ) {
-    if (!roleId || assignedVanIds === undefined) return;
-
-    const role = await this.roleModel.findOne({ roleId }).lean();
-    if (!role) return;
-
-    const maxAssociatedVans = role.maxAssociatedVans ?? 0;
-    if (maxAssociatedVans === -1) return;
-
-    if (assignedVanIds.length > maxAssociatedVans) {
-      throw new BadRequestException(
-        `Role allows only ${maxAssociatedVans} associated van(s).`,
-      );
-    }
-  }
-
-  private async normalizeOfflineAccess(roleId: string, requested: boolean) {
-    if (!requested) return false;
-    const role = await this.roleModel.findOne({ roleId }).lean();
-    const roleName = String(role?.name ?? '')
-      .trim()
-      .toUpperCase();
-    if (!['SALESMAN', 'SALES', 'SALES_EXECUTIVE'].includes(roleName)) {
-      throw new BadRequestException(
-        'Offline access can only be granted to a salesman role.',
-      );
-    }
-    return true;
-  }
-
-  private async buildHierarchyPath(reportingEmployeeId?: string) {
-    if (!reportingEmployeeId) return [];
-
-    const reportingEmployee = await this.findOne(
-      { employeeId: reportingEmployeeId },
-      { lean: true },
-    );
-
-    if (!reportingEmployee) {
-      throw new BadRequestException('Reporting employee not found.');
-    }
-
-    return [
-      ...(reportingEmployee.hierarchyPath || []),
-      reportingEmployee.employeeId,
-    ];
   }
 
   private async attachLoginIds<T extends { employeeId?: string }>(
@@ -222,85 +191,142 @@ export class EmployeeService extends MongoRepository<Employee> {
     }));
   }
 
+  async resetPassword(employeeId: string) {
+    const employee = await this.findOne({ employeeId }, { lean: true });
+    if (!employee) {
+      throw new NotFoundException(EMPLOYEE.NOT_FOUND);
+    }
+
+    return this.userService.resetPassword(
+      employeeId,
+      DEFAULT_EMPLOYEE_PASSWORD,
+    );
+  }
+
   private async attachAssignedVanIds<T extends { employeeId?: string }>(
     employees: T[],
   ) {
     const employeeIds = employees
       .map((employee) => employee.employeeId)
       .filter((employeeId): employeeId is string => Boolean(employeeId));
-
-    if (!employeeIds.length) return employees;
-
-    const vans = await this.vanModel
-      .find({ associatedUsers: { $in: employeeIds } })
-      .select('vanId associatedUsers')
-      .lean();
-    const vanIdsByEmployeeId = new Map<string, string[]>();
-
-    vans.forEach((van) => {
-      (van.associatedUsers || []).forEach((employeeId) => {
-        if (!employeeIds.includes(employeeId)) return;
-        const vanIds = vanIdsByEmployeeId.get(employeeId) || [];
-        vanIds.push(van.vanId);
-        vanIdsByEmployeeId.set(employeeId, vanIds);
-      });
-    });
-
-    return employees.map((employee) => ({
-      ...employee,
-      assignedVanIds: employee.employeeId
-        ? vanIdsByEmployeeId.get(employee.employeeId) || []
+    const [positions, legacyVanMappings] = await Promise.all([
+      employeeIds.length
+        ? this.positionModel
+            .find({
+              employeeId: { $in: employeeIds },
+              isDeleted: { $ne: true },
+            })
+            .select('positionId name employeeId vanIds roleId reportTo')
+            .lean()
         : [],
-    }));
-  }
-
-  private async resolveVanIds(values?: string[]) {
-    if (!values) return values;
-    if (!values.length) return [];
-
-    const resolved: string[] = [];
-
-    for (const value of values) {
-      const van = await this.vanModel
-        .findOne({
-          $or: [
-            { vanId: value },
-            { name: this.exactRegex(value) },
-            { vanNumber: this.exactRegex(value) },
-          ],
-        })
-        .lean();
-
-      if (!van) {
-        throw new BadRequestException(`Van not found: ${value}`);
-      }
-
-      resolved.push(van.vanId);
-    }
-
-    return [...new Set(resolved)];
-  }
-
-  private async syncEmployeeVanAssignments(
-    employeeId: string,
-    assignedVanIds?: string[],
-    session?: any,
-  ) {
-    if (assignedVanIds === undefined) return;
-
-    await this.vanModel.updateMany(
-      { associatedUsers: employeeId },
-      { $pull: { associatedUsers: employeeId } },
-      { session },
+      employeeIds.length
+        ? this.vanModel.collection
+            .find(
+              {
+                $or: [
+                  { associatedUsers: { $in: employeeIds } },
+                  { driverEmployeeId: { $in: employeeIds } },
+                ],
+                isDeleted: { $ne: true },
+              },
+              {
+                projection: {
+                  vanId: 1,
+                  associatedUsers: 1,
+                  driverEmployeeId: 1,
+                },
+              },
+            )
+            .toArray()
+        : [],
+    ]);
+    const positionDocuments = positions as Array<{
+      positionId: string;
+      name?: string;
+      employeeId?: string;
+      vanIds?: string[];
+      roleId?: string;
+      reportTo?: string;
+    }>;
+    const legacyVanDocuments = legacyVanMappings as Array<{
+      vanId: string;
+      associatedUsers?: string[];
+      driverEmployeeId?: string;
+    }>;
+    const reportToIds = [
+      ...new Set(
+        positionDocuments
+          .map((position) => position.reportTo)
+          .filter((positionId): positionId is string => Boolean(positionId)),
+      ),
+    ];
+    const reportingPositions = reportToIds.length
+      ? await this.positionModel
+          .find({
+            positionId: { $in: reportToIds },
+            isDeleted: { $ne: true },
+          })
+          .select('positionId employeeId')
+          .lean()
+      : [];
+    const reportingEmployeeByPositionId = new Map(
+      reportingPositions
+        .filter((position) => Boolean(position.employeeId))
+        .map((position) => [position.positionId, String(position.employeeId)]),
     );
 
-    if (!assignedVanIds.length) return;
+    return employees.map((employee) => {
+      const position = positionDocuments.find(
+        (item) => item.employeeId === employee.employeeId,
+      );
+      const directlyAssignedVanIds = legacyVanDocuments
+        .filter(
+          (van) =>
+            (Array.isArray(van.associatedUsers) &&
+              Boolean(employee.employeeId) &&
+              van.associatedUsers.includes(employee.employeeId as string)) ||
+            van.driverEmployeeId === employee.employeeId,
+        )
+        .map((van) => String(van.vanId));
 
-    await this.vanModel.updateMany(
-      { vanId: { $in: assignedVanIds } },
-      { $addToSet: { associatedUsers: employeeId } },
-      { session },
-    );
+      return {
+        ...employee,
+        positionId: position?.positionId,
+        positionName: position?.name,
+        roleId: position?.roleId,
+        reportingEmployeeId: position?.reportTo
+          ? reportingEmployeeByPositionId.get(position.reportTo)
+          : undefined,
+        assignedVanIds: [
+          ...new Set([...(position?.vanIds || []), ...directlyAssignedVanIds]),
+        ],
+      };
+    });
+  }
+
+  private async getPositionIdsReportingToEmployee(employeeId: string) {
+    const managerPosition = await this.positionModel
+      .findOne({ employeeId, isDeleted: { $ne: true } })
+      .select('positionId')
+      .lean();
+    const managerPositionId = managerPosition?.positionId;
+    if (!managerPositionId) return [];
+    return this.positionModel.distinct('positionId', {
+      reportTo: managerPositionId,
+      isDeleted: { $ne: true },
+    });
+  }
+
+  private async getVanIdsForEmployees(employeeIds: string[]) {
+    if (!employeeIds.length) return [];
+    const positions = await this.positionModel
+      .find({
+        employeeId: { $in: employeeIds },
+        isDeleted: { $ne: true },
+      })
+      .select('vanIds')
+      .lean();
+    return [...new Set(positions.flatMap((position) => position.vanIds || []))];
   }
 
   /**
@@ -320,20 +346,21 @@ export class EmployeeService extends MongoRepository<Employee> {
    * - Prevents duplicate active employees
    */
   async create(payload: CreateEmployeeDto) {
+    const requestedEmployeeId = payload.employeeId?.trim();
     const initialStatus = payload.status ?? UserStatus.ACTIVE;
-    const assignedVanIds = await this.resolveVanIds(payload.assignedVanIds);
-    await this.validateAssignedVansForRole(payload.roleId, assignedVanIds);
-    const offlineAccessAllowed = await this.normalizeOfflineAccess(
-      payload.roleId,
-      payload.offlineAccessAllowed === true,
-    );
-    const hierarchyPath = await this.buildHierarchyPath(
-      payload.reportingEmployeeId,
-    );
+    const employeeType = payload.employeeType ?? EmployeeType.STAFF;
+    const hasAppAccess = employeeType === EmployeeType.STAFF;
+
+    if (hasAppAccess && (!payload.loginId || !payload.password)) {
+      throw new BadRequestException(
+        'Login ID and password are required for staff employees',
+      );
+    }
 
     return this.withTransaction(async (session) => {
       // Check existing employee (including soft-deleted)
       const duplicateConditions = [
+        ...(requestedEmployeeId ? [{ employeeId: requestedEmployeeId }] : []),
         { mobile: payload.mobile },
         ...(payload.email ? [{ email: payload.email }] : []),
       ];
@@ -354,111 +381,112 @@ export class EmployeeService extends MongoRepository<Employee> {
         await this.updateById(
           existingEmployee._id.toString(),
           {
+            manNumber: payload.manNumber,
             name: payload.name,
-            roleId: payload.roleId,
-            designationId: payload.designationId,
-            reportingEmployeeId: payload.reportingEmployeeId,
-            hierarchyPath,
+            employeeType,
+            hierarchyPath: [],
             permissionOverrides: payload.permissionOverrides
               ? {
                   allow: payload.permissionOverrides.allow || [],
                   deny: payload.permissionOverrides.deny || [],
                 }
               : undefined,
-            offlineAccessAllowed,
             status: initialStatus,
             isDeleted: false,
           },
           { session },
         );
-        await this.syncEmployeeVanAssignments(
-          existingEmployee.employeeId,
-          assignedVanIds,
-          session,
-        );
-
-        await this.userService.restoreUser(
-          {
-            profileId: existingEmployee.employeeId,
-            mobile: payload.mobile,
-            email: payload.email,
-            password: payload.password,
-            isDeleted: false,
-            status: initialStatus,
-            loginId: payload.loginId,
-          },
-          session,
-        );
+        if (hasAppAccess) {
+          await this.userService.restoreUser(
+            {
+              profileId: existingEmployee.employeeId,
+              mobile: payload.mobile,
+              email: payload.email,
+              password: payload.password!,
+              isDeleted: false,
+              status: initialStatus,
+              loginId: payload.loginId!,
+            },
+            session,
+          );
+        } else {
+          await this.userService.disableUserIfExists(
+            existingEmployee.employeeId,
+            session,
+          );
+        }
 
         return {
           statusCode: HttpStatus.OK,
           message: EMPLOYEE.CREATED,
-          data: { employeeId: existingEmployee.employeeId, assignedVanIds },
+          data: { employeeId: existingEmployee.employeeId },
         };
       }
 
-      // Generate unique business employeeId
-      const MAX_TRIES = 10;
-      let employeeId = '';
+      let employeeId = requestedEmployeeId;
 
-      for (let attempt = 1; attempt <= MAX_TRIES; attempt++) {
-        employeeId = IdGenerator.generate('EID', 8);
-        if (!(await this.exists({ employeeId }, session))) break;
+      // Generate a unique business employeeId only when one was not supplied.
+      if (!employeeId) {
+        const MAX_TRIES = 10;
 
-        if (attempt === MAX_TRIES) {
-          throw new ConflictException(
-            'Unable to generate unique employeeId. Try again.',
-          );
+        for (let attempt = 1; attempt <= MAX_TRIES; attempt++) {
+          employeeId = IdGenerator.generate('EID', 8);
+          if (!(await this.exists({ employeeId }, session))) break;
+
+          if (attempt === MAX_TRIES) {
+            throw new ConflictException(
+              'Unable to generate unique employeeId. Try again.',
+            );
+          }
         }
+      }
+
+      if (!employeeId) {
+        throw new ConflictException(
+          'Unable to generate unique employeeId. Try again.',
+        );
       }
 
       // Create employee profile
       const employee = await this.save(
         {
           employeeId,
+          employeeType,
+          manNumber: payload.manNumber,
           mobile: payload.mobile,
           name: payload.name,
           email: payload.email,
-          roleId: payload.roleId,
-          designationId: payload.designationId,
-          reportingEmployeeId: payload.reportingEmployeeId,
-          hierarchyPath,
+          hierarchyPath: [],
           permissionOverrides: payload.permissionOverrides
             ? {
                 allow: payload.permissionOverrides.allow || [],
                 deny: payload.permissionOverrides.deny || [],
               }
             : undefined,
-          offlineAccessAllowed,
           status: initialStatus,
         },
         { session },
       );
 
-      // Create linked authentication user
-      await this.userService.createUser(
-        {
-          profileId: employeeId,
-          mobile: payload.mobile,
-          email: payload.email,
-          password: payload.password,
-          loginId: payload.loginId,
-          status: initialStatus,
-        },
-        session,
-      );
-      await this.syncEmployeeVanAssignments(
-        employeeId,
-        assignedVanIds,
-        session,
-      );
-
+      if (hasAppAccess) {
+        await this.userService.createUser(
+          {
+            profileId: employeeId,
+            mobile: payload.mobile,
+            email: payload.email,
+            password: payload.password!,
+            loginId: payload.loginId!,
+            status: initialStatus,
+          },
+          session,
+        );
+      }
       return {
         statusCode: HttpStatus.CREATED,
         message: EMPLOYEE.CREATED,
         data: {
           ...(employee.toObject?.() ?? employee),
-          assignedVanIds: assignedVanIds || [],
+          assignedVanIds: [],
         },
       };
     });
@@ -511,79 +539,8 @@ export class EmployeeService extends MongoRepository<Employee> {
     };
   }
 
-  private escapeExactRegex(value: string) {
-    return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  }
-
-  private exactRegex(value: string) {
-    return new RegExp(`^${this.escapeExactRegex(value.trim())}$`, 'i');
-  }
-
-  private async resolveRoleId(value: string): Promise<string>;
-  private async resolveRoleId(value?: string): Promise<string | undefined>;
-  private async resolveRoleId(value?: string) {
-    if (!value) return value;
-
-    const role = await this.roleModel
-      .findOne({
-        $or: [
-          { roleId: value },
-          { name: this.exactRegex(value) },
-          { displayName: this.exactRegex(value) },
-        ],
-      })
-      .lean();
-
-    if (!role) {
-      throw new BadRequestException(`Role not found: ${value}`);
-    }
-
-    return role.roleId;
-  }
-
-  private async resolveDesignationId(value?: string) {
-    if (!value) return value;
-
-    const designation = await this.designationModel
-      .findOne({
-        $or: [{ designationId: value }, { name: this.exactRegex(value) }],
-      })
-      .lean();
-
-    if (!designation) {
-      throw new BadRequestException(`Designation not found: ${value}`);
-    }
-
-    return designation.designationId;
-  }
-
-  private async resolveReportingEmployeeId(value?: string) {
-    if (!value) return value;
-
-    const employee = await this.findOne(
-      {
-        $or: [{ employeeId: value }, { name: this.exactRegex(value) }],
-      },
-      { lean: true },
-    );
-
-    if (!employee) {
-      throw new BadRequestException(`Report To employee not found: ${value}`);
-    }
-
-    return employee.employeeId;
-  }
-
   private async resolveBulkUploadReferences(item: CreateEmployeeDto) {
-    return {
-      ...item,
-      roleId: await this.resolveRoleId(item.roleId),
-      designationId: await this.resolveDesignationId(item.designationId),
-      assignedVanIds: await this.resolveVanIds(item.assignedVanIds),
-      reportingEmployeeId: await this.resolveReportingEmployeeId(
-        item.reportingEmployeeId,
-      ),
-    };
+    return item;
   }
 
   private getBulkUploadErrorMessage(error: unknown) {
@@ -600,25 +557,42 @@ export class EmployeeService extends MongoRepository<Employee> {
     return error instanceof Error ? error.message : 'Unable to create employee';
   }
 
-  private buildEmployeeFilter(query: EmployeeQueryDto) {
-    const { status, roleId, designationId, reportingEmployeeId, searchText } =
+  private async buildEmployeeFilter(query: EmployeeQueryDto) {
+    const { status, employeeType, roleId, reportingEmployeeId, searchText } =
       query;
     const filter: Record<string, any> = {};
 
     if (status) filter.status = status;
-    if (roleId) filter.roleId = roleId;
-    if (designationId) filter.designationId = designationId;
-    if (reportingEmployeeId) filter.reportingEmployeeId = reportingEmployeeId;
+    if (employeeType) filter.employeeType = employeeType;
+    if (roleId) {
+      const employeeIds = await this.positionModel.distinct('employeeId', {
+        roleId,
+        isDeleted: { $ne: true },
+      });
+      filter.employeeId = { $in: employeeIds };
+    }
+    if (reportingEmployeeId) {
+      const positionIds =
+        await this.getPositionIdsReportingToEmployee(reportingEmployeeId);
+      const employeeIds = await this.positionModel.distinct('employeeId', {
+        positionId: { $in: positionIds },
+        isDeleted: { $ne: true },
+      });
+      filter.$or = [
+        { employeeId: { $in: employeeIds } },
+        { hierarchyPath: reportingEmployeeId },
+      ];
+    }
 
     if (searchText) {
       const regex = new RegExp(searchText, 'i');
 
       filter.$or = [
         { employeeId: regex },
+        { manNumber: regex },
         { name: regex },
         { mobile: regex },
         { email: regex },
-        { designationId: regex },
       ];
     }
 
@@ -628,10 +602,12 @@ export class EmployeeService extends MongoRepository<Employee> {
   private getExportColumns(columns?: string) {
     const definitions = [
       { key: 'primary', title: 'Name' },
+      { key: 'employeeTypeLabel', title: 'Employee Type' },
+      { key: 'manNumber', title: 'MAN Number' },
       { key: 'loginId', title: 'Login ID' },
+      { key: 'positionName', title: 'Position' },
       { key: 'secondary', title: 'Role' },
       { key: 'owner', title: 'Reports To' },
-      { key: 'designation', title: 'Designation' },
       { key: 'assignedVans', title: 'Assigned Vans' },
       { key: 'status', title: 'Status' },
     ];
@@ -657,9 +633,8 @@ export class EmployeeService extends MongoRepository<Employee> {
           .filter(Boolean),
       ),
     ];
-    const [roles, designations, vans, reportingEmployees] = await Promise.all([
+    const [roles, vans, reportingEmployees] = await Promise.all([
       this.roleModel.find({}).lean(),
-      this.designationModel.find({}).lean(),
       this.vanModel.find({}).lean(),
       reportingEmployeeIds.length
         ? this.findLean({ employeeId: { $in: reportingEmployeeIds } } as any)
@@ -683,12 +658,6 @@ export class EmployeeService extends MongoRepository<Employee> {
           role.displayName || role.name || role.roleId,
         ]),
       ),
-      designationNameById: new Map(
-        designations.map((designation) => [
-          designation.designationId,
-          designation.name || designation.designationId,
-        ]),
-      ),
       vanNameById: new Map(
         vans.map((van) => [van.vanId, van.name || van.vanNumber || van.vanId]),
       ),
@@ -698,7 +667,13 @@ export class EmployeeService extends MongoRepository<Employee> {
   private getEmployeeListingValue(employee: any, maps: any, key: string) {
     const values: Record<string, string> = {
       primary: employee.name || '',
+      employeeTypeLabel:
+        employee.employeeType === EmployeeType.SUPPORTING_STAFF
+          ? 'Supporting Staff (Driver)'
+          : 'Staff',
+      manNumber: employee.manNumber || '',
       loginId: employee.loginId || '',
+      positionName: employee.positionName || '',
       secondary:
         (employee.roleId && maps.roleNameById.get(employee.roleId)) ||
         employee.roleId ||
@@ -707,11 +682,6 @@ export class EmployeeService extends MongoRepository<Employee> {
         (employee.reportingEmployeeId &&
           maps.employeeNameById.get(employee.reportingEmployeeId)) ||
         employee.reportingEmployeeId ||
-        '',
-      designation:
-        (employee.designationId &&
-          (maps.designationNameById.get(employee.designationId) ||
-            employee.designationId)) ||
         '',
       assignedVans: Array.isArray(employee.assignedVanIds)
         ? employee.assignedVanIds
@@ -893,14 +863,13 @@ export class EmployeeService extends MongoRepository<Employee> {
     const columns = this.getExportColumns(query.columns);
     const employees = await this.attachAssignedVanIds(
       await this.attachLoginIds(
-        await this.findLean(this.buildEmployeeFilter(query), {
+        await this.findLean(await this.buildEmployeeFilter(query), {
           sort: { createdAt: -1 },
         }),
       ),
     );
-    const [roles, designations, vans] = await Promise.all([
+    const [roles, vans] = await Promise.all([
       this.roleModel.find({}).lean(),
-      this.designationModel.find({}).lean(),
       this.vanModel.find({}).lean(),
     ]);
     const employeeNameById = new Map(
@@ -912,18 +881,13 @@ export class EmployeeService extends MongoRepository<Employee> {
         role.displayName || role.name || role.roleId,
       ]),
     );
-    const designationNameById = new Map(
-      designations.map((designation) => [
-        designation.designationId,
-        designation.name || designation.designationId,
-      ]),
-    );
     const vanNameById = new Map(
       vans.map((van) => [van.vanId, van.name || van.vanNumber || van.vanId]),
     );
     const exportRows = employees.map((employee: any) => {
       const values: Record<string, string> = {
         primary: employee.name || '',
+        manNumber: employee.manNumber || '',
         loginId: employee.loginId || '',
         secondary:
           (employee.roleId && roleNameById.get(employee.roleId)) ||
@@ -933,11 +897,6 @@ export class EmployeeService extends MongoRepository<Employee> {
           (employee.reportingEmployeeId &&
             employeeNameById.get(employee.reportingEmployeeId)) ||
           employee.reportingEmployeeId ||
-          '',
-        designation:
-          (employee.designationId &&
-            (designationNameById.get(employee.designationId) ||
-              employee.designationId)) ||
           '',
         assignedVans: Array.isArray(employee.assignedVanIds)
           ? employee.assignedVanIds
@@ -987,8 +946,8 @@ export class EmployeeService extends MongoRepository<Employee> {
   async findAll(query: EmployeeQueryDto) {
     const {
       status,
+      employeeType,
       roleId,
-      designationId,
       reportingEmployeeId,
       searchText,
       sortBy,
@@ -1002,17 +961,29 @@ export class EmployeeService extends MongoRepository<Employee> {
     if (status) {
       filter.status = status;
     }
-
-    if (roleId) {
-      filter.roleId = roleId;
+    if (employeeType) {
+      filter.employeeType = employeeType;
     }
 
-    if (designationId) {
-      filter.designationId = designationId;
+    if (roleId) {
+      const employeeIds = await this.positionModel.distinct('employeeId', {
+        roleId,
+        isDeleted: { $ne: true },
+      });
+      filter.employeeId = { $in: employeeIds };
     }
 
     if (reportingEmployeeId) {
-      filter.reportingEmployeeId = reportingEmployeeId;
+      const positionIds =
+        await this.getPositionIdsReportingToEmployee(reportingEmployeeId);
+      const employeeIds = await this.positionModel.distinct('employeeId', {
+        positionId: { $in: positionIds },
+        isDeleted: { $ne: true },
+      });
+      filter.$or = [
+        { employeeId: { $in: employeeIds } },
+        { hierarchyPath: reportingEmployeeId },
+      ];
     }
 
     if (searchText) {
@@ -1023,7 +994,6 @@ export class EmployeeService extends MongoRepository<Employee> {
         { name: regex },
         { mobile: regex },
         { email: regex },
-        { designationId: regex },
       ];
     }
 
@@ -1120,33 +1090,18 @@ export class EmployeeService extends MongoRepository<Employee> {
     if (!existing) {
       throw new NotFoundException(EMPLOYEE.NOT_FOUND);
     }
-    const { assignedVanIds, ...employeeDto } = dto;
-    employeeDto.offlineAccessAllowed = await this.normalizeOfflineAccess(
-      employeeDto.roleId ?? existing.roleId,
-      employeeDto.offlineAccessAllowed ??
-        existing.offlineAccessAllowed ??
-        false,
-    );
-    const resolvedAssignedVanIds = await this.resolveVanIds(assignedVanIds);
-    await this.validateAssignedVansForRole(
-      employeeDto.roleId ?? existing.roleId,
-      resolvedAssignedVanIds,
-    );
-
-    const nextReportingEmployeeId =
-      employeeDto.reportingEmployeeId !== undefined
-        ? employeeDto.reportingEmployeeId
-        : existing.reportingEmployeeId;
-    const hierarchyPath = await this.buildHierarchyPath(
-      nextReportingEmployeeId,
-    );
-
+    const employeeDto = dto;
+    const employeeType = existing.employeeType ?? EmployeeType.STAFF;
+    if (employeeDto.employeeType && employeeDto.employeeType !== employeeType) {
+      throw new BadRequestException(
+        'Employee type cannot be changed after creation',
+      );
+    }
     const employee = await this.withTransaction(async (session) => {
       const updated = await this.updateOne(
         { employeeId },
         {
           ...employeeDto,
-          hierarchyPath,
         },
         { session },
       );
@@ -1154,12 +1109,6 @@ export class EmployeeService extends MongoRepository<Employee> {
       if (!updated) {
         throw new NotFoundException(EMPLOYEE.NOT_FOUND);
       }
-
-      await this.syncEmployeeVanAssignments(
-        employeeId,
-        resolvedAssignedVanIds,
-        session,
-      );
 
       if (employeeDto.status && employeeDto.status !== existing.status) {
         await this.userService.updateUserStatus(
@@ -1210,7 +1159,23 @@ export class EmployeeService extends MongoRepository<Employee> {
       }
 
       await this.softDelete({ employeeId }, { session });
-      await this.userService.delete(employeeId, { session });
+      if (
+        (existing.employeeType ?? EmployeeType.STAFF) === EmployeeType.STAFF
+      ) {
+        await this.userService.delete(employeeId, { session });
+      } else {
+        await this.userService.disableUserIfExists(employeeId, session);
+      }
+      await this.positionModel.updateOne(
+        { employeeId, isDeleted: { $ne: true } },
+        { $unset: { employeeId: 1 } },
+        { session },
+      );
+      await this.vanModel.updateMany(
+        { driverEmployeeId: employeeId, isDeleted: { $ne: true } },
+        { $unset: { driverEmployeeId: 1, driverName: 1 } },
+        { session },
+      );
 
       return existing;
     });
@@ -1960,15 +1925,15 @@ export class EmployeeService extends MongoRepository<Employee> {
   //      * Sales summary
   //      *
   //      * IMPORTANT:
-  //      * Sale schema has employees array:
-  //      * employees.employeeId
+  //      * Sale schema uses the position hierarchy:
+  //      * positionHierarchy.employeeId
   //      *
   //      * Do not use employeeId directly here.
   //      */
   //     this.saleModal.aggregate([
   //       {
   //         $match: {
-  //           'employees.employeeId': {
+  //           'positionHierarchy.employeeId': {
   //             $in: employeeIds,
   //           },
   //           date: {
@@ -2401,13 +2366,13 @@ export class EmployeeService extends MongoRepository<Employee> {
   //      * =====================================================
   //      *
   //      * IMPORTANT:
-  //      * Sale schema has employees array.
-  //      * So use employees.employeeId, not employeeId.
+  //      * Sale schema uses the position hierarchy.
+  //      * So use positionHierarchy.employeeId, not employeeId.
   //      */
   //     this.saleModal.aggregate([
   //       {
   //         $match: {
-  //           'employees.employeeId': {
+  //           'positionHierarchy.employeeId': {
   //             $in: employeeIds,
   //           },
   //           date: {
@@ -2708,7 +2673,7 @@ export class EmployeeService extends MongoRepository<Employee> {
      * =====================================================
      */
     const employees = await this.find({
-      $or: [{ reportingEmployeeId: managerId }, { hierarchyPath: managerId }],
+      hierarchyPath: managerId,
       status: UserStatus.ACTIVE,
     });
 
@@ -2731,17 +2696,15 @@ export class EmployeeService extends MongoRepository<Employee> {
      * ASSOCIATED VANS → ROUTES → DISTINCT ASSIGNED OUTLETS
      * =====================================================
      */
+    const assignedVanIds = await this.getVanIdsForEmployees(employeeIds);
     const vans = await this.vanModel
       .find(
         {
-          associatedUsers: {
-            $in: employeeIds,
-          },
+          vanId: { $in: assignedVanIds },
           status: VanStatus.ACTIVE,
         },
         {
           vanId: 1,
-          associatedUsers: 1,
           associatedRoutes: 1,
           _id: 0,
         },
@@ -2884,13 +2847,13 @@ export class EmployeeService extends MongoRepository<Employee> {
       /**
        * Sales summary
        *
-       * Sale schema has employees array.
-       * Use employees.employeeId, not employeeId.
+       * Sale schema uses the position hierarchy.
+       * Use positionHierarchy.employeeId, not employeeId.
        */
       this.saleModal.aggregate([
         {
           $match: {
-            'employees.employeeId': {
+            'positionHierarchy.employeeId': {
               $in: employeeIds,
             },
             date: {
@@ -2921,16 +2884,11 @@ export class EmployeeService extends MongoRepository<Employee> {
             },
 
             /**
-             * totalWeight is KG, convert to tonnage.
+             * totalWeight is already stored in KG.
              */
             qtyTonnage: {
               $sum: {
-                $divide: [
-                  {
-                    $ifNull: ['$totalWeight', 0],
-                  },
-                  1000,
-                ],
+                $ifNull: ['$totalWeight', 0],
               },
             },
           },
@@ -3226,7 +3184,7 @@ export class EmployeeService extends MongoRepository<Employee> {
       this.saleModal.aggregate([
         {
           $match: {
-            'employees.employeeId': employeeId,
+            'positionHierarchy.employeeId': employeeId,
             ...saleDateFilter,
             status: SaleStatus.COMPLETED,
           },
@@ -3403,7 +3361,7 @@ export class EmployeeService extends MongoRepository<Employee> {
   //     this.saleModal.aggregate([
   //       {
   //         $match: {
-  //           'employees.employeeId': employeeId,
+  //           'positionHierarchy.employeeId': employeeId,
   //           status: SaleStatus.COMPLETED,
   //           date: {
   //             $gte: startDate,
@@ -3445,7 +3403,7 @@ export class EmployeeService extends MongoRepository<Employee> {
   //     this.saleModal.aggregate([
   //       {
   //         $match: {
-  //           'employees.employeeId': employeeId,
+  //           'positionHierarchy.employeeId': employeeId,
   //           status: SaleStatus.COMPLETED,
   //           date: {
   //             $gte: lmtdStartDate,
@@ -3682,7 +3640,7 @@ export class EmployeeService extends MongoRepository<Employee> {
   //     this.saleModal.aggregate([
   //       {
   //         $match: {
-  //           'employees.employeeId': employeeId,
+  //           'positionHierarchy.employeeId': employeeId,
   //           status: SaleStatus.COMPLETED,
   //           date: {
   //             $gte: startDate,
@@ -4157,12 +4115,8 @@ export class EmployeeService extends MongoRepository<Employee> {
     const openActivityEnd =
       endDate.getTime() > Date.now() ? new Date() : endDate;
 
-    /**
-     * KG to tonnage expression.
-     * totalWeight is stored in KG.
-     */
-    const kgToTonnageExpression = (field: string) => ({
-      $divide: [{ $ifNull: [field, 0] }, 1000],
+    const weightKgExpression = (field: string) => ({
+      $ifNull: [field, 0],
     });
 
     const [
@@ -4214,7 +4168,7 @@ export class EmployeeService extends MongoRepository<Employee> {
       this.saleModal.aggregate([
         {
           $match: {
-            'employees.employeeId': employeeId,
+            'positionHierarchy.employeeId': employeeId,
             status: SaleStatus.COMPLETED,
             date: {
               $gte: startDate,
@@ -4231,11 +4185,8 @@ export class EmployeeService extends MongoRepository<Employee> {
                   totalOrders: { $sum: 1 },
                   totalCases: { $sum: '$netCases' },
 
-                  /**
-                   * Convert KG to tonnage before summing.
-                   */
                   totalTonnage: {
-                    $sum: kgToTonnageExpression('$totalWeight'),
+                    $sum: weightKgExpression('$totalWeight'),
                   },
 
                   totalValue: { $sum: '$totalValue' },
@@ -4259,11 +4210,8 @@ export class EmployeeService extends MongoRepository<Employee> {
                   upc: { $addToSet: '$customerId' },
                   cases: { $sum: '$netCases' },
 
-                  /**
-                   * Day-wise tonnage after KG conversion.
-                   */
                   tonnage: {
-                    $sum: kgToTonnageExpression('$totalWeight'),
+                    $sum: weightKgExpression('$totalWeight'),
                   },
 
                   netValue: { $sum: '$totalValue' },
@@ -4302,7 +4250,7 @@ export class EmployeeService extends MongoRepository<Employee> {
       this.saleModal.aggregate([
         {
           $match: {
-            'employees.employeeId': employeeId,
+            'positionHierarchy.employeeId': employeeId,
             status: SaleStatus.COMPLETED,
             date: {
               $gte: lmtdStartDate,
@@ -4315,11 +4263,8 @@ export class EmployeeService extends MongoRepository<Employee> {
             _id: null,
             totalCases: { $sum: '$netCases' },
 
-            /**
-             * Convert KG to tonnage before summing.
-             */
             totalTonnage: {
-              $sum: kgToTonnageExpression('$totalWeight'),
+              $sum: weightKgExpression('$totalWeight'),
             },
 
             totalValue: { $sum: '$totalValue' },
@@ -4424,7 +4369,7 @@ export class EmployeeService extends MongoRepository<Employee> {
       this.saleModal.aggregate([
         {
           $match: {
-            'employees.employeeId': employeeId,
+            'positionHierarchy.employeeId': employeeId,
             status: SaleStatus.COMPLETED,
             date: {
               $gte: startDate,
@@ -4856,9 +4801,6 @@ export class EmployeeService extends MongoRepository<Employee> {
         netValue: Number((daySales.netValue || 0).toFixed(2)),
         cases: Number((daySales.cases || 0).toFixed(2)),
 
-        /**
-         * Already converted from KG to tonnage inside aggregation.
-         */
         tonnage: Number((daySales.tonnage || 0).toFixed(3)),
 
         firstCallTime: formatTime(visits.firstCallTime),
@@ -4878,10 +4820,7 @@ export class EmployeeService extends MongoRepository<Employee> {
     const achievedCases = Number(sales.totalCases || 0);
     const remainingCases = Math.max(targetCases - achievedCases, 0);
 
-    /**
-     * Tonnage values are now correct because achievedTonnage is already KG / 1000.
-     */
-    const targetTonnage = Number(targetSummary.targetTonnage || 0);
+    const targetTonnage = Number(targetSummary.targetTonnage || 0) * 1000;
     const achievedTonnage = Number(sales.totalTonnage || 0);
     const remainingTonnage = Math.max(targetTonnage - achievedTonnage, 0);
 
@@ -4907,14 +4846,11 @@ export class EmployeeService extends MongoRepository<Employee> {
 
     const lmtdTarget =
       normalizedMetric === 'tonnage'
-        ? Number(lmtdTargetSummary.targetTonnage || 0)
+        ? Number(lmtdTargetSummary.targetTonnage || 0) * 1000
         : normalizedMetric === 'value'
           ? Number(lmtdTargetSummary.targetValue || 0)
           : Number(lmtdTargetSummary.targetCases || 0);
 
-    /**
-     * LMTD tonnage is also already KG / 1000.
-     */
     const lmtdAchieved =
       normalizedMetric === 'tonnage'
         ? Number(lmtdSales.totalTonnage || 0)
@@ -4948,7 +4884,7 @@ export class EmployeeService extends MongoRepository<Employee> {
       (selectedAchievementPercentage - lmtdAchievementPercentage).toFixed(2),
     );
 
-    const selectedDecimalPlaces = normalizedMetric === 'tonnage' ? 3 : 2;
+    const selectedDecimalPlaces = 2;
 
     return {
       statusCode: HttpStatus.OK,
@@ -5113,10 +5049,10 @@ export class EmployeeService extends MongoRepository<Employee> {
     /**
      * New sales schema:
      * Sale does not have direct employeeId.
-     * Employee is inside employees array.
+     * Employee is inside the position hierarchy.
      */
     const saleMatch = {
-      'employees.employeeId': employeeId,
+      'positionHierarchy.employeeId': employeeId,
       status: SaleStatus.COMPLETED,
       date: {
         $gte: startDate,
@@ -5755,7 +5691,7 @@ export class EmployeeService extends MongoRepository<Employee> {
      * ==========================================
      */
     const employees = await this.find({
-      $or: [{ reportingEmployeeId: managerId }, { hierarchyPath: managerId }],
+      hierarchyPath: managerId,
       status: UserStatus.ACTIVE,
     });
 
@@ -5770,7 +5706,6 @@ export class EmployeeService extends MongoRepository<Employee> {
         data: emptyData,
       };
     }
-
     /**
      * ==========================================
      * TARGETS + ACHIEVEMENT
@@ -5829,9 +5764,9 @@ export class EmployeeService extends MongoRepository<Employee> {
         {
           $match: {
             /**
-             * Sale schema has employees array.
+             * Sale schema uses the position hierarchy.
              */
-            'employees.employeeId': {
+            'positionHierarchy.employeeId': {
               $in: employeeIds,
             },
             status: SaleStatus.COMPLETED,
@@ -5852,17 +5787,11 @@ export class EmployeeService extends MongoRepository<Employee> {
             },
 
             /**
-             * totalWeight is KG.
-             * Convert KG to tonnage.
+             * totalWeight is already stored in KG.
              */
             achievedTonnage: {
               $sum: {
-                $divide: [
-                  {
-                    $ifNull: ['$totalWeight', 0],
-                  },
-                  1000,
-                ],
+                $ifNull: ['$totalWeight', 0],
               },
             },
 
@@ -5918,11 +5847,10 @@ export class EmployeeService extends MongoRepository<Employee> {
     const remainingCases = Math.max(targetCases - achievedCases, 0);
 
     /**
-     * ==========================================
-     * TONNAGE
-     * ==========================================
+     * Stored target weight remains in tonnes for database compatibility;
+     * API values are exposed in KG.
      */
-    const targetTonnage = Number(targetSummary.targetTonnage || 0);
+    const targetTonnage = Number(targetSummary.targetTonnage || 0) * 1000;
     const achievedTonnage = Number(achievementSummary.achievedTonnage || 0);
     const remainingTonnage = Math.max(targetTonnage - achievedTonnage, 0);
 
@@ -6059,7 +5987,7 @@ export class EmployeeService extends MongoRepository<Employee> {
      * ==========================================
      */
     const employees = await this.find({
-      $or: [{ reportingEmployeeId: managerId }, { hierarchyPath: managerId }],
+      hierarchyPath: managerId,
       status: UserStatus.ACTIVE,
     });
 
@@ -6074,7 +6002,6 @@ export class EmployeeService extends MongoRepository<Employee> {
         data: [],
       };
     }
-
     /**
      * ==========================================
      * TARGETS + ACHIEVEMENTS
@@ -6126,13 +6053,13 @@ export class EmployeeService extends MongoRepository<Employee> {
       /**
        * Achievement from completed sales
        *
-       * Sale schema has employees array.
-       * So use employees.employeeId and group by employees.employeeId.
+       * Sale schema uses the position hierarchy.
+       * So use positionHierarchy.employeeId and group by positionHierarchy.employeeId.
        */
       this.saleModal.aggregate([
         {
           $match: {
-            'employees.employeeId': {
+            'positionHierarchy.employeeId': {
               $in: employeeIds,
             },
             status: SaleStatus.COMPLETED,
@@ -6143,18 +6070,18 @@ export class EmployeeService extends MongoRepository<Employee> {
           },
         },
         {
-          $unwind: '$employees',
+          $unwind: '$positionHierarchy',
         },
         {
           $match: {
-            'employees.employeeId': {
+            'positionHierarchy.employeeId': {
               $in: employeeIds,
             },
           },
         },
         {
           $group: {
-            _id: '$employees.employeeId',
+            _id: '$positionHierarchy.employeeId',
 
             achievementCases: {
               $sum: {
@@ -6163,17 +6090,11 @@ export class EmployeeService extends MongoRepository<Employee> {
             },
 
             /**
-             * totalWeight is KG.
-             * Convert KG to tonnage.
+             * totalWeight is already stored in KG.
              */
             achievementTonnage: {
               $sum: {
-                $divide: [
-                  {
-                    $ifNull: ['$totalWeight', 0],
-                  },
-                  1000,
-                ],
+                $ifNull: ['$totalWeight', 0],
               },
             },
 
@@ -6226,7 +6147,7 @@ export class EmployeeService extends MongoRepository<Employee> {
        * ==========================================
        */
       const targetCases = Number(target.targetCases || 0);
-      const targetTonnage = Number(target.targetTonnage || 0);
+      const targetTonnage = Number(target.targetTonnage || 0) * 1000;
       const targetValue = Number(target.targetValue || 0);
 
       /**
@@ -6413,7 +6334,7 @@ export class EmployeeService extends MongoRepository<Employee> {
   //      * ==========================================
   //      *
   //      * Fixes:
-  //      * 1. Sale schema has employees array, so use employees.employeeId.
+  //      * 1. Sale schema uses the position hierarchy, so use positionHierarchy.employeeId.
   //      * 2. sale_items already has parentCategoryId, so no need for product_master lookup.
   //      * 3. totalNetWeight is KG, so convert KG to tonnage.
   //      */
@@ -6421,7 +6342,7 @@ export class EmployeeService extends MongoRepository<Employee> {
   //       .aggregate([
   //         {
   //           $match: {
-  //             'employees.employeeId': query.employeeId,
+  //             'positionHierarchy.employeeId': query.employeeId,
   //             status: SaleStatus.COMPLETED,
   //             date: {
   //               $gte: startDate,
@@ -6704,11 +6625,11 @@ export class EmployeeService extends MongoRepository<Employee> {
   //       $match: {
   //         status: SaleStatus.COMPLETED,
   //         date: { $gte: startDate, $lte: endDate },
-  //         'employees.employeeId': { $in: employeeIds },
+  //         'positionHierarchy.employeeId': { $in: employeeIds },
   //       },
   //     },
-  //     { $unwind: '$employees' },
-  //     { $match: { 'employees.employeeId': { $in: employeeIds } } },
+  //     { $unwind: '$positionHierarchy' },
+  //     { $match: { 'positionHierarchy.employeeId': { $in: employeeIds } } },
   //     {
   //       $lookup: {
   //         from: 'sale_items',
@@ -6736,7 +6657,7 @@ export class EmployeeService extends MongoRepository<Employee> {
   //   achievementPipeline.push({
   //     $group: {
   //       _id: {
-  //         employeeId: '$employees.employeeId',
+  //         employeeId: '$positionHierarchy.employeeId',
   //         dimensionId:
   //           targetType === 'FOCUSED_PACK'
   //             ? '$product.productId'
@@ -6940,7 +6861,7 @@ export class EmployeeService extends MongoRepository<Employee> {
         .aggregate([
           {
             $match: {
-              'employees.employeeId': query.employeeId,
+              'positionHierarchy.employeeId': query.employeeId,
               status: SaleStatus.COMPLETED,
               date: {
                 $gte: startDate,
@@ -7037,17 +6958,11 @@ export class EmployeeService extends MongoRepository<Employee> {
               },
 
               /**
-               * totalNetWeight is KG.
-               * Convert KG to tonnage.
+               * totalNetWeight is already stored in KG.
                */
               achievementTonnage: {
                 $sum: {
-                  $divide: [
-                    {
-                      $ifNull: ['$items.totalNetWeight', 0],
-                    },
-                    1000,
-                  ],
+                  $ifNull: ['$items.totalNetWeight', 0],
                 },
               },
 
@@ -7077,7 +6992,7 @@ export class EmployeeService extends MongoRepository<Employee> {
         category: target.category || 'Unknown',
 
         targetCases: Number(target.targetCases || 0),
-        targetTonnage: Number(target.targetTonnage || 0),
+        targetTonnage: Number(target.targetTonnage || 0) * 1000,
         targetValue: Number(target.targetValue || 0),
 
         achievementCases: 0,
@@ -7233,7 +7148,7 @@ export class EmployeeService extends MongoRepository<Employee> {
     );
 
     const employees = await this.find({
-      $or: [{ reportingEmployeeId: managerId }, { hierarchyPath: managerId }],
+      hierarchyPath: managerId,
       status: UserStatus.ACTIVE,
     });
 
@@ -7325,7 +7240,7 @@ export class EmployeeService extends MongoRepository<Employee> {
                 $gte: startDate,
                 $lte: endDate,
               },
-              'employees.employeeId': {
+              'positionHierarchy.employeeId': {
                 $in: employeeIds,
               },
               customerId: {
@@ -7334,18 +7249,18 @@ export class EmployeeService extends MongoRepository<Employee> {
             },
           },
           {
-            $unwind: '$employees',
+            $unwind: '$positionHierarchy',
           },
           {
             $match: {
-              'employees.employeeId': {
+              'positionHierarchy.employeeId': {
                 $in: employeeIds,
               },
             },
           },
           {
             $group: {
-              _id: '$employees.employeeId',
+              _id: '$positionHierarchy.employeeId',
 
               uniqueBilledOutlets: {
                 $addToSet: '$customerId',
@@ -7481,17 +7396,17 @@ export class EmployeeService extends MongoRepository<Employee> {
                 $gte: startDate,
                 $lte: endDate,
               },
-              'employees.employeeId': {
+              'positionHierarchy.employeeId': {
                 $in: employeeIds,
               },
             },
           },
           {
-            $unwind: '$employees',
+            $unwind: '$positionHierarchy',
           },
           {
             $match: {
-              'employees.employeeId': {
+              'positionHierarchy.employeeId': {
                 $in: employeeIds,
               },
             },
@@ -7539,7 +7454,7 @@ export class EmployeeService extends MongoRepository<Employee> {
           {
             $group: {
               _id: {
-                employeeId: '$employees.employeeId',
+                employeeId: '$positionHierarchy.employeeId',
                 dimensionId: '$items.productId',
               },
 
@@ -7575,17 +7490,11 @@ export class EmployeeService extends MongoRepository<Employee> {
               },
 
               /**
-               * totalNetWeight is KG.
-               * Convert KG to tonnage.
+               * totalNetWeight is already stored in KG.
                */
               achievementTonnage: {
                 $sum: {
-                  $divide: [
-                    {
-                      $ifNull: ['$items.totalNetWeight', 0],
-                    },
-                    1000,
-                  ],
+                  $ifNull: ['$items.totalNetWeight', 0],
                 },
               },
 
@@ -7617,7 +7526,7 @@ export class EmployeeService extends MongoRepository<Employee> {
 
       current.dimensions.add(dimensionId);
       current.targetCases += Number(target.targetCases || 0);
-      current.targetTonnage += Number(target.targetTonnage || 0);
+      current.targetTonnage += Number(target.targetTonnage || 0) * 1000;
       current.targetValue += Number(target.targetValue || 0);
 
       targetsByUser.set(userId, current);
@@ -7801,7 +7710,7 @@ export class EmployeeService extends MongoRepository<Employee> {
        * Directly gets unique customerId from completed sales.
        */
       this.saleModal.distinct('customerId', {
-        'employees.employeeId': query.employeeId,
+        'positionHierarchy.employeeId': query.employeeId,
         status: SaleStatus.COMPLETED,
         date: {
           $gte: startDate,
@@ -7888,11 +7797,11 @@ export class EmployeeService extends MongoRepository<Employee> {
   //         $match: {
   //           status: SaleStatus.COMPLETED,
   //           date: { $gte: startDate, $lte: now },
-  //           'employees.employeeId': query.employeeId,
+  //           'positionHierarchy.employeeId': query.employeeId,
   //         },
   //       },
-  //       { $unwind: '$employees' },
-  //       { $match: { 'employees.employeeId': query.employeeId } },
+  //       { $unwind: '$positionHierarchy' },
+  //       { $match: { 'positionHierarchy.employeeId': query.employeeId } },
   //       {
   //         $lookup: {
   //           from: 'sale_items',
@@ -8931,7 +8840,7 @@ export class EmployeeService extends MongoRepository<Employee> {
                     $gte: startDate,
                     $lte: endDate,
                   },
-                  'employees.employeeId': query.employeeId,
+                  'positionHierarchy.employeeId': query.employeeId,
                 },
               },
               {
@@ -8983,17 +8892,11 @@ export class EmployeeService extends MongoRepository<Employee> {
             },
 
             /**
-             * totalNetWeight is KG.
-             * Convert KG to tonnage.
+             * totalNetWeight is already stored in KG.
              */
             achievementTonnage: {
               $sum: {
-                $divide: [
-                  {
-                    $ifNull: ['$totalNetWeight', 0],
-                  },
-                  1000,
-                ],
+                $ifNull: ['$totalNetWeight', 0],
               },
             },
 
@@ -9018,7 +8921,7 @@ export class EmployeeService extends MongoRepository<Employee> {
       const achievementCases = Number(achievement.achievementCases || 0);
       const remainingCases = Math.max(targetCases - achievementCases, 0);
 
-      const targetTonnage = Number(target.targetTonnage || 0);
+      const targetTonnage = Number(target.targetTonnage || 0) * 1000;
       const achievementTonnage = Number(achievement.achievementTonnage || 0);
       const remainingTonnage = Math.max(targetTonnage - achievementTonnage, 0);
 
@@ -9160,7 +9063,7 @@ export class EmployeeService extends MongoRepository<Employee> {
      * ==========================================
      */
     const employees = await this.find({
-      $or: [{ reportingEmployeeId: managerId }, { hierarchyPath: managerId }],
+      hierarchyPath: managerId,
       status: UserStatus.ACTIVE,
     });
 
@@ -9177,12 +9080,11 @@ export class EmployeeService extends MongoRepository<Employee> {
      * TEAM VANS → ROUTES
      * ==========================================
      */
+    const assignedVanIds = await this.getVanIdsForEmployees(employeeIds);
     const vans = await this.vanModel
       .find(
         {
-          associatedUsers: {
-            $in: employeeIds,
-          },
+          vanId: { $in: assignedVanIds },
           status: VanStatus.ACTIVE,
         },
         {
@@ -9242,11 +9144,11 @@ export class EmployeeService extends MongoRepository<Employee> {
      * Common sale match.
      *
      * IMPORTANT:
-     * Sale schema has employees array.
-     * Use employees.employeeId, not employeeId.
+     * Sale schema uses the position hierarchy.
+     * Use positionHierarchy.employeeId, not employeeId.
      */
     const saleMatch = {
-      'employees.employeeId': {
+      'positionHierarchy.employeeId': {
         $in: employeeIds,
       },
       status: SaleStatus.COMPLETED,
@@ -9276,7 +9178,7 @@ export class EmployeeService extends MongoRepository<Employee> {
        * - Removed product_master lookup.
        * - sale_items already has parentCategoryId.
        * - Lookup productcategories directly by items.parentCategoryId.
-       * - Convert KG to tonnage using / 1000.
+       * - Return stored product weight directly in KG.
        */
       this.saleModal
         .aggregate([
@@ -9367,17 +9269,9 @@ export class EmployeeService extends MongoRepository<Employee> {
                 },
               },
 
-              /**
-               * totalNetWeight is KG, convert to tonnage.
-               */
               tonnage: {
                 $sum: {
-                  $divide: [
-                    {
-                      $ifNull: ['$items.totalNetWeight', 0],
-                    },
-                    1000,
-                  ],
+                  $ifNull: ['$items.totalNetWeight', 0],
                 },
               },
 
@@ -9403,7 +9297,7 @@ export class EmployeeService extends MongoRepository<Employee> {
        *
        * Fixed sale employee filter.
        * order count = number of completed sales.
-       * tonnage = KG / 1000.
+       * Weight values are returned in KG.
        */
       this.saleModal.aggregate([
         {
@@ -9436,12 +9330,7 @@ export class EmployeeService extends MongoRepository<Employee> {
 
             orderTonnage: {
               $sum: {
-                $divide: [
-                  {
-                    $ifNull: ['$totalWeight', 0],
-                  },
-                  1000,
-                ],
+                $ifNull: ['$totalWeight', 0],
               },
             },
 
@@ -9459,12 +9348,7 @@ export class EmployeeService extends MongoRepository<Employee> {
 
             validationTonnage: {
               $sum: {
-                $divide: [
-                  {
-                    $ifNull: ['$totalWeight', 0],
-                  },
-                  1000,
-                ],
+                $ifNull: ['$totalWeight', 0],
               },
             },
 
@@ -9937,7 +9821,7 @@ export class EmployeeService extends MongoRepository<Employee> {
      * TEAM MEMBERS (DIRECT + INDIRECT)
      * ========================================== */
     const employeeIds: any = await this.model.distinct('employeeId', {
-      $or: [{ reportingEmployeeId: managerId }, { hierarchyPath: managerId }],
+      hierarchyPath: managerId,
       status: UserStatus.ACTIVE,
     });
 
@@ -9979,18 +9863,17 @@ export class EmployeeService extends MongoRepository<Employee> {
             employeeId: 1,
             name: 1,
             mobile: 1,
-            designationId: 1,
           },
           { lean: true },
         )
       : [];
-
     /* ==========================================
      * ASSIGNED VANS
      * ========================================== */
+    const assignedVanIds = await this.getVanIdsForEmployees(employeeIds);
     const vans = await this.vanModel.find(
       {
-        associatedUsers: { $in: employeeIds },
+        vanId: { $in: assignedVanIds },
         status: VanStatus.ACTIVE,
       },
       {
@@ -10000,7 +9883,6 @@ export class EmployeeService extends MongoRepository<Employee> {
         driverName: 1,
         capacity: 1,
         warehouseId: 1,
-        associatedUsers: 1,
         associatedRoutes: 1,
       },
       { lean: true },
@@ -10159,7 +10041,6 @@ export class EmployeeService extends MongoRepository<Employee> {
           employeeId: user.employeeId,
           name: user.name,
           mobile: user.mobile,
-          designationId: user.designationId,
         })),
         vanList: vans.map((van: any) => ({
           vanId: van.vanId,
@@ -10168,7 +10049,6 @@ export class EmployeeService extends MongoRepository<Employee> {
           driverName: van.driverName,
           capacity: van.capacity,
           warehouseId: van.warehouseId,
-          associatedUsers: van.associatedUsers || [],
           routeCount: (van.associatedRoutes || []).length,
         })),
         outletList: assignedOutlets.map((outlet: any) => ({
@@ -10254,7 +10134,7 @@ export class EmployeeService extends MongoRepository<Employee> {
      * ==========================================
      */
     const employees = await this.find({
-      $or: [{ reportingEmployeeId: managerId }, { hierarchyPath: managerId }],
+      hierarchyPath: managerId,
       status: UserStatus.ACTIVE,
     });
 
@@ -10275,12 +10155,11 @@ export class EmployeeService extends MongoRepository<Employee> {
      * TEAM VANS
      * ==========================================
      */
+    const assignedVanIds = await this.getVanIdsForEmployees(employeeIds);
     const vans = await this.vanModel
       .find(
         {
-          associatedUsers: {
-            $in: employeeIds,
-          },
+          vanId: { $in: assignedVanIds },
           status: VanStatus.ACTIVE,
         },
         {
@@ -10431,10 +10310,10 @@ export class EmployeeService extends MongoRepository<Employee> {
        * MTD ordered outlets.
        *
        * IMPORTANT:
-       * Sale schema has employees array.
+       * Sale schema uses the position hierarchy.
        */
       this.saleModal.distinct('customerId', {
-        'employees.employeeId': {
+        'positionHierarchy.employeeId': {
           $in: employeeIds,
         },
         customerId: {
@@ -10624,7 +10503,7 @@ export class EmployeeService extends MongoRepository<Employee> {
      * ==========================================
      */
     const employees = await this.find({
-      $or: [{ reportingEmployeeId: managerId }, { hierarchyPath: managerId }],
+      hierarchyPath: managerId,
       status: UserStatus.ACTIVE,
     });
 
@@ -10799,13 +10678,13 @@ export class EmployeeService extends MongoRepository<Employee> {
        * First productive call per employee
        *
        * IMPORTANT:
-       * Sale schema has employees array.
+       * Sale schema uses the position hierarchy.
        */
       this.saleModal
         .aggregate([
           {
             $match: {
-              'employees.employeeId': {
+              'positionHierarchy.employeeId': {
                 $in: employeeIds,
               },
               status: SaleStatus.COMPLETED,
@@ -10816,11 +10695,11 @@ export class EmployeeService extends MongoRepository<Employee> {
             },
           },
           {
-            $unwind: '$employees',
+            $unwind: '$positionHierarchy',
           },
           {
             $match: {
-              'employees.employeeId': {
+              'positionHierarchy.employeeId': {
                 $in: employeeIds,
               },
             },
@@ -10832,7 +10711,7 @@ export class EmployeeService extends MongoRepository<Employee> {
           },
           {
             $group: {
-              _id: '$employees.employeeId',
+              _id: '$positionHierarchy.employeeId',
               firstPcTime: {
                 $first: '$date',
               },
@@ -10873,13 +10752,13 @@ export class EmployeeService extends MongoRepository<Employee> {
        * PC = completed sales count
        *
        * IMPORTANT:
-       * Sale schema has employees array.
+       * Sale schema uses the position hierarchy.
        */
       this.saleModal
         .aggregate([
           {
             $match: {
-              'employees.employeeId': {
+              'positionHierarchy.employeeId': {
                 $in: employeeIds,
               },
               status: SaleStatus.COMPLETED,
@@ -10890,18 +10769,18 @@ export class EmployeeService extends MongoRepository<Employee> {
             },
           },
           {
-            $unwind: '$employees',
+            $unwind: '$positionHierarchy',
           },
           {
             $match: {
-              'employees.employeeId': {
+              'positionHierarchy.employeeId': {
                 $in: employeeIds,
               },
             },
           },
           {
             $group: {
-              _id: '$employees.employeeId',
+              _id: '$positionHierarchy.employeeId',
               pc: {
                 $sum: 1,
               },
@@ -10917,7 +10796,7 @@ export class EmployeeService extends MongoRepository<Employee> {
         .aggregate([
           {
             $match: {
-              'employees.employeeId': {
+              'positionHierarchy.employeeId': {
                 $in: employeeIds,
               },
               status: SaleStatus.COMPLETED,
@@ -10928,18 +10807,18 @@ export class EmployeeService extends MongoRepository<Employee> {
             },
           },
           {
-            $unwind: '$employees',
+            $unwind: '$positionHierarchy',
           },
           {
             $match: {
-              'employees.employeeId': {
+              'positionHierarchy.employeeId': {
                 $in: employeeIds,
               },
             },
           },
           {
             $group: {
-              _id: '$employees.employeeId',
+              _id: '$positionHierarchy.employeeId',
               saleIds: {
                 $addToSet: '$saleId',
               },
@@ -11690,19 +11569,33 @@ export class EmployeeService extends MongoRepository<Employee> {
      * MANAGER:
      * - show only reporting / hierarchy users
      */
-    const employeeFilter =
-      roleId === 'ADMIN'
-        ? {
-            roleId: 'SALESMAN',
-            status: UserStatus.ACTIVE,
-          }
-        : {
-            $or: [
-              { reportingEmployeeId: managerId },
-              { hierarchyPath: managerId },
-            ],
-            status: UserStatus.ACTIVE,
-          };
+    const isAdmin = ['ADMIN', 'SUPER_ADMIN'].includes(
+      String(store?.role || roleId || '').toUpperCase(),
+    );
+    const salesmanRoles = isAdmin
+      ? await this.roleModel
+          .find({
+            name: { $in: ['SALESMAN', 'SALES', 'SALES_EXECUTIVE'] },
+            isDeleted: { $ne: true },
+          })
+          .select('roleId')
+          .lean()
+      : [];
+    const salesmanEmployeeIds = isAdmin
+      ? await this.positionModel.distinct('employeeId', {
+          roleId: { $in: salesmanRoles.map((role) => role.roleId) },
+          isDeleted: { $ne: true },
+        })
+      : [];
+    const employeeFilter = isAdmin
+      ? {
+          employeeId: { $in: salesmanEmployeeIds },
+          status: UserStatus.ACTIVE,
+        }
+      : {
+          hierarchyPath: managerId,
+          status: UserStatus.ACTIVE,
+        };
 
     const employees = await this.find(employeeFilter);
 
@@ -11717,6 +11610,14 @@ export class EmployeeService extends MongoRepository<Employee> {
         data: [],
       };
     }
+
+    const livePositions = await this.positionModel
+      .find({ employeeId: { $in: employeeIds } })
+      .select('employeeId roleId')
+      .lean();
+    const liveRoleIdByEmployeeId = new Map(
+      livePositions.map((position) => [position.employeeId, position.roleId]),
+    );
 
     /**
      * ==========================================
@@ -11844,7 +11745,7 @@ export class EmployeeService extends MongoRepository<Employee> {
         employeeName: employee.name,
         mobile: employee.mobile || '',
 
-        roleId: employee.roleId || null,
+        roleId: liveRoleIdByEmployeeId.get(employeeId) || null,
 
         status: latestSession?.status || 'OFFLINE',
 
@@ -11864,6 +11765,1068 @@ export class EmployeeService extends MongoRepository<Employee> {
       statusCode: HttpStatus.OK,
       message: 'Live locations fetched successfully',
       data,
+    };
+  }
+
+  async getVehicleBreakdownReport(query: VehicleBreakdownReportQueryDto) {
+    const fromDate = parseCalendarDate(query.fromDate);
+    const toDate = parseCalendarDate(query.toDate || query.fromDate);
+    const startOfRange = new Date(fromDate);
+    const endOfRange = new Date(toDate);
+    startOfRange.setHours(0, 0, 0, 0);
+    endOfRange.setHours(23, 59, 59, 999);
+
+    if (
+      Number.isNaN(startOfRange.getTime()) ||
+      Number.isNaN(endOfRange.getTime()) ||
+      endOfRange < startOfRange
+    ) {
+      throw new BadRequestException(
+        'Invalid vehicle breakdown report date range',
+      );
+    }
+
+    if ((endOfRange.getTime() - startOfRange.getTime()) / 86_400_000 > 31) {
+      throw new BadRequestException(
+        'Vehicle breakdown report date range cannot exceed 31 days',
+      );
+    }
+
+    const context = RequestContextStore.getStore();
+    const normalizedRole = String(context?.role || '')
+      .trim()
+      .toUpperCase();
+    const isFieldUser = ['SALESMAN', 'SALES', 'SALES_EXECUTIVE'].includes(
+      normalizedRole,
+    );
+    const sessionFilter: Record<string, any> = {
+      dayStartTime: { $gte: startOfRange, $lte: endOfRange },
+      isDeleted: { $ne: true },
+    };
+
+    if (isFieldUser && context?.userId) {
+      sessionFilter.userId = context.userId;
+    }
+
+    const workSessions = await this.workSessionModel
+      .find(sessionFilter)
+      .sort({ dayStartTime: 1 })
+      .lean();
+    const employeeIds = [
+      ...new Set(
+        workSessions.map((session: any) => session.userId).filter(Boolean),
+      ),
+    ] as string[];
+    const vanIds = [
+      ...new Set(
+        workSessions.map((session: any) => session.vanId).filter(Boolean),
+      ),
+    ] as string[];
+
+    if (!workSessions.length) {
+      return {
+        message: 'Vehicle breakdown report fetched successfully',
+        data: { items: [] },
+      };
+    }
+
+    const [employees, positions, roles, vans] = await Promise.all([
+      this.model
+        .find({
+          employeeId: { $in: employeeIds },
+          isDeleted: { $ne: true },
+        })
+        .lean(),
+      this.positionModel.find({ isDeleted: { $ne: true } }).lean(),
+      this.roleModel.find({ isDeleted: { $ne: true } }).lean(),
+      this.vanModel
+        .find({ vanId: { $in: vanIds }, isDeleted: { $ne: true } })
+        .lean(),
+    ]);
+    const hierarchyEmployeeIds = [
+      ...new Set(
+        employees.flatMap((employee: any) => employee.hierarchyPath || []),
+      ),
+    ].filter(Boolean);
+    const hierarchyEmployees = hierarchyEmployeeIds.length
+      ? await this.model
+          .find({
+            employeeId: { $in: hierarchyEmployeeIds },
+            isDeleted: { $ne: true },
+          })
+          .lean()
+      : [];
+    const allEmployees = [...employees, ...hierarchyEmployees];
+    const countryIds = [
+      ...new Set(
+        positions.map((position: any) => position.countryId).filter(Boolean),
+      ),
+    ] as string[];
+    const countries = countryIds.length
+      ? await this.countryModel
+          .find({
+            countryId: { $in: countryIds },
+            isDeleted: { $ne: true },
+          })
+          .lean()
+      : [];
+
+    const toMap = (items: any[], key: string) =>
+      new Map<string, any>(
+        items
+          .filter((item) => item[key])
+          .map((item) => [String(item[key]), item]),
+      );
+    const employeeById = toMap(allEmployees as any[], 'employeeId');
+    const positionById = toMap(positions as any[], 'positionId');
+    const positionByEmployeeId = new Map<string, any>(
+      (positions as any[])
+        .filter((position) => position.employeeId)
+        .map((position) => [String(position.employeeId), position]),
+    );
+    const roleById = toMap(roles as any[], 'roleId');
+    const vanById = toMap(vans as any[], 'vanId');
+    const countryById = toMap(countries as any[], 'countryId');
+
+    const hierarchyFor = (employee: any) => {
+      const usersByLevel: Record<number, string> = {
+        1: '',
+        2: '',
+        3: '',
+        4: '',
+        5: '',
+      };
+      const currentPosition = positionByEmployeeId.get(employee?.employeeId);
+      let hierarchyPosition = currentPosition;
+      let reportingManager = '';
+
+      while (hierarchyPosition) {
+        const level = Number(hierarchyPosition.hierarchyDepth);
+        const positionUser =
+          employeeById.get(hierarchyPosition.employeeId)?.name ||
+          hierarchyPosition.name ||
+          '';
+        if (level >= 1 && level <= 5) usersByLevel[level] = positionUser;
+        const parentPosition = hierarchyPosition.reportTo
+          ? positionById.get(hierarchyPosition.reportTo)
+          : undefined;
+        if (!reportingManager && parentPosition) {
+          reportingManager =
+            employeeById.get(parentPosition.employeeId)?.name ||
+            parentPosition.name ||
+            '';
+        }
+        hierarchyPosition = parentPosition;
+      }
+
+      return { currentPosition, usersByLevel, reportingManager };
+    };
+    const rows = workSessions.map((session: any) => {
+      const employee = employeeById.get(session.userId) || {
+        employeeId: session.userId,
+        name: session.userName,
+      };
+      const hierarchy = hierarchyFor(employee);
+      const position = hierarchy.currentPosition;
+      const role = roleById.get(position?.roleId);
+      const van = vanById.get(session.vanId);
+      const latitude = Number(session.dayStartLocation?.latitude);
+      const longitude = Number(session.dayStartLocation?.longitude);
+
+      return {
+        id: session.workSessionId,
+        date: new Date(session.dayStartTime).toISOString(),
+        l1PositionUser: hierarchy.usersByLevel[1] || '',
+        l2PositionUser: hierarchy.usersByLevel[2] || '',
+        l3PositionUser: hierarchy.usersByLevel[3] || '',
+        l4PositionUser: hierarchy.usersByLevel[4] || '',
+        l5PositionUser: hierarchy.usersByLevel[5] || '',
+        reportingManager: hierarchy.reportingManager,
+        userErpId:
+          employee?.manNumber || van?.vanNumber || session.vanName || '',
+        employee: employee?.name || session.userName || session.userId,
+        userPositionLevel:
+          role?.displayName || role?.name || position?.name || '',
+        surveyZone:
+          countryById.get(position?.countryId)?.name ||
+          position?.countryId ||
+          '',
+        vanId: van?.vanId || session.vanId || '',
+        vanNumber: van?.vanNumber || '',
+        vanName: van?.name || session.vanName || '',
+        driverName: session.driverName || van?.driverName || '',
+        time: new Date(session.dayStartTime).toISOString(),
+        latitude: Number.isFinite(latitude) ? latitude : null,
+        longitude: Number.isFinite(longitude) ? longitude : null,
+        vehicleBreakdown: van?.status === VanStatus.BREAKDOWN ? 'Yes' : 'No',
+        breakdownReason: van?.breakdownReason || '',
+      };
+    });
+
+    const search = query.search?.trim().toLowerCase();
+    const filteredRows = rows
+      .filter(
+        (row) =>
+          !query.breakdownStatus ||
+          row.vehicleBreakdown === query.breakdownStatus,
+      )
+      .filter((row) => !query.surveyZone || row.surveyZone === query.surveyZone)
+      .filter((row) => !query.employee || row.employee === query.employee)
+      .filter(
+        (row) =>
+          !search ||
+          [
+            row.employee,
+            row.userErpId,
+            row.l5PositionUser,
+            row.reportingManager,
+            row.vanId,
+            row.vanNumber,
+            row.vanName,
+            row.driverName,
+            row.breakdownReason,
+          ].some((value) =>
+            String(value || '')
+              .toLowerCase()
+              .includes(search),
+          ),
+      );
+
+    return {
+      message: 'Vehicle breakdown report fetched successfully',
+      data: { items: filteredRows },
+    };
+  }
+
+  async getProductPerformanceReport(query: ProductPerformanceReportQueryDto) {
+    const fromDate = parseCalendarDate(query.fromDate);
+    const toDate = parseCalendarDate(query.toDate || query.fromDate);
+    const startOfRange = new Date(fromDate);
+    const endOfRange = new Date(toDate);
+    startOfRange.setHours(0, 0, 0, 0);
+    endOfRange.setHours(23, 59, 59, 999);
+
+    if (
+      Number.isNaN(startOfRange.getTime()) ||
+      Number.isNaN(endOfRange.getTime()) ||
+      endOfRange < startOfRange
+    ) {
+      throw new BadRequestException(
+        'Invalid product performance report date range',
+      );
+    }
+
+    if ((endOfRange.getTime() - startOfRange.getTime()) / 86_400_000 > 31) {
+      throw new BadRequestException(
+        'Product performance report date range cannot exceed 31 days',
+      );
+    }
+
+    const context = RequestContextStore.getStore();
+    const normalizedRole = String(context?.role || '')
+      .trim()
+      .toUpperCase();
+    const isFieldUser = ['SALESMAN', 'SALES', 'SALES_EXECUTIVE'].includes(
+      normalizedRole,
+    );
+    const saleFilter: Record<string, any> = {
+      date: { $gte: startOfRange, $lte: endOfRange },
+      status: SaleStatus.COMPLETED,
+      isDeleted: { $ne: true },
+    };
+
+    if (isFieldUser && context?.userId) {
+      saleFilter['positionHierarchy.employeeId'] = context.userId;
+    }
+
+    const sales = await this.saleModal
+      .find(saleFilter)
+      .sort({ date: 1 })
+      .lean();
+    const saleIds = sales.map((sale: any) => sale.saleId).filter(Boolean);
+
+    if (!saleIds.length) {
+      return {
+        message: 'Product performance report fetched successfully',
+        data: { items: [] },
+      };
+    }
+
+    const saleItems = await this.saleItemModel
+      .find({
+        saleId: { $in: saleIds },
+        isDeleted: { $ne: true },
+      })
+      .lean();
+    const employeeIds = [
+      ...new Set(
+        sales
+          .flatMap((sale: any) =>
+            (sale.positionHierarchy || []).map(
+              (position: any) => position.employeeId,
+            ),
+          )
+          .filter(Boolean),
+      ),
+    ] as string[];
+    const customerIds = [
+      ...new Set(sales.map((sale: any) => sale.customerId).filter(Boolean)),
+    ] as string[];
+    const visitIds = [
+      ...new Set(sales.map((sale: any) => sale.visitId).filter(Boolean)),
+    ] as string[];
+    const saleVanIds = [
+      ...new Set(sales.map((sale: any) => sale.vanId).filter(Boolean)),
+    ] as string[];
+    const categoryIds = [
+      ...new Set(
+        saleItems
+          .flatMap((item: any) => [item.categoryId, item.parentCategoryId])
+          .filter(Boolean),
+      ),
+    ] as string[];
+
+    const [
+      employees,
+      positions,
+      customers,
+      routeMappings,
+      categories,
+      saleVisits,
+    ] = await Promise.all([
+      this.model
+        .find({
+          $or: [
+            { employeeId: { $in: employeeIds } },
+            { hierarchyPath: { $in: employeeIds } },
+          ],
+          isDeleted: { $ne: true },
+        })
+        .lean(),
+      this.positionModel.find({ isDeleted: { $ne: true } }).lean(),
+      this.customerModel
+        .find({
+          customerId: { $in: customerIds },
+          isDeleted: { $ne: true },
+        })
+        .lean(),
+      this.routeCustomerMappingModel
+        .find({
+          customerId: { $in: customerIds },
+          isDeleted: { $ne: true },
+        })
+        .lean(),
+      this.productCategoryModel
+        .find({
+          categoryId: { $in: categoryIds },
+          isDeleted: { $ne: true },
+        })
+        .lean(),
+      this.shopVisitModel
+        .find({ visitId: { $in: visitIds }, isDeleted: { $ne: true } })
+        .lean(),
+    ]);
+
+    const allEmployeeIds = [
+      ...new Set(
+        employees.flatMap((employee: any) => [
+          employee.employeeId,
+          ...(employee.hierarchyPath || []),
+        ]),
+      ),
+    ].filter(Boolean);
+    const missingEmployeeIds = allEmployeeIds.filter(
+      (employeeId) =>
+        !employees.some((employee: any) => employee.employeeId === employeeId),
+    );
+    const missingEmployees = missingEmployeeIds.length
+      ? await this.model
+          .find({
+            employeeId: { $in: missingEmployeeIds },
+            isDeleted: { $ne: true },
+          })
+          .lean()
+      : [];
+    const reportEmployees = [...employees, ...missingEmployees];
+    const routeIds = [
+      ...new Set(
+        routeMappings.map((mapping: any) => mapping.routeId).filter(Boolean),
+      ),
+    ] as string[];
+    const marketIds = [
+      ...new Set(
+        customers.map((customer: any) => customer.marketId).filter(Boolean),
+      ),
+    ] as string[];
+    const workSessionIds = [
+      ...new Set(
+        saleVisits.map((visit: any) => visit.workSessionId).filter(Boolean),
+      ),
+    ] as string[];
+    const [routes, markets, workSessions, vans] = await Promise.all([
+      routeIds.length
+        ? this.routeModel
+            .find({ routeId: { $in: routeIds }, isDeleted: { $ne: true } })
+            .lean()
+        : [],
+      marketIds.length
+        ? this.marketModel
+            .find({ marketId: { $in: marketIds }, isDeleted: { $ne: true } })
+            .lean()
+        : [],
+      workSessionIds.length
+        ? this.workSessionModel
+            .find({
+              workSessionId: { $in: workSessionIds },
+              isDeleted: { $ne: true },
+            })
+            .lean()
+        : [],
+      saleVanIds.length
+        ? this.vanModel
+            .find({ vanId: { $in: saleVanIds }, isDeleted: { $ne: true } })
+            .lean()
+        : [],
+    ]);
+
+    const toMap = (items: any[], key: string) =>
+      new Map<string, any>(
+        items
+          .filter((item) => item[key])
+          .map((item) => [String(item[key]), item]),
+      );
+    const saleById = toMap(sales as any[], 'saleId');
+    const employeeById = toMap(reportEmployees as any[], 'employeeId');
+    const positionById = toMap(positions as any[], 'positionId');
+    const positionByEmployeeId = new Map<string, any>(
+      (positions as any[])
+        .filter((position) => position.employeeId)
+        .map((position) => [String(position.employeeId), position]),
+    );
+    const customerById = toMap(customers as any[], 'customerId');
+    const categoryById = toMap(categories as any[], 'categoryId');
+    const routeById = toMap(routes as any[], 'routeId');
+    const marketById = toMap(markets as any[], 'marketId');
+    const visitById = toMap(saleVisits as any[], 'visitId');
+    const workSessionById = toMap(workSessions as any[], 'workSessionId');
+    const vanById = toMap(vans as any[], 'vanId');
+    const routeByCustomerId = new Map<string, any>();
+
+    for (const mapping of routeMappings as any[]) {
+      if (!routeByCustomerId.has(mapping.customerId)) {
+        routeByCustomerId.set(
+          mapping.customerId,
+          routeById.get(mapping.routeId),
+        );
+      }
+    }
+
+    const hierarchyFor = (
+      employeeId: string,
+      salePositionId?: string,
+      positionHierarchy?: Array<{
+        level: number;
+        positionId: string;
+        positionName: string;
+        employeeId?: string;
+        employeeName?: string;
+      }>,
+    ) => {
+      const employee = employeeById.get(employeeId);
+      const hierarchyUsers: Record<number, string> = {
+        1: '',
+        2: '',
+        3: '',
+        4: '',
+        5: '',
+      };
+
+      if (positionHierarchy?.length) {
+        for (const snapshotPosition of positionHierarchy) {
+          const livePosition = positionById.get(snapshotPosition.positionId);
+          const absoluteLevel = Number(
+            snapshotPosition.level ?? livePosition?.hierarchyDepth,
+          );
+          if (absoluteLevel < 1 || absoluteLevel > 5) continue;
+          hierarchyUsers[absoluteLevel] =
+            snapshotPosition.employeeName ||
+            snapshotPosition.positionName ||
+            '';
+        }
+
+        return {
+          employee,
+          l1PositionUser: hierarchyUsers[1],
+          l2PositionUser: hierarchyUsers[2],
+          l3PositionUser: hierarchyUsers[3],
+          l4PositionUser: hierarchyUsers[4],
+          l5PositionUser: hierarchyUsers[5],
+        };
+      }
+
+      let hierarchyPosition =
+        (salePositionId ? positionById.get(salePositionId) : undefined) ||
+        positionByEmployeeId.get(employeeId);
+      while (hierarchyPosition) {
+        const level = Number(hierarchyPosition.hierarchyDepth);
+        if (level >= 1 && level <= 5) {
+          hierarchyUsers[level] =
+            employeeById.get(hierarchyPosition.employeeId)?.name ||
+            hierarchyPosition.name ||
+            '';
+        }
+        hierarchyPosition = hierarchyPosition.reportTo
+          ? positionById.get(hierarchyPosition.reportTo)
+          : undefined;
+      }
+
+      return {
+        employee,
+        l1PositionUser: hierarchyUsers[1],
+        l2PositionUser: hierarchyUsers[2],
+        l3PositionUser: hierarchyUsers[3],
+        l4PositionUser: hierarchyUsers[4],
+        l5PositionUser: hierarchyUsers[5],
+      };
+    };
+
+    const rows = (saleItems as any[])
+      .map((item: any, index: number) => {
+        const sale = saleById.get(item.saleId);
+        if (!sale) return null;
+        const saleEmployee = (sale.positionHierarchy || []).reduce(
+          (deepestEmployee: any, position: any) => {
+            if (!position.employeeId) return deepestEmployee;
+
+            const positionLevel = Number(
+              position.level ??
+                positionById.get(position.positionId)?.hierarchyDepth ??
+                0,
+            );
+            const deepestLevel = Number(
+              deepestEmployee?.level ??
+                positionById.get(deepestEmployee?.positionId)?.hierarchyDepth ??
+                0,
+            );
+
+            return !deepestEmployee || positionLevel > deepestLevel
+              ? position
+              : deepestEmployee;
+          },
+          undefined,
+        );
+        const hierarchy = hierarchyFor(
+          saleEmployee?.employeeId,
+          saleEmployee?.positionId,
+          sale.positionHierarchy,
+        );
+        const customer = customerById.get(sale.customerId);
+        const route = routeByCustomerId.get(sale.customerId);
+        const visit = visitById.get(sale.visitId);
+        const workSession = workSessionById.get(visit?.workSessionId);
+        const van = vanById.get(sale.vanId);
+        const primaryCategory = categoryById.get(item.parentCategoryId);
+        const secondaryCategory = categoryById.get(item.categoryId);
+        const market = marketById.get(customer?.marketId);
+
+        return {
+          id: `${item.saleId}-${item.productId}-${index}`,
+          l1PositionUser: hierarchy.l1PositionUser,
+          l2PositionUser: hierarchy.l2PositionUser,
+          l3PositionUser: hierarchy.l3PositionUser,
+          l4PositionUser: hierarchy.l4PositionUser,
+          l5PositionUser: hierarchy.l5PositionUser,
+          fieldUser:
+            hierarchy.employee?.name ||
+            saleEmployee?.employeeName ||
+            saleEmployee?.employeeId ||
+            '',
+          fieldUserErpId: saleEmployee?.employeeId || '',
+          contactNumber: hierarchy.employee?.mobile || '',
+          driverName: workSession?.driverName || van?.driverName || '',
+          beats: route?.name || '',
+          territory: market?.name || customer?.marketId || '',
+          shop: sale.customerName || customer?.name || sale.customerId,
+          shopErpId: sale.customerId,
+          casesConversionFactor: Number(item.unitQtyInCase || 0),
+          productName: item.productName || item.productId,
+          secondaryCategory: secondaryCategory?.name || item.categoryId || '',
+          primaryCategory: primaryCategory?.name || item.parentCategoryId || '',
+          alternateCategory:
+            String(item.productName || '').split('-')[0] ||
+            item.productId ||
+            '',
+          date: new Date(sale.date).toISOString(),
+          dispatchCases: Number(item.netCases ?? item.caseQty ?? 0),
+          dispatchPcs: Number(item.pieceQty || 0),
+          value: Number(item.totalValue || 0),
+        };
+      })
+      .filter(Boolean) as any[];
+
+    const search = query.search?.trim().toLowerCase();
+    const filteredRows = rows
+      .filter((row) => !query.territory || row.territory === query.territory)
+      .filter((row) => !query.fieldUser || row.fieldUser === query.fieldUser)
+      .filter(
+        (row) =>
+          !query.primaryCategory ||
+          row.primaryCategory === query.primaryCategory,
+      )
+      .filter(
+        (row) =>
+          !search ||
+          [
+            row.fieldUser,
+            row.fieldUserErpId,
+            row.driverName,
+            row.beats,
+            row.territory,
+            row.shop,
+            row.shopErpId,
+            row.productName,
+            row.secondaryCategory,
+            row.primaryCategory,
+            row.alternateCategory,
+          ].some((value) =>
+            String(value || '')
+              .toLowerCase()
+              .includes(search),
+          ),
+      );
+
+    return {
+      message: 'Product performance report fetched successfully',
+      data: { items: filteredRows },
+    };
+  }
+
+  async getTimelineReport(query: TimelineReportQueryDto) {
+    const fromDate = parseCalendarDate(query.fromDate);
+    const toDate = parseCalendarDate(query.toDate || query.fromDate);
+    const startOfRange = new Date(fromDate);
+    const endOfRange = new Date(toDate);
+    startOfRange.setHours(0, 0, 0, 0);
+    endOfRange.setHours(23, 59, 59, 999);
+
+    if (
+      Number.isNaN(startOfRange.getTime()) ||
+      Number.isNaN(endOfRange.getTime()) ||
+      endOfRange < startOfRange
+    ) {
+      throw new BadRequestException('Invalid timeline report date range');
+    }
+
+    const rangeInDays =
+      (endOfRange.getTime() - startOfRange.getTime()) / 86_400_000;
+    if (rangeInDays > 31) {
+      throw new BadRequestException(
+        'Timeline report date range cannot exceed 31 days',
+      );
+    }
+
+    const context = RequestContextStore.getStore();
+    const normalizedRole = String(context?.role || '')
+      .trim()
+      .toUpperCase();
+    const isFieldUser = ['SALESMAN', 'SALES', 'SALES_EXECUTIVE'].includes(
+      normalizedRole,
+    );
+    const sessionFilter: Record<string, any> = {
+      dayStartTime: { $gte: startOfRange, $lte: endOfRange },
+      isDeleted: { $ne: true },
+    };
+
+    if (isFieldUser && context?.userId) {
+      sessionFilter.userId = context.userId;
+    }
+
+    const workSessions = await this.workSessionModel
+      .find(sessionFilter)
+      .sort({ dayStartTime: 1 })
+      .lean();
+    const workSessionIds = workSessions
+      .map((session: any) => session.workSessionId)
+      .filter(Boolean);
+
+    if (!workSessionIds.length) {
+      return {
+        message: 'Timeline report fetched successfully',
+        data: { items: [] },
+      };
+    }
+
+    const employeeIds = [
+      ...new Set(
+        workSessions.map((session: any) => session.userId).filter(Boolean),
+      ),
+    ] as string[];
+
+    const [visits, routeSessions, reportEmployees, positions, roles] =
+      await Promise.all([
+        this.shopVisitModel
+          .find({
+            workSessionId: { $in: workSessionIds },
+            isDeleted: { $ne: true },
+          })
+          .sort({ checkInTime: 1 })
+          .lean(),
+        this.routeSessionModel
+          .find({
+            workSessionId: { $in: workSessionIds },
+            isDeleted: { $ne: true },
+          })
+          .lean(),
+        this.model
+          .find({
+            $or: [
+              { employeeId: { $in: employeeIds } },
+              { hierarchyPath: { $in: employeeIds } },
+            ],
+            isDeleted: { $ne: true },
+          })
+          .lean(),
+        this.positionModel.find({ isDeleted: { $ne: true } }).lean(),
+        this.roleModel.find({ isDeleted: { $ne: true } }).lean(),
+      ]);
+
+    const allHierarchyEmployeeIds = [
+      ...new Set(
+        reportEmployees.flatMap((employee: any) => [
+          employee.employeeId,
+          ...(employee.hierarchyPath || []),
+        ]),
+      ),
+    ].filter(Boolean);
+    const missingEmployeeIds = allHierarchyEmployeeIds.filter(
+      (employeeId) =>
+        !reportEmployees.some(
+          (employee: any) => employee.employeeId === employeeId,
+        ),
+    );
+    const missingEmployees = missingEmployeeIds.length
+      ? await this.model
+          .find({
+            employeeId: { $in: missingEmployeeIds },
+            isDeleted: { $ne: true },
+          })
+          .lean()
+      : [];
+    const employees = [...reportEmployees, ...missingEmployees];
+
+    const routeIds = [
+      ...new Set(
+        routeSessions.map((session: any) => session.routeId).filter(Boolean),
+      ),
+    ] as string[];
+    const customerIds = [
+      ...new Set(visits.map((visit: any) => visit.outletId).filter(Boolean)),
+    ] as string[];
+    const vanIds = [
+      ...new Set(
+        workSessions.map((session: any) => session.vanId).filter(Boolean),
+      ),
+    ] as string[];
+    const countryIds = [
+      ...new Set(
+        positions.map((position: any) => position.countryId).filter(Boolean),
+      ),
+    ] as string[];
+    const provinceIds = [
+      ...new Set(
+        positions.map((position: any) => position.provinceId).filter(Boolean),
+      ),
+    ] as string[];
+
+    const [routes, customers, vans, countries, provinces] = await Promise.all([
+      routeIds.length
+        ? this.routeModel
+            .find({ routeId: { $in: routeIds }, isDeleted: { $ne: true } })
+            .lean()
+        : [],
+      customerIds.length
+        ? this.customerModel
+            .find({
+              customerId: { $in: customerIds },
+              isDeleted: { $ne: true },
+            })
+            .lean()
+        : [],
+      vanIds.length
+        ? this.vanModel
+            .find({ vanId: { $in: vanIds }, isDeleted: { $ne: true } })
+            .lean()
+        : [],
+      countryIds.length
+        ? this.countryModel
+            .find({
+              countryId: { $in: countryIds },
+              isDeleted: { $ne: true },
+            })
+            .lean()
+        : [],
+      provinceIds.length
+        ? this.provinceModel
+            .find({
+              provinceId: { $in: provinceIds },
+              isDeleted: { $ne: true },
+            })
+            .lean()
+        : [],
+    ]);
+
+    const by = (items: any[], key: string) =>
+      new Map<string, any>(
+        items
+          .filter((item) => item[key])
+          .map((item) => [String(item[key]), item]),
+      );
+    const employeeById = by(employees as any[], 'employeeId');
+    const positionById = by(positions as any[], 'positionId');
+    const positionByEmployeeId = new Map<string, any>(
+      (positions as any[])
+        .filter((position) => position.employeeId)
+        .map((position) => [String(position.employeeId), position]),
+    );
+    const roleById = by(roles as any[], 'roleId');
+    const routeById = by(routes as any[], 'routeId');
+    const customerById = by(customers as any[], 'customerId');
+    const vanById = by(vans as any[], 'vanId');
+    const countryById = by(countries as any[], 'countryId');
+    const provinceById = by(provinces as any[], 'provinceId');
+    const routeSessionById = by(routeSessions as any[], 'routeSessionId');
+    const visitsByWorkSessionId = new Map<string, any[]>();
+
+    for (const visit of visits as any[]) {
+      const sessionVisits =
+        visitsByWorkSessionId.get(visit.workSessionId) || [];
+      sessionVisits.push(visit);
+      visitsByWorkSessionId.set(visit.workSessionId, sessionVisits);
+    }
+
+    const hierarchyFor = (employee: any) => {
+      const hierarchy: Record<string, string> = {
+        l1PositionUser: '',
+        l2PositionUser: '',
+        l3PositionUser: '',
+        l4PositionUser: '',
+        l5PositionUser: '',
+      };
+      const currentPosition = positionByEmployeeId.get(employee?.employeeId);
+      let parentPosition = currentPosition?.reportTo
+        ? positionById.get(currentPosition.reportTo)
+        : undefined;
+      let reportingManager = '';
+
+      const assignPositionUser = (position: any, employeeName?: string) => {
+        const level = Number(position?.hierarchyDepth);
+        if (level < 1 || level > 5) return;
+        const positionEmployee = employeeById.get(position?.employeeId);
+        hierarchy[`l${level}PositionUser`] =
+          employeeName || positionEmployee?.name || position?.name || '';
+      };
+
+      assignPositionUser(currentPosition, employee?.name);
+
+      while (parentPosition) {
+        const parentEmployee = employeeById.get(parentPosition.employeeId);
+        if (!reportingManager) {
+          reportingManager = parentEmployee?.name || parentPosition.name || '';
+        }
+        assignPositionUser(parentPosition, parentEmployee?.name);
+        parentPosition = parentPosition.reportTo
+          ? positionById.get(parentPosition.reportTo)
+          : undefined;
+      }
+
+      if (!reportingManager) {
+        const fallbackManagers = [...(employee?.hierarchyPath || [])].map(
+          (employeeId: string) => employeeById.get(employeeId),
+        );
+        fallbackManagers.filter(Boolean).forEach((manager: any) => {
+          assignPositionUser(
+            positionByEmployeeId.get(manager.employeeId),
+            manager.name,
+          );
+        });
+        reportingManager = fallbackManagers.filter(Boolean).at(-1)?.name || '';
+      }
+
+      return {
+        l1PositionUser: hierarchy.l1PositionUser,
+        l2PositionUser: hierarchy.l2PositionUser,
+        l3PositionUser: hierarchy.l3PositionUser,
+        l4PositionUser: hierarchy.l4PositionUser,
+        l5PositionUser: hierarchy.l5PositionUser,
+        reportingManager,
+        currentPosition,
+      };
+    };
+
+    const locationOf = (value: any) => {
+      const latitude = Number(value?.latitude ?? value?.lat);
+      const longitude = Number(value?.longitude ?? value?.lng);
+      return {
+        latitude: Number.isFinite(latitude) ? latitude : null,
+        longitude: Number.isFinite(longitude) ? longitude : null,
+      };
+    };
+    const addressOf = (customer: any) =>
+      [customer?.address?.line1, customer?.address?.line2]
+        .filter(Boolean)
+        .join(', ');
+    const rows: any[] = [];
+
+    for (const session of workSessions as any[]) {
+      const employee = employeeById.get(session.userId) || {
+        employeeId: session.userId,
+        name: session.userName,
+      };
+      const hierarchy = hierarchyFor(employee);
+      const position = hierarchy.currentPosition;
+      const role = roleById.get(position?.roleId);
+      const van = vanById.get(session.vanId);
+      const zone =
+        countryById.get(position?.countryId)?.name || position?.countryId || '';
+      const region =
+        provinceById.get(position?.provinceId)?.name ||
+        position?.provinceId ||
+        '';
+      const date = new Date(session.dayStartTime);
+      const week = Math.ceil(date.getDate() / 7);
+      const common = {
+        date: date.toISOString(),
+        l1PositionUser: hierarchy.l1PositionUser,
+        l5PositionUser: hierarchy.l5PositionUser,
+        l4PositionUser: hierarchy.l4PositionUser,
+        l3PositionUser: hierarchy.l3PositionUser,
+        l2PositionUser: hierarchy.l2PositionUser,
+        zone,
+        region,
+        reportingManager: hierarchy.reportingManager,
+        user: employee?.name || session.userName || session.userId,
+        userErpId: employee?.employeeId || session.userId || '',
+        userLevel: role?.displayName || role?.name || position?.name || '',
+        driverName: session.driverName || van?.driverName || '',
+        isOvt: false,
+        isOvc: false,
+        warehouse: van?.name || session.vanName || '',
+        warehouseErpId: van?.vanNumber || session.vanId || '',
+        week,
+      };
+      const startLocation = locationOf(session.dayStartLocation);
+
+      rows.push({
+        id: `${session.workSessionId}-start`,
+        ...common,
+        type: 'Day Start',
+        address: '',
+        description: 'Retailing',
+        startTime: session.dayStartTime,
+        endTime: session.dayEndTime || null,
+        beats: '',
+        beatsErpId: '',
+        outlets: '',
+        outletsErpId: '',
+        ...startLocation,
+      });
+
+      for (const visit of visitsByWorkSessionId.get(session.workSessionId) ||
+        []) {
+        const routeSession = routeSessionById.get(visit.routeSessionId);
+        const route = routeById.get(routeSession?.routeId);
+        const customer = customerById.get(visit.outletId);
+        const outletName =
+          visit.outletName || customer?.name || visit.outletId || '';
+        const visitLocation = locationOf(
+          visit.checkOutLocation || visit.checkInLocation || customer?.geoTag,
+        );
+        const visitType = String(visit.visitType || '').toUpperCase();
+        const distanceMeters = Number(visit.distanceMeters);
+        const configuredRadiusMeters = Number(visit.configuredRadiusMeters);
+        const hasDistanceResult =
+          Number.isFinite(distanceMeters) &&
+          Number.isFinite(configuredRadiusMeters);
+        const isOvt =
+          visitType === ShopVisitType.OFF_SITE ||
+          (!visitType &&
+            hasDistanceResult &&
+            distanceMeters > configuredRadiusMeters);
+        const isOvc =
+          visitType === ShopVisitType.ON_SITE ||
+          (!visitType &&
+            hasDistanceResult &&
+            distanceMeters <= configuredRadiusMeters);
+
+        rows.push({
+          id: visit.visitId,
+          ...common,
+          type: 'VanSales Activity',
+          address: addressOf(customer),
+          description: `Call Completed at ${outletName}`,
+          startTime: visit.checkInTime,
+          endTime: visit.checkOutTime || null,
+          beats: routeSession?.routeName || route?.name || '',
+          beatsErpId: routeSession?.routeId || route?.routeId || '',
+          outlets: outletName,
+          outletsErpId: visit.outletId || '',
+          isOvt,
+          isOvc,
+          ...visitLocation,
+        });
+      }
+
+      if (session.dayEndTime) {
+        const endLocation = locationOf(session.dayEndLocation);
+        rows.push({
+          id: `${session.workSessionId}-end`,
+          ...common,
+          type: 'Day End (Normal)',
+          address: '',
+          description: 'Normal Day End',
+          startTime: null,
+          endTime: session.dayEndTime,
+          beats: '',
+          beatsErpId: '',
+          outlets: '',
+          outletsErpId: '',
+          ...endLocation,
+        });
+      }
+    }
+
+    const search = query.search?.trim().toLowerCase();
+    const filteredRows = rows
+      .filter((row) => !query.type || row.type === query.type)
+      .filter((row) => !query.region || row.region === query.region)
+      .filter((row) => !query.user || row.user === query.user)
+      .filter(
+        (row) =>
+          !search ||
+          [
+            row.user,
+            row.userErpId,
+            row.driverName,
+            row.description,
+            row.outlets,
+            row.outletsErpId,
+            row.beats,
+            row.address,
+          ].some((value) =>
+            String(value || '')
+              .toLowerCase()
+              .includes(search),
+          ),
+      )
+      .sort(
+        (left, right) =>
+          new Date(left.startTime || left.endTime).getTime() -
+          new Date(right.startTime || right.endTime).getTime(),
+      );
+
+    return {
+      message: 'Timeline report fetched successfully',
+      data: { items: filteredRows },
     };
   }
 
@@ -11891,7 +12854,7 @@ export class EmployeeService extends MongoRepository<Employee> {
     const employee = await this.findOne({
       employeeId: query.employeeId,
       status: UserStatus.ACTIVE,
-      $or: [{ reportingEmployeeId: managerId }, { hierarchyPath: managerId }],
+      hierarchyPath: managerId,
     });
 
     if (!employee) {
@@ -11966,14 +12929,14 @@ export class EmployeeService extends MongoRepository<Employee> {
      * ==========================================
      *
      * IMPORTANT:
-     * Sale schema has employees array.
-     * So use employees.employeeId, not employeeId.
+     * Sale schema uses the position hierarchy.
+     * So use positionHierarchy.employeeId, not employeeId.
      */
     const [rawSales, rawNonSales] = await Promise.all([
       visitIds.length
         ? this.saleModal
             .find({
-              'employees.employeeId': query.employeeId,
+              'positionHierarchy.employeeId': query.employeeId,
               visitId: {
                 $in: visitIds,
               },
@@ -12212,7 +13175,6 @@ export class EmployeeService extends MongoRepository<Employee> {
       const nonSale: any = nonSalesByVisit.get(visit.visitId);
 
       const totalWeightKg = Number(sale?.totalWeight || 0);
-      const totalTonnage = totalWeightKg / 1000;
 
       const metrics = sale
         ? [
@@ -12229,8 +13191,8 @@ export class EmployeeService extends MongoRepository<Employee> {
               value: formatNumberValue(sale.netCases),
             },
             {
-              label: 'Tonnage',
-              value: formatNumberValue(totalTonnage),
+              label: 'KG',
+              value: formatNumberValue(totalWeightKg),
             },
             {
               label: 'Pieces',
@@ -12395,7 +13357,7 @@ export class EmployeeService extends MongoRepository<Employee> {
     const employee = await this.findOne({
       employeeId,
       status: UserStatus.ACTIVE,
-      $or: [{ reportingEmployeeId: managerId }, { hierarchyPath: managerId }],
+      hierarchyPath: managerId,
     });
 
     if (!employee) throw new NotFoundException(EMPLOYEE.NOT_FOUND);
@@ -12408,10 +13370,11 @@ export class EmployeeService extends MongoRepository<Employee> {
     startDate: Date,
     endDate: Date,
   ) {
+    const assignedVanIds = await this.getVanIdsForEmployees([employeeId]);
     const vans = await this.vanModel
       .find(
         {
-          associatedUsers: employeeId,
+          vanId: { $in: assignedVanIds },
           status: VanStatus.ACTIVE,
         },
         {
@@ -12541,11 +13504,11 @@ export class EmployeeService extends MongoRepository<Employee> {
 
         /**
          * IMPORTANT:
-         * Sale schema has employees array.
+         * Sale schema uses the position hierarchy.
          * Do not use employeeId directly.
          */
         this.saleModal.distinct('customerId', {
-          'employees.employeeId': employee.employeeId,
+          'positionHierarchy.employeeId': employee.employeeId,
           date: {
             $gte: startOfMonth,
             $lte: endOfDay,
@@ -12806,12 +13769,12 @@ export class EmployeeService extends MongoRepository<Employee> {
 
       /**
        * IMPORTANT:
-       * Sale schema has employees array.
+       * Sale schema uses the position hierarchy.
        * Do not use employeeId directly.
        */
       customerIds.length
         ? this.saleModal.distinct('customerId', {
-            'employees.employeeId': employee.employeeId,
+            'positionHierarchy.employeeId': employee.employeeId,
             customerId: {
               $in: customerIds,
             },

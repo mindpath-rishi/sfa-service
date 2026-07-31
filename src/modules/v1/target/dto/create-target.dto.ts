@@ -56,7 +56,7 @@ export class CreateTargetDto {
   @Min(0)
   targetCases?: number;
 
-  @ApiPropertyOptional({ type: Number })
+  @ApiPropertyOptional({ type: Number, description: 'Target weight in KG' })
   @IsOptional()
   @IsNumber()
   @Min(0)

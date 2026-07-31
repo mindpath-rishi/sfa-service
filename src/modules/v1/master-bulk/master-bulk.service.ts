@@ -3,7 +3,7 @@ import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import { CountryService } from '../country/country.service';
 import { ProvinceService } from '../province/province.service';
-import { DesignationService } from '../designation/designation.service';
+import { PositionService } from '../position/position.service';
 import { CustomerCategoryService } from '../customer-category/customer-category.service';
 import { ChannelService } from '../channel/channel.service';
 import { OutletTypeService } from '../outlet-type/outlet-type.service';
@@ -12,7 +12,7 @@ import { ProductCategoryService } from '../product-category/product-category.ser
 import { SegmentationService } from '../segmentation/segmentation.service';
 import { CreateCountryDto } from '../country/dto/create-country.dto';
 import { CreateProvinceDto } from '../province/dto/create-province.dto';
-import { CreateDesignationDto } from '../designation/dto/create-designation.dto';
+import { CreatePositionDto } from '../position/dto/create-position.dto';
 import { CreateCustomerCategoryDto } from '../customer-category/dto/create-customer-category.dto';
 import { CreateChannelDto } from '../channel/dto/create-channel.dto';
 import { CreateOutletTypeDto } from '../outlet-type/dto/create-outlet-type.dto';
@@ -22,16 +22,17 @@ import { CreateSegmentationDto } from '../segmentation/dto/create-segmentation.d
 import * as XLSX from 'xlsx';
 import { ProductCategoryType } from 'src/core/database/mongo/schema/product-category';
 import * as ExcelJS from 'exceljs';
+import { RoleService } from '../role/role.service';
 
 @Injectable()
 export class MasterBulkService {
-  constructor(private country: CountryService, private province: ProvinceService, private designation: DesignationService, private customerCategory: CustomerCategoryService, private channel: ChannelService, private outletType: OutletTypeService, private market: MarketService, private productCategory: ProductCategoryService, private segmentation: SegmentationService) {}
+  constructor(private country: CountryService, private province: ProvinceService, private position: PositionService, private customerCategory: CustomerCategoryService, private channel: ChannelService, private outletType: OutletTypeService, private market: MarketService, private productCategory: ProductCategoryService, private segmentation: SegmentationService, private role: RoleService) {}
 
   async upload(entity: string, items: Record<string, unknown>[]) {
     const configs: Record<string, { dto: new () => object; create: (value: any) => Promise<any> }> = {
       country: { dto: CreateCountryDto, create: (v) => this.country.create(v) },
       province: { dto: CreateProvinceDto, create: (v) => this.province.create(v) },
-      designation: { dto: CreateDesignationDto, create: (v) => this.designation.create(v) },
+      position: { dto: CreatePositionDto, create: (v) => this.position.create(v) },
       'customer-category': { dto: CreateCustomerCategoryDto, create: (v) => this.customerCategory.create(v) },
       channel: { dto: CreateChannelDto, create: (v) => this.channel.create(v) },
       segmentation: { dto: CreateSegmentationDto, create: (v) => this.segmentation.create(v) },
@@ -75,23 +76,24 @@ export class MasterBulkService {
 
   private async resolveReferences(entity: string, item: Record<string, unknown>) {
     const value = { ...item };
-    if (['province', 'designation'].includes(entity)) value.countryId = await this.exactId(this.country, value.countryId ?? value.country, 'countryId');
+    if (['province', 'position'].includes(entity)) value.countryId = await this.exactId(this.country, value.countryId ?? value.country, 'countryId');
     if (entity === 'market') value.provinceId = await this.exactId(this.province, value.provinceId ?? value.province, 'provinceId');
-    if (entity === 'designation') {
+    if (entity === 'position') {
       value.provinceId = await this.exactId(this.province, value.provinceId ?? value.province, 'provinceId');
       value.marketId = await this.exactId(this.market, value.marketId ?? value.market, 'marketId');
+      value.roleId = await this.exactId(this.role, value.roleId ?? value.role, 'roleId');
     }
     if (entity === 'product-category' && String(value.type).toUpperCase() === 'CHILD') {
       value.parentId = await this.exactId(this.productCategory, value.parentId ?? value.parentCategory, 'categoryId');
     }
-    delete value.country; delete value.province; delete value.market; delete value.parentCategory;
+    delete value.country; delete value.province; delete value.market; delete value.role; delete value.parentCategory;
     return value;
   }
 
   private config(entity: string) {
     const configs: Record<string, { service: any; id: string; refs?: string[] }> = {
       country: { service: this.country, id: 'countryId' }, province: { service: this.province, id: 'provinceId' },
-      designation: { service: this.designation, id: 'designationId' }, 'customer-category': { service: this.customerCategory, id: 'customerCategoryId' },
+      position: { service: this.position, id: 'positionId' }, 'customer-category': { service: this.customerCategory, id: 'customerCategoryId' },
       channel: { service: this.channel, id: 'channelId' }, 'outlet-type': { service: this.outletType, id: 'outletTypeId' },
       segmentation: { service: this.segmentation, id: 'segmentationId' },
       market: { service: this.market, id: 'marketId' }, 'product-category': { service: this.productCategory, id: 'categoryId' },
@@ -101,25 +103,36 @@ export class MasterBulkService {
     return config;
   }
 
-  async export(entity: string, fileType: 'xlsx' | 'csv' | 'pdf', type?: string) {
+  async export(
+    entity: string,
+    fileType: 'xlsx' | 'csv' | 'pdf',
+    type?: string,
+    filters: Record<string, string> = {},
+  ) {
     const config = this.config(entity);
-    const response = await config.service.findAll({ page: 1, limit: 10000, ...(type ? { type } : {}) });
+    const response = await config.service.findAll({
+      page: 1,
+      limit: 10000,
+      ...filters,
+      ...(type ? { type } : {}),
+    });
     const rows = response.data ?? [];
-    const [countries, provinces, markets, categories] = await Promise.all([
+    const [countries, provinces, markets, categories, roles] = await Promise.all([
       this.country.findAll({ page: 1, limit: 10000 }), this.province.findAll({ page: 1, limit: 10000 }),
-      this.market.findAll({ page: 1, limit: 10000 }), this.productCategory.findAll({ page: 1, limit: 10000 }),
+      this.market.findAll({ page: 1, limit: 10000 }), this.productCategory.findAll({ page: 1, limit: 10000 }), this.role.findAll({ page: 1, limit: 10000 }),
     ]);
     const names = (items: any[], id: string) => new Map(items.map((row) => [row[id], row.name]));
     const countryNames = names(countries.data ?? [], 'countryId');
     const provinceNames = names(provinces.data ?? [], 'provinceId');
     const marketNames = names(markets.data ?? [], 'marketId');
     const categoryNames = names(categories.data ?? [], 'categoryId');
-    const relationHeaders = entity === 'province' ? ['country'] : entity === 'market' ? ['province'] : entity === 'designation' ? ['country', 'province', 'market'] : entity === 'product-category' ? ['type', 'parentCategory'] : [];
+    const roleNames = new Map((roles.data ?? []).map((row: any) => [row.roleId, row.displayName || row.name]));
+    const relationHeaders = entity === 'province' ? ['country'] : entity === 'market' ? ['province'] : entity === 'position' ? ['country', 'province', 'market', 'role'] : entity === 'product-category' ? ['type', 'parentCategory'] : [];
     const headers = [config.id, 'name', ...relationHeaders, 'status'];
     const values = rows.map((row: any) => [row[config.id], row.name,
       ...(entity === 'province' ? [countryNames.get(row.countryId) || row.countryId] : []),
       ...(entity === 'market' ? [provinceNames.get(row.provinceId) || row.provinceId] : []),
-      ...(entity === 'designation' ? [countryNames.get(row.countryId) || row.countryId, provinceNames.get(row.provinceId) || row.provinceId, marketNames.get(row.marketId) || row.marketId] : []),
+      ...(entity === 'position' ? [countryNames.get(row.countryId) || row.countryId, provinceNames.get(row.provinceId) || row.provinceId, marketNames.get(row.marketId) || row.marketId, roleNames.get(row.roleId) || row.roleId] : []),
       ...(entity === 'product-category' ? [row.type, categoryNames.get(row.parentId) || row.parentId || ''] : []), row.status]);
     const data = [headers, ...values];
     if (fileType === 'csv') return { buffer: Buffer.from(data.map((r: any[]) => r.map((v) => `"${String(v ?? '').replace(/"/g, '""')}"`).join(',')).join('\n')), fileName: `${entity}.csv`, mimeType: 'text/csv' };
@@ -134,12 +147,12 @@ export class MasterBulkService {
   }
 
   async template(entity: string, type?: string) {
-    const refs = await Promise.all([this.country.findAll({ page: 1, limit: 10000 }), this.province.findAll({ page: 1, limit: 10000 }), this.market.findAll({ page: 1, limit: 10000 }), this.productCategory.findAll({ page: 1, limit: 10000, type: ProductCategoryType.PARENT })]);
+    const refs = await Promise.all([this.country.findAll({ page: 1, limit: 10000 }), this.province.findAll({ page: 1, limit: 10000 }), this.market.findAll({ page: 1, limit: 10000 }), this.productCategory.findAll({ page: 1, limit: 10000, type: ProductCategoryType.PARENT }), this.role.findAll({ page: 1, limit: 10000 })]);
     const lists = {
       country: (refs[0].data ?? []).map((r: any) => r.name), province: (refs[1].data ?? []).map((r: any) => r.name),
-      market: (refs[2].data ?? []).map((r: any) => r.name), parentCategory: (refs[3].data ?? []).map((r: any) => r.name), type: ['PARENT', 'CHILD'],
+      market: (refs[2].data ?? []).map((r: any) => r.name), parentCategory: (refs[3].data ?? []).map((r: any) => r.name), role: (refs[4].data ?? []).map((r: any) => r.displayName || r.name), type: ['PARENT', 'CHILD'],
     };
-    const headers = [...(entity === 'product-category' ? ['categoryId'] : []), 'name', ...(entity === 'province' ? ['country'] : []), ...(entity === 'market' ? ['province'] : []), ...(entity === 'designation' ? ['country', 'province', 'market'] : []), ...(entity === 'product-category' ? ['type', ...(type === 'CHILD' ? ['parentCategory'] : [])] : [])];
+    const headers = [...(entity === 'product-category' ? ['categoryId'] : []), 'name', ...(entity === 'province' ? ['country'] : []), ...(entity === 'market' ? ['province'] : []), ...(entity === 'position' ? ['country', 'province', 'market', 'role'] : []), ...(entity === 'product-category' ? ['type', ...(type === 'CHILD' ? ['parentCategory'] : [])] : [])];
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet('Template');
     sheet.addRow(headers);

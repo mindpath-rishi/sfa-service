@@ -49,6 +49,9 @@ export class VanChangeRequest {
 
   @Prop({ type: Date })
   resolvedAt?: Date;
+
+  @Prop({ type: Date })
+  routeSelectedAt?: Date;
 }
 
 export const VanChangeRequestSchema =

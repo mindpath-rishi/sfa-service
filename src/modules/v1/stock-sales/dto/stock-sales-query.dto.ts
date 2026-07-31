@@ -1,7 +1,7 @@
 import { ErpSyncStatus, StockSalesStatus } from 'src/shared/enums/stock-sales.enums';
 
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsBoolean, IsEnum, IsNumber, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import { IsBoolean, IsEnum, IsNumber, IsOptional, IsString, MaxLength } from 'class-validator';
 import { PaginationDto } from 'src/shared/dto/pagination.dto';
 
 /**
@@ -16,7 +16,6 @@ export class StockSalesQueryDto extends PaginationDto {
   @ApiPropertyOptional({ description: "Search by name, code, or identifier (supports partial matching)", example: "search term" })
   @IsOptional()
   @IsString()
-  @MinLength(2)
   @MaxLength(100)
   searchText?: string;
 

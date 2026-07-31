@@ -64,15 +64,31 @@ import {
 } from 'src/core/database/mongo/schema/van-daily-stock.schema';
 import { Role, RoleSchema } from 'src/core/database/mongo/schema/role.schema';
 import {
-  Designation,
-  DesignationSchema,
-} from 'src/core/database/mongo/schema/designation.schema';
+  Position,
+  PositionSchema,
+} from 'src/core/database/mongo/schema/position.schema';
 import { User, UserSchema } from 'src/core/database/mongo/schema/user.schema';
 import {
   FocusedPackTarget,
   FocusedPackTargetSchema,
 } from 'src/core/database/mongo/schema/focused-pack-target.schema';
 import { LiveLocationModule } from '../live-location/live-location.module';
+import {
+  Country,
+  CountrySchema,
+} from 'src/core/database/mongo/schema/country.schema';
+import {
+  Province,
+  ProvinceSchema,
+} from 'src/core/database/mongo/schema/province.schema';
+import {
+  ProductCategory,
+  ProductCategorySchema,
+} from 'src/core/database/mongo/schema/product-category';
+import {
+  Market,
+  MarketSchema,
+} from 'src/core/database/mongo/schema/market.schema';
 
 @Module({
   imports: [
@@ -95,8 +111,12 @@ import { LiveLocationModule } from '../live-location/live-location.module';
       { name: RouteSession.name, schema: RouteSessionSchema },
       { name: VanDailyStock.name, schema: VanDailyStockSchema },
       { name: Role.name, schema: RoleSchema },
-      { name: Designation.name, schema: DesignationSchema },
+      { name: Position.name, schema: PositionSchema },
       { name: User.name, schema: UserSchema },
+      { name: Country.name, schema: CountrySchema },
+      { name: Province.name, schema: ProvinceSchema },
+      { name: ProductCategory.name, schema: ProductCategorySchema },
+      { name: Market.name, schema: MarketSchema },
     ]),
     UserModule,
     LiveLocationModule,

@@ -107,6 +107,7 @@ const getEntityId = (docOrQuery: any): string | undefined => {
   return (
     docOrQuery?.customerId ||
     docOrQuery?.employeeId ||
+    docOrQuery?.vanId ||
     docOrQuery?._id?.toString?.() ||
     docOrQuery?._id
   );
@@ -222,6 +223,7 @@ export const auditPlugin = (schema: Schema, entity: string) => {
     const before = (this as any)._auditBefore;
     const after = (this as any)._auditAfter;
     const entityId = (this as any)._auditEntityId;
+    const metadata = (this as any)._auditMetadata;
 
     if (!after || !Object.keys(after).length) return;
 
@@ -249,6 +251,7 @@ export const auditPlugin = (schema: Schema, entity: string) => {
         name: ctx.name,
         role: ctx.role,
       },
+      metadata,
     }).catch(() => null);
   });
 };

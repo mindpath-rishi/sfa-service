@@ -1,7 +1,7 @@
 import { RouteStatus } from 'src/shared/enums/route.enums';
 
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEnum, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import { IsEnum, IsOptional, IsString, MaxLength } from 'class-validator';
 
 import { PaginationDto } from 'src/shared/dto/pagination.dto';
 
@@ -15,7 +15,6 @@ export class RouteQueryDto extends PaginationDto {
   })
   @IsOptional()
   @IsString()
-  @MinLength(2)
   @MaxLength(100)
   searchText?: string;
 
@@ -86,7 +85,6 @@ export class RouteCustomerQueryDto extends PaginationDto {
   })
   @IsOptional()
   @IsString()
-  @MinLength(2)
   @MaxLength(100)
   searchText?: string;
 
