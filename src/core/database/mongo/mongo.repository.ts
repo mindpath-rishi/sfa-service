@@ -239,13 +239,13 @@ export abstract class MongoRepository<T> {
     try {
       const result = await fn(session);
 
-      if (isNewSession) {
+      if (isNewSession && session.inTransaction()) {
         await session.commitTransaction();
       }
 
       return result;
     } catch (e) {
-      if (isNewSession) {
+      if (isNewSession && session.inTransaction()) {
         await session.abortTransaction();
       }
       throw e;

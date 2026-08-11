@@ -1,6 +1,6 @@
 
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsDate, IsEnum, IsNumber, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import { IsDate, IsEnum, IsNumber, IsOptional, IsString, MaxLength } from 'class-validator';
 import { PaginationDto } from 'src/shared/dto/pagination.dto';
 import { RouteSessionStatus } from 'src/shared/enums/route-session.enums';
 
@@ -16,7 +16,6 @@ export class RouteSessionQueryDto extends PaginationDto {
   @ApiPropertyOptional({ description: "Search by name, code, or identifier (supports partial matching)", example: "search term" })
   @IsOptional()
   @IsString()
-  @MinLength(2)
   @MaxLength(100)
   searchText?: string;
 

@@ -7,6 +7,8 @@ export type ProductDocument = HydratedDocument<Product>;
 @Schema({ collection: 'product_master' })
 export class Product {
   /* ================= IDENTITY ================= */
+  @Prop({ required: true, trim: true, type: String })
+  compCode!: string;
 
   @Prop({ required: true, trim: true, unique: true, type: String })
   productId!: string;
@@ -21,6 +23,9 @@ export class Product {
 
   @Prop({ required: true, type: String, ref: 'ProductCategory' })
   categoryId!: string;
+
+  @Prop({ required: true, type: String, ref: 'ProductCategory' })
+  parentCategoryId!: string;
 
   /* ================= PRICING ================= */
 
@@ -50,10 +55,16 @@ export class Product {
   @Prop({ type: String })
   unitType?: string;
 
+  // @Prop({ type: String })
+  // itemGroup?: string;
+
+  // @Prop({ type: String })
+  // itemsSubGroup?: string;
+
   @Prop({ type: String })
   unitSize?: string;
 
-  @Prop({ type: String })
+  @Prop({ type: String, enum: ['Y', 'N'], default: 'N' })
   isFocusedPack?: string;
 
   @Prop({ required: true, type: Number })
@@ -71,29 +82,21 @@ export class Product {
 
 export const ProductSchema = SchemaFactory.createForClass(Product);
 
-/* ======================================================
- * SAVE HOOK
- * ====================================================== */
-
 ProductSchema.pre('save', function (next: any) {
   const doc: any = this;
 
-  // Price calculation
   if (doc.casePrice && doc.unitQtyInCase) {
-    doc.piecePrice = doc.casePrice / doc.unitQtyInCase;
+    doc.piecePrice = Number((doc.casePrice / doc.unitQtyInCase).toFixed(4));
   }
 
-  // Weight calculation
-  if (doc.caseWeight && doc.unitQtyInCase) {
-    doc.pieceWeight = Number((doc.caseWeight / doc.unitQtyInCase).toFixed(4));
+  if (doc.caseNetWeight && doc.unitQtyInCase) {
+    doc.pieceNetWeight = Number(
+      (doc.caseNetWeight / doc.unitQtyInCase).toFixed(4),
+    );
   }
 
   next();
 });
-
-/* ======================================================
- * UPDATE HOOK
- * ====================================================== */
 
 ProductSchema.pre(
   'findOneAndUpdate',
@@ -106,12 +109,11 @@ ProductSchema.pre(
     if (!doc) return next();
 
     const casePrice = data.casePrice ?? doc.casePrice;
-    const caseWeight = data.caseWeight ?? doc.caseWeight;
+    const caseNetWeight = data.caseNetWeight ?? doc.caseNetWeight;
     const unitQtyInCase = data.unitQtyInCase ?? doc.unitQtyInCase;
 
-    // Price calculation
     if (casePrice && unitQtyInCase) {
-      const piecePrice = casePrice / unitQtyInCase;
+      const piecePrice = Number((casePrice / unitQtyInCase).toFixed(4));
 
       if (update.$set) {
         update.$set.piecePrice = piecePrice;
@@ -120,14 +122,13 @@ ProductSchema.pre(
       }
     }
 
-    // Weight calculation
-    if (caseWeight && unitQtyInCase) {
-      const pieceWeight = Number((caseWeight / unitQtyInCase).toFixed(4));
+    if (caseNetWeight && unitQtyInCase) {
+      const pieceNetWeight = Number((caseNetWeight / unitQtyInCase).toFixed(4));
 
       if (update.$set) {
-        update.$set.pieceWeight = pieceWeight;
+        update.$set.pieceNetWeight = pieceNetWeight;
       } else {
-        update.pieceWeight = pieceWeight;
+        update.pieceNetWeight = pieceNetWeight;
       }
     }
 

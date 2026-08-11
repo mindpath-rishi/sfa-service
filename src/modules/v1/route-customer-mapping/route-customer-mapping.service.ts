@@ -36,11 +36,11 @@ export class RouteCustomerMappingService extends MongoRepository<RouteCustomerMa
   ) {
     try {
       return await this.withTransaction(async (session) => {
-        const { routeId, customerId, day } = payload;
+        const { customerId } = payload;
 
         // ✅ Check existing ACTIVE mapping
         const existing = await this.findOne(
-          { routeId, customerId, status: RouteCustomerMappingStatus.ACTIVE },
+          { customerId, status: RouteCustomerMappingStatus.ACTIVE },
           { session },
         );
 
@@ -70,7 +70,7 @@ export class RouteCustomerMappingService extends MongoRepository<RouteCustomerMa
   }
 
   async findAll(query: RouteCustomerMappingQueryDto) {
-    const { searchText, status, page = 1, limit = 20, routeId } = query;
+    const { searchText, status, page = 1, limit = 20, routeId, customerId } = query;
 
     const filter: FilterQuery<RouteCustomerMapping> = {};
 
@@ -82,6 +82,7 @@ export class RouteCustomerMappingService extends MongoRepository<RouteCustomerMa
     }
 
     if (routeId) filter.routeId = routeId;
+    if (customerId) filter.customerId = customerId;
 
     const result = await this.paginate(filter, {
       page,
@@ -137,6 +138,15 @@ export class RouteCustomerMappingService extends MongoRepository<RouteCustomerMa
     if (!existing)
       throw new NotFoundException(ROUTE_CUSTOMER_MAPPING.NOT_FOUND);
 
+    await this.updateOne(
+      { mappingId },
+      {
+        $set: {
+          status: RouteCustomerMappingStatus.INACTIVE,
+          effectiveTo: new Date(),
+        },
+      },
+    );
     await this.softDelete({ mappingId });
 
     return {

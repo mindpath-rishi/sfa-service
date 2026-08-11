@@ -6,12 +6,43 @@
  *
  * Supports:
  * - Van identity
- * - Capacity and manufacture year
- * - User associations
+ * - Capacity in cases and manufacture year
  */
 
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsNumber, IsOptional, IsArray } from 'class-validator';
+import {
+  ArrayUnique,
+  ArrayMinSize,
+  IsString,
+  IsNumber,
+  IsOptional,
+  IsNotEmpty,
+  IsArray,
+  IsEnum,
+  IsDateString,
+  ValidateNested,
+} from 'class-validator';
+import { Type } from 'class-transformer';
+import { VanStatus } from 'src/shared/enums/van.enums';
+
+export class VanRouteDto {
+  @ApiProperty({ example: 'ROUTE-001' })
+  @IsString()
+  routeId!: string;
+
+  @ApiProperty({ example: 'MONDAY', required: false })
+  @IsOptional()
+  @IsString()
+  day?: string;
+
+  @ApiProperty({ example: '2026-06-01' })
+  @IsDateString()
+  fromDate!: string;
+
+  @ApiProperty({ example: '2026-06-30' })
+  @IsDateString()
+  toDate!: string;
+}
 
 export class CreateVanDto {
   /**
@@ -34,6 +65,11 @@ export class CreateVanDto {
   @IsString()
   name!: string;
 
+  @ApiProperty({ example: 'EID-DRIVER-001' })
+  @IsString()
+  @IsNotEmpty()
+  driverEmployeeId!: string;
+
   /**
    * Van Number
    * ----------
@@ -44,13 +80,27 @@ export class CreateVanDto {
   @IsString()
   vanNumber!: string;
 
+  @ApiProperty({
+    type: [String],
+    description: 'Active parent product categories associated with the van',
+  })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayUnique()
+  @IsString({ each: true })
+  categoryIds!: string[];
+
   /**
-   * Capacity
+   * Capacity in Cases
    * --------
-   * Purpose : Load capacity
+   * Purpose : Maximum van load capacity measured in cases
    * Example : 1000
    */
-  @ApiProperty({ example: 1000, required: false })
+  @ApiProperty({
+    example: 1000,
+    required: false,
+    description: 'Maximum van load capacity measured in cases',
+  })
   @IsOptional()
   @IsNumber()
   capacity?: number;
@@ -66,17 +116,18 @@ export class CreateVanDto {
   @IsNumber()
   madeYear?: number;
 
-  /**
-   * Associated Users
-   * ----------------
-   * Purpose : Users assigned to van
-   * Example : [{ "userId": "EID-001" }]
-   */
   @ApiProperty({
-    example: [{ userId: 'EID-001' }],
+    type: [VanRouteDto],
     required: false,
   })
   @IsOptional()
   @IsArray()
-  associatedUsers?: string[];
+  @ValidateNested({ each: true })
+  @Type(() => VanRouteDto)
+  associatedRoutes?: VanRouteDto[];
+
+  @ApiProperty({ example: VanStatus.ACTIVE, enum: VanStatus, required: false })
+  @IsOptional()
+  @IsEnum(VanStatus)
+  status?: VanStatus;
 }

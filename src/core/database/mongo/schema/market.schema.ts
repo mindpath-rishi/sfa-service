@@ -36,6 +36,9 @@ export class Market {
   @Prop({ required: true, unique: true, trim: true, type: String })
   name!: string;
 
+  @Prop({ required: true, index: true, type: String, ref: 'Province' })
+  provinceId!: string;
+
   /* ======================================================
    * STATUS
    * ====================================================== */
@@ -51,3 +54,4 @@ export class Market {
 }
 
 export const MarketSchema = SchemaFactory.createForClass(Market);
+MarketSchema.index({ provinceId: 1, status: 1 });

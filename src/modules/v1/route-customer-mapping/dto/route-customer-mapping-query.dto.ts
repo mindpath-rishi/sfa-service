@@ -7,13 +7,9 @@ import {
   IsString,
   MaxLength,
   Min,
-  MinLength,
 } from 'class-validator';
 import { PaginationDto } from 'src/shared/dto/pagination.dto';
-import {
-  Days,
-  RouteCustomerMappingStatus,
-} from 'src/shared/enums/route-customer-mapping.enums';
+import { RouteCustomerMappingStatus } from 'src/shared/enums/route-customer-mapping.enums';
 
 /**
  * RouteCustomerMappingQueryDto
@@ -31,7 +27,6 @@ export class RouteCustomerMappingQueryDto extends PaginationDto {
   })
   @IsOptional()
   @IsString()
-  @MinLength(2)
   @MaxLength(100)
   searchText?: string;
 
@@ -62,10 +57,6 @@ export class RouteCustomerMappingQueryDto extends PaginationDto {
   @IsNumber()
   @Min(1)
   sequence?: number;
-
-  @ApiPropertyOptional({ enum: Days, description: 'Filter by day' })
-  @IsOptional()
-  day?: Days;
 
   @ApiPropertyOptional({
     enum: RouteCustomerMappingStatus,

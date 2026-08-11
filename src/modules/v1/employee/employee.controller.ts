@@ -27,11 +27,15 @@ import {
   Patch,
   Post,
   Query,
+  Res,
+  Req,
 } from '@nestjs/common';
 import { ApiBody, ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger';
+import type { Request, Response } from 'express';
 
 import { CreateEmployeeDto } from './dto/create-employee.dto';
 import { UpdateEmployeeDto } from './dto/update-employee.dto';
+import { BulkUploadEmployeesDto } from './dto/bulk-upload-employees.dto';
 
 import { EmployeeService } from './employee.service';
 import { FeatureFlag } from 'src/core/decorators/feature-flag.decorator';
@@ -53,6 +57,7 @@ import { Permissions } from 'src/core/decorators/permission.decorator';
 import { EmployeeQueryDto } from './dto/employee.query.dto';
 import { Public } from 'src/core/decorators/public.decorator';
 import { UserPrimaryCategoryTargetQueryDto } from './dto/user-primary-category-target-query.dto';
+import { UserStatus } from '../user/user.enum';
 
 @ApiTags('Employee')
 @FeatureFlag(API_MODULE_ENABLE_KEYS.EMPLOYEE)
@@ -91,8 +96,21 @@ export class EmployeeController {
     EMPLOYEE.CREATED,
     HttpStatus.CREATED,
   )
-  async create(@Body() dto: CreateEmployeeDto) {
-    return this.employeeService.create(dto);
+  async create(@Body() dto: CreateEmployeeDto, @Req() req: Request) {
+    const isMobile = req.headers['x-client-platform'] === 'mobile';
+    return this.employeeService.create({
+      ...dto,
+      status: isMobile ? UserStatus.PENDING : dto.status,
+    });
+  }
+
+  @Permissions('EMPLOYEE_CREATE')
+  @Post('/bulk-upload')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Bulk upload employees' })
+  @ApiBody({ type: BulkUploadEmployeesDto })
+  async bulkUpload(@Body() dto: BulkUploadEmployeesDto) {
+    return this.employeeService.bulkUpload(dto);
   }
 
   @Get('/manager/stats')
@@ -172,6 +190,25 @@ export class EmployeeController {
     return this.employeeService.getUserWiseTargetSummary(query?.date);
   }
 
+  @Get('/manager/ubo-target')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Get user-wise UBO target and achievement' })
+  async getUboTargetSummary(@Query() query: { date?: string }) {
+    return this.employeeService.getSpecialTargetSummary('UBO', query?.date);
+  }
+
+  @Get('/manager/focused-pack-target')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Get user-wise Focused Pack target and achievement',
+  })
+  async getFocusedPackTargetSummary(@Query() query: { date?: string }) {
+    return this.employeeService.getSpecialTargetSummary(
+      'FOCUSED_PACK',
+      query?.date,
+    );
+  }
+
   @Get('/manager/user-primary-category-target')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Get user primary category targets' })
@@ -179,6 +216,26 @@ export class EmployeeController {
     @Query() query: UserPrimaryCategoryTargetQueryDto,
   ) {
     return this.employeeService.getUserPrimaryCategoryTarget(query);
+  }
+
+  @Get('/manager/user-ubo-target')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Get category-wise UBO target and achievement for a user',
+  })
+  async getUserUboTarget(@Query() query: UserPrimaryCategoryTargetQueryDto) {
+    return this.employeeService.getUserUboTargetBreakdown(query);
+  }
+
+  @Get('/manager/user-focused-pack-target')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Get product-wise Focused Pack target and achievement for a user',
+  })
+  async getUserFocusedPackTarget(
+    @Query() query: UserPrimaryCategoryTargetQueryDto,
+  ) {
+    return this.employeeService.getUserFocusedPackTargetBreakdown(query);
   }
 
   @Get('/manager/order-summary')
@@ -202,8 +259,10 @@ export class EmployeeController {
     },
     EMPLOYEE.FETCHED,
   )
-  async getManagerOrderSummary() {
-    return this.employeeService.getManagerOrderSummary();
+  async getManagerOrderSummary(
+    @Query() query: { date?: string; startDate?: string; endDate?: string },
+  ) {
+    return this.employeeService.getManagerOrderSummary(query);
   }
 
   @Get('/manager/team-coverage')
@@ -279,6 +338,17 @@ export class EmployeeController {
   )
   async getFieldUsersSummary(@Query() query: { date?: string }) {
     return this.employeeService.getFieldUsersSummary(query?.date);
+  }
+
+  @Get('/manager/live-locations')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Get latest live locations for manager field users',
+  })
+  async getManagerLiveLocations(
+    @Query() query: { date?: string; startDate?: string; endDate?: string },
+  ) {
+    return this.employeeService.getManagerLiveLocations(query);
   }
 
   @Get('/manager/user-timeline')
@@ -510,6 +580,27 @@ export class EmployeeController {
     return this.employeeService.shareSalesmanReport('MSR', body);
   }
 
+  @Get('/export')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Export employees' })
+  async exportEmployees(
+    @Query()
+    query: EmployeeQueryDto & {
+      fileType?: 'excel' | 'pdf';
+      columns?: string;
+    },
+    @Res() res: Response,
+  ) {
+    const file = await this.employeeService.exportEmployees(query);
+
+    res.setHeader('Content-Type', file.mimeType);
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${file.fileName}"`,
+    );
+    res.send(file.buffer);
+  }
+
   /**
    * Get Employees
    * -------------
@@ -587,6 +678,17 @@ export class EmployeeController {
   @ApiNotFoundResponse()
   async getEmployeeStats(@Param('employeeId') employeeId: string) {
     return this.employeeService.getEmployeeStats(employeeId);
+  }
+
+  @Permissions('EMPLOYEE_UPDATE')
+  @Patch(':employeeId/reset-password')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Reset employee password' })
+  @ApiParam({ name: 'employeeId', example: 'EID-1A2B3C4D' })
+  @ApiSuccessResponse({ updated: true }, 'Password reset successfully')
+  @ApiNotFoundResponse()
+  async resetPassword(@Param('employeeId') employeeId: string) {
+    return this.employeeService.resetPassword(employeeId);
   }
 
   /**

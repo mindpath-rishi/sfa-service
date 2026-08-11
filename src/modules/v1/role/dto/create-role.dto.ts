@@ -20,10 +20,11 @@ import {
   IsArray,
   IsOptional,
   ArrayUnique,
-  IsInt,
-  Min,
   MaxLength,
+  IsBoolean,
+  IsEnum,
 } from 'class-validator';
+import { Status } from 'src/shared/enums/app.enums';
 
 export class CreateRoleDto {
   /**
@@ -80,29 +81,21 @@ export class CreateRoleDto {
   @IsString({ each: true })
   permissions!: string[];
 
-  /**
-   * Max Associated Vans
-   * -------------------
-   * Purpose : Limit operational scope for users of this role
-   *
-   * Rules:
-   * - -1 = Unlimited access
-   * -  0 = No access
-   * - >0 = Maximum number of vans
-   *
-   * Notes:
-   * - Optional
-   * - Defaults to 0 if omitted
-   */
   @ApiProperty({
-    example: 3,
-    description:
-      'Maximum number of vans allowed (-1 = unlimited, 0 = none)',
+    example: 'ACTIVE',
+    enum: Status,
     required: false,
-    minimum: -1,
   })
   @IsOptional()
-  @IsInt()
-  @Min(-1)
-  maxAssociatedVans?: number;
+  @IsEnum(Status)
+  status?: Status;
+
+  @ApiProperty({
+    example: false,
+    description: 'Whether this is a system admin role',
+    required: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  isSystemAdmin?: boolean;
 }

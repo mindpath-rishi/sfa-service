@@ -5,7 +5,9 @@ import {
   IsString,
   IsNumber,
   IsDate,
+  Min,
 } from 'class-validator';
+import { Type } from 'class-transformer';
 
 export class CreateTargetDto {
   /**
@@ -26,22 +28,22 @@ export class CreateTargetDto {
   @ApiProperty({ type: String })
   @IsNotEmpty()
   @IsString()
-  categoryId!: string;
+  parentCategoryId!: string;
 
   @ApiProperty({ type: String })
   @IsNotEmpty()
   @IsString()
+  parentCategory!: string;
+
+  @ApiProperty({ type: String, description: 'Child category ID' })
+  @IsNotEmpty()
+  @IsString()
+  categoryId!: string;
+
+  @ApiProperty({ type: String, description: 'Child category name' })
+  @IsNotEmpty()
+  @IsString()
   category!: string;
-
-  @ApiPropertyOptional({ type: String })
-  @IsOptional()
-  @IsString()
-  subCategoryId?: string;
-
-  @ApiPropertyOptional({ type: String })
-  @IsOptional()
-  @IsString()
-  subCategory?: string;
 
   @ApiPropertyOptional({ type: String })
   @IsOptional()
@@ -51,45 +53,36 @@ export class CreateTargetDto {
   @ApiPropertyOptional({ type: Number })
   @IsOptional()
   @IsNumber()
+  @Min(0)
   targetCases?: number;
 
-  @ApiPropertyOptional({ type: Number })
+  @ApiPropertyOptional({ type: Number, description: 'Target weight in KG' })
   @IsOptional()
   @IsNumber()
-  achievedCases?: number;
-
-  @ApiPropertyOptional({ type: Number })
-  @IsOptional()
-  @IsNumber()
+  @Min(0)
   targetTonnage?: number;
 
   @ApiPropertyOptional({ type: Number })
   @IsOptional()
   @IsNumber()
-  achievedTonnage?: number;
-
-  @ApiPropertyOptional({ type: Number })
-  @IsOptional()
-  @IsNumber()
+  @Min(0)
   targetValue?: number;
 
-  @ApiPropertyOptional({ type: Number })
+  @ApiPropertyOptional({ type: Number, default: 0 })
   @IsOptional()
   @IsNumber()
-  achievedValue?: number;
+  @Min(0)
+  uboTarget?: number;
 
   @ApiProperty({ type: Date })
   @IsNotEmpty()
   @IsDate()
+  @Type(() => Date)
   startDate!: Date;
 
   @ApiProperty({ type: Date })
   @IsNotEmpty()
   @IsDate()
+  @Type(() => Date)
   endDate!: Date;
-
-  @ApiProperty({ type: String })
-  @IsNotEmpty()
-  @IsString()
-  status!: string;
 }

@@ -5,12 +5,17 @@ import {
   HttpStatus,
   BadRequestException,
 } from '@nestjs/common';
+import { Model } from 'mongoose';
 
 import { MongoService } from 'src/core/database/mongo/mongo.service';
 import { MongoRepository } from 'src/core/database/mongo/mongo.repository';
 import { FilterQuery } from 'src/core/database/mongo/mongo.interface';
 
 import { Sale, SaleSchema } from 'src/core/database/mongo/schema/sale.schema';
+import {
+  Employee,
+  EmployeeSchema,
+} from 'src/core/database/mongo/schema/employee.schema';
 
 import { IdGenerator } from 'src/shared/utils/id-generator.utils';
 import { ProductService } from '../product/product.service';
@@ -31,9 +36,24 @@ import {
 import { InventoryTransactionService } from '../inventory-transaction/inventory-transaction.service';
 import { CustomerService } from '../customer/customer.service';
 import { VanDailyStockService } from '../van-daily-stock/van-daily-stock.service';
+import { OracleRepository } from 'src/core/database/oracle/oracle.repository';
+import { RequestContextStore } from 'src/core/context/request-context';
+import { ErpSyncStatus } from 'src/shared/enums/stock-sales.enums';
+import {
+  ProductCategory,
+  ProductCategorySchema,
+} from 'src/core/database/mongo/schema/product-category';
+import {
+  Position,
+  PositionSchema,
+} from 'src/core/database/mongo/schema/position.schema';
 
 @Injectable()
 export class SaleService extends MongoRepository<Sale> {
+  private readonly employeeModel: Model<Employee>;
+  private readonly productCategoryModel: Model<ProductCategory>;
+  private readonly positionModel: Model<Position>;
+
   constructor(
     mongo: MongoService,
     private readonly productService: ProductService,
@@ -43,8 +63,15 @@ export class SaleService extends MongoRepository<Sale> {
     private readonly inventoryTxnService: InventoryTransactionService,
     private readonly customerService: CustomerService,
     private readonly vanDailyStockService: VanDailyStockService,
+    private readonly oracleRepository: OracleRepository,
   ) {
     super(mongo.getModel(Sale.name, SaleSchema));
+    this.employeeModel = mongo.getModel(Employee.name, EmployeeSchema);
+    this.productCategoryModel = mongo.getModel(
+      ProductCategory.name,
+      ProductCategorySchema,
+    );
+    this.positionModel = mongo.getModel(Position.name, PositionSchema);
   }
 
   async create(payload: CreateSaleDto) {
@@ -55,6 +82,131 @@ export class SaleService extends MongoRepository<Sale> {
 
         if (!items.length) {
           throw new BadRequestException('At least one item is required');
+        }
+
+        const ctx = RequestContextStore.getStore();
+        const loggedInEmployeeId = ctx?.userId;
+
+        if (!loggedInEmployeeId) {
+          throw new BadRequestException('Logged-in employee is required');
+        }
+
+        const employee = await this.employeeModel
+          .findOne({
+            employeeId: loggedInEmployeeId,
+            isDeleted: false,
+          } as any)
+          .select({
+            employeeId: 1,
+            name: 1,
+          })
+          .session(session)
+          .lean()
+          .exec();
+
+        if (!employee) {
+          throw new BadRequestException(
+            `Employee not found: ${loggedInEmployeeId}`,
+          );
+        }
+
+        const currentPosition = await this.positionModel
+          .findOne({
+            employeeId: loggedInEmployeeId,
+            isDeleted: { $ne: true },
+          })
+          .select('positionId name employeeId reportTo hierarchyDepth')
+          .session(session)
+          .lean();
+
+        if (!currentPosition) {
+          throw new BadRequestException(
+            `Position not found for employee: ${loggedInEmployeeId}`,
+          );
+        }
+
+        const hierarchyPositions: Array<{
+          positionId: string;
+          name: string;
+          employeeId?: string;
+          reportTo?: string;
+          hierarchyDepth: number;
+        }> = [];
+        const visitedPositionIds = new Set<string>();
+        let hierarchyPosition: {
+          positionId: string;
+          name: string;
+          employeeId?: string;
+          reportTo?: string;
+          hierarchyDepth: number;
+        } | null = currentPosition;
+
+        while (hierarchyPosition) {
+          if (visitedPositionIds.has(hierarchyPosition.positionId)) {
+            throw new BadRequestException(
+              `Circular position hierarchy detected at ${hierarchyPosition.positionId}`,
+            );
+          }
+
+          visitedPositionIds.add(hierarchyPosition.positionId);
+          hierarchyPositions.push(hierarchyPosition);
+
+          if (!hierarchyPosition.reportTo) break;
+
+          hierarchyPosition = await this.positionModel
+            .findOne({
+              positionId: hierarchyPosition.reportTo,
+              isDeleted: { $ne: true },
+            })
+            .select('positionId name employeeId reportTo hierarchyDepth')
+            .session(session)
+            .lean();
+        }
+
+        const hierarchyEmployeeIds = hierarchyPositions
+          .map((position) => position.employeeId)
+          .filter((employeeId): employeeId is string => Boolean(employeeId));
+
+        const hierarchyEmployees = await this.employeeModel
+          .find({
+            employeeId: { $in: hierarchyEmployeeIds },
+            isDeleted: false,
+          } as any)
+          .select({
+            employeeId: 1,
+            name: 1,
+          })
+          .session(session)
+          .lean()
+          .exec();
+
+        const hierarchyEmployeeById = new Map(
+          hierarchyEmployees.map((employee) => [employee.employeeId, employee]),
+        );
+        const positionHierarchy = hierarchyPositions.map((position) => {
+          const hierarchyEmployee = position.employeeId
+            ? hierarchyEmployeeById.get(position.employeeId)
+            : undefined;
+
+          return {
+            level: position.hierarchyDepth,
+            positionId: position.positionId,
+            positionName: position.name,
+            employeeId: position.employeeId,
+            employeeName:
+              position.employeeId === loggedInEmployeeId
+                ? ctx?.name || hierarchyEmployee?.name || employee.name
+                : hierarchyEmployee?.name,
+          };
+        });
+
+        const primaryEmployee = positionHierarchy.find(
+          (position) => position.employeeId,
+        );
+        if (!primaryEmployee?.employeeId) {
+          throw new BadRequestException(
+            'No employee is assigned to the sales position hierarchy',
+          );
         }
 
         if (
@@ -82,8 +234,28 @@ export class SaleService extends MongoRepository<Sale> {
         let totalPieces = 0;
         let totalQty = 0;
         let totalWeight = 0;
+        let subtotal = 0;
+        let schemeDiscountAmount = 0;
         let totalValue = 0;
         let netCases = 0;
+        const schemeIds = new Set<string>();
+        const schemeNames = new Set<string>();
+        const schemes = new Map<
+          string,
+          {
+            schemeId: string;
+            schemeName: string;
+            schemeType: string;
+            minimumQuantity: number;
+            discountPercent?: number;
+            discountValue?: number;
+            buyQty?: number;
+            discountAmount: number;
+            freeQty: number;
+            freeProductId?: string;
+            freeProductName?: string;
+          }
+        >();
 
         const processedItems: any[] = [];
 
@@ -91,9 +263,30 @@ export class SaleService extends MongoRepository<Sale> {
           const caseQty = item.caseQty || 0;
           const pieceQty = item.pieceQty || 0;
 
+          const itemCustomerCategoryId =
+            (item as any).customerCategoryId ||
+            (rest as any).customerCategoryId;
+          const itemCompCode = String((item as any).compCode || '').trim();
+
+          if (!itemCustomerCategoryId) {
+            throw new BadRequestException(
+              `Customer category is required for product: ${item.productId}`,
+            );
+          }
+
+          if (!itemCompCode) {
+            throw new BadRequestException(
+              `Company code is required for product: ${item.productId}`,
+            );
+          }
+
           const response = await this.productService.findByProductId(
             item.productId,
+            {
+              customerCategoryId: itemCustomerCategoryId,
+            },
           );
+
           const product = response?.data;
 
           if (!product) {
@@ -107,7 +300,6 @@ export class SaleService extends MongoRepository<Sale> {
           const unitQtyInCase = product.unitQtyInCase || 1;
           const casePrice = Number(product.casePrice || 0);
 
-          // ✅ Use backend stored piece price OR derive safely
           const piecePrice = Number(
             product.piecePrice ?? casePrice / unitQtyInCase,
           );
@@ -118,9 +310,15 @@ export class SaleService extends MongoRepository<Sale> {
 
           /* ================= VALUE ================= */
 
-          const itemValueRaw = caseQty * casePrice + pieceQty * piecePrice;
-
-          const itemValue = toFixed4(itemValueRaw);
+          const itemGrossValueRaw = caseQty * casePrice + pieceQty * piecePrice;
+          const itemGrossValue = toFixed4(itemGrossValueRaw);
+          const itemSchemeDiscount = toFixed4(
+            Math.min(
+              Math.max(Number((item as any).schemeDiscountAmount) || 0, 0),
+              itemGrossValue,
+            ),
+          );
+          const itemValue = toFixed4(itemGrossValue - itemSchemeDiscount);
 
           /* ================= WEIGHT ================= */
 
@@ -132,12 +330,52 @@ export class SaleService extends MongoRepository<Sale> {
 
           /* ================= TOTALS ================= */
 
+          const itemNetCases = quantity / unitQtyInCase;
+
           totalCases += caseQty;
           totalPieces += pieceQty;
           totalQty += quantity;
           totalWeight += itemWeight;
+          subtotal += itemGrossValue;
+          schemeDiscountAmount += itemSchemeDiscount;
           totalValue += itemValue;
-          netCases += quantity / unitQtyInCase;
+          netCases += itemNetCases;
+
+          const schemeId = String((item as any).schemeId || '').trim();
+          const schemeName = String((item as any).schemeName || '').trim();
+          const schemeType = String((item as any).schemeType || '').trim();
+          const schemeMinimumQuantity = Math.max(
+            Number((item as any).schemeMinimumQuantity) || 0,
+            0,
+          );
+          const schemeFreeQty = Math.max(
+            Number((item as any).schemeFreeQty) || 0,
+            0,
+          );
+          if (schemeId) schemeIds.add(schemeId);
+          if (schemeName) schemeNames.add(schemeName);
+          if (schemeId && schemeName && schemeType) {
+            const existingScheme = schemes.get(schemeId);
+            schemes.set(schemeId, {
+              schemeId,
+              schemeName,
+              schemeType,
+              minimumQuantity: schemeMinimumQuantity,
+              discountPercent: (item as any).schemeDiscountPercent,
+              discountValue: (item as any).schemeDiscountValue,
+              buyQty: (item as any).schemeBuyQty,
+              discountAmount: toFixed4(
+                (existingScheme?.discountAmount ?? 0) + itemSchemeDiscount,
+              ),
+              freeQty: (existingScheme?.freeQty ?? 0) + schemeFreeQty,
+              freeProductId:
+                (item as any).schemeFreeProductId ||
+                existingScheme?.freeProductId,
+              freeProductName:
+                (item as any).schemeFreeProductName ||
+                existingScheme?.freeProductName,
+            });
+          }
 
           processedItems.push({
             saleId: '',
@@ -157,21 +395,42 @@ export class SaleService extends MongoRepository<Sale> {
             caseNetWeight,
 
             totalNetWeight: itemWeight,
+            grossValue: itemGrossValue,
             totalValue: itemValue,
+
+            schemeId: schemeId || undefined,
+            schemeName: schemeName || undefined,
+            schemeType: schemeType || undefined,
+            schemeMinimumQuantity,
+            schemeDiscountPercent: (item as any).schemeDiscountPercent,
+            schemeDiscountValue: (item as any).schemeDiscountValue,
+            schemeBuyQty: (item as any).schemeBuyQty,
+            schemeDiscountAmount: itemSchemeDiscount,
+            schemeFreeQty,
+            schemeFreeProductId: (item as any).schemeFreeProductId,
+            schemeFreeProductName: (item as any).schemeFreeProductName,
+
+            categoryId: (item as any).categoryId || (rest as any).categoryId,
+            parentCategoryId:
+              (item as any).parentCategoryId || (rest as any).parentCategoryId,
+            customerCategoryId: itemCustomerCategoryId,
+            compCode: itemCompCode,
+            isFocusedPack: product.isFocusedPack === 'Y' ? 'Y' : 'N',
+
+            netCases: toFixed4(itemNetCases),
           });
         }
 
         /* ================= FINAL ROUNDING ================= */
 
         totalWeight = toFixed4(totalWeight);
+        subtotal = toFixed4(subtotal);
+        schemeDiscountAmount = toFixed4(schemeDiscountAmount);
         totalValue = toFixed4(totalValue);
-
-        console.log('BACKEND TOTAL:', totalValue);
-
-        console.log('Other  Total', totalCases, totalPieces, totalQty);
+        netCases = toFixed4(netCases);
 
         /* ======================================================
-         * VALIDATE FRONTEND DATA (SAFE COMPARISON)
+         * VALIDATE FRONTEND DATA
          * ====================================================== */
 
         if (
@@ -215,17 +474,24 @@ export class SaleService extends MongoRepository<Sale> {
          * CREATE SALES HEADER
          * ====================================================== */
 
-        const saleId = IdGenerator.generate('SALE', 8);
+        const saleId = IdGenerator.generate('Sale', 8);
 
         const doc = await this.save(
           {
             saleId,
             ...rest,
 
+            positionHierarchy,
+
             totalCases,
             totalPieces,
             totalQty,
             totalWeight,
+            subtotal,
+            schemeIds: Array.from(schemeIds),
+            schemeNames: Array.from(schemeNames),
+            schemeDiscountAmount,
+            schemes: Array.from(schemes.values()),
             totalValue,
 
             paidAmount,
@@ -285,30 +551,41 @@ export class SaleService extends MongoRepository<Sale> {
             { session },
           );
 
-          const response = await this.vanDailyStockService.updateOne(
+          const stockDayStart = new Date();
+          stockDayStart.setHours(0, 0, 0, 0);
+          const stockDayEnd = new Date(stockDayStart);
+          stockDayEnd.setHours(23, 59, 59, 999);
+          const currentDailyStock = await this.vanDailyStockService.findOne(
             {
-              productId: inventory?.productId,
-              vanId: inventory?.vanId,
-              date: { $gte: new Date().setHours(0, 0, 0, 0) } as any,
+              productId: inventory.productId,
+              vanId: inventory.vanId,
+              date: { $gte: stockDayStart, $lte: stockDayEnd },
             },
+            { session, sort: { createdAt: -1 } },
+          );
+
+          if (!currentDailyStock) {
+            throw new BadRequestException(
+              `Daily stock not initialized for product: ${productId}`,
+            );
+          }
+
+          await this.vanDailyStockService.updateById(
+            currentDailyStock._id.toString(),
             {
               $inc: {
                 outQty: quantity,
                 closingQty: -quantity,
               },
             },
-            {
-              session,
-            },
+            { session },
           );
-
-          console.log('Van Daily Stock Update Result:', response);
 
           await this.inventoryTxnService.create(
             {
               productId,
               vanId: doc.vanId,
-              employeeId: doc.employeeId,
+              employeeId: primaryEmployee.employeeId,
 
               transactionType: TransactionType.SALE,
               direction: Direction.OUT,
@@ -335,7 +612,7 @@ export class SaleService extends MongoRepository<Sale> {
             {
               customerId: doc.customerId,
               vanId: doc.vanId,
-              employeeId: doc.employeeId,
+              employeeId: primaryEmployee.employeeId,
               amount: paidAmount,
               paymentMode: payload.paymentMode,
               status: PaymentStatus.SUCCESS,
@@ -354,10 +631,9 @@ export class SaleService extends MongoRepository<Sale> {
         }
 
         /* ======================================================
-         * CUSTOMER OUTSTANDING UPDATE (CREDIT SALE)
+         * CUSTOMER OUTSTANDING UPDATE
          * ====================================================== */
 
-        console.log(type, pendingAmount);
         if (type === SaleType.CREDIT && pendingAmount > 0) {
           await this.customerService.updateOne(
             { customerId: doc.customerId },
@@ -371,8 +647,15 @@ export class SaleService extends MongoRepository<Sale> {
         }
 
         /* ======================================================
-         * RESPONSE
+         * EXPORT SALE TO ERP SFA_ORDER
          * ====================================================== */
+
+        await this.syncSaleToERP({
+          sale: doc,
+          items: processedItems,
+          saleId,
+          session,
+        });
 
         return {
           statusCode: HttpStatus.CREATED,
@@ -397,6 +680,7 @@ export class SaleService extends MongoRepository<Sale> {
       customerName,
       employeeId,
       employeeName,
+      positionId,
       status,
       type,
       paymentStatus,
@@ -407,6 +691,7 @@ export class SaleService extends MongoRepository<Sale> {
     const match: Record<string, any> = {
       isDeleted: false,
     };
+
     const toSafeRegex = (value: string) =>
       new RegExp(value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
 
@@ -414,10 +699,20 @@ export class SaleService extends MongoRepository<Sale> {
     if (salesId) match.saleId = salesId;
     if (vanId) match.vanId = vanId;
     if (customerId) match.customerId = customerId;
-    if (employeeId) match.employeeId = employeeId;
-    if (employeeName) match.employeeName = employeeName;
     if (type) match.type = type;
     if (paymentStatus) match.paymentStatus = paymentStatus;
+
+    if (employeeId) {
+      match['positionHierarchy.employeeId'] = employeeId;
+    }
+
+    if (employeeName) {
+      match['positionHierarchy.employeeName'] = toSafeRegex(employeeName);
+    }
+
+    if (positionId) {
+      match['positionHierarchy.positionId'] = positionId;
+    }
 
     if (vanName) {
       match.vanName = toSafeRegex(vanName);
@@ -429,35 +724,36 @@ export class SaleService extends MongoRepository<Sale> {
 
     if (searchText) {
       const regex = toSafeRegex(searchText);
-      match.$or = [{ customerName: regex }, { vanName: regex }];
+
+      match.$or = [
+        { saleId: regex },
+        { customerName: regex },
+        { customerId: regex },
+        { vanName: regex },
+        { vanId: regex },
+        { 'positionHierarchy.employeeId': regex },
+        { 'positionHierarchy.employeeName': regex },
+        { 'positionHierarchy.positionId': regex },
+      ];
     }
 
-    if (type) {
-      match.type = type;
-    }
-
-    const skip = (page - 1) * limit;
+    const pageNumber = Number(page);
+    const limitNumber = Number(limit);
+    const skip = (pageNumber - 1) * limitNumber;
 
     const pipeline: any[] = [
       { $match: match },
       { $sort: { createdAt: -1 } },
       {
-        $lookup: {
-          from: 'sale_items',
-          localField: 'saleId',
-          foreignField: 'saleId',
-          as: 'items',
-        },
-      },
-      {
         $facet: {
-          items: [{ $skip: skip }, { $limit: limit }],
+          items: [{ $skip: skip }, { $limit: limitNumber }],
           meta: [{ $count: 'total' }],
         },
       },
     ];
 
     const [result] = await this.model.aggregate(pipeline);
+
     const total = result?.meta?.[0]?.total ?? 0;
 
     return {
@@ -466,12 +762,502 @@ export class SaleService extends MongoRepository<Sale> {
       data: result?.items ?? [],
       meta: {
         total,
-        page,
-        limit,
-        totalPages: Math.ceil(total / limit),
+        page: pageNumber,
+        limit: limitNumber,
+        totalPages: Math.ceil(total / limitNumber),
       },
     };
   }
+
+  // async getLastSixMonthCategoryWiseSale(query: {
+  //   vanId?: string;
+  //   outletId?: string;
+  // }) {
+  //   const { vanId, outletId } = query;
+
+  //   const currentDate = new Date();
+
+  //   const monthsData: any = [];
+
+  //   for (let i = 0; i < 6; i++) {
+  //     const date = new Date(
+  //       currentDate.getFullYear(),
+  //       currentDate.getMonth() - i,
+  //       1,
+  //     );
+
+  //     monthsData.push({
+  //       year: date.getFullYear(),
+  //       monthNumber: date.getMonth() + 1,
+  //       month: date.toLocaleString('default', {
+  //         month: 'short',
+  //       }),
+  //     });
+  //   }
+
+  //   const startDate = new Date(
+  //     monthsData[5].year,
+  //     monthsData[5].monthNumber - 1,
+  //     1,
+  //   );
+
+  //   const match: Record<string, any> = {
+  //     isDeleted: false,
+  //     date: {
+  //       $gte: startDate,
+  //     },
+  //   };
+
+  //   if (vanId) {
+  //     match.vanId = vanId;
+  //   }
+
+  //   if (outletId) {
+  //     match.customerId = outletId;
+  //   }
+
+  //   const pipeline: any[] = [
+  //     {
+  //       $match: match,
+  //     },
+
+  //     {
+  //       $lookup: {
+  //         from: 'sale_items',
+  //         localField: 'saleId',
+  //         foreignField: 'saleId',
+  //         as: 'items',
+  //       },
+  //     },
+
+  //     {
+  //       $unwind: '$items',
+  //     },
+
+  //     {
+  //       $match: {
+  //         'items.isDeleted': false,
+  //       },
+  //     },
+
+  //     // Product Master Lookup
+  //     {
+  //       $lookup: {
+  //         from: 'product_master',
+  //         localField: 'items.productId',
+  //         foreignField: 'productId',
+  //         as: 'product',
+  //       },
+  //     },
+
+  //     {
+  //       $unwind: {
+  //         path: '$product',
+  //         preserveNullAndEmptyArrays: true,
+  //       },
+  //     },
+
+  //     // Product Category Lookup
+  //     {
+  //       $lookup: {
+  //         from: 'productcategories',
+  //         localField: 'product.parentCategoryId',
+  //         foreignField: 'categoryId',
+  //         as: 'category',
+  //       },
+  //     },
+
+  //     {
+  //       $unwind: {
+  //         path: '$category',
+  //         preserveNullAndEmptyArrays: true,
+  //       },
+  //     },
+
+  //     {
+  //       $group: {
+  //         _id: {
+  //           year: {
+  //             $year: '$date',
+  //           },
+
+  //           monthNumber: {
+  //             $month: '$date',
+  //           },
+
+  //           categoryName: {
+  //             $ifNull: ['$category.name', 'UNKNOWN'],
+  //           },
+  //         },
+
+  //         totalCases: {
+  //           $sum: {
+  //             $ifNull: ['$items.caseQty', 0],
+  //           },
+  //         },
+
+  //         totalPieces: {
+  //           $sum: {
+  //             $ifNull: ['$items.pieceQty', 0],
+  //           },
+  //         },
+
+  //         totalQtyInCases: {
+  //           $sum: {
+  //             $add: [
+  //               {
+  //                 $ifNull: ['$items.caseQty', 0],
+  //               },
+
+  //               {
+  //                 $cond: [
+  //                   {
+  //                     $gt: ['$items.unitQtyInCase', 0],
+  //                   },
+
+  //                   {
+  //                     $divide: [
+  //                       {
+  //                         $ifNull: ['$items.pieceQty', 0],
+  //                       },
+  //                       '$items.unitQtyInCase',
+  //                     ],
+  //                   },
+
+  //                   0,
+  //                 ],
+  //               },
+  //             ],
+  //           },
+  //         },
+
+  //         totalValue: {
+  //           $sum: {
+  //             $ifNull: ['$items.totalValue', 0],
+  //           },
+  //         },
+
+  //         totalWeight: {
+  //           $sum: {
+  //             $ifNull: ['$items.totalNetWeight', 0],
+  //           },
+  //         },
+  //       },
+  //     },
+  //     {
+  //       $project: {
+  //         _id: 0,
+
+  //         year: '$_id.year',
+
+  //         monthNumber: '$_id.monthNumber',
+
+  //         categoryName: '$_id.categoryName',
+
+  //         totalCases: 1,
+
+  //         totalPieces: 1,
+
+  //         totalQtyInCases: {
+  //           $round: ['$totalQtyInCases', 3],
+  //         },
+
+  //         totalValue: {
+  //           $round: ['$totalValue', 3],
+  //         },
+
+  //         totalWeight: {
+  //           $round: ['$totalWeight', 3],
+  //         },
+  //       },
+  //     },
+  //   ];
+
+  //   try {
+  //     const rawData = await this.model.aggregate(pipeline);
+
+  //     const categories = [...new Set(rawData.map((item) => item.categoryName))];
+
+  //     const finalData: any = [];
+
+  //     for (const monthData of monthsData) {
+  //       for (const categoryName of categories) {
+  //         const existing = rawData.find(
+  //           (item) =>
+  //             item.year === monthData.year &&
+  //             item.monthNumber === monthData.monthNumber &&
+  //             item.categoryName === categoryName,
+  //         );
+
+  //         finalData.push({
+  //           year: monthData.year,
+
+  //           monthNumber: monthData.monthNumber,
+
+  //           month: monthData.month,
+
+  //           categoryName,
+
+  //           totalCases: existing?.totalCases ?? 0,
+
+  //           totalPieces: existing?.totalPieces ?? 0,
+
+  //           totalQtyInCases: existing?.totalQtyInCases ?? 0,
+
+  //           totalValue: existing?.totalValue ?? 0,
+
+  //           totalWeight: existing?.totalWeight ?? 0,
+  //         });
+  //       }
+  //     }
+
+  //     return {
+  //       statusCode: HttpStatus.OK,
+  //       message: 'Last six month category wise sales fetched successfully',
+  //       data: finalData,
+  //     };
+  //   } catch (error) {
+  //     console.log(error);
+
+  //     throw error;
+  //   }
+  // }
+
+  // async getCategoryWiseSaleDetail(query: {
+  //   vanId?: string;
+  //   outletId?: string;
+  //   categoryName?: string;
+  //   year?: number;
+  //   monthNumber?: number;
+  // }) {
+  //   const { vanId, outletId, categoryName, year, monthNumber } = query;
+
+  //   const emptyData = {
+  //     year,
+  //     monthNumber,
+  //     categoryName,
+  //     totalCases: 0,
+  //     totalPieces: 0,
+  //     totalQtyInCases: 0,
+  //     totalValue: 0,
+  //     totalWeight: 0,
+  //     products: [],
+  //   };
+
+  //   if (!categoryName || !year || !monthNumber) {
+  //     return {
+  //       statusCode: HttpStatus.OK,
+  //       message: 'Category wise sales detail fetched successfully',
+  //       data: emptyData,
+  //     };
+  //   }
+
+  //   const match: Record<string, any> = {
+  //     isDeleted: false,
+  //     date: {
+  //       $gte: new Date(year, monthNumber - 1, 1),
+  //       $lt: new Date(year, monthNumber, 1),
+  //     },
+  //   };
+
+  //   if (vanId) {
+  //     match.vanId = vanId;
+  //   }
+
+  //   if (outletId) {
+  //     match.customerId = outletId;
+  //   }
+
+  //   const [detail] = await this.model.aggregate([
+  //     {
+  //       $match: match,
+  //     },
+  //     {
+  //       $lookup: {
+  //         from: 'sale_items',
+  //         localField: 'saleId',
+  //         foreignField: 'saleId',
+  //         as: 'items',
+  //       },
+  //     },
+  //     {
+  //       $unwind: '$items',
+  //     },
+  //     {
+  //       $match: {
+  //         'items.isDeleted': false,
+  //       },
+  //     },
+  //     {
+  //       $lookup: {
+  //         from: 'product_master',
+  //         localField: 'items.productId',
+  //         foreignField: 'productId',
+  //         as: 'product',
+  //       },
+  //     },
+  //     {
+  //       $unwind: {
+  //         path: '$product',
+  //         preserveNullAndEmptyArrays: true,
+  //       },
+  //     },
+  //     {
+  //       $lookup: {
+  //         from: 'productcategories',
+  //         localField: 'product.parentCategoryId',
+  //         foreignField: 'categoryId',
+  //         as: 'category',
+  //       },
+  //     },
+  //     {
+  //       $unwind: {
+  //         path: '$category',
+  //         preserveNullAndEmptyArrays: true,
+  //       },
+  //     },
+  //     {
+  //       $match: {
+  //         $expr: {
+  //           $eq: [{ $ifNull: ['$category.name', 'UNKNOWN'] }, categoryName],
+  //         },
+  //       },
+  //     },
+  //     {
+  //       $group: {
+  //         _id: {
+  //           productId: '$items.productId',
+  //           productName: {
+  //             $ifNull: ['$items.productName', '$product.name'],
+  //           },
+  //         },
+  //         cases: {
+  //           $sum: {
+  //             $ifNull: ['$items.caseQty', 0],
+  //           },
+  //         },
+  //         pieces: {
+  //           $sum: {
+  //             $ifNull: ['$items.pieceQty', 0],
+  //           },
+  //         },
+  //         qtyInCases: {
+  //           $sum: {
+  //             $add: [
+  //               {
+  //                 $ifNull: ['$items.caseQty', 0],
+  //               },
+  //               {
+  //                 $cond: [
+  //                   {
+  //                     $gt: ['$items.unitQtyInCase', 0],
+  //                   },
+  //                   {
+  //                     $divide: [
+  //                       {
+  //                         $ifNull: ['$items.pieceQty', 0],
+  //                       },
+  //                       '$items.unitQtyInCase',
+  //                     ],
+  //                   },
+  //                   0,
+  //                 ],
+  //               },
+  //             ],
+  //           },
+  //         },
+  //         value: {
+  //           $sum: {
+  //             $ifNull: ['$items.totalValue', 0],
+  //           },
+  //         },
+  //         weight: {
+  //           $sum: {
+  //             $ifNull: ['$items.totalNetWeight', 0],
+  //           },
+  //         },
+  //       },
+  //     },
+  //     {
+  //       $sort: {
+  //         value: -1,
+  //         '_id.productName': 1,
+  //       },
+  //     },
+  //     {
+  //       $group: {
+  //         _id: null,
+  //         totalCases: { $sum: '$cases' },
+  //         totalPieces: { $sum: '$pieces' },
+  //         totalQtyInCases: { $sum: '$qtyInCases' },
+  //         totalValue: { $sum: '$value' },
+  //         totalWeight: { $sum: '$weight' },
+  //         products: {
+  //           $push: {
+  //             productId: '$_id.productId',
+  //             productName: '$_id.productName',
+  //             cases: '$cases',
+  //             pieces: '$pieces',
+  //             qtyInCases: '$qtyInCases',
+  //             value: '$value',
+  //             weight: '$weight',
+  //           },
+  //         },
+  //       },
+  //     },
+  //     {
+  //       $project: {
+  //         _id: 0,
+  //         totalCases: 1,
+  //         totalPieces: 1,
+  //         totalQtyInCases: {
+  //           $round: ['$totalQtyInCases', 3],
+  //         },
+  //         totalValue: {
+  //           $round: ['$totalValue', 3],
+  //         },
+  //         totalWeight: {
+  //           $round: ['$totalWeight', 3],
+  //         },
+  //         products: {
+  //           $map: {
+  //             input: '$products',
+  //             as: 'product',
+  //             in: {
+  //               productId: '$$product.productId',
+  //               productName: '$$product.productName',
+  //               cases: '$$product.cases',
+  //               pieces: '$$product.pieces',
+  //               qtyInCases: {
+  //                 $round: ['$$product.qtyInCases', 3],
+  //               },
+  //               value: {
+  //                 $round: ['$$product.value', 3],
+  //               },
+  //               weight: {
+  //                 $round: ['$$product.weight', 3],
+  //               },
+  //             },
+  //           },
+  //         },
+  //       },
+  //     },
+  //   ]);
+
+  //   return {
+  //     statusCode: HttpStatus.OK,
+  //     message: 'Category wise sales detail fetched successfully',
+  //     data: {
+  //       ...emptyData,
+  //       totalCases: detail?.totalCases ?? 0,
+  //       totalPieces: detail?.totalPieces ?? 0,
+  //       totalQtyInCases: detail?.totalQtyInCases ?? 0,
+  //       totalValue: detail?.totalValue ?? 0,
+  //       totalWeight: detail?.totalWeight ?? 0,
+  //       products: detail?.products ?? [],
+  //     },
+  //   };
+  // }
 
   async getLastSixMonthCategoryWiseSale(query: {
     vanId?: string;
@@ -481,7 +1267,10 @@ export class SaleService extends MongoRepository<Sale> {
 
     const currentDate = new Date();
 
-    const monthsData: any = [];
+    /**
+     * ================= MONTHS DATA =================
+     */
+    const monthsData: any[] = [];
 
     for (let i = 0; i < 6; i++) {
       const date = new Date(
@@ -499,16 +1288,54 @@ export class SaleService extends MongoRepository<Sale> {
       });
     }
 
+    /**
+     * For response order old to new, reverse months.
+     */
+    const orderedMonthsData = [...monthsData].reverse();
+
     const startDate = new Date(
-      monthsData[5].year,
-      monthsData[5].monthNumber - 1,
+      orderedMonthsData[0].year,
+      orderedMonthsData[0].monthNumber - 1,
       1,
     );
 
+    const endDate = new Date(
+      currentDate.getFullYear(),
+      currentDate.getMonth() + 1,
+      1,
+    );
+
+    /**
+     * ================= CATEGORY MAP =================
+     *
+     * Load categories once instead of lookup for every sale item.
+     */
+    const categories = await this.productCategoryModel
+      .find({
+        type: 'PARENT',
+        isDeleted: false,
+      })
+      .select({
+        categoryId: 1,
+        name: 1,
+        _id: 0,
+      })
+      .lean();
+
+    const categoryNameMap = new Map<string, string>();
+
+    for (const category of categories) {
+      categoryNameMap.set(category.categoryId, category.name);
+    }
+
+    /**
+     * ================= SALE MATCH =================
+     */
     const match: Record<string, any> = {
       isDeleted: false,
       date: {
         $gte: startDate,
+        $lt: endDate,
       },
     };
 
@@ -520,196 +1347,198 @@ export class SaleService extends MongoRepository<Sale> {
       match.customerId = outletId;
     }
 
-    const pipeline: any[] = [
-      {
-        $match: match,
-      },
-
-      {
-        $lookup: {
-          from: 'sale_items',
-          localField: 'saleId',
-          foreignField: 'saleId',
-          as: 'items',
-        },
-      },
-
-      {
-        $unwind: '$items',
-      },
-
-      {
-        $match: {
-          'items.isDeleted': false,
-        },
-      },
-
-      // Product Master Lookup
-      {
-        $lookup: {
-          from: 'product_master',
-          localField: 'items.productId',
-          foreignField: 'productId',
-          as: 'product',
-        },
-      },
-
-      {
-        $unwind: {
-          path: '$product',
-          preserveNullAndEmptyArrays: true,
-        },
-      },
-
-      // Product Category Lookup
-      {
-        $lookup: {
-          from: 'productcategories',
-          localField: 'product.categoryId',
-          foreignField: 'categoryId',
-          as: 'category',
-        },
-      },
-
-      {
-        $unwind: {
-          path: '$category',
-          preserveNullAndEmptyArrays: true,
-        },
-      },
-
-      {
-        $group: {
-          _id: {
-            year: {
-              $year: '$date',
-            },
-
-            monthNumber: {
-              $month: '$date',
-            },
-
-            categoryName: {
-              $ifNull: ['$category.name', 'UNKNOWN'],
-            },
+    try {
+      const rawData = await this.model
+        .aggregate([
+          {
+            $match: match,
           },
 
-          totalCases: {
-            $sum: {
-              $ifNull: ['$items.caseQty', 0],
-            },
-          },
-
-          totalPieces: {
-            $sum: {
-              $ifNull: ['$items.pieceQty', 0],
-            },
-          },
-
-          totalQtyInCases: {
-            $sum: {
-              $add: [
+          /**
+           * Lookup sale_items only.
+           * No product_master lookup needed.
+           */
+          {
+            $lookup: {
+              from: 'sale_items',
+              let: {
+                saleId: '$saleId',
+              },
+              pipeline: [
                 {
-                  $ifNull: ['$items.caseQty', 0],
+                  $match: {
+                    $expr: {
+                      $eq: ['$saleId', '$$saleId'],
+                    },
+                  },
                 },
-
                 {
-                  $cond: [
-                    {
-                      $gt: ['$items.unitQtyInCase', 0],
-                    },
-
-                    {
-                      $divide: [
-                        {
-                          $ifNull: ['$items.pieceQty', 0],
-                        },
-                        '$items.unitQtyInCase',
-                      ],
-                    },
-
-                    0,
-                  ],
+                  $project: {
+                    _id: 0,
+                    parentCategoryId: 1,
+                    caseQty: 1,
+                    pieceQty: 1,
+                    unitQtyInCase: 1,
+                    totalValue: 1,
+                    totalNetWeight: 1,
+                  },
                 },
               ],
+              as: 'items',
             },
           },
 
-          totalValue: {
-            $sum: {
-              $ifNull: ['$items.totalValue', 0],
+          {
+            $unwind: '$items',
+          },
+
+          /**
+           * Group by month and parentCategoryId.
+           */
+          {
+            $group: {
+              _id: {
+                year: {
+                  $year: '$date',
+                },
+                monthNumber: {
+                  $month: '$date',
+                },
+                parentCategoryId: '$items.parentCategoryId',
+              },
+
+              totalCases: {
+                $sum: {
+                  $ifNull: ['$items.caseQty', 0],
+                },
+              },
+
+              totalPieces: {
+                $sum: {
+                  $ifNull: ['$items.pieceQty', 0],
+                },
+              },
+
+              totalQtyInCases: {
+                $sum: {
+                  $add: [
+                    {
+                      $ifNull: ['$items.caseQty', 0],
+                    },
+                    {
+                      $cond: [
+                        {
+                          $gt: ['$items.unitQtyInCase', 0],
+                        },
+                        {
+                          $divide: [
+                            {
+                              $ifNull: ['$items.pieceQty', 0],
+                            },
+                            '$items.unitQtyInCase',
+                          ],
+                        },
+                        0,
+                      ],
+                    },
+                  ],
+                },
+              },
+
+              totalValue: {
+                $sum: {
+                  $ifNull: ['$items.totalValue', 0],
+                },
+              },
+
+              totalWeight: {
+                $sum: {
+                  $ifNull: ['$items.totalNetWeight', 0],
+                },
+              },
             },
           },
 
-          totalWeight: {
-            $sum: {
-              $ifNull: ['$items.totalNetWeight', 0],
+          {
+            $project: {
+              _id: 0,
+
+              year: '$_id.year',
+              monthNumber: '$_id.monthNumber',
+              parentCategoryId: '$_id.parentCategoryId',
+
+              totalCases: 1,
+              totalPieces: 1,
+
+              totalQtyInCases: {
+                $round: ['$totalQtyInCases', 3],
+              },
+
+              totalValue: {
+                $round: ['$totalValue', 3],
+              },
+
+              totalWeight: {
+                $round: ['$totalWeight', 3],
+              },
             },
           },
-        },
-      },
-      {
-        $project: {
-          _id: 0,
 
-          year: '$_id.year',
-
-          monthNumber: '$_id.monthNumber',
-
-          categoryName: '$_id.categoryName',
-
-          totalCases: 1,
-
-          totalPieces: 1,
-
-          totalQtyInCases: {
-            $round: ['$totalQtyInCases', 3],
+          {
+            $sort: {
+              year: 1,
+              monthNumber: 1,
+              totalValue: -1,
+            },
           },
+        ])
+        .allowDiskUse(true);
 
-          totalValue: {
-            $round: ['$totalValue', 3],
-          },
+      /**
+       * ================= ADD CATEGORY NAME =================
+       */
+      const formattedRawData = rawData.map((item) => ({
+        ...item,
+        categoryName: categoryNameMap.get(item.parentCategoryId) || 'UNKNOWN',
+      }));
 
-          totalWeight: {
-            $round: ['$totalWeight', 3],
-          },
-        },
-      },
-    ];
+      /**
+       * Get only categories that have sales in last 6 months.
+       */
+      const soldCategoryNames = [
+        ...new Set(formattedRawData.map((item) => item.categoryName)),
+      ];
 
-    try {
-      const rawData = await this.model.aggregate(pipeline);
+      /**
+       * Fast lookup map instead of rawData.find inside nested loop.
+       */
+      const salesMap = new Map<string, any>();
 
-      const categories = [...new Set(rawData.map((item) => item.categoryName))];
+      for (const item of formattedRawData) {
+        const key = `${item.year}-${item.monthNumber}-${item.categoryName}`;
+        salesMap.set(key, item);
+      }
 
-      const finalData: any = [];
+      /**
+       * ================= FINAL DATA =================
+       */
+      const finalData: any[] = [];
 
-      for (const monthData of monthsData) {
-        for (const categoryName of categories) {
-          const existing = rawData.find(
-            (item) =>
-              item.year === monthData.year &&
-              item.monthNumber === monthData.monthNumber &&
-              item.categoryName === categoryName,
-          );
+      for (const monthData of orderedMonthsData) {
+        for (const categoryName of soldCategoryNames) {
+          const key = `${monthData.year}-${monthData.monthNumber}-${categoryName}`;
+          const existing = salesMap.get(key);
 
           finalData.push({
             year: monthData.year,
-
             monthNumber: monthData.monthNumber,
-
             month: monthData.month,
-
             categoryName,
 
             totalCases: existing?.totalCases ?? 0,
-
             totalPieces: existing?.totalPieces ?? 0,
-
             totalQtyInCases: existing?.totalQtyInCases ?? 0,
-
             totalValue: existing?.totalValue ?? 0,
-
             totalWeight: existing?.totalWeight ?? 0,
           });
         }
@@ -722,7 +1551,6 @@ export class SaleService extends MongoRepository<Sale> {
       };
     } catch (error) {
       console.log(error);
-
       throw error;
     }
   }
@@ -756,203 +1584,277 @@ export class SaleService extends MongoRepository<Sale> {
       };
     }
 
-    const match: Record<string, any> = {
+    /**
+     * ================= DATE RANGE =================
+     */
+    const startDate = new Date(year, monthNumber - 1, 1);
+    const endDate = new Date(year, monthNumber, 1);
+
+    /**
+     * ================= RESOLVE CATEGORY ONCE =================
+     *
+     * Instead of doing productcategories lookup for every sale item,
+     * get categoryId once.
+     */
+    const category = await this.productCategoryModel
+      .findOne({
+        name: categoryName,
+        type: 'PARENT',
+        isDeleted: false,
+      })
+      .select({
+        categoryId: 1,
+        name: 1,
+        _id: 0,
+      })
+      .lean();
+
+    if (!category?.categoryId) {
+      return {
+        statusCode: HttpStatus.OK,
+        message: 'Category wise sales detail fetched successfully',
+        data: emptyData,
+      };
+    }
+
+    /**
+     * ================= SALE MATCH =================
+     */
+    const saleMatch: Record<string, any> = {
       isDeleted: false,
       date: {
-        $gte: new Date(year, monthNumber - 1, 1),
-        $lt: new Date(year, monthNumber, 1),
+        $gte: startDate,
+        $lt: endDate,
       },
     };
 
     if (vanId) {
-      match.vanId = vanId;
+      saleMatch.vanId = vanId;
     }
 
     if (outletId) {
-      match.customerId = outletId;
+      saleMatch.customerId = outletId;
     }
 
-    const [detail] = await this.model.aggregate([
-      {
-        $match: match,
-      },
-      {
-        $lookup: {
-          from: 'sale_items',
-          localField: 'saleId',
-          foreignField: 'saleId',
-          as: 'items',
+    const [detail] = await this.model
+      .aggregate([
+        {
+          $match: saleMatch,
         },
-      },
-      {
-        $unwind: '$items',
-      },
-      {
-        $match: {
-          'items.isDeleted': false,
-        },
-      },
-      {
-        $lookup: {
-          from: 'product_master',
-          localField: 'items.productId',
-          foreignField: 'productId',
-          as: 'product',
-        },
-      },
-      {
-        $unwind: {
-          path: '$product',
-          preserveNullAndEmptyArrays: true,
-        },
-      },
-      {
-        $lookup: {
-          from: 'productcategories',
-          localField: 'product.categoryId',
-          foreignField: 'categoryId',
-          as: 'category',
-        },
-      },
-      {
-        $unwind: {
-          path: '$category',
-          preserveNullAndEmptyArrays: true,
-        },
-      },
-      {
-        $match: {
-          $expr: {
-            $eq: [{ $ifNull: ['$category.name', 'UNKNOWN'] }, categoryName],
-          },
-        },
-      },
-      {
-        $group: {
-          _id: {
-            productId: '$items.productId',
-            productName: {
-              $ifNull: ['$items.productName', '$product.name'],
+
+        /**
+         * Lookup only matching sale items of selected parent category.
+         */
+        {
+          $lookup: {
+            from: 'sale_items',
+            let: {
+              saleId: '$saleId',
+              parentCategoryId: category.categoryId,
             },
-          },
-          cases: {
-            $sum: {
-              $ifNull: ['$items.caseQty', 0],
-            },
-          },
-          pieces: {
-            $sum: {
-              $ifNull: ['$items.pieceQty', 0],
-            },
-          },
-          qtyInCases: {
-            $sum: {
-              $add: [
-                {
-                  $ifNull: ['$items.caseQty', 0],
+            pipeline: [
+              {
+                $match: {
+                  $expr: {
+                    $and: [
+                      {
+                        $eq: ['$saleId', '$$saleId'],
+                      },
+                      {
+                        $eq: ['$parentCategoryId', '$$parentCategoryId'],
+                      },
+                    ],
+                  },
                 },
-                {
-                  $cond: [
-                    {
-                      $gt: ['$items.unitQtyInCase', 0],
-                    },
-                    {
-                      $divide: [
-                        {
-                          $ifNull: ['$items.pieceQty', 0],
-                        },
-                        '$items.unitQtyInCase',
-                      ],
-                    },
-                    0,
-                  ],
+              },
+              {
+                $project: {
+                  _id: 0,
+                  productId: 1,
+                  productName: 1,
+                  caseQty: 1,
+                  pieceQty: 1,
+                  unitQtyInCase: 1,
+                  totalValue: 1,
+                  totalNetWeight: 1,
                 },
-              ],
-            },
+              },
+            ],
+            as: 'items',
           },
-          value: {
-            $sum: {
-              $ifNull: ['$items.totalValue', 0],
+        },
+
+        /**
+         * Remove sales where no matching items found.
+         */
+        {
+          $unwind: '$items',
+        },
+
+        /**
+         * Product-wise grouping.
+         */
+        {
+          $group: {
+            _id: {
+              productId: '$items.productId',
+              productName: '$items.productName',
             },
-          },
-          weight: {
-            $sum: {
-              $ifNull: ['$items.totalNetWeight', 0],
+
+            cases: {
+              $sum: {
+                $ifNull: ['$items.caseQty', 0],
+              },
+            },
+
+            pieces: {
+              $sum: {
+                $ifNull: ['$items.pieceQty', 0],
+              },
+            },
+
+            qtyInCases: {
+              $sum: {
+                $add: [
+                  {
+                    $ifNull: ['$items.caseQty', 0],
+                  },
+                  {
+                    $cond: [
+                      {
+                        $gt: ['$items.unitQtyInCase', 0],
+                      },
+                      {
+                        $divide: [
+                          {
+                            $ifNull: ['$items.pieceQty', 0],
+                          },
+                          '$items.unitQtyInCase',
+                        ],
+                      },
+                      0,
+                    ],
+                  },
+                ],
+              },
+            },
+
+            value: {
+              $sum: {
+                $ifNull: ['$items.totalValue', 0],
+              },
+            },
+
+            weight: {
+              $sum: {
+                $ifNull: ['$items.totalNetWeight', 0],
+              },
             },
           },
         },
-      },
-      {
-        $sort: {
-          value: -1,
-          '_id.productName': 1,
+
+        {
+          $sort: {
+            value: -1,
+            '_id.productName': 1,
+          },
         },
-      },
-      {
-        $group: {
-          _id: null,
-          totalCases: { $sum: '$cases' },
-          totalPieces: { $sum: '$pieces' },
-          totalQtyInCases: { $sum: '$qtyInCases' },
-          totalValue: { $sum: '$value' },
-          totalWeight: { $sum: '$weight' },
-          products: {
-            $push: {
-              productId: '$_id.productId',
-              productName: '$_id.productName',
-              cases: '$cases',
-              pieces: '$pieces',
-              qtyInCases: '$qtyInCases',
-              value: '$value',
-              weight: '$weight',
+
+        /**
+         * Final total grouping.
+         */
+        {
+          $group: {
+            _id: null,
+
+            totalCases: {
+              $sum: '$cases',
+            },
+
+            totalPieces: {
+              $sum: '$pieces',
+            },
+
+            totalQtyInCases: {
+              $sum: '$qtyInCases',
+            },
+
+            totalValue: {
+              $sum: '$value',
+            },
+
+            totalWeight: {
+              $sum: '$weight',
+            },
+
+            products: {
+              $push: {
+                productId: '$_id.productId',
+                productName: '$_id.productName',
+                cases: '$cases',
+                pieces: '$pieces',
+                qtyInCases: '$qtyInCases',
+                value: '$value',
+                weight: '$weight',
+              },
             },
           },
         },
-      },
-      {
-        $project: {
-          _id: 0,
-          totalCases: 1,
-          totalPieces: 1,
-          totalQtyInCases: {
-            $round: ['$totalQtyInCases', 3],
-          },
-          totalValue: {
-            $round: ['$totalValue', 3],
-          },
-          totalWeight: {
-            $round: ['$totalWeight', 3],
-          },
-          products: {
-            $map: {
-              input: '$products',
-              as: 'product',
-              in: {
-                productId: '$$product.productId',
-                productName: '$$product.productName',
-                cases: '$$product.cases',
-                pieces: '$$product.pieces',
-                qtyInCases: {
-                  $round: ['$$product.qtyInCases', 3],
-                },
-                value: {
-                  $round: ['$$product.value', 3],
-                },
-                weight: {
-                  $round: ['$$product.weight', 3],
+
+        {
+          $project: {
+            _id: 0,
+
+            totalCases: 1,
+            totalPieces: 1,
+
+            totalQtyInCases: {
+              $round: ['$totalQtyInCases', 3],
+            },
+
+            totalValue: {
+              $round: ['$totalValue', 3],
+            },
+
+            totalWeight: {
+              $round: ['$totalWeight', 3],
+            },
+
+            products: {
+              $map: {
+                input: '$products',
+                as: 'product',
+                in: {
+                  productId: '$$product.productId',
+                  productName: '$$product.productName',
+                  cases: '$$product.cases',
+                  pieces: '$$product.pieces',
+
+                  qtyInCases: {
+                    $round: ['$$product.qtyInCases', 3],
+                  },
+
+                  value: {
+                    $round: ['$$product.value', 3],
+                  },
+
+                  weight: {
+                    $round: ['$$product.weight', 3],
+                  },
                 },
               },
             },
           },
         },
-      },
-    ]);
+      ])
+      .allowDiskUse(true);
 
     return {
       statusCode: HttpStatus.OK,
       message: 'Category wise sales detail fetched successfully',
       data: {
         ...emptyData,
+        categoryName: category.name,
         totalCases: detail?.totalCases ?? 0,
         totalPieces: detail?.totalPieces ?? 0,
         totalQtyInCases: detail?.totalQtyInCases ?? 0,
@@ -1026,6 +1928,270 @@ export class SaleService extends MongoRepository<Sale> {
       statusCode: HttpStatus.OK,
       message: SALE.DELETED,
       data: existing,
+    };
+  }
+
+  /**
+   * Export Sale To ERP SFA_ORDER
+   * ----------------------------
+   * Source : Mongo Sale + Sale Items
+   * Target : Oracle SFA_ORDER
+   *
+   * Oracle table columns:
+   * VC_COMP_CODE
+   * VC_ORDER_NO
+   * DT_ORDER_DATE
+   * NU_CUSTOMER_CODE
+   * VC_ITEM_CODE
+   * NU_QTY
+   * VC_ORDER_NO_SFA
+   * DT_ORDER_DATE_SFA
+   * VC_STORE_CODE
+   * DT_MOD_DATE
+   */
+  private async exportSaleToErpSfaOrder(params: {
+    sale: any;
+    items: any[];
+    saleId: string;
+  }): Promise<void> {
+    if (!this.oracleRepository.isEnabled()) {
+      throw new Error('OracleDB is disabled');
+    }
+
+    const { sale, items, saleId } = params;
+
+    const toStringSafe = (value: any): string => {
+      return String(value ?? '').trim();
+    };
+
+    const toNumberSafe = (value: any, defaultValue = 0): number => {
+      const numberValue = Number(value);
+      return Number.isFinite(numberValue) ? numberValue : defaultValue;
+    };
+
+    const toErpCustomerCode = (value: any): number => {
+      const rawValue = toStringSafe(value);
+      const directNumber = Number(rawValue);
+
+      if (Number.isFinite(directNumber)) {
+        return directNumber;
+      }
+
+      return toNumberSafe(rawValue.replace(/\D/g, ''));
+    };
+
+    const toFixed4 = (value: number): number => {
+      return Number((value || 0).toFixed(4));
+    };
+
+    const orderNo = '';
+    const orderNoSfa = saleId;
+    const storeCode = toStringSafe(sale.vanId);
+    const orderDate = sale.date ? new Date(sale.date) : new Date();
+    const customerCode = toErpCustomerCode(sale.customerId);
+
+    if (!customerCode) {
+      throw new BadRequestException(
+        `Invalid ERP customer code for sale ${saleId}. customerId must contain a numeric code for NU_CUSTOMER_CODE.`,
+      );
+    }
+
+    if (!storeCode) {
+      throw new BadRequestException(
+        `Invalid ERP store code for sale ${saleId}. vanId is required for VC_STORE_CODE.`,
+      );
+    }
+
+    const itemMap = new Map<
+      string,
+      {
+        productId: string;
+        qty: number;
+        compCode: string;
+      }
+    >();
+
+    for (const item of items) {
+      const productId = toStringSafe(item.productId);
+      const compCode = toStringSafe(item.compCode);
+
+      if (!productId) continue;
+
+      if (!compCode) {
+        throw new BadRequestException(
+          `Invalid ERP company code for sale ${saleId}. compCode is required in sale items.`,
+        );
+      }
+
+      const itemNetCases = toNumberSafe(item.netCases, 0);
+
+      const qty =
+        itemNetCases > 0
+          ? itemNetCases
+          : toFixed4(
+              toNumberSafe(item.caseQty, 0) +
+                toNumberSafe(item.pieceQty, 0) /
+                  Math.max(toNumberSafe(item.unitQtyInCase, 1), 1),
+            );
+
+      if (qty <= 0) continue;
+
+      const itemKey = `${compCode}:${productId}`;
+      const existing = itemMap.get(itemKey);
+
+      if (existing) {
+        existing.qty = toFixed4(existing.qty + qty);
+      } else {
+        itemMap.set(itemKey, {
+          productId,
+          qty: toFixed4(qty),
+          compCode,
+        });
+      }
+    }
+
+    const exportItems = Array.from(itemMap.values());
+
+    if (!exportItems.length) {
+      throw new BadRequestException(
+        `No valid sale items found to export sale ${saleId} to ERP.`,
+      );
+    }
+
+    await this.oracleRepository.transaction(async (connection) => {
+      for (const item of exportItems) {
+        await connection.execute(
+          `MERGE INTO ORDER_SFA target
+          USING (
+            SELECT :orderNoSfa AS VC_ORDER_NO_SFA,
+                   :compCode AS VC_COMP_CODE,
+                   :itemCode AS VC_ITEM_CODE
+            FROM DUAL
+          ) source
+          ON (
+            target.VC_ORDER_NO_SFA = source.VC_ORDER_NO_SFA
+            AND target.VC_COMP_CODE = source.VC_COMP_CODE
+            AND target.VC_ITEM_CODE = source.VC_ITEM_CODE
+          )
+          WHEN NOT MATCHED THEN INSERT (
+          VC_COMP_CODE,
+          VC_ORDER_NO,
+          DT_ORDER_DATE,
+          NU_CUSTOMER_CODE,
+          VC_ITEM_CODE,
+          NU_QTY,
+          VC_ORDER_NO_SFA,
+          DT_ORDER_DATE_SFA,
+          VC_STORE_CODE,
+          DT_MOD_DATE
+          ) VALUES (
+          :compCode,
+          :orderNo,
+          :orderDate,
+          :customerCode,
+          :itemCode,
+          :qty,
+          :orderNoSfa,
+          :orderDateSfa,
+          :storeCode,
+          :modDate
+        )
+        `,
+          {
+            compCode: item.compCode,
+            orderNo,
+            orderDate: null,
+            customerCode,
+            itemCode: item.productId,
+            qty: item.qty,
+            orderNoSfa,
+            orderDateSfa: orderDate,
+            storeCode,
+            modDate: new Date(),
+          },
+          {
+            autoCommit: false,
+          },
+        );
+      }
+
+      return true;
+    });
+  }
+
+  private async syncSaleToERP(params: {
+    sale: any;
+    items: any[];
+    saleId: string;
+    session?: any;
+  }) {
+    const { sale, items, saleId, session } = params;
+
+    try {
+      await this.exportSaleToErpSfaOrder({ sale, items, saleId });
+      await this.updateOne(
+        { saleId },
+        {
+          $set: {
+            erpSyncStatus: ErpSyncStatus.SYNCED,
+            erpSyncedAt: new Date(),
+            erpLastSyncAttemptAt: new Date(),
+            erpSyncError: null,
+          },
+          $inc: { erpSyncAttempts: 1 },
+        },
+        { session },
+      );
+      return true;
+    } catch (error) {
+      await this.updateOne(
+        { saleId },
+        {
+          $set: {
+            erpSyncStatus: ErpSyncStatus.FAILED,
+            erpLastSyncAttemptAt: new Date(),
+            erpSyncError:
+              error instanceof Error ? error.message : String(error),
+          },
+          $inc: { erpSyncAttempts: 1 },
+        },
+        { session },
+      );
+      return false;
+    }
+  }
+
+  async syncPendingSalesToERP() {
+    const sales = await this.find({
+      $or: [
+        {
+          erpSyncStatus: {
+            $in: [ErpSyncStatus.PENDING, ErpSyncStatus.FAILED],
+          },
+        },
+        { erpSyncStatus: { $exists: false } },
+      ],
+    });
+    let synced = 0;
+    let failed = 0;
+
+    for (const sale of sales) {
+      const items = await this.saleItemService.findLean({
+        saleId: sale.saleId,
+      });
+      const success = await this.syncSaleToERP({
+        sale,
+        items,
+        saleId: sale.saleId,
+      });
+      if (success) synced += 1;
+      else failed += 1;
+    }
+
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'Sale ERP synchronization completed',
+      data: { checked: sales.length, synced, failed },
     };
   }
 

@@ -51,11 +51,7 @@ import { CreateWorkSessionDto } from './dto/create-work-session.dto';
 import { UpdateWorkSessionDto } from './dto/update-work-session.dto';
 import { WorkSessionQueryDto } from './dto/work-session-query.dto';
 import { WORK_SESSION } from './work-session.constants';
-import {
-  CompleteWorkSessionDto,
-  TrackLocationDto,
-} from './dto/track-location.dto';
-import { VanChangeApprovalDto } from './dto/van-change-approval.dto';
+import { CompleteWorkSessionDto } from './dto/complete-work-session.dto';
 
 @ApiTags('Work-session')
 @FeatureFlag(API_MODULE_ENABLE_KEYS.WORK_SESSION)
@@ -100,11 +96,6 @@ export class WorkSessionController {
     return this.service.complete(payload);
   }
 
-  @Permissions('WORK_SESSION_CREATE')
-  @Post('location')
-  async trackLocation(@Body() payload: TrackLocationDto) {
-    return this.service.trackLocation(payload);
-  }
   /**
    * Get Today Active Work Session
    * ---------------------
@@ -113,48 +104,6 @@ export class WorkSessionController {
   @Get('today-activity')
   async todayActivity() {
     return this.service.todayActivity();
-  }
-
-  @Permissions('VAN_CHANGE')
-  @Patch('van-change/:workSessionId/approve')
-  @ApiParam({ name: 'workSessionId', description: 'WorkSession workSessionId' })
-  async approveVanChange(
-    @Param('workSessionId') workSessionId: string,
-    @Body() _dto: VanChangeApprovalDto,
-  ) {
-    return this.service.approveVanChange(workSessionId);
-  }
-
-  @Permissions('VAN_CHANGE')
-  @Patch('van-change/:workSessionId/reject')
-  @ApiParam({ name: 'workSessionId', description: 'WorkSession workSessionId' })
-  async rejectVanChange(
-    @Param('workSessionId') workSessionId: string,
-    @Body() _dto: VanChangeApprovalDto,
-  ) {
-    return this.service.rejectVanChange(workSessionId);
-  }
-
-  @Permissions('WORK_SESSION_CREATE')
-  @Patch('van-change/:workSessionId/request')
-  @ApiParam({ name: 'workSessionId', description: 'WorkSession workSessionId' })
-  async requestVanChange(
-    @Param('workSessionId') workSessionId: string,
-    @Body()
-    payload: {
-      requestedVanId: string;
-      requestedVanName?: string;
-      vanChangeReason?: string;
-    },
-  ) {
-    return this.service.requestVanChange(workSessionId, payload);
-  }
-
-  @Permissions('WORK_SESSION_CREATE')
-  @Patch('van-change/:workSessionId/cancel')
-  @ApiParam({ name: 'workSessionId', description: 'WorkSession workSessionId' })
-  async cancelVanChange(@Param('workSessionId') workSessionId: string) {
-    return this.service.cancelVanChange(workSessionId);
   }
 
   /**

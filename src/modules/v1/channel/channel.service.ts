@@ -1,4 +1,3 @@
-
 import {
   Injectable,
   NotFoundException,
@@ -10,7 +9,10 @@ import { MongoService } from 'src/core/database/mongo/mongo.service';
 import { MongoRepository } from 'src/core/database/mongo/mongo.repository';
 import { FilterQuery } from 'src/core/database/mongo/mongo.interface';
 
-import { Channel, ChannelSchema } from 'src/core/database/mongo/schema/channel.schema';
+import {
+  Channel,
+  ChannelSchema,
+} from 'src/core/database/mongo/schema/channel.schema';
 
 import { CHANNEL } from './channel.constants';
 import { CreateChannelDto } from './dto/create-channel.dto';
@@ -30,13 +32,12 @@ export class ChannelService extends MongoRepository<Channel> {
     try {
       return await this.withTransaction(async (session) => {
         if (payload.name) {
-          payload.name = TextNormalizer.normalize(payload.name, NormalizeType.TITLE);
+          payload.name = TextNormalizer.normalize(
+            payload.name,
+            NormalizeType.TITLE,
+          );
         }
-
-        const filter: FilterQuery<Channel> = {};
-
-        
-        if (payload.name) filter.name = payload.name;
+        const filter: FilterQuery<Channel> = { name: payload.name };
 
         const existing = await this.findOne(filter, {
           session,
@@ -93,7 +94,7 @@ export class ChannelService extends MongoRepository<Channel> {
 
     if (searchText) {
       const regex = new RegExp(searchText, 'i');
-      filter.$or = [{ channelId: regex }];
+      filter.$or = [{ channelId: regex }, { name: regex }];
     }
 
     const result = await this.paginate(filter, {
@@ -130,11 +131,10 @@ export class ChannelService extends MongoRepository<Channel> {
           dto.name = TextNormalizer.normalize(dto.name, NormalizeType.TITLE);
         }
 
-        const doc = await this.updateOne(
-          { channelId },
-          dto,
-          { session, new: true },
-        );
+        const doc = await this.updateOne({ channelId }, dto, {
+          session,
+          new: true,
+        });
 
         if (!doc) throw new NotFoundException(CHANNEL.NOT_FOUND);
 

@@ -12,8 +12,15 @@
  * - Pagination
  */
 
-import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsString, IsArray, IsEnum } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import {
+  IsOptional,
+  IsString,
+  IsArray,
+  IsEnum,
+  IsNotEmpty,
+  IsIn,
+} from 'class-validator';
 import { Transform } from 'class-transformer';
 import { ProductStatus } from 'src/shared/enums/product.enums';
 import { PaginationDto } from 'src/shared/dto/pagination.dto';
@@ -32,6 +39,45 @@ export class ProductQueryDto extends PaginationDto {
   @IsString()
   searchText?: string;
 
+  @ApiPropertyOptional({ example: 'RETAIL' })
+  @IsOptional()
+  @IsString()
+  customerCategoryId?: string;
+
+  @ApiPropertyOptional({
+    description: 'Include schemes applicable to each returned product',
+    example: 'true',
+  })
+  @IsOptional()
+  @IsIn(['true', 'false'])
+  includeSchemes?: string;
+
+  @ApiPropertyOptional({ description: 'Route used for scheme applicability' })
+  @IsOptional()
+  @IsString()
+  routeId?: string;
+
+  @ApiPropertyOptional({
+    description: 'Province used for scheme applicability',
+  })
+  @IsOptional()
+  @IsString()
+  provinceId?: string;
+
+  @ApiPropertyOptional({ description: 'Van used for scheme applicability' })
+  @IsOptional()
+  @IsString()
+  vanId?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Keep products that do not have a price for the requested customer category',
+    example: 'true',
+  })
+  @IsOptional()
+  @IsIn(['true', 'false'])
+  includeUnpricedProducts?: string;
+
   /**
    * Category IDs
    * -------------
@@ -45,6 +91,26 @@ export class ProductQueryDto extends PaginationDto {
   @IsOptional()
   @IsString()
   categoryIds?: string;
+
+  @ApiPropertyOptional({ description: 'Filter by exact category ID' })
+  @IsOptional()
+  @IsString()
+  categoryId?: string;
+
+  @ApiPropertyOptional({ description: 'Filter by exact parent category ID' })
+  @IsOptional()
+  @IsString()
+  parentCategoryId?: string;
+
+  @ApiPropertyOptional({ description: 'Sort by exact sortBy' })
+  @IsOptional()
+  @IsString()
+  sortBy?: string;
+
+  @ApiPropertyOptional({ description: 'Sort by exact sortOrder' })
+  @IsOptional()
+  @IsString()
+  sortOrder?: string;
 
   /**
    * Brands
@@ -133,4 +199,14 @@ export class ProductQueryDto extends PaginationDto {
   @IsOptional()
   @IsString()
   hasDiscount?: string;
+
+  @ApiPropertyOptional({ enum: ['excel', 'pdf'] })
+  @IsOptional()
+  @IsIn(['excel', 'pdf'])
+  fileType?: 'excel' | 'pdf';
+
+  @ApiPropertyOptional({ description: 'Comma-separated export column keys' })
+  @IsOptional()
+  @IsString()
+  columns?: string;
 }

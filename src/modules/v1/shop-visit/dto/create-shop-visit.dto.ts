@@ -6,7 +6,13 @@ import {
 import { ApiProperty } from '@nestjs/swagger';
 
 import { Type } from 'class-transformer';
-import { IsEnum, IsNotEmpty, IsOptional, IsString, ValidateNested } from 'class-validator';
+import {
+  IsEnum,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  ValidateNested,
+} from 'class-validator';
 import { LocationPointDto } from 'src/shared/dto/location-point.dto';
 
 export class CreateShopVisitDto {
@@ -51,15 +57,21 @@ export class CreateShopVisitDto {
   @ApiProperty({
     enum: ShopVisitType,
     example: ShopVisitType.ON_SITE,
-    description: 'Visit type (ON_SITE / OFF_SITE)',
+    description: 'Deprecated. Visit type is calculated by the server.',
+    required: false,
   })
-  @IsNotEmpty()
+  @IsOptional()
   @IsEnum(ShopVisitType)
-  visitType!: ShopVisitType;
+  visitType?: ShopVisitType;
 
   @ApiProperty({ type: LocationPointDto, required: false })
   @IsOptional()
   @ValidateNested()
   @Type(() => LocationPointDto)
   checkInLocation?: LocationPointDto;
+
+  @ApiProperty({ type: String, required: false })
+  @IsOptional()
+  @IsString()
+  interactionId?: string;
 }

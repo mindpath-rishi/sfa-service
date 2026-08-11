@@ -17,6 +17,10 @@ import {
   IsObject,
   IsOptional,
   IsString,
+  IsArray,
+  ArrayUnique,
+  IsBoolean,
+  ValidateIf,
 } from 'class-validator';
 import { NotificationPlatform } from 'src/shared/enums/notification.enums';
 
@@ -26,10 +30,16 @@ export class CreateNotificationDto {
    * ====================================================== */
 
   // Target recipient identifier (user / employee / admin)
-  @ApiProperty({ example: 'USR-123' })
+  @ApiProperty({ example: 'USR-123', required: false })
+  @ValidateIf((dto) => !dto.sendToAll)
   @IsString()
   @IsNotEmpty()
-  recipientId!: string;
+  recipientId?: string;
+
+  @ApiProperty({ example: false, required: false })
+  @IsOptional()
+  @IsBoolean()
+  sendToAll?: boolean;
 
   /* ======================================================
    * CONTENT
@@ -68,6 +78,13 @@ export class CreateNotificationDto {
   @IsOptional()
   @IsEnum(NotificationPlatform)
   platform?: NotificationPlatform;
+
+  @ApiProperty({ enum: NotificationPlatform, isArray: true, required: false })
+  @IsOptional()
+  @IsArray()
+  @ArrayUnique()
+  @IsEnum(NotificationPlatform, { each: true })
+  platforms?: NotificationPlatform[];
 
   // Notification category/type (order, payment, system)
   @ApiProperty({

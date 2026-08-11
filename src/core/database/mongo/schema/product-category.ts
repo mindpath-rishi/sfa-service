@@ -24,6 +24,11 @@ export enum ProductCategoryStatus {
   INACTIVE = 'INACTIVE',
 }
 
+export enum ProductCategoryType {
+  PARENT = 'PARENT',
+  CHILD = 'CHILD',
+}
+
 @Schema({ timestamps: true })
 export class ProductCategory {
   /* ======================================================
@@ -35,8 +40,20 @@ export class ProductCategory {
   categoryId!: string;
 
   // Display name of category
-  @Prop({ required: true, type: String })
+  @Prop({ required: true, index: true, type: String })
   name!: string;
+
+  @Prop({
+    required: true,
+    type: String,
+    enum: ProductCategoryType,
+    default: ProductCategoryType.PARENT,
+    index: true,
+  })
+  type!: ProductCategoryType;
+
+  @Prop({ required: false, type: String, index: true })
+  parentId?: string;
 
   /* ======================================================
    * STATUS
@@ -56,3 +73,9 @@ export class ProductCategory {
 
 export const ProductCategorySchema =
   SchemaFactory.createForClass(ProductCategory);
+
+ProductCategorySchema.index({ type: 1, parentId: 1, status: 1 });
+ProductCategorySchema.index(
+  { type: 1, parentId: 1, name: 1 },
+  { unique: true, name: 'unique_category_name_per_parent' },
+);

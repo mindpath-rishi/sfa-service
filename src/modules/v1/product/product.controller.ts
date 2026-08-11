@@ -27,8 +27,10 @@ import {
   Patch,
   Post,
   Query,
+  Res,
 } from '@nestjs/common';
 import { ApiBody, ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger';
+import type { Response } from 'express';
 
 import { FeatureFlag } from 'src/core/decorators/feature-flag.decorator';
 import { ApiSuccessResponse } from 'src/core/swagger/api.response.swagger';
@@ -51,6 +53,7 @@ import { ProductQueryDto } from './dto/product-query.dto';
 import { PRODUCT } from './product.constants';
 import { ProductUpdateDto } from './dto/update-product.dto';
 import { ProductCreateDto } from './dto/create-product.dto';
+import { BulkUpdateFocusedPackDto } from './dto/bulk-update-focused-pack.dto';
 import { ProductService } from './product.service';
 import { Public } from 'src/core/decorators/public.decorator';
 
@@ -90,6 +93,28 @@ export class ProductController {
     return this.productService.create(dto);
   }
 
+  @Public()
+  @Permissions('PRODUCT_SYNC')
+  @Post('sync')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Sync products from ERP Oracle to MongoDB' })
+  @ApiSuccessResponse(
+    {
+      totalERPRecords: 100,
+      totalUniqueRecords: 100,
+      totalValidRecords: 100,
+      inserted: 10,
+      updated: 90,
+      matched: 90,
+      synced: 100,
+    },
+    PRODUCT.SYNCED,
+    HttpStatus.OK,
+  )
+  async syncProducts() {
+    return this.productService.syncProductsFromERP();
+  }
+
   /**
    * Get Products
    * ------------
@@ -111,6 +136,8 @@ export class ProductController {
         {
           productId: 'PID-001',
           name: 'Milk 1L',
+          parentCategory: 'Dairy',
+          subCategory: 'Milk',
           status: 'ACTIVE',
         },
       ],
@@ -125,6 +152,41 @@ export class ProductController {
   )
   async findAll(@Query() query: ProductQueryDto) {
     return this.productService.findAll(query);
+  }
+
+  @Get('export')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Export products' })
+  async exportProducts(@Query() query: ProductQueryDto, @Res() res: Response) {
+    const file = await this.productService.exportProducts(query);
+    res.setHeader('Content-Type', file.mimeType);
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${file.fileName}"`,
+    );
+    res.send(file.buffer);
+  }
+
+  @Get('focused-pack/template')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Download Focused Pack product template' })
+  async downloadFocusedPackTemplate(@Res() res: Response) {
+    const file = await this.productService.getFocusedPackTemplate();
+    res.setHeader('Content-Type', file.mimeType);
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${file.fileName}"`,
+    );
+    res.send(file.buffer);
+  }
+
+  @Permissions('PRODUCT_UPDATE')
+  @Post('focused-pack/bulk-upload')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Bulk update Focused Pack values' })
+  @ApiBody({ type: BulkUpdateFocusedPackDto })
+  async bulkUpdateFocusedPacks(@Body() dto: BulkUpdateFocusedPackDto) {
+    return this.productService.bulkUpdateFocusedPacks(dto);
   }
 
   /**
@@ -145,8 +207,13 @@ export class ProductController {
     PRODUCT.FETCHED,
   )
   @ApiNotFoundResponse()
-  async findOne(@Param('productId') productId: string) {
-    return this.productService.findByProductId(productId);
+  async findOne(
+    @Param('productId') productId: string,
+    @Query('customerCategoryId') customerCategoryId?: string,
+  ) {
+    return this.productService.findByProductId(productId, {
+      customerCategoryId,
+    });
   }
 
   /**

@@ -1,5 +1,7 @@
 export enum UserStatus {
   ACTIVE = 'ACTIVE',
+  PENDING = 'PENDING',
+  REJECTED = 'REJECTED',
   BLOCKED = 'BLOCKED',
   INACTIVE = 'INACTIVE',
 }
@@ -16,4 +18,3 @@ export enum Agent {
   BACK_OFFICE = 'BACK_OFFICE',
   ECOMMERCE = 'ECOMMERCE',
 };
-

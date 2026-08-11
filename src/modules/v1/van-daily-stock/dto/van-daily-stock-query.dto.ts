@@ -1,7 +1,7 @@
 import { VanDailyStockStatus } from 'src/shared/enums/van-daily-stock.enums';
 
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsDate, IsEnum, IsNumber, IsOptional, IsString, MaxLength, Min, MinLength } from 'class-validator';
+import { IsDate, IsEnum, IsNumber, IsOptional, IsString, MaxLength, Min } from 'class-validator';
 import { PaginationDto } from 'src/shared/dto/pagination.dto';
 
 /**
@@ -16,7 +16,6 @@ export class VanDailyStockQueryDto extends PaginationDto {
   @ApiPropertyOptional({ description: "Search by name, code, or identifier (supports partial matching)", example: "search term" })
   @IsOptional()
   @IsString()
-  @MinLength(2)
   @MaxLength(100)
   searchText?: string;
 

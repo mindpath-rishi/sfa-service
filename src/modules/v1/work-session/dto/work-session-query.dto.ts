@@ -1,7 +1,7 @@
 import { WorkSessionStatus } from 'src/shared/enums/work-session.enums';
 
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsDate, IsEnum, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import { IsDate, IsEnum, IsOptional, IsString, MaxLength } from 'class-validator';
 import { PaginationDto } from 'src/shared/dto/pagination.dto';
 
 /**
@@ -16,7 +16,6 @@ export class WorkSessionQueryDto extends PaginationDto {
   @ApiPropertyOptional({ description: "Search by name, code, or identifier (supports partial matching)", example: "search term" })
   @IsOptional()
   @IsString()
-  @MinLength(2)
   @MaxLength(100)
   searchText?: string;
 

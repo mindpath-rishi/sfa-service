@@ -1,44 +1,32 @@
 import { ChannelStatus } from 'src/shared/enums/channel.enums';
 
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsString, IsEnum } from 'class-validator';
+import {
+  IsOptional,
+  IsString,
+  MaxLength,
+  IsEnum,
+} from 'class-validator';
 import { PaginationDto } from 'src/shared/dto/pagination.dto';
 
 /**
- * Channel Query DTO
- * ===================
- * Data Transfer Object for querying Channel records
- * 
- * Extends PaginationDto for pagination support
+ * ChannelQueryDto
+ * =================
+ * DTO for querying Channel
  */
 export class ChannelQueryDto extends PaginationDto {
-  /**
-   * SearchText
-   * ----------
-   * Search by name, code, or identifier
-   */
-
-  @ApiPropertyOptional({ description: "Search by name, code, or identifier" })
+  @ApiPropertyOptional({ description: 'Search text', example: 'abc' })
   @IsOptional()
   @IsString()
+  @MaxLength(100)
   searchText?: string;
-  /**
-   * Name
-   * ----
-   * Display name of channel
-   */
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ type: String })
   @IsOptional()
   @IsString()
   name?: string;
-  /**
-   * Status
-   * ------
-   * Channel availability status
-   */
 
-  @ApiPropertyOptional({ example: ChannelStatus.ACTIVE, enum: ChannelStatus })
+  @ApiPropertyOptional({ enum: ChannelStatus })
   @IsOptional()
   @IsEnum(ChannelStatus)
   status?: ChannelStatus;

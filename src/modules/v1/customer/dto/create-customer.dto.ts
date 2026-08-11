@@ -119,6 +119,7 @@ export class CreateCustomerDto {
     type: () => GeoTagDto,
     description: 'Embedded GeoTag object',
   })
+  @IsOptional()
   @ValidateNested()
   @Type(() => GeoTagDto)
   geoTag?: GeoTagDto;
@@ -128,12 +129,16 @@ export class CreateCustomerDto {
    * ------
    * Reference of customer category
    */
-  // @ApiPropertyOptional({ enum: CustomerStatus, example: CustomerStatus.ACTIVE })
-  // @IsEnum(CustomerStatus)
-  // status?: CustomerStatus;
+  @ApiPropertyOptional({
+    enum: CustomerStatus,
+    example: CustomerStatus.VERIFICATION_PENDING,
+  })
+  @IsOptional()
+  @IsEnum(CustomerStatus)
+  status?: CustomerStatus;
 
-  @ApiProperty({ type: String, description: 'Reference ID' })
-  @IsNotEmpty()
+  @ApiPropertyOptional({ type: String, description: 'Route mapping reference ID' })
+  @IsOptional()
   @IsString()
-  routeId!: string;
+  routeId?: string;
 }

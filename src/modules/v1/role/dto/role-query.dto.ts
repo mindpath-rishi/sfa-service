@@ -7,7 +7,6 @@
  * Supports:
  * - Status-based filtering
  * - Free-text search
- * - Van association limit filters
  * - Pagination (via PaginationDto)
  */
 
@@ -15,12 +14,9 @@ import { ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsEnum,
   IsOptional,
-  IsInt,
-  Min,
   IsString,
   MaxLength,
 } from 'class-validator';
-import { Type } from 'class-transformer';
 import { Status } from 'src/shared/enums/app.enums';
 import { PaginationDto } from 'src/shared/dto/pagination.dto';
 
@@ -60,60 +56,21 @@ export class RoleQueryDto extends PaginationDto {
   @MaxLength(50)
   searchText?: string;
 
-  /**
-   * Exact Van Limit
-   * ---------------
-   * Purpose : Match roles with an exact van association limit
-   *
-   * Rules:
-   * - -1 = Unlimited
-   * -  0 = No vans allowed
-   * - >0 = Exact number of vans
-   */
   @ApiPropertyOptional({
-    example: 1,
-    description: 'Exact van limit (-1 = unlimited, 0 = none, N = max N vans)',
+    example: 'name',
+    description: 'Sort field',
   })
   @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(-1)
-  maxAssociatedVans?: number;
+  @IsString()
+  @MaxLength(50)
+  sortBy?: string;
 
-  /**
-   * Max Van Limit (LTE)
-   * ------------------
-   * Purpose : Filter roles with van limit less than or equal to a value
-   *
-   * Example:
-   * - 3 → roles allowing up to 3 vans
-   */
   @ApiPropertyOptional({
-    example: 3,
-    description: 'Filter roles with van limit less than or equal to this value',
+    example: 'asc',
+    enum: ['asc', 'desc'],
+    description: 'Sort direction',
   })
   @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(-1)
-  maxAssociatedVansLte?: number;
-
-  /**
-   * Min Van Limit (GTE)
-   * ------------------
-   * Purpose : Filter roles with van limit greater than or equal to a value
-   *
-   * Example:
-   * - 1 → roles allowing at least 1 van
-   */
-  @ApiPropertyOptional({
-    example: 1,
-    description:
-      'Filter roles with van limit greater than or equal to this value',
-  })
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(-1)
-  maxAssociatedVansGte?: number;
+  @IsString()
+  sortOrder?: 'asc' | 'desc';
 }

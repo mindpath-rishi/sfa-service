@@ -6,6 +6,7 @@ export const envValidationSchema = Joi.object({
     .required(),
 
   PORT: Joi.number().default(3000),
+  CUSTOMER_GEOFENCE_RADIUS_METERS: Joi.number().positive().default(100),
 
   /* ---------------- DATABASE ---------------- */
   MONGO_URI: Joi.string().required(),

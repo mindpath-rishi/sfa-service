@@ -22,10 +22,25 @@ export class SaleItem {
   saleId!: string;
 
   @Prop({ type: String, required: true, index: true })
+  compCode!: string;
+
+  @Prop({ type: String, required: true, index: true })
   productId!: string;
 
   @Prop({ type: String, required: true })
   productName!: string;
+
+  @Prop({ type: String, required: true })
+  categoryId!: string;
+
+  @Prop({ type: String, required: true })
+  parentCategoryId!: string;
+
+  @Prop({ type: String, required: true, index: true })
+  customerCategoryId!: string;
+
+  @Prop({ type: String, enum: ['Y', 'N'], default: 'N' })
+  isFocusedPack!: string;
 
   /* ================= QUANTITY ================= */
 
@@ -37,6 +52,9 @@ export class SaleItem {
 
   @Prop({ type: Number, required: true })
   quantity!: number;
+
+  @Prop({ type: Number, required: true })
+  netCases!: number;
 
   /* ================= RETURNS ================= */
 
@@ -75,7 +93,46 @@ export class SaleItem {
   totalNetWeight!: number;
 
   @Prop({ type: Number, default: 0 })
+  grossValue!: number;
+
+  @Prop({ type: Number, default: 0 })
   totalValue!: number;
+
+  /* ================= SCHEME ================= */
+
+  // Applied scheme reference, if any category/sub-category/product/province/route/van wise scheme matched this line
+  @Prop({ type: String, ref: 'Scheme' })
+  schemeId?: string;
+
+  @Prop({ type: String, trim: true })
+  schemeName?: string;
+
+  @Prop({ type: String, trim: true })
+  schemeType?: string;
+
+  @Prop({ type: Number, default: 0 })
+  schemeMinimumQuantity?: number;
+
+  @Prop({ type: Number })
+  schemeDiscountPercent?: number;
+
+  @Prop({ type: Number })
+  schemeDiscountValue?: number;
+
+  @Prop({ type: Number })
+  schemeBuyQty?: number;
+
+  @Prop({ type: Number, default: 0 })
+  schemeDiscountAmount?: number;
+
+  @Prop({ type: Number, default: 0 })
+  schemeFreeQty?: number;
+
+  @Prop({ type: String })
+  schemeFreeProductId?: string;
+
+  @Prop({ type: String, trim: true })
+  schemeFreeProductName?: string;
 
   /* ================= CONVERSION ================= */
 

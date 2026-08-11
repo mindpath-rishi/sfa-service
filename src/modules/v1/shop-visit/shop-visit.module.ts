@@ -9,14 +9,19 @@ import { ShopVisitController } from './shop-visit.controller';
 import { ShopVisitService } from './shop-visit.service';
 import { CustomerModule } from '../customer/customer.module';
 import { RouteSessionModule } from '../route-session/route-session.module';
+import {
+  InteractionLog,
+  InteractionLogSchema,
+} from 'src/core/database/mongo/schema/interaction-log.schema';
 
 @Module({
   imports: [
     MongooseModule.forFeature([
       { name: ShopVisit.name, schema: ShopVisitSchema },
+      { name: InteractionLog.name, schema: InteractionLogSchema },
     ]),
     CustomerModule,
-    RouteSessionModule
+    RouteSessionModule,
   ],
   controllers: [ShopVisitController],
   providers: [ShopVisitService],

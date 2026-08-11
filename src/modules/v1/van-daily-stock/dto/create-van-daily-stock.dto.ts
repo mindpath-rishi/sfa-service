@@ -1,21 +1,39 @@
 import { VanDailyStockStatus } from 'src/shared/enums/van-daily-stock.enums';
 
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsDate, IsEnum, IsNotEmpty, IsNumber, IsOptional, IsString, Min } from 'class-validator';
-
+import {
+  IsDate,
+  IsEnum,
+  IsNotEmpty,
+  IsNumber,
+  IsOptional,
+  IsString,
+  Min,
+} from 'class-validator';
 
 export class CreateVanDailyStockDto {
-/**
- * CreateVanDailyStockDto
- * =================
- * Data Transfer Object for creating new VanDailyStock records
- */
+  /**
+   * CreateVanDailyStockDto
+   * =================
+   * Data Transfer Object for creating new VanDailyStock records
+   */
   @ApiProperty({ type: Date })
   @IsNotEmpty()
   @IsDate()
   date!: Date;
 
-  @ApiProperty({ type: String, description: 'Business identifier for employee' })
+  @ApiProperty({
+    type: String,
+    description: 'Business identifier for work session',
+  })
+  @IsNotEmpty()
+  @IsString()
+  workSessionId!: string;
+
+  @ApiProperty({
+    type: String,
+    description: 'Business identifier for employee',
+  })
   @IsNotEmpty()
   @IsString()
   employeeId!: string;
@@ -30,31 +48,46 @@ export class CreateVanDailyStockDto {
   @IsString()
   productId!: string;
 
-  @ApiPropertyOptional({ type: Number , default: 0 })
+  @ApiProperty({ type: Number })
+  @IsNumber()
+  @Min(1)
+  unitQtyInCase!: number;
+
+  @ApiProperty({ type: Number })
+  @IsNumber()
+  @Min(0)
+  piecePrice!: number;
+
+  @ApiProperty({ type: Number })
+  @IsNumber()
+  @Min(0)
+  pieceNetWeight!: number;
+
+  @ApiPropertyOptional({ type: Number, default: 0 })
   @IsOptional()
   @IsNumber()
   @Min(0)
   openingQty?: number;
 
-  @ApiPropertyOptional({ type: Number , default: 0 })
+  @ApiPropertyOptional({ type: Number, default: 0 })
   @IsOptional()
   @IsNumber()
   @Min(0)
   inQty?: number;
 
-  @ApiPropertyOptional({ type: Number , default: 0 })
+  @ApiPropertyOptional({ type: Number, default: 0 })
   @IsOptional()
   @IsNumber()
   @Min(0)
   outQty?: number;
 
-  @ApiPropertyOptional({ type: Number , default: 0 })
+  @ApiPropertyOptional({ type: Number, default: 0 })
   @IsOptional()
   @IsNumber()
   @Min(0)
   adjustmentQty?: number;
 
-  @ApiPropertyOptional({ type: Number , default: 0 })
+  @ApiPropertyOptional({ type: Number, default: 0 })
   @IsOptional()
   @IsNumber()
   @Min(0)
@@ -65,9 +98,11 @@ export class CreateVanDailyStockDto {
   @IsString()
   remark?: string;
 
-  @ApiPropertyOptional({ enum: VanDailyStockStatus, default: VanDailyStockStatus.DRAFT })
+  @ApiPropertyOptional({
+    enum: VanDailyStockStatus,
+    default: VanDailyStockStatus.DRAFT,
+  })
   @IsOptional()
   @IsEnum(VanDailyStockStatus)
   status?: VanDailyStockStatus;
-
 }

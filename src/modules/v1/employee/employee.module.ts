@@ -62,6 +62,33 @@ import {
   VanDailyStock,
   VanDailyStockSchema,
 } from 'src/core/database/mongo/schema/van-daily-stock.schema';
+import { Role, RoleSchema } from 'src/core/database/mongo/schema/role.schema';
+import {
+  Position,
+  PositionSchema,
+} from 'src/core/database/mongo/schema/position.schema';
+import { User, UserSchema } from 'src/core/database/mongo/schema/user.schema';
+import {
+  FocusedPackTarget,
+  FocusedPackTargetSchema,
+} from 'src/core/database/mongo/schema/focused-pack-target.schema';
+import { LiveLocationModule } from '../live-location/live-location.module';
+import {
+  Country,
+  CountrySchema,
+} from 'src/core/database/mongo/schema/country.schema';
+import {
+  Province,
+  ProvinceSchema,
+} from 'src/core/database/mongo/schema/province.schema';
+import {
+  ProductCategory,
+  ProductCategorySchema,
+} from 'src/core/database/mongo/schema/product-category';
+import {
+  Market,
+  MarketSchema,
+} from 'src/core/database/mongo/schema/market.schema';
 
 @Module({
   imports: [
@@ -73,6 +100,7 @@ import {
       { name: Activity.name, schema: ActivitySchema },
       { name: Leave.name, schema: LeaveSchema },
       { name: Target.name, schema: TargetSchema },
+      { name: FocusedPackTarget.name, schema: FocusedPackTargetSchema },
       { name: RouteCustomerMapping.name, schema: RouteCustomerMappingSchema },
       { name: Route.name, schema: RouteSchema },
       { name: Customer.name, schema: CustomerSchema },
@@ -82,8 +110,16 @@ import {
       { name: WorkSession.name, schema: WorkSessionSchema },
       { name: RouteSession.name, schema: RouteSessionSchema },
       { name: VanDailyStock.name, schema: VanDailyStockSchema },
+      { name: Role.name, schema: RoleSchema },
+      { name: Position.name, schema: PositionSchema },
+      { name: User.name, schema: UserSchema },
+      { name: Country.name, schema: CountrySchema },
+      { name: Province.name, schema: ProvinceSchema },
+      { name: ProductCategory.name, schema: ProductCategorySchema },
+      { name: Market.name, schema: MarketSchema },
     ]),
     UserModule,
+    LiveLocationModule,
   ],
   controllers: [EmployeeController],
   providers: [EmployeeService],

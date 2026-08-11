@@ -93,7 +93,7 @@ export class CountryService extends MongoRepository<Country> {
 
     if (searchText) {
       const regex = new RegExp(searchText, 'i');
-      filter.$or = [{ countryId: regex }];
+      filter.$or = [{ countryId: regex }, { name: regex }];
     }
 
     const result = await this.paginate(filter, {

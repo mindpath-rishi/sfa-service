@@ -145,6 +145,7 @@ export class Customer {
 
   @Prop({ type: Number, default: 0 })
   outstanding!: number;
+
   /* ======================================================
    * LOCATION
    * ====================================================== */
@@ -163,10 +164,13 @@ export class Customer {
   @Prop({
     type: String,
     enum: CustomerStatus,
-    default: CustomerStatus.ACTIVE,
+    default: CustomerStatus.VERIFICATION_PENDING,
     index: true,
   })
   status!: CustomerStatus;
+
+  @Prop({ type: String, index: true })
+  createdByEmployeeId?: string;
 
   @Prop({
     type: Date,

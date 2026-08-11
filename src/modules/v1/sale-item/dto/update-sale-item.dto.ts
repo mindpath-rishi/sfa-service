@@ -1,16 +1,15 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IsNumber, IsOptional, IsString } from 'class-validator';
 
-
 export class UpdateSaleItemDto {
-/**
- * UpdateSalesItemDto
- * =================
- * Data Transfer Object for updating SalesItem records
- * 
- * All fields are optional for partial updates
- * Supports partial updates - omitted fields will retain their existing values
- */
+  /**
+   * UpdateSalesItemDto
+   * =================
+   * Data Transfer Object for updating SalesItem records
+   *
+   * All fields are optional for partial updates
+   * Supports partial updates - omitted fields will retain their existing values
+   */
   @ApiPropertyOptional({ type: String })
   @IsOptional()
   @IsString()
@@ -26,12 +25,17 @@ export class UpdateSaleItemDto {
   @IsString()
   productName?: string;
 
-  @ApiPropertyOptional({ type: Number , default: 0 })
+  @ApiPropertyOptional({ type: String, enum: ['Y', 'N'] })
+  @IsOptional()
+  @IsString()
+  isFocusedPack?: string;
+
+  @ApiPropertyOptional({ type: Number, default: 0 })
   @IsOptional()
   @IsNumber()
   caseQty?: number;
 
-  @ApiPropertyOptional({ type: Number , default: 0 })
+  @ApiPropertyOptional({ type: Number, default: 0 })
   @IsOptional()
   @IsNumber()
   pieceQty?: number;
@@ -41,17 +45,17 @@ export class UpdateSaleItemDto {
   @IsNumber()
   quantity?: number;
 
-  @ApiPropertyOptional({ type: Number , default: 0 })
+  @ApiPropertyOptional({ type: Number, default: 0 })
   @IsOptional()
   @IsNumber()
   returnCaseQty?: number;
 
-  @ApiPropertyOptional({ type: Number , default: 0 })
+  @ApiPropertyOptional({ type: Number, default: 0 })
   @IsOptional()
   @IsNumber()
   returnPieceQty?: number;
 
-  @ApiPropertyOptional({ type: Number , default: 0 })
+  @ApiPropertyOptional({ type: Number, default: 0 })
   @IsOptional()
   @IsNumber()
   returnQuantity?: number;
@@ -76,7 +80,7 @@ export class UpdateSaleItemDto {
   @IsNumber()
   caseNetWeight?: number;
 
-  @ApiPropertyOptional({ type: Number , default: 0 })
+  @ApiPropertyOptional({ type: Number, default: 0 })
   @IsOptional()
   @IsNumber()
   totalWeight?: number;
@@ -86,7 +90,7 @@ export class UpdateSaleItemDto {
    * ----------
    * 🔥 Base (source of truth)
    */
-  @ApiPropertyOptional({ type: Number , default: 0 })
+  @ApiPropertyOptional({ type: Number, default: 0 })
   @IsOptional()
   @IsNumber()
   totalValue?: number;
@@ -100,5 +104,4 @@ export class UpdateSaleItemDto {
   @IsOptional()
   @IsNumber()
   unitQtyInCase?: number;
-
 }

@@ -1,15 +1,21 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsOptional, IsString, ValidateNested } from 'class-validator';
+import {
+  ArrayMaxSize,
+  IsArray,
+  IsOptional,
+  IsString,
+  ValidateNested,
+} from 'class-validator';
 import { LocationPointDto } from 'src/shared/dto/location-point.dto';
 
-export class TrackLocationDto {
-  @ApiPropertyOptional({ type: String })
+export class TrackLiveLocationDto {
+  @ApiPropertyOptional()
   @IsOptional()
   @IsString()
   workSessionId?: string;
 
-  @ApiPropertyOptional({ type: String })
+  @ApiPropertyOptional()
   @IsOptional()
   @IsString()
   source?: string;
@@ -19,16 +25,12 @@ export class TrackLocationDto {
   @ValidateNested()
   @Type(() => LocationPointDto)
   location?: LocationPointDto;
-}
 
-export class CompleteWorkSessionDto {
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ type: [LocationPointDto], maxItems: 1000 })
   @IsOptional()
-  carryForwardStock?: any;
-
-  @ApiPropertyOptional({ type: LocationPointDto })
-  @IsOptional()
-  @ValidateNested()
+  @IsArray()
+  @ArrayMaxSize(1000)
+  @ValidateNested({ each: true })
   @Type(() => LocationPointDto)
-  dayEndLocation?: LocationPointDto;
+  locations?: LocationPointDto[];
 }

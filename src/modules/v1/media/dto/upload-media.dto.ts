@@ -45,16 +45,22 @@ export class UploadMediaDto {
    * OWNER
    * ====================================================== */
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     enum: Object.values(MEDIA_OWNER_TYPE),
     example: MEDIA_OWNER_TYPE.PRODUCT,
+    description: 'Required when uploading media',
   })
+  @IsOptional()
   @IsIn(Object.values(MEDIA_OWNER_TYPE))
-  ownerType!: string;
+  ownerType?: string;
 
-  @ApiProperty({ example: 'P001' })
+  @ApiPropertyOptional({
+    example: 'P001',
+    description: 'Required when uploading media',
+  })
+  @IsOptional()
   @IsString()
-  ownerId!: string;
+  ownerId?: string;
 
   @ApiPropertyOptional({ example: 'V001' })
   @IsOptional()

@@ -10,6 +10,7 @@ import { ActivityService } from './activity.service';
 import { RouteSessionModule } from '../route-session/route-session.module';
 import { VanDailyStockModule } from '../van-daily-stock/van-daily-stock.module';
 import { VanInventoryModule } from '../van-inventory/van-inventory.module';
+import { VanErpClosingModule } from '../van-erp-closing/van-erp-closing.module';
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { VanInventoryModule } from '../van-inventory/van-inventory.module';
     RouteSessionModule,
     VanDailyStockModule,
     VanInventoryModule,
+    VanErpClosingModule,
   ],
   controllers: [ActivityController],
   providers: [ActivityService],

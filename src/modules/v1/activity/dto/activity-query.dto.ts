@@ -7,7 +7,6 @@ import {
   IsOptional,
   IsString,
   MaxLength,
-  MinLength,
 } from 'class-validator';
 import { PaginationDto } from 'src/shared/dto/pagination.dto';
 
@@ -27,7 +26,6 @@ export class ActivityQueryDto extends PaginationDto {
   })
   @IsOptional()
   @IsString()
-  @MinLength(2)
   @MaxLength(100)
   searchText?: string;
 

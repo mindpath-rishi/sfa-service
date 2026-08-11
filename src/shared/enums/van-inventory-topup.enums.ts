@@ -23,3 +23,9 @@ export enum VanInventoryTopupStatus {
   // Rejected by supervisor
   REJECTED = 'REJECTED',
 }
+
+export enum VanInventoryTopupErpSyncStatus {
+  PENDING = 'PENDING',
+  SYNCED = 'SYNCED',
+  FAILED = 'FAILED',
+}

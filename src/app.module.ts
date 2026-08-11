@@ -28,7 +28,9 @@ import { EmployeeModule } from './modules/v1/employee/employee.module';
 import { NotificationModule } from './modules/v1/notification/notification.module';
 import { ProductModule } from './modules/v1/product/product.module';
 import { ProductCategoryModule } from './modules/v1/product-category/product-category.module';
+import { MasterBulkModule } from './modules/v1/master-bulk/master-bulk.module';
 import { VanModule } from './modules/v1/van/van.module';
+import { PositionModule } from './modules/v1/position/position.module';
 import { MarketModule } from './modules/v1/market/market.module';
 import { ProvinceModule } from './modules/v1/province/province.module';
 import { OutletTypeModule } from './modules/v1/outlet-type/outlet-type.module';
@@ -55,6 +57,20 @@ import { SaleModule } from './modules/v1/sale/sale.module';
 import { SaleItemModule } from './modules/v1/sale-item/sale-item.module';
 import { LeaveModule } from './modules/v1/leave/leave.module';
 import { TargetModule } from './modules/v1/target/target.module';
+import { OracleModule } from './core/database/oracle/oracle.module';
+import { PriceModule } from './modules/v1/price/price.module';
+import { VanErpClosingModule } from './modules/v1/van-erp-closing/van-erp-closing.module';
+import { SchemeModule } from './modules/v1/scheme/scheme.module';
+import { DashboardModule } from './modules/v1/dashboard/dashboard.module';
+import { ChannelModule } from './modules/v1/channel/channel.module';
+import { SyncModule } from './modules/v1/sync/sync.module';
+import { SegmentationModule } from './modules/v1/segmentation/segmentation.module';
+import { LiveLocationModule } from './modules/v1/live-location/live-location.module';
+import { VanChangeRequestModule } from './modules/v1/van-change-request/van-change-request.module';
+import { OutletVerificationModule } from './modules/v1/outlet-verification/outlet-verification.module';
+import { RouteChangeRequestModule } from './modules/v1/route-change-request/route-change-request.module';
+import { StockUnloadRequestModule } from './modules/v1/stock-unload-request/stock-unload-request.module';
+import { ReportModule } from './modules/v1/report/report.module';
 
 @Global()
 @Module({
@@ -92,10 +108,13 @@ import { TargetModule } from './modules/v1/target/target.module';
     PermissionModule,
     MediaModule,
     EmployeeModule,
+    ReportModule,
     NotificationModule,
     ProductModule,
     ProductCategoryModule,
+    MasterBulkModule,
     VanModule,
+    PositionModule,
     MarketModule,
     ProvinceModule,
     CustomerCategoryModule,
@@ -114,6 +133,11 @@ import { TargetModule } from './modules/v1/target/target.module';
     VanInventoryTopupItemModule,
     ActivityModule,
     WorkSessionModule,
+    VanChangeRequestModule,
+    RouteChangeRequestModule,
+    StockUnloadRequestModule,
+    OutletVerificationModule,
+    LiveLocationModule,
     RouteSessionModule,
     ShopVisitModule,
     RouteCustomerMappingModule,
@@ -122,7 +146,16 @@ import { TargetModule } from './modules/v1/target/target.module';
     SaleModule,
     SaleItemModule,
     LeaveModule,
-    TargetModule,],
+    TargetModule,
+    OracleModule,
+    PriceModule,
+    DashboardModule,
+    VanErpClosingModule,
+    SchemeModule,
+    ChannelModule,
+    SegmentationModule,
+    SyncModule,
+  ],
   providers: [
     AppControlService,
     MongoService,

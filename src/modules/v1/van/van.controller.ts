@@ -27,8 +27,10 @@ import {
   Patch,
   Post,
   Query,
+  Res,
 } from '@nestjs/common';
 import { ApiBody, ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger';
+import type { Response } from 'express';
 
 import { FeatureFlag } from 'src/core/decorators/feature-flag.decorator';
 import { ApiSuccessResponse } from 'src/core/swagger/api.response.swagger';
@@ -51,6 +53,7 @@ import { VanService } from './van.service';
 import { CreateVanDto } from './dto/create-van.dto';
 import { UpdateVanDto } from './dto/update-van.dto';
 import { VanQueryDto } from './dto/van-query.dto';
+import { UpdateVanBreakdownDto } from './dto/update-van-breakdown.dto';
 import { VAN } from './van.constants';
 import { Public } from 'src/core/decorators/public.decorator';
 
@@ -103,6 +106,28 @@ export class VanController {
     return this.vanService.changeVan(dto);
   }
 
+  @Public()
+  @Permissions('VAN_SYNC')
+  @Post('sync')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Sync vans from ERP Oracle to MongoDB' })
+  @ApiSuccessResponse(
+    {
+      totalERPRecords: 10,
+      totalUniqueRecords: 10,
+      totalValidRecords: 10,
+      inserted: 2,
+      updated: 8,
+      matched: 8,
+      synced: 10,
+    },
+    'ERP vans synced successfully.',
+    HttpStatus.OK,
+  )
+  async syncVans() {
+    return this.vanService.syncVansFromERP();
+  }
+
   /**
    * Get Van mapped routes
    * -------------
@@ -123,6 +148,16 @@ export class VanController {
   @ApiNotFoundResponse()
   async getVanMappedRoutes() {
     return this.vanService.getVanMappedRoutes();
+  }
+
+  @Permissions('WORK_SESSION_CREATE')
+  @Get('change-options')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Get vans eligible for the logged-in salesman to request',
+  })
+  async getVanChangeOptions() {
+    return this.vanService.getVanChangeOptions();
   }
 
   /**
@@ -159,6 +194,36 @@ export class VanController {
   )
   async findAll(@Query() query: VanQueryDto) {
     return this.vanService.findAll(query);
+  }
+
+  @Get('/export')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Export vans' })
+  async exportVans(
+    @Query()
+    query: VanQueryDto & {
+      fileType?: 'excel' | 'pdf';
+      columns?: string;
+    },
+    @Res() res: Response,
+  ) {
+    const file = await this.vanService.exportVans(query);
+
+    res.setHeader('Content-Type', file.mimeType);
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${file.fileName}"`,
+    );
+    res.send(file.buffer);
+  }
+
+  @Permissions('VAN_UPDATE')
+  @Patch('breakdown')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Update breakdown status for selected vans' })
+  @ApiBody({ type: UpdateVanBreakdownDto })
+  async updateBreakdown(@Body() dto: UpdateVanBreakdownDto) {
+    return this.vanService.updateBreakdown(dto);
   }
 
   /**

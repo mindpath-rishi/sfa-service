@@ -38,7 +38,7 @@ export class LocationPoint {
   capturedAt?: Date;
 }
 
-@Schema({ timestamps: true})
+@Schema({ timestamps: true })
 export class Activity {
   /* ======================================================
    * IDENTITY
@@ -62,7 +62,7 @@ export class Activity {
   userName!: string;
 
   // User who performed the activity
-  @Prop({ required: true, type: String })
+  @Prop({ type: String })
   vanId!: string;
 
   // User name (for quick reference)

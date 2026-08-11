@@ -44,10 +44,20 @@ import { USER } from './user.constants';
 import { jwtConfig } from 'src/core/config/jwt.config';
 import { Employee } from 'src/core/database/mongo/schema/employee.schema';
 import { UserDevice } from 'src/core/database/mongo/schema/device.schema';
+import { Role } from 'src/core/database/mongo/schema/role.schema';
 import { VanService } from '../van/van.service';
+import { UpdateOwnProfileDto } from './dto/login.dto';
+import { VanStatus } from 'src/shared/enums/van.enums';
+import {
+  Position,
+  PositionSchema,
+} from 'src/core/database/mongo/schema/position.schema';
+import { EmployeeType } from 'src/shared/enums/employee.enums';
 
 @Injectable()
 export class UserService extends MongoRepository<User> {
+  private readonly positionModel;
+
   constructor(
     private readonly jwtService: JwtService,
     private readonly redis: RedisRepository,
@@ -57,8 +67,11 @@ export class UserService extends MongoRepository<User> {
     private readonly employeeModel: Model<Employee>,
     @InjectModel(UserDevice.name)
     private readonly userDeviceModel: Model<UserDevice>,
+    @InjectModel(Role.name)
+    private readonly roleModel: Model<Role>,
   ) {
     super(mongo.getModel(User.name, UserSchema));
+    this.positionModel = mongo.getModel(Position.name, PositionSchema);
   }
 
   /* ======================================================
@@ -79,6 +92,7 @@ export class UserService extends MongoRepository<User> {
       email?: string;
       password: string;
       loginId: string;
+      status?: UserStatus;
     },
     session?: any,
   ) {
@@ -91,7 +105,7 @@ export class UserService extends MongoRepository<User> {
           mobile: data.mobile,
           email: data.email?.toLowerCase(),
           password: hashedPassword,
-          status: UserStatus.ACTIVE,
+          status: data.status ?? UserStatus.ACTIVE,
           loginId: data.loginId,
         },
         { session },
@@ -173,6 +187,49 @@ export class UserService extends MongoRepository<User> {
     if (!profile) {
       throw new ForbiddenException(USER.PROFILE_NOT_FOUND);
     }
+    if (profile.employeeType === EmployeeType.SUPPORTING_STAFF) {
+      throw new ForbiddenException('Supporting staff do not have app access');
+    }
+
+    const position = await this.positionModel
+      .findOne({
+        employeeId: profile.employeeId,
+        status: 'ACTIVE',
+        isDeleted: { $ne: true },
+      })
+      .select('positionId roleId reportTo offlineAccessAllowed')
+      .lean();
+    const reportingPosition = position?.reportTo
+      ? await this.positionModel
+          .findOne({
+            positionId: position.reportTo,
+            isDeleted: { $ne: true },
+          })
+          .select('employeeId')
+          .lean()
+      : null;
+    const reportingEmployee = reportingPosition?.employeeId
+      ? await this.employeeModel
+          .findOne({
+            employeeId: reportingPosition.employeeId,
+            isDeleted: { $ne: true },
+          })
+          .select({ employeeId: 1, name: 1 })
+          .lean()
+      : null;
+
+    if (!position?.roleId) {
+      throw new ForbiddenException('Position role not found');
+    }
+    const roleId = position.roleId;
+    const role = await this.roleModel.findOne({
+      roleId,
+      isDeleted: false,
+    });
+
+    if (!role) {
+      throw new ForbiddenException('Role not found');
+    }
 
     /* ---------- DEVICE UPSERT ---------- */
     await this.userDeviceModel.findOneAndUpdate(
@@ -200,7 +257,9 @@ export class UserService extends MongoRepository<User> {
       {
         type: 'USER',
         profileId: user.profileId,
-        role: user.role,
+        role: role.name,
+        roleId,
+        offlineAccessAllowed: position.offlineAccessAllowed === true,
         deviceId,
         createdAt: new Date().toISOString(),
       },
@@ -221,16 +280,24 @@ export class UserService extends MongoRepository<User> {
       60 * 60 * 24 * 7,
     );
 
-    const vanId: string = profile?.associatedVans?.[0];
+    const assignedVans = await this.vanService.findAll({
+      userId: user.profileId,
+      status: VanStatus.ACTIVE,
+      page: 1,
+      limit: 1,
+    });
+    const vanId = assignedVans.data[0]?.vanId;
 
     const accessToken = this.jwtService.sign(
       {
         sub: user.profileId,
-        role: user.role,
+        role: role.name,
+        roleId,
         sid: sessionId,
         // deviceId,
         name: profile?.name,
         vanId,
+        offlineAccessAllowed: position.offlineAccessAllowed === true,
       },
       {
         expiresIn,
@@ -257,7 +324,17 @@ export class UserService extends MongoRepository<User> {
       sessionId,
       user: {
         profileId: user.profileId,
-        profile,
+        profile: {
+          ...profile.toObject(),
+          offlineAccessAllowed: position.offlineAccessAllowed === true,
+          roleId,
+          manager: reportingEmployee?.name,
+          managerName: reportingEmployee?.name,
+          reportingEmployeeName: reportingEmployee?.name,
+        },
+        role: role.name,
+        roleId,
+        vanId,
       },
       message: USER.LOGIN,
     };
@@ -310,6 +387,8 @@ export class UserService extends MongoRepository<User> {
       {
         sub: session.profileId,
         role: session.role,
+        roleId: session.roleId,
+        offlineAccessAllowed: session.offlineAccessAllowed === true,
         sid: sessionId,
         deviceId,
       },
@@ -400,7 +479,9 @@ export class UserService extends MongoRepository<User> {
     newPassword: string,
     accessToken?: string,
   ) {
-    const session = sessionId ? await this.redis.getJson<any>(`session:${sessionId}`) : null;
+    const session = sessionId
+      ? await this.redis.getJson<any>(`session:${sessionId}`)
+      : null;
     let profileId = session?.type === 'USER' ? session.profileId : null;
 
     if (!profileId && accessToken) {
@@ -432,7 +513,9 @@ export class UserService extends MongoRepository<User> {
 
     const samePassword = await bcrypt.compare(newPassword, user.password);
     if (samePassword) {
-      throw new BadRequestException('New password must be different from current password');
+      throw new BadRequestException(
+        'New password must be different from current password',
+      );
     }
 
     await this.updateById(user._id.toString(), {
@@ -444,6 +527,130 @@ export class UserService extends MongoRepository<User> {
       message: 'Password changed successfully',
       data: { updated: true },
     };
+  }
+
+  async resetPassword(profileId: string, newPassword: string) {
+    const user = await this.findOne({ profileId });
+    if (!user) {
+      throw new NotFoundException(USER.NOT_FOUND);
+    }
+
+    await this.updateById(user._id.toString(), {
+      password: await bcrypt.hash(newPassword, 10),
+    });
+
+    const activeDevices = await this.userDeviceModel
+      .find({ userId: profileId, isActive: true })
+      .select({ sessionId: 1, _id: 0 })
+      .lean();
+
+    await Promise.all([
+      ...activeDevices.flatMap((device) => [
+        this.redis.delete(`session:${device.sessionId}`),
+        this.redis.delete(`refresh:${device.sessionId}`),
+      ]),
+      this.userDeviceModel.updateMany(
+        { userId: profileId, isActive: true },
+        { $set: { isActive: false } },
+      ),
+    ]);
+
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'Password reset successfully',
+      data: { updated: true },
+    };
+  }
+
+  async updateUserStatus(
+    profileId: string,
+    status: UserStatus,
+    session?: ClientSession,
+  ) {
+    return this.updateOne({ profileId }, { status }, { session });
+  }
+
+  private resolveProfileId(accessToken?: string) {
+    if (!accessToken) throw new UnauthorizedException(USER.SESSION_EXPIRED);
+    try {
+      const payload: any = this.jwtService.verify(accessToken, {
+        issuer: jwtConfig.issuer,
+        audience: jwtConfig.audience,
+      });
+      if (!payload?.sub) throw new UnauthorizedException(USER.SESSION_EXPIRED);
+      return String(payload.sub);
+    } catch {
+      throw new UnauthorizedException(USER.SESSION_EXPIRED);
+    }
+  }
+
+  async getCurrentProfile(accessToken?: string) {
+    const profileId = this.resolveProfileId(accessToken);
+    const profile: any = await this.employeeModel
+      .findOne({ employeeId: profileId })
+      .lean();
+    if (!profile) throw new NotFoundException('Profile not found');
+    const position: any = await this.positionModel
+      .findOne({ employeeId: profile.employeeId, isDeleted: { $ne: true } })
+      .select('roleId')
+      .lean();
+    const roleId = position?.roleId;
+    const role: any = roleId
+      ? await this.roleModel.findOne({ roleId }).lean()
+      : null;
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'Profile fetched successfully',
+      data: {
+        employeeId: profile.employeeId,
+        name: profile.name,
+        email: profile.email || '',
+        mobile: profile.mobile || '',
+        roleId,
+        roleName: role?.displayName || role?.name || roleId,
+        status: profile.status,
+        createdAt: profile.createdAt,
+        updatedAt: profile.updatedAt,
+      },
+    };
+  }
+
+  async updateCurrentProfile(
+    accessToken: string | undefined,
+    dto: UpdateOwnProfileDto,
+  ) {
+    const profileId = this.resolveProfileId(accessToken);
+    try {
+      const profile: any = await this.employeeModel
+        .findOneAndUpdate(
+          { employeeId: profileId },
+          {
+            $set: {
+              name: dto.name.trim(),
+              email: dto.email?.trim().toLowerCase() || undefined,
+              mobile: dto.mobile?.trim() || undefined,
+            },
+          },
+          { new: true, runValidators: true },
+        )
+        .lean();
+      if (!profile) throw new NotFoundException('Profile not found');
+      await this.updateOne(
+        { profileId },
+        { email: profile.email, mobile: profile.mobile },
+      );
+      return {
+        statusCode: HttpStatus.OK,
+        message: 'Profile updated successfully',
+        data: profile,
+      };
+    } catch (error: any) {
+      if (error?.code === 11000)
+        throw new BadRequestException(
+          'Email or mobile number is already in use',
+        );
+      throw error;
+    }
   }
 
   /* ======================================================
@@ -465,6 +672,17 @@ export class UserService extends MongoRepository<User> {
       message: USER.DELETED,
       data: user,
     };
+  }
+
+  async disableUserIfExists(profileId: string, session?: ClientSession) {
+    await this.updateOne(
+      { profileId, isDeleted: { $ne: true } },
+      {
+        status: UserStatus.INACTIVE,
+        isDeleted: true,
+      },
+      { session },
+    );
   }
 
   async restoreUser(

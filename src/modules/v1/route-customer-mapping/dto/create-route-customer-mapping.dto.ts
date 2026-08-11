@@ -1,7 +1,6 @@
 
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsDate, IsEnum, IsNotEmpty, IsNumber, IsOptional, IsString, Min } from 'class-validator';
-import { Days, RouteCustomerMappingStatus } from 'src/shared/enums/route-customer-mapping.enums';
+import { IsDate, IsNotEmpty, IsNumber, IsOptional, IsString, Min } from 'class-validator';
 
 
 export class CreateRouteCustomerMappingDto {
@@ -25,11 +24,6 @@ export class CreateRouteCustomerMappingDto {
   @IsNumber()
   @Min(1)
   sequence!: number;
-
-  @ApiProperty({ enum: Days, description: 'Day of the week for the route-customer mapping' })
-  @IsNotEmpty()
-  @IsEnum(Days)
-  day!: Days;
 
   @ApiPropertyOptional({ type: Date  })
   @IsOptional()

@@ -6,3 +6,5 @@ export const EMPLOYEE = {
   DELETED: 'Employee deleted successfully',
   FETCHED: 'Employee fetched successfully',
 };
+
+export const SYSTEM_POSITION_ID = 'SYSTEM';

@@ -19,6 +19,7 @@ import {
   Controller,
   Post,
   Patch,
+  Get,
   Body,
   Res,
   Req,
@@ -36,7 +37,7 @@ import {
 import type { Request, Response } from 'express';
 
 import { UserService } from './user.service';
-import { ChangePasswordDto, LoginDto, UpdatePushTokenDto } from './dto/login.dto';
+import { ChangePasswordDto, LoginDto, UpdateOwnProfileDto, UpdatePushTokenDto } from './dto/login.dto';
 
 import { ApiSuccessResponse } from 'src/core/swagger/api.response.swagger';
 import {
@@ -66,6 +67,13 @@ import { Agent } from 'src/modules/v1/user/user.enum';
 })
 export class UserController {
   constructor(private readonly userService: UserService) {}
+
+  private getAccessToken(req: Request) {
+    const authHeader = req.headers.authorization;
+    return typeof authHeader === 'string' && authHeader.startsWith('Bearer ')
+      ? authHeader.slice(7)
+      : req.cookies?.access_token;
+  }
 
   /* ======================================================
    * LOGIN
@@ -263,11 +271,7 @@ export class UserController {
   @ApiSuccessResponse({ updated: true }, 'Password changed successfully')
   async changePassword(@Req() req: Request, @Body() dto: ChangePasswordDto) {
     const sessionId = (req as any).sessionId;
-    const authHeader = req.headers.authorization;
-    const accessToken =
-      typeof authHeader === 'string' && authHeader.startsWith('Bearer ')
-        ? authHeader.slice(7)
-        : req.cookies?.access_token;
+    const accessToken = this.getAccessToken(req);
 
     return this.userService.changePassword(
       sessionId,
@@ -275,5 +279,20 @@ export class UserController {
       dto.newPassword,
       accessToken,
     );
+  }
+
+  @Get('profile')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Get current user profile' })
+  async getProfile(@Req() req: Request) {
+    return this.userService.getCurrentProfile(this.getAccessToken(req));
+  }
+
+  @Patch('profile')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Update current user profile' })
+  @ApiBody({ type: UpdateOwnProfileDto })
+  async updateProfile(@Req() req: Request, @Body() dto: UpdateOwnProfileDto) {
+    return this.userService.updateCurrentProfile(this.getAccessToken(req), dto);
   }
 }

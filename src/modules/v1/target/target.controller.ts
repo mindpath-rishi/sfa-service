@@ -26,7 +26,9 @@ import {
   Patch,
   Post,
   Query,
+  Res,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import { ApiBody, ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger';
 
 import { FeatureFlag } from 'src/core/decorators/feature-flag.decorator';
@@ -51,6 +53,11 @@ import { CreateTargetDto } from './dto/create-target.dto';
 import { UpdateTargetDto } from './dto/update-target.dto';
 import { TargetQueryDto } from './dto/target-query.dto';
 import { TARGET } from './target.constants';
+import { BulkUploadTargetsDto } from './dto/bulk-upload-targets.dto';
+import { CreateFocusedPackTargetDto } from './dto/create-focused-pack-target.dto';
+import { UpdateFocusedPackTargetDto } from './dto/update-focused-pack-target.dto';
+import { FocusedPackTargetQueryDto } from './dto/focused-pack-target-query.dto';
+import { BulkUploadFocusedPackTargetsDto } from './dto/bulk-upload-focused-pack-targets.dto';
 
 @ApiTags('Target')
 @FeatureFlag(API_MODULE_ENABLE_KEYS.TARGET)
@@ -82,6 +89,68 @@ export class TargetController {
     return this.service.create(dto);
   }
 
+  @Permissions('TARGET_CREATE')
+  @Post('bulk-upload')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Bulk upload targets' })
+  @ApiBody({ type: BulkUploadTargetsDto })
+  async bulkUpload(@Body() dto: BulkUploadTargetsDto) {
+    return this.service.bulkUpload(dto);
+  }
+
+  @Permissions('TARGET_CREATE')
+  @Post('focused-pack')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Create or update a product-wise Focused Pack target',
+  })
+  async upsertFocusedPackTarget(@Body() dto: CreateFocusedPackTargetDto) {
+    return this.service.upsertFocusedPackTarget(dto);
+  }
+
+  @Permissions('TARGET_CREATE')
+  @Post('focused-pack/bulk-upload')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Bulk create or update product-wise Focused Pack targets',
+  })
+  async bulkUploadFocusedPackTargets(
+    @Body() dto: BulkUploadFocusedPackTargetsDto,
+  ) {
+    return this.service.bulkUploadFocusedPackTargets(dto);
+  }
+
+  @Permissions('TARGET_VIEW')
+  @Get('focused-pack')
+  @ApiOperation({ summary: 'List Focused Pack targets' })
+  async findAllFocusedPackTargets(@Query() query: FocusedPackTargetQueryDto) {
+    return this.service.findAllFocusedPackTargets(query);
+  }
+
+  @Permissions('TARGET_VIEW')
+  @Get('focused-pack/:id')
+  @ApiParam({ name: 'id', description: 'Focused Pack target document ID' })
+  async findFocusedPackTargetById(@Param('id') id: string) {
+    return this.service.findFocusedPackTargetById(id);
+  }
+
+  @Permissions('TARGET_UPDATE')
+  @Patch('focused-pack/:id')
+  @ApiParam({ name: 'id', description: 'Focused Pack target document ID' })
+  async updateFocusedPackTarget(
+    @Param('id') id: string,
+    @Body() dto: UpdateFocusedPackTargetDto,
+  ) {
+    return this.service.updateFocusedPackTarget(id, dto);
+  }
+
+  @Permissions('TARGET_DELETE')
+  @Delete('focused-pack/:id')
+  @ApiParam({ name: 'id', description: 'Focused Pack target document ID' })
+  async deleteFocusedPackTarget(@Param('id') id: string) {
+    return this.service.deleteFocusedPackTarget(id);
+  }
+
   /**
    * Get Targets
    * -----------
@@ -90,6 +159,19 @@ export class TargetController {
   @Permissions('TARGET_VIEW')
   async findAll(@Query() query: TargetQueryDto) {
     return this.service.findAll(query);
+  }
+
+  @Get('export')
+  @Permissions('TARGET_VIEW')
+  @ApiOperation({ summary: 'Export targets as Excel or PDF' })
+  async exportTargets(@Query() query: TargetQueryDto, @Res() res: Response) {
+    const file = await this.service.exportTargets(query);
+    res.setHeader('Content-Type', file.mimeType);
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${file.fileName}"`,
+    );
+    res.send(file.buffer);
   }
 
   /**

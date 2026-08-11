@@ -1,4 +1,4 @@
-import { NestFactory, Reflector } from '@nestjs/core';
+import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { RequestMethod, ValidationPipe, VersioningType } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
@@ -22,11 +22,13 @@ import {
 import { RequestContextInterceptor } from './core/interceptors/request-context.interceptor';
 import { LoggerService } from './core/logger/logger.service';
 import { AppLogger } from './core/logger/app-logger';
-import { PermissionsSeeder } from './core/seeds/permission.seeds';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { join } from 'path';
 import { SeederRunner } from './core/seeds/seed.runner';
 import { CustomerService } from './modules/v1/customer/customer.service';
+import * as crypto from 'crypto';
+import * as oracledb from 'oracledb';
+import { ORACLE_POOL } from './core/database/oracle/oracle.provider';
 
 // ⚠️ guaranteed cookie-parser fix
 const cookieParser = require('cookie-parser');
@@ -40,6 +42,24 @@ async function bootstrap() {
 
   const logger = app.get(LoggerService);
   AppLogger.init(logger);
+
+  /* ---------------- ORACLE POOL STARTUP CHECK ---------------- */
+  try {
+    const oraclePool = app.get<oracledb.Pool>(ORACLE_POOL, {
+      strict: false,
+    });
+
+    if (oraclePool) {
+      logger.setContext('OracleDB');
+
+      logger.info(
+        `OracleDB pool ready: open=${oraclePool.connectionsOpen}, inUse=${oraclePool.connectionsInUse}`,
+      );
+    }
+  } catch (error) {
+    logger.error('OracleDB pool initialization failed', error);
+    throw error;
+  }
 
   /* ---------------- SECURITY & PERF ---------------- */
   app.use(helmet());
@@ -62,6 +82,7 @@ async function bootstrap() {
   app.setGlobalPrefix(API_PREFIX, {
     exclude: [{ path: API_MODULE.METRIC, method: RequestMethod.GET }],
   });
+
   app.enableVersioning({
     type: VersioningType.URI,
     defaultVersion: V1,
@@ -78,6 +99,7 @@ async function bootstrap() {
 
   /* ---------------- GLOBAL FILTERS & INTERCEPTORS ---------------- */
   app.useGlobalFilters(new GlobalExceptionFilter());
+
   app.useGlobalInterceptors(
     new RequestContextInterceptor(),
     new ResponseInterceptor(),
@@ -108,6 +130,7 @@ async function bootstrap() {
       .build();
 
     const document = SwaggerModule.createDocument(app, config);
+
     SwaggerModule.setup(SWAGGER_ENDPOINT, app, document, {
       useGlobalPrefix: false,
       swaggerOptions: {
@@ -120,7 +143,9 @@ async function bootstrap() {
   app.enableShutdownHooks();
 
   await app.listen(process.env.PORT || 3000);
-  console.log('🚀 Server running on http://localhost:3000');
+
+  logger.setContext('Bootstrap');
+  logger.info(`🚀 Server running on http://localhost:${process.env.PORT || 3000}`);
 
   if (process.env.SEED_PERMISSIONS === 'true') {
     const seederRunner = app.get(SeederRunner);
@@ -128,17 +153,17 @@ async function bootstrap() {
   }
 
   /* ---------------- IMPORT EXCEL ---------------- */
-
   if (process.env.IMPORT_CUSTOMERS === 'true') {
     try {
       const customerService = app.get(CustomerService);
 
       await customerService.importFromExcel('./uploads/Outlet Master.xlsx');
 
-      console.log('✅ CUSTOMER IMPORT COMPLETED');
+      logger.info('✅ CUSTOMER IMPORT COMPLETED');
     } catch (error) {
-      console.error('❌ CUSTOMER IMPORT FAILED', error);
+      logger.error('❌ CUSTOMER IMPORT FAILED', error);
     }
   }
 }
+
 bootstrap();

@@ -1,34 +1,3 @@
-// import { Module } from '@nestjs/common';
-// import { MongooseModule } from '@nestjs/mongoose';
-
-// import {
-//   Customer,
-//   CustomerSchema,
-// } from 'src/core/database/mongo/schema/customer.schema';
-// import { RouteCustomerMappingModule } from '../route-customer-mapping/route-customer-mapping.module';
-// import { CustomerController } from './customer.controller';
-// import { CustomerService } from './customer.service';
-// import {
-//   ShopVisit,
-//   ShopVisitSchema,
-// } from 'src/core/database/mongo/schema/shop-visit.schema';
-// import { Sale, SaleSchema } from 'src/core/database/mongo/schema/sale.schema';
-
-// @Module({
-//   imports: [
-//     MongooseModule.forFeature([
-//       { name: Customer.name, schema: CustomerSchema },
-//       { name: ShopVisit.name, schema: ShopVisitSchema },
-//       { name: Sale.name, schema: SaleSchema },
-//     ]),
-//     RouteCustomerMappingModule,
-//   ],
-//   controllers: [CustomerController],
-//   providers: [CustomerService],
-//   exports: [CustomerService],
-// })
-// export class CustomerModule {}
-
 import { Module } from '@nestjs/common';
 
 import { MongooseModule } from '@nestjs/mongoose';
@@ -76,6 +45,12 @@ import { CustomerController } from './customer.controller';
 
 import { CustomerService } from './customer.service';
 import { Van, VanSchema } from 'src/core/database/mongo/schema/van.schema';
+import {
+  Employee,
+  EmployeeSchema,
+} from 'src/core/database/mongo/schema/employee.schema';
+import { NotificationModule } from '../notification/notification.module';
+import { OutletVerificationModule } from '../outlet-verification/outlet-verification.module';
 
 @Module({
   imports: [
@@ -88,6 +63,7 @@ import { Van, VanSchema } from 'src/core/database/mongo/schema/van.schema';
         name: Customer.name,
         schema: CustomerSchema,
       },
+      { name: Employee.name, schema: EmployeeSchema },
 
       /* ======================================================
        * SHOP VISIT
@@ -159,6 +135,8 @@ import { Van, VanSchema } from 'src/core/database/mongo/schema/van.schema';
     ]),
 
     RouteCustomerMappingModule,
+    NotificationModule,
+    OutletVerificationModule,
   ],
 
   controllers: [CustomerController],

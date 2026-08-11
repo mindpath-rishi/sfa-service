@@ -54,6 +54,7 @@ import {
   ShopVisitStatusQueryDto,
 } from './dto/shop-visit-query.dto';
 import { SHOP_VISIT } from './shop-visit.constants';
+import { CreateInteractionDto } from './dto/create-interaction.dto';
 
 @ApiTags('Shop-visit')
 @FeatureFlag(API_MODULE_ENABLE_KEYS.SHOP_VISIT)
@@ -66,6 +67,19 @@ import { SHOP_VISIT } from './shop-visit.constants';
 })
 export class ShopVisitController {
   constructor(private readonly service: ShopVisitService) {}
+
+  @Permissions('SHOP_VISIT_CREATE')
+  @Post('interaction')
+  @HttpCode(HttpStatus.CREATED)
+  async createInteraction(@Body() dto: CreateInteractionDto) {
+    return this.service.createInteraction(dto);
+  }
+
+  @Permissions('SHOP_VISIT_VIEW')
+  @Get('interaction/:interactionId')
+  async getInteraction(@Param('interactionId') interactionId: string) {
+    return this.service.getInteraction(interactionId);
+  }
 
   /**
    * Create ShopVisit

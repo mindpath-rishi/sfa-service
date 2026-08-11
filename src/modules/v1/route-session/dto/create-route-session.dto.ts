@@ -27,8 +27,23 @@ export class CreateRouteSessionDto {
   @IsString()
   routeName?: string;
 
+  @ApiPropertyOptional({ type: String })
+  @IsOptional()
+  @IsString()
+  customerCategoryId?: string;
+
   @ApiPropertyOptional({ type: Number })
   @IsNotEmpty()
   @IsNumber()
   totalShops?: number;
+
+  @ApiProperty({ type: String, description: 'Business identifier for route' })
+  @IsNotEmpty()
+  @IsString()
+  vanId!: string;
+
+  @ApiPropertyOptional({ type: String })
+  @IsOptional()
+  @IsString()
+  vanName?: string;
 }

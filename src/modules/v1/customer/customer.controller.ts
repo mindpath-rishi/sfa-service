@@ -1,4 +1,3 @@
-
 /**
  * Customer Controller
  * --------------------
@@ -27,8 +26,10 @@ import {
   Patch,
   Post,
   Query,
+  Res,
 } from '@nestjs/common';
 import { ApiBody, ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger';
+import type { Response } from 'express';
 
 import { FeatureFlag } from 'src/core/decorators/feature-flag.decorator';
 import { ApiSuccessResponse } from 'src/core/swagger/api.response.swagger';
@@ -52,7 +53,6 @@ import { CreateCustomerDto } from './dto/create-customer.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
 import { CustomerQueryDto } from './dto/customer-query.dto';
 import { CUSTOMER } from './customer.constants';
-import { Public } from 'src/core/decorators/public.decorator';
 
 @ApiTags('Customer')
 @FeatureFlag(API_MODULE_ENABLE_KEYS.CUSTOMER)
@@ -63,7 +63,6 @@ import { Public } from 'src/core/decorators/public.decorator';
   path: API_MODULE.CUSTOMER,
   version: V1,
 })
-@Public()
 export class CustomerController {
   constructor(private readonly service: CustomerService) {}
 
@@ -95,6 +94,27 @@ export class CustomerController {
     return this.service.findAll(query);
   }
 
+  @Get('/export')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Export customers' })
+  async exportCustomers(
+    @Query()
+    query: CustomerQueryDto & {
+      fileType?: 'excel' | 'pdf';
+      columns?: string;
+    },
+    @Res() res: Response,
+  ) {
+    const file = await this.service.exportCustomers(query);
+
+    res.setHeader('Content-Type', file.mimeType);
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${file.fileName}"`,
+    );
+    res.send(file.buffer);
+  }
+
   /**
    * Get Customer by ID
    * ------------------
@@ -117,6 +137,19 @@ export class CustomerController {
     @Body() dto: UpdateCustomerDto,
   ) {
     return this.service.update(customerId, dto);
+  }
+
+  @Patch(':customerId/approve')
+  async approve(@Param('customerId') customerId: string) {
+    return this.service.reviewOutlet(customerId, true);
+  }
+
+  @Patch(':customerId/reject')
+  async reject(
+    @Param('customerId') customerId: string,
+    @Body() body: { reason?: string },
+  ) {
+    return this.service.reviewOutlet(customerId, false, body.reason);
   }
 
   /**

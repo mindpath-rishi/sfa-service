@@ -4,6 +4,10 @@ import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IsOptional, IsString, IsEnum } from 'class-validator';
 
 export class UpdateMarketDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  provinceId?: string;
 /**
  * Market Update DTO
  * ====================

@@ -51,10 +51,6 @@ export class Province {
     default: ProvinceStatus.ACTIVE,
   })
   status!: ProvinceStatus;
-
-  // Soft delete flag
-  @Prop({ default: false, type: Boolean })
-  isDeleted!: boolean;
 }
 
 export const ProvinceSchema = SchemaFactory.createForClass(Province);

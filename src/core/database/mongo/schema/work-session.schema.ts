@@ -57,50 +57,30 @@ export class WorkSession {
   userName!: string;
 
   // User who started the session
-  @Prop({ required: true, type: String })
+  @Prop({ type: String })
   vanId!: string;
 
   // User name (for quick reference)
   @Prop({ type: String })
   vanName!: string;
 
+  // Driver assignment captured at day start for historical reporting
   @Prop({ type: String })
-  requestedVanId?: string;
-
-  @Prop({ type: String })
-  requestedVanName?: string;
+  driverEmployeeId?: string;
 
   @Prop({ type: String })
-  vanChangeReason?: string;
-
-  @Prop({
-    type: String,
-    enum: ['PENDING', 'APPROVED', 'REJECTED'],
-  })
-  vanChangeStatus?: 'PENDING' | 'APPROVED' | 'REJECTED';
-
-  @Prop({ type: String })
-  vanChangeApprovedBy?: string;
-
-  @Prop({ type: Date })
-  vanChangeApprovedAt?: Date;
-
-  @Prop({ type: String })
-  vanChangeRejectedBy?: string;
-
-  @Prop({ type: Date })
-  vanChangeRejectedAt?: Date;
+  driverName?: string;
 
   /* ======================================================
    * SESSION DETAILS
    * ====================================================== */
 
   // Day start time
-  @Prop({ required: true, type: String })
+  @Prop({ required: true, type: Date })
   dayStartTime!: Date;
 
   // Day end time
-  @Prop({ type: String })
+  @Prop({ type: Date })
   dayEndTime!: Date;
 
   @Prop({ type: String })
@@ -114,9 +94,6 @@ export class WorkSession {
 
   @Prop({ type: Object })
   dayEndLocation?: LocationPoint;
-
-  @Prop({ type: [Object], default: [] })
-  backgroundLocations?: LocationPoint[];
 
   // Activity status
   @Prop({
@@ -138,4 +115,3 @@ WorkSessionSchema.index({ userId: 1, isActive: 1 });
 
 // Fast queries for reports
 WorkSessionSchema.index({ userId: 1, dayStartTime: -1 });
-WorkSessionSchema.index({ vanChangeStatus: 1, requestedVanId: 1 });

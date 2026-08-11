@@ -15,19 +15,6 @@ import {
 
 import { Type } from 'class-transformer';
 
-/**
- * ✅ Day Enum (recommended)
- */
-export enum RouteDay {
-  MON = 'MON',
-  TUE = 'TUE',
-  WED = 'WED',
-  THU = 'THU',
-  FRI = 'FRI',
-  SAT = 'SAT',
-  SUN = 'SUN',
-}
-
 /* ======================================================
  * ROUTE CUSTOMER DTO
  * ====================================================== */
@@ -64,22 +51,6 @@ export class CreateRouteDto {
   @IsString()
   name!: string;
 
-  @ApiProperty({
-    type: String,
-    description: 'Business identifier for beat',
-  })
-  @IsNotEmpty()
-  @IsString()
-  beatId!: string;
-
-  @ApiPropertyOptional({
-    type: String,
-    description: 'Beat ERP identifier',
-  })
-  @IsOptional()
-  @IsString()
-  beatErpId?: string;
-
   @ApiPropertyOptional({
     type: String,
     description: 'Business identifier for country',
@@ -104,12 +75,17 @@ export class CreateRouteDto {
   @IsString()
   marketId?: string;
 
-  /**
-   * ✅ Customers Array
-   */
+  @ApiPropertyOptional({
+    type: String,
+    description: 'Business identifier for customer category',
+  })
+  @IsOptional()
+  @IsString()
+  customerCategoryId?: string;
+
   @ApiPropertyOptional({
     type: () => [RouteCustomerDto],
-    description: 'List of customers with sequence',
+    description: 'List of outlets with sequence',
     default: [],
   })
   @IsOptional()
@@ -118,20 +94,6 @@ export class CreateRouteDto {
   @Type(() => RouteCustomerDto)
   associatedCustomers?: RouteCustomerDto[];
 
-  /**
-   * ✅ Day Validation (ENUM)
-   */
-  @ApiProperty({
-    enum: RouteDay,
-    description: 'Route day of execution',
-  })
-  @IsNotEmpty()
-  @IsEnum(RouteDay)
-  day!: RouteDay;
-
-  /**
-   * ✅ Distance
-   */
   @ApiPropertyOptional({
     type: Number,
     default: 0,
@@ -140,7 +102,7 @@ export class CreateRouteDto {
   @Type(() => Number)
   @IsNumber()
   @Min(0)
-  distance?: number;
+  outletCount?: number;
 
   /**
    * ✅ Status

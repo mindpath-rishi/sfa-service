@@ -18,8 +18,10 @@ export class RequestContextInterceptor implements NestInterceptor {
         userId: req.user?.userId,
         name: req.user?.name,
         role: req.user?.role,
+        roleId: req.user?.roleId,
         vanId: req.user?.vanId,
         vanName: req.user?.vanName,
+        offlineAccessAllowed: req.user?.offlineAccessAllowed === true,
       },
       () => next.handle(),
     );

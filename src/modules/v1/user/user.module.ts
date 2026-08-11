@@ -18,6 +18,7 @@ import {
   UserDevice,
   UserDeviceSchema,
 } from 'src/core/database/mongo/schema/device.schema';
+import { Role, RoleSchema } from 'src/core/database/mongo/schema/role.schema';
 import { VanModule } from '../van/van.module';
 
 
@@ -37,6 +38,7 @@ import { VanModule } from '../van/van.module';
       { name: User.name, schema: UserSchema },
       { name: Employee.name, schema: EmployeeSchema },
       { name: UserDevice.name, schema: UserDeviceSchema },
+      { name: Role.name, schema: RoleSchema },
     ]),
     VanModule
     

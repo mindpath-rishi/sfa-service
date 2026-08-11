@@ -27,6 +27,7 @@ import {
   Patch,
   Post,
   Query,
+  Res,
 } from '@nestjs/common';
 import {
   ApiBody,
@@ -48,6 +49,7 @@ import {
   API_MODULE_ENABLE_KEYS,
   V1,
 } from 'src/shared/constants/api.constants';
+import type { Response } from 'express';
 
 import { ApiSuccessResponse } from 'src/core/swagger/api.response.swagger';
 import {
@@ -128,6 +130,27 @@ export class RoleController {
   )
   async findAll(@Query() query: RoleQueryDto) {
     return this.roleService.findAll(query);
+  }
+
+  @Get('/export')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Export roles' })
+  async exportRoles(
+    @Query()
+    query: RoleQueryDto & {
+      fileType?: 'excel' | 'pdf';
+      columns?: string;
+    },
+    @Res() res: Response,
+  ) {
+    const file = await this.roleService.exportRoles(query);
+
+    res.setHeader('Content-Type', file.mimeType);
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${file.fileName}"`,
+    );
+    res.send(file.buffer);
   }
 
   /**

@@ -77,6 +77,13 @@ export class SalesController {
     return this.service.create(dto);
   }
 
+  @Permissions('SALES_UPDATE')
+  @Post('sync-erp')
+  @ApiOperation({ summary: 'Retry pending and failed sales to ERP' })
+  async syncErp() {
+    return this.service.syncPendingSalesToERP();
+  }
+
   /**
    * Get Saless
    * ----------

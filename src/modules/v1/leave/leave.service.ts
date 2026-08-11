@@ -13,6 +13,14 @@ import {
   Leave,
   LeaveSchema,
 } from 'src/core/database/mongo/schema/leave.schema';
+import {
+  Activity,
+  ActivitySchema,
+} from 'src/core/database/mongo/schema/activity.schema';
+import {
+  WorkSession,
+  WorkSessionSchema,
+} from 'src/core/database/mongo/schema/work-session.schema';
 
 import { LEAVE } from './leave.constants';
 import { CreateLeaveDto } from './dto/create-leave.dto';
@@ -22,18 +30,83 @@ import { IdGenerator } from 'src/shared/utils/id-generator.utils';
 
 @Injectable()
 export class LeaveService extends MongoRepository<Leave> {
+  private readonly activityModel: any;
+  private readonly workSessionModel: any;
+
   constructor(mongo: MongoService) {
     super(mongo.getModel(Leave.name, LeaveSchema));
+    this.activityModel = mongo.getModel(Activity.name, ActivitySchema);
+    this.workSessionModel = mongo.getModel(WorkSession.name, WorkSessionSchema);
   }
 
   async create(payload: CreateLeaveDto) {
     try {
       return await this.withTransaction(async (session) => {
+        const todayStart = new Date(new Date().setHours(0, 0, 0, 0));
+        const todayEnd = new Date(new Date().setHours(23, 59, 59, 999));
+
+        const todayWorkFilter = {
+          userId: payload.userId,
+          isDeleted: { $ne: true },
+          $or: [
+            {
+              startTime: {
+                $gte: todayStart,
+                $lte: todayEnd,
+              },
+              name: { $in: ['Retailing', 'Offline'] },
+            },
+            {
+              dayStartTime: {
+                $gte: todayStart,
+                $lte: todayEnd,
+              },
+            },
+          ],
+        };
+
+        const hasTodayWork = await this.activityModel
+          .findOne(
+            {
+              userId: payload.userId,
+              isDeleted: { $ne: true },
+              startTime: {
+                $gte: todayStart,
+                $lte: todayEnd,
+              },
+              name: { $in: ['Retailing', 'Offline'] },
+            },
+            null,
+            { session },
+          )
+          .lean()
+          .exec();
+
+        const hasTodayWorkSession = await this.workSessionModel
+          .findOne(
+            {
+              userId: payload.userId,
+              isDeleted: { $ne: true },
+              dayStartTime: {
+                $gte: todayStart,
+                $lte: todayEnd,
+              },
+            },
+            null,
+            { session },
+          )
+          .lean()
+          .exec();
+
+        if (hasTodayWork || hasTodayWorkSession) {
+          throw new ConflictException(LEAVE.TODAY_WORK_CONFLICT);
+        }
+
         const filter: FilterQuery<Leave> = {
           userId: payload.userId,
           createdAt: {
-            $gte: new Date(new Date().setHours(0, 0, 0, 0)),
-            $lte: new Date(new Date().setHours(23, 59, 59, 999)),
+            $gte: todayStart,
+            $lte: todayEnd,
           },
         };
 

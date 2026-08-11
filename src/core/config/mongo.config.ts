@@ -3,9 +3,11 @@ import mongoose, { Connection } from 'mongoose';
 import { LoggerService } from 'src/core/logger/logger.service';
 import { timestampsPlugin } from '../database/mongo/plugins/timestamps.plugin';
 import { softDeletePlugin } from '../database/mongo/plugins/soft-delete.plugin';
+import { syncAuditPlugin } from '../database/mongo/plugins/sync-audit.plugin';
 import { auditPlugin } from '../database/mongo/plugins/audit-logs.plugin';
 import { EmployeeSchema } from '../database/mongo/schema/employee.schema';
 import { RoleSchema } from '../database/mongo/schema/role.schema';
+import { VanSchema } from '../database/mongo/schema/van.schema';
 
 export const mongoConfig = (
   uri: string,
@@ -27,8 +29,10 @@ export const mongoConfig = (
     /* ==================== GLOBAL PLUGINS ==================== */
     connection.plugin(timestampsPlugin);
     connection.plugin(softDeletePlugin);
+    connection.plugin(syncAuditPlugin);
     EmployeeSchema.plugin(auditPlugin, 'employees');
     RoleSchema.plugin(auditPlugin, 'roles');
+    VanSchema.plugin(auditPlugin, 'vans');
 
     logger.info(`MongoDB initial readyState: ${connection.readyState}`);
 

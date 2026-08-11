@@ -12,7 +12,8 @@
  */
 
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsBoolean, IsEnum, IsNumberString, IsOptional } from 'class-validator';
+import { IsBoolean, IsEnum, IsOptional, IsString } from 'class-validator';
+import { Transform } from 'class-transformer';
 import { NotificationDeliveryStatus, NotificationPlatform } from 'src/shared/enums/notification.enums';
 import { PaginationDto } from 'src/shared/dto/pagination.dto';
 
@@ -32,6 +33,7 @@ export class NotificationQueryDto  extends PaginationDto{
   // Read / unread filter
   @ApiPropertyOptional({ example: false })
   @IsOptional()
+  @Transform(({ value }) => value === true || value === 'true')
   @IsBoolean()
   isRead?: boolean;
 
@@ -40,4 +42,14 @@ export class NotificationQueryDto  extends PaginationDto{
   @IsOptional()
   @IsEnum(NotificationPlatform)
   platform?: NotificationPlatform;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  searchText?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  category?: string;
 }

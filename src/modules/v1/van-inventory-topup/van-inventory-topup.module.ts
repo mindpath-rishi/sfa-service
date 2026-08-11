@@ -13,6 +13,7 @@ import { VanInventoryModule } from '../van-inventory/van-inventory.module';
 import { InventoryTransactionModule } from '../inventory-transaction/inventory-transaction.module';
 import { VanDailyStockModule } from '../van-daily-stock/van-daily-stock.module';
 import { NotificationModule } from '../notification/notification.module';
+import { WorkSessionModule } from '../work-session/work-session.module';
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { NotificationModule } from '../notification/notification.module';
     InventoryTransactionModule,
     VanDailyStockModule,
     NotificationModule,
+    WorkSessionModule,
   ],
   controllers: [VanInventoryTopupController],
   providers: [VanInventoryTopupService],

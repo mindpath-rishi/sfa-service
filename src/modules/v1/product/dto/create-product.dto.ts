@@ -12,9 +12,15 @@
  */
 
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsNumber, IsOptional, IsEnum, IsNotEmpty } from 'class-validator';
+import {
+  IsString,
+  IsNumber,
+  IsOptional,
+  IsEnum,
+  IsNotEmpty,
+  IsIn,
+} from 'class-validator';
 import { PriceType } from 'src/shared/enums/product.enums';
-
 
 export class ProductCreateDto {
   /**
@@ -50,6 +56,11 @@ export class ProductCreateDto {
   @IsString()
   categoryId!: string;
 
+  @ApiProperty({ example: 'CAT-PARENT-001', required: true })
+  @IsNotEmpty()
+  @IsString()
+  parentCategoryId!: string;
+
   /**
    * System Code
    * -----------
@@ -68,9 +79,19 @@ export class ProductCreateDto {
    * Example : 50
    */
   @ApiProperty({ example: 50, minimum: 1, required: true })
-  @IsNotEmpty()
+  @IsOptional()
   @IsNumber()
-  price!: number;
+  casePrice?: number;
+
+  /**
+   * Price
+   * -----
+   * Deprecated alias for casePrice.
+   */
+  @ApiProperty({ example: 50, minimum: 1, required: false })
+  @IsOptional()
+  @IsNumber()
+  price?: number;
 
   /**
    * Net Weight
@@ -79,9 +100,19 @@ export class ProductCreateDto {
    * Example : 1
    */
   @ApiProperty({ example: 1, required: true })
-  @IsNotEmpty()
+  @IsOptional()
   @IsNumber()
-  netWeight!: number;
+  caseNetWeight?: number;
+
+  /**
+   * Net Weight
+   * ----------
+   * Deprecated alias for piece net weight.
+   */
+  @ApiProperty({ example: 1, required: false })
+  @IsOptional()
+  @IsNumber()
+  netWeight?: number;
 
   /**
    * Price Type
@@ -115,6 +146,17 @@ export class ProductCreateDto {
   @IsOptional()
   @IsString()
   unitSize?: string;
+
+  /**
+   * Focused Pack
+   * ------------
+   * Purpose : Marks product as focused pack
+   * Example : Y
+   */
+  @ApiProperty({ enum: ['Y', 'N'], example: 'N', required: false })
+  @IsOptional()
+  @IsIn(['Y', 'N'])
+  isFocusedPack?: string;
 
   /**
    * Quantity Per Case

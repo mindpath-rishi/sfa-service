@@ -17,6 +17,35 @@ export class CreateSaleItemDto {
   @IsString()
   productId!: string;
 
+  @ApiProperty({ type: String, description: 'Company code' })
+  @IsNotEmpty()
+  @IsString()
+  compCode!: string;
+
+  @ApiProperty({ type: String, description: 'Child categoryId' })
+  @IsNotEmpty()
+  @IsString()
+  categoryId!: string;
+
+  @ApiProperty({ type: String, description: 'Parent categoryId' })
+  @IsNotEmpty()
+  @IsString()
+  parentCategoryId!: string;
+
+  @ApiProperty({ type: String, description: 'Customer categoryId' })
+  @IsNotEmpty()
+  @IsString()
+  customerCategoryId!: string;
+
+  @ApiPropertyOptional({
+    type: String,
+    enum: ['Y', 'N'],
+    description: 'Focused-pack snapshot from the product master',
+  })
+  @IsOptional()
+  @IsString()
+  isFocusedPack?: string;
+
   @ApiProperty({ type: String })
   @IsNotEmpty()
   @IsString()
@@ -62,6 +91,14 @@ export class CreateSaleItemDto {
   @IsNumber()
   totalNetWeight?: number;
 
+  @ApiPropertyOptional({
+    type: Number,
+    description: 'Gross line value before scheme discount',
+  })
+  @IsOptional()
+  @IsNumber()
+  grossValue?: number;
+
   /**
    * TotalValue
    * ----------
@@ -81,4 +118,62 @@ export class CreateSaleItemDto {
   @IsNotEmpty()
   @IsNumber()
   unitQtyInCase!: number;
+
+  @ApiPropertyOptional({
+    type: String,
+    description: 'Applied scheme business identifier',
+  })
+  @IsOptional()
+  @IsString()
+  schemeId?: string;
+
+  @ApiPropertyOptional({ type: String })
+  @IsOptional()
+  @IsString()
+  schemeName?: string;
+
+  @ApiPropertyOptional({ type: String })
+  @IsOptional()
+  @IsString()
+  schemeType?: string;
+
+  @ApiPropertyOptional({ type: Number, default: 0 })
+  @IsOptional()
+  @IsNumber()
+  schemeMinimumQuantity?: number;
+
+  @ApiPropertyOptional({ type: Number })
+  @IsOptional()
+  @IsNumber()
+  schemeDiscountPercent?: number;
+
+  @ApiPropertyOptional({ type: Number })
+  @IsOptional()
+  @IsNumber()
+  schemeDiscountValue?: number;
+
+  @ApiPropertyOptional({ type: Number })
+  @IsOptional()
+  @IsNumber()
+  schemeBuyQty?: number;
+
+  @ApiPropertyOptional({ type: Number, default: 0 })
+  @IsOptional()
+  @IsNumber()
+  schemeDiscountAmount?: number;
+
+  @ApiPropertyOptional({ type: Number, default: 0 })
+  @IsOptional()
+  @IsNumber()
+  schemeFreeQty?: number;
+
+  @ApiPropertyOptional({ type: String })
+  @IsOptional()
+  @IsString()
+  schemeFreeProductId?: string;
+
+  @ApiPropertyOptional({ type: String })
+  @IsOptional()
+  @IsString()
+  schemeFreeProductName?: string;
 }
