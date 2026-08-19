@@ -21,8 +21,10 @@ import {
   Injectable,
   ConflictException,
   NotFoundException,
+  BadRequestException,
   HttpStatus,
 } from '@nestjs/common';
+import { ClientSession } from 'mongoose';
 
 import { CreateRoleDto } from './dto/create-role.dto';
 import { UpdateRoleDto } from './dto/update-role.dto';
@@ -254,6 +256,100 @@ export class RoleService extends MongoRepository<Role> {
     return Buffer.from(pdf);
   }
 
+  private async getRoleHierarchy(
+    parentRoleId?: string,
+    session?: ClientSession,
+    currentRoleId?: string,
+  ) {
+    if (!parentRoleId) {
+      return { hierarchyPath: [] as string[], hierarchyLevel: 1 };
+    }
+
+    const parentChain: Array<{ roleId: string; parentRoleId?: string }> = [];
+    const visited = new Set<string>(currentRoleId ? [currentRoleId] : []);
+    let parentId: string | undefined = parentRoleId;
+
+    while (parentId) {
+      if (visited.has(parentId)) {
+        throw new BadRequestException(
+          'A cycle exists in the role hierarchy.',
+        );
+      }
+      visited.add(parentId);
+
+      const parentQuery = this.model
+        .findOne({ roleId: parentId, status: Status.ACTIVE })
+        .select('roleId parentRoleId')
+        .lean();
+      if (session) parentQuery.session(session);
+      const parent = await parentQuery;
+
+      if (!parent) {
+        throw new NotFoundException(`Active parent role not found: ${parentId}`);
+      }
+      parentChain.push(parent as any);
+      if (parentChain.length >= 5) {
+        throw new BadRequestException(
+          'Role hierarchy cannot contain more than five levels.',
+        );
+      }
+      parentId = (parent as any).parentRoleId;
+    }
+
+    const orderedParents = parentChain.reverse();
+    return {
+      hierarchyPath: orderedParents.map((role) => role.roleId),
+      hierarchyLevel: orderedParents.length + 1,
+    };
+  }
+
+  private async refreshDescendantRoleHierarchies(
+    roleId: string,
+    hierarchyPath: string[],
+    hierarchyLevel: number,
+    session?: ClientSession,
+  ) {
+    const queue = [{ roleId, hierarchyPath, hierarchyLevel }];
+    const visited = new Set<string>();
+
+    while (queue.length) {
+      const parent = queue.shift()!;
+      if (visited.has(parent.roleId)) {
+        throw new BadRequestException(
+          'A cycle exists in the role hierarchy.',
+        );
+      }
+      visited.add(parent.roleId);
+
+      const childHierarchyPath = [...parent.hierarchyPath, parent.roleId];
+      const childHierarchyLevel = parent.hierarchyLevel + 1;
+      const childrenQuery = this.model
+        .find({ parentRoleId: parent.roleId, status: Status.ACTIVE })
+        .select('roleId')
+        .lean();
+      if (session) childrenQuery.session(session);
+      const children = await childrenQuery;
+
+      for (const child of children) {
+        await this.model.updateOne(
+          { roleId: (child as any).roleId },
+          {
+            $set: {
+              hierarchyPath: childHierarchyPath,
+              hierarchyLevel: childHierarchyLevel,
+            },
+          },
+          { session },
+        );
+        queue.push({
+          roleId: (child as any).roleId,
+          hierarchyPath: childHierarchyPath,
+          hierarchyLevel: childHierarchyLevel,
+        });
+      }
+    }
+  }
+
   /**
    * Create Role
    * -----------
@@ -270,57 +366,87 @@ export class RoleService extends MongoRepository<Role> {
    * - Restored roles are reactivated with updated values
    */
   async create(dto: CreateRoleDto & Partial<Role>) {
-    const normalizedName = normalizeRoleName(dto.name);
+    return this.withTransaction(async (session) => {
+      const normalizedName = normalizeRoleName(dto.name);
 
-    // Check if role already exists (including soft-deleted)
-    const existing = (await this.findOne(
-      { name: normalizedName },
-      { withDeleted: true },
-    )) as any;
+      // Check if role already exists (including soft-deleted)
+      const existing = (await this.findOne(
+        { name: normalizedName },
+        { withDeleted: true, session },
+      )) as any;
 
-    if (existing) {
-      // Active role → conflict
-      if (!existing.isDeleted) {
-        throw new ConflictException(ROLE.DUPLICATE);
+      if (existing) {
+        // Active role → conflict
+        if (!existing.isDeleted) {
+          throw new ConflictException(ROLE.DUPLICATE);
+        }
+
+        const hierarchy = await this.getRoleHierarchy(
+          dto.parentRoleId,
+          session,
+          existing.roleId,
+        );
+
+        // Soft-deleted role → restore & update
+        const restored = await this.updateOne(
+          { roleId: existing.roleId },
+          {
+            displayName: dto.name.trim(),
+            name: normalizedName,
+            description: dto.description,
+            parentRoleId: dto.parentRoleId,
+            hierarchyPath: hierarchy.hierarchyPath,
+            hierarchyLevel: hierarchy.hierarchyLevel,
+            permissions: dto.permissions,
+            status: dto.status ?? Status.ACTIVE,
+            isSystemAdmin: dto.isSystemAdmin ?? false,
+            isDeleted: false,
+          },
+          { session },
+        );
+
+        await this.refreshDescendantRoleHierarchies(
+          existing.roleId,
+          hierarchy.hierarchyPath,
+          hierarchy.hierarchyLevel,
+          session,
+        );
+
+        return {
+          statusCode: HttpStatus.OK,
+          message: ROLE.CREATED,
+          data: restored,
+        };
       }
 
-      // Soft-deleted role → restore & update
-      const restored = await this.updateOne(
-        { roleId: existing.roleId },
+      const hierarchy = await this.getRoleHierarchy(
+        dto.parentRoleId,
+        session,
+      );
+
+      // Fresh role creation
+      const role = await this.save(
         {
-          displayName: dto.name.trim(),
+          roleId: normalizedName,
           name: normalizedName,
+          displayName: dto.name.trim(),
           description: dto.description,
+          parentRoleId: dto.parentRoleId,
+          hierarchyPath: hierarchy.hierarchyPath,
+          hierarchyLevel: hierarchy.hierarchyLevel,
           permissions: dto.permissions,
           status: dto.status ?? Status.ACTIVE,
           isSystemAdmin: dto.isSystemAdmin ?? false,
-          isDeleted: false,
         },
+        { session },
       );
 
       return {
-        statusCode: HttpStatus.OK,
+        statusCode: HttpStatus.CREATED,
         message: ROLE.CREATED,
-        data: restored,
+        data: role,
       };
-    }
-
-    // Fresh role creation
-    const role = await this.save({
-      roleId: normalizedName,
-      name: normalizedName,
-      displayName: dto.name.trim(),
-      description: dto.description,
-      permissions: dto.permissions,
-      status: dto.status ?? Status.ACTIVE,
-      isSystemAdmin: dto.isSystemAdmin ?? false,
     });
-
-    return {
-      statusCode: HttpStatus.CREATED,
-      message: ROLE.CREATED,
-      data: role,
-    };
   }
 
   /**
@@ -428,25 +554,59 @@ export class RoleService extends MongoRepository<Role> {
    * - Duplicate role names are prevented
    */
   async update(roleId: string, dto: UpdateRoleDto) {
-    const update: any = { ...dto };
-
-    if (dto.name) {
-      update.name = normalizeRoleName(dto.name);
-      update.displayName = dto.name.trim();
-    }
-
     try {
-      const role = await this.upsert({ roleId }, update, { upsert: false });
+      return await this.withTransaction(async (session) => {
+        const existing = await this.findOne({ roleId }, { session, lean: true });
+        if (!existing) {
+          throw new NotFoundException(ROLE.NOT_FOUND);
+        }
 
-      if (!role) {
-        throw new NotFoundException(ROLE.NOT_FOUND);
-      }
+        const update: any = { ...dto };
 
-      return {
-        statusCode: HttpStatus.OK,
-        message: ROLE.UPDATED,
-        data: role,
-      };
+        if (dto.name) {
+          update.name = normalizeRoleName(dto.name);
+          update.displayName = dto.name.trim();
+        }
+
+        if (dto.parentRoleId !== undefined) {
+          if (dto.parentRoleId === roleId) {
+            throw new BadRequestException('A role cannot report to itself.');
+          }
+          const hierarchy = await this.getRoleHierarchy(
+            dto.parentRoleId,
+            session,
+            roleId,
+          );
+          update.hierarchyPath = hierarchy.hierarchyPath;
+          update.hierarchyLevel = hierarchy.hierarchyLevel;
+
+          if (!dto.parentRoleId) delete update.parentRoleId;
+        }
+
+        const role = await this.upsert({ roleId }, update, {
+          upsert: false,
+          session,
+        });
+
+        if (!role) {
+          throw new NotFoundException(ROLE.NOT_FOUND);
+        }
+
+        if (dto.parentRoleId !== undefined) {
+          await this.refreshDescendantRoleHierarchies(
+            roleId,
+            update.hierarchyPath,
+            update.hierarchyLevel,
+            session,
+          );
+        }
+
+        return {
+          statusCode: HttpStatus.OK,
+          message: ROLE.UPDATED,
+          data: role,
+        };
+      });
     } catch (err: any) {
       if (err?.code === 11000) {
         throw new ConflictException(ROLE.DUPLICATE);

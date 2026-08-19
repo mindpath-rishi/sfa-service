@@ -63,6 +63,24 @@ export class CreateRoleDto {
   description?: string;
 
   /**
+   * Parent Role
+   * -----------
+   * Purpose : Defines this role's parent in the RBAC hierarchy
+   *
+   * Notes:
+   * - Optional; omit for a root-level role
+   * - hierarchyLevel and hierarchyPath are derived server-side from this chain
+   */
+  @ApiProperty({
+    example: 'OPERATIONS_MANAGER',
+    description: 'roleId of the parent role in the RBAC hierarchy',
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  parentRoleId?: string;
+
+  /**
    * Permissions
    * -----------
    * Purpose : Define permissions granted to this role

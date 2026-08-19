@@ -32,14 +32,6 @@ import {
 } from 'src/core/database/mongo/schema/activity.schema';
 import { ActivityStatus } from 'src/shared/enums/activity.enums';
 
-const POSITION_ROLE_LEVELS: Record<string, number> = {
-  ADMIN: 1,
-  CATEGORY_MANAGER: 2,
-  MANAGER: 3,
-  TEAM_LEADER: 4,
-  SALESMAN: 5,
-};
-
 @Injectable()
 export class PositionService extends MongoRepository<Position> {
   private readonly vanModel;
@@ -214,23 +206,16 @@ export class PositionService extends MongoRepository<Position> {
   }
 
   private async validatePositionHierarchyLevel(
-    roleName: unknown,
+    role: { name?: unknown; parentRoleId?: string },
     reportTo: string | undefined,
-    hierarchyDepth: number,
     session?: ClientSession,
   ) {
-    const normalizedRoleName = this.normalizePositionRoleName(roleName);
-    const expectedLevel = POSITION_ROLE_LEVELS[normalizedRoleName];
-    if (!expectedLevel) {
-      throw new BadRequestException(
-        'Positions only support ADMIN, CATEGORY_MANAGER, MANAGER, TEAM_LEADER, and SALESMAN roles.',
-      );
-    }
+    const normalizedRoleName = this.normalizePositionRoleName(role.name);
 
-    if (expectedLevel === 1) {
+    if (!role.parentRoleId) {
       if (reportTo) {
         throw new BadRequestException(
-          'An ADMIN position cannot report to another position.',
+          `A ${normalizedRoleName} position (root-level role) cannot report to another position.`,
         );
       }
       return;
@@ -239,12 +224,6 @@ export class PositionService extends MongoRepository<Position> {
     if (!reportTo) {
       throw new BadRequestException(
         `${normalizedRoleName} must have a reporting position.`,
-      );
-    }
-
-    if (hierarchyDepth !== expectedLevel) {
-      throw new BadRequestException(
-        `${normalizedRoleName} must be at position hierarchy level ${expectedLevel}.`,
       );
     }
 
@@ -264,78 +243,73 @@ export class PositionService extends MongoRepository<Position> {
         status: 'ACTIVE',
         isDeleted: { $ne: true },
       })
-      .select('name')
+      .select('roleId name')
       .lean();
     if (session) parentRoleQuery.session(session);
     const parentRole = await parentRoleQuery;
-    const parentRoleName = this.normalizePositionRoleName(parentRole?.name);
-    const expectedParentRole = Object.entries(POSITION_ROLE_LEVELS).find(
-      ([, level]) => level === expectedLevel - 1,
-    )?.[0];
 
-    if (parentRoleName !== expectedParentRole) {
+    if (parentRole?.roleId !== role.parentRoleId) {
       throw new BadRequestException(
-        `${normalizedRoleName} must report to a ${expectedParentRole} position.`,
+        `${normalizedRoleName} must report to a position using its parent role.`,
       );
     }
   }
 
   private async validateDescendantPositionLevels(
     positionId: string,
-    hierarchyDepth: number,
+    roleId: string,
     session?: ClientSession,
+    depth = 1,
   ) {
-    const queue = [{ positionId, hierarchyDepth }];
-
-    while (queue.length) {
-      const parent = queue.shift()!;
-      const childrenQuery = this.model
-        .find({
-          reportTo: parent.positionId,
-          status: 'ACTIVE',
-          isDeleted: { $ne: true },
-        })
-        .select('positionId roleId')
-        .lean();
-      if (session) childrenQuery.session(session);
-      const children = await childrenQuery;
-      const childDepth = parent.hierarchyDepth + 1;
-
-      if (children.length && childDepth > 5) {
-        throw new BadRequestException(
-          'Position hierarchy cannot contain more than five levels.',
-        );
-      }
-
-      const childRoleIds = [...new Set(children.map((child) => child.roleId))];
-      const childRolesQuery = this.roleModel
-        .find({
-          roleId: { $in: childRoleIds },
-          status: 'ACTIVE',
-          isDeleted: { $ne: true },
-        })
-        .select('roleId name')
-        .lean();
-      if (session) childRolesQuery.session(session);
-      const childRoles = childRoleIds.length ? await childRolesQuery : [];
-      const childRoleById = new Map(
-        childRoles.map((role) => [role.roleId, role.name]),
+    if (depth > 5) {
+      throw new BadRequestException(
+        'Position hierarchy cannot contain more than five levels.',
       );
+    }
 
-      for (const child of children) {
-        const childRoleName = this.normalizePositionRoleName(
-          childRoleById.get(child.roleId),
+    const childrenQuery = this.model
+      .find({
+        reportTo: positionId,
+        status: 'ACTIVE',
+        isDeleted: { $ne: true },
+      })
+      .select('positionId roleId')
+      .lean();
+    if (session) childrenQuery.session(session);
+    const children = await childrenQuery;
+    if (!children.length) return;
+
+    const childRoleIds = [...new Set(children.map((child) => child.roleId))];
+    const childRolesQuery = this.roleModel
+      .find({
+        roleId: { $in: childRoleIds },
+        status: 'ACTIVE',
+        isDeleted: { $ne: true },
+      })
+      .select('roleId parentRoleId')
+      .lean();
+    if (session) childRolesQuery.session(session);
+    const childRoles = (await childRolesQuery) as unknown as Array<{
+      roleId: string;
+      parentRoleId?: string;
+    }>;
+    const childRoleById = new Map(
+      childRoles.map((role) => [role.roleId, role]),
+    );
+
+    for (const child of children) {
+      const childRole = childRoleById.get(child.roleId);
+      if (childRole?.parentRoleId !== roleId) {
+        throw new BadRequestException(
+          `Position ${child.positionId} must use a role whose parent role matches its reporting position's role.`,
         );
-        if (POSITION_ROLE_LEVELS[childRoleName] !== childDepth) {
-          throw new BadRequestException(
-            `Position ${child.positionId} must use the role assigned to hierarchy level ${childDepth}.`,
-          );
-        }
-        queue.push({
-          positionId: child.positionId,
-          hierarchyDepth: childDepth,
-        });
       }
+      await this.validateDescendantPositionLevels(
+        child.positionId,
+        child.roleId,
+        session,
+        depth + 1,
+      );
     }
   }
 
@@ -424,7 +398,7 @@ export class PositionService extends MongoRepository<Position> {
   ) {
     const roleQuery = this.roleModel
       .findOne({ roleId, status: 'ACTIVE', isDeleted: { $ne: true } })
-      .select('roleId name')
+      .select('roleId name hierarchyLevel parentRoleId')
       .lean();
     if (session) roleQuery.session(session);
     const role = await roleQuery;
@@ -433,11 +407,6 @@ export class PositionService extends MongoRepository<Position> {
     const roleName = String(role.name ?? '')
       .trim()
       .toUpperCase();
-    if (!POSITION_ROLE_LEVELS[this.normalizePositionRoleName(roleName)]) {
-      throw new BadRequestException(
-        'Positions only support ADMIN, CATEGORY_MANAGER, MANAGER, TEAM_LEADER, and SALESMAN roles.',
-      );
-    }
     if (
       offlineAccessAllowed &&
       !['SALESMAN', 'SALES', 'SALES_EXECUTIVE'].includes(roleName)
@@ -661,9 +630,8 @@ export class PositionService extends MongoRepository<Position> {
           session,
         );
         await this.validatePositionHierarchyLevel(
-          role.name,
+          role,
           payload.reportTo,
-          hierarchy.hierarchyDepth,
           session,
         );
         await this.validatePositionVanAssignments(
@@ -890,15 +858,14 @@ export class PositionService extends MongoRepository<Position> {
           positionId,
         );
         await this.validatePositionHierarchyLevel(
-          role.name,
+          role,
           nextReportTo,
-          hierarchy.hierarchyDepth,
           session,
         );
         if (dto.roleId !== undefined || dto.reportTo !== undefined) {
           await this.validateDescendantPositionLevels(
             positionId,
-            hierarchy.hierarchyDepth,
+            role.roleId,
             session,
           );
         }

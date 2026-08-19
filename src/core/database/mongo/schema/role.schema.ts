@@ -51,6 +51,22 @@ export class Role extends Document {
   description?: string;
 
   /* ======================================================
+   * HIERARCHY
+   * ====================================================== */
+
+  /** Parent role in the RBAC hierarchy. */
+  @Prop({ required: false, ref: 'Role', index: true, type: String })
+  parentRoleId?: string;
+
+  /** One-based depth from the root role, derived from parentRoleId. */
+  @Prop({ type: Number, required: true, min: 1, default: 1, index: true })
+  hierarchyLevel!: number;
+
+  /** Ancestor role IDs ordered from the root to the direct parent. */
+  @Prop({ type: [String], default: [] })
+  hierarchyPath!: string[];
+
+  /* ======================================================
    * PERMISSIONS
    * ====================================================== */
 
@@ -81,3 +97,6 @@ export const RoleSchema = SchemaFactory.createForClass(Role);
 /* ======================================================
  * INDEXES
  * ====================================================== */
+
+RoleSchema.index({ hierarchyPath: 1 });
+RoleSchema.index({ parentRoleId: 1, status: 1, isDeleted: 1 });
