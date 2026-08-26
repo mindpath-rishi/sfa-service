@@ -112,30 +112,32 @@ export class StockUnloadRequestService extends MongoRepository<StockUnloadReques
     );
 
     const hierarchyRecipients = [...new Set(hierarchyPath.filter(Boolean))];
-    for (const recipientId of hierarchyRecipients) {
-      await this.notificationService.create({
-        recipientId,
-        title: 'Stock Unload Approval Required',
-        body: `${employee?.name || input.employeeId} requested to unload all stock from van ${input.vanId}.`,
-        category: 'stock_unload',
-        platform: NotificationPlatform.ANDROID,
-        data: {
+    await Promise.all(
+      hierarchyRecipients.map((recipientId) =>
+        this.notificationService.create({
+          recipientId,
+          title: 'Stock Unload Approval Required',
+          body: `${employee?.name || input.employeeId} requested to unload all stock from van ${input.vanId}.`,
           category: 'stock_unload',
-          action: 'APPROVAL_REQUIRED',
-          status: StockUnloadRequestStatus.PENDING,
-          unloadRequestId: request.unloadRequestId,
-          workSessionId: input.workSessionId,
-          vanId: input.vanId,
-          employeeId: input.employeeId,
-          employeeName: employee?.name,
-          totalQuantity: input.totalQuantity || 0,
-          totalCases: input.totalCases || 0,
-          totalPieces: input.totalPieces || 0,
-          totalValue: input.totalValue || 0,
-          route: `/stock-unload-detail?unloadRequestId=${request.unloadRequestId}`,
-        },
-      });
-    }
+          platform: NotificationPlatform.ANDROID,
+          data: {
+            category: 'stock_unload',
+            action: 'APPROVAL_REQUIRED',
+            status: StockUnloadRequestStatus.PENDING,
+            unloadRequestId: request.unloadRequestId,
+            workSessionId: input.workSessionId,
+            vanId: input.vanId,
+            employeeId: input.employeeId,
+            employeeName: employee?.name,
+            totalQuantity: input.totalQuantity || 0,
+            totalCases: input.totalCases || 0,
+            totalPieces: input.totalPieces || 0,
+            totalValue: input.totalValue || 0,
+            route: `/stock-unload-detail?unloadRequestId=${request.unloadRequestId}`,
+          },
+        }),
+      ),
+    );
 
     return request;
   }
@@ -144,13 +146,16 @@ export class StockUnloadRequestService extends MongoRepository<StockUnloadReques
     const { page = 1, limit = 20, searchText, ...requestedFilters } = query;
     const ctx = RequestContextStore.getStore();
 
-    const isAdmin = (ctx?.roleId || '').toUpperCase().includes('ADMIN');
-    const filter: Record<string, any> = { ...requestedFilters };
+    const isAdmin = String(ctx?.roleId || '')
+      .toUpperCase()
+      .includes('ADMIN');
+    const filter: Record<string, any> = Object.fromEntries(
+      Object.entries(requestedFilters).filter(([, value]) => value),
+    );
 
     if (!isAdmin) {
       filter.managerId = ctx?.userId;
     }
-    console.log('RequestContextStore:', ctx, 'isAdmin:', isAdmin, 'filter:', filter);
 
     if (searchText) {
       const regex = new RegExp(searchText, 'i');
@@ -205,7 +210,7 @@ export class StockUnloadRequestService extends MongoRepository<StockUnloadReques
     }
 
     const ctx = RequestContextStore.getStore();
-    const isAdmin = String(ctx?.role || '')
+    const isAdmin = String(ctx?.roleId || '')
       .toUpperCase()
       .includes('ADMIN');
     const canView =
@@ -381,7 +386,7 @@ export class StockUnloadRequestService extends MongoRepository<StockUnloadReques
 
   private assertApprover(request: StockUnloadRequest) {
     const ctx = RequestContextStore.getStore();
-    const isAdmin = String(ctx?.role || '')
+    const isAdmin = String(ctx?.roleId || '')
       .toUpperCase()
       .includes('ADMIN');
 
