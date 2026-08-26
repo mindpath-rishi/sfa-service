@@ -144,15 +144,13 @@ export class StockUnloadRequestService extends MongoRepository<StockUnloadReques
     const { page = 1, limit = 20, searchText, ...requestedFilters } = query;
     const ctx = RequestContextStore.getStore();
 
-    console.log('RequestContextStore:', ctx);
-    const isAdmin = String(ctx?.roleId || '')
-      .toUpperCase()
-      .includes('ADMIN');
+    const isAdmin = (ctx?.roleId || '').toUpperCase().includes('ADMIN');
     const filter: Record<string, any> = { ...requestedFilters };
 
     if (!isAdmin) {
       filter.managerId = ctx?.userId;
     }
+    console.log('RequestContextStore:', ctx, 'isAdmin:', isAdmin, 'filter:', filter);
 
     if (searchText) {
       const regex = new RegExp(searchText, 'i');
