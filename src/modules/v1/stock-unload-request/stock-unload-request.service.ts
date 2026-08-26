@@ -111,9 +111,10 @@ export class StockUnloadRequestService extends MongoRepository<StockUnloadReques
       { session },
     );
 
-    if (managerId) {
+    const hierarchyRecipients = [...new Set(hierarchyPath.filter(Boolean))];
+    for (const recipientId of hierarchyRecipients) {
       await this.notificationService.create({
-        recipientId: managerId,
+        recipientId,
         title: 'Stock Unload Approval Required',
         body: `${employee?.name || input.employeeId} requested to unload all stock from van ${input.vanId}.`,
         category: 'stock_unload',
