@@ -143,6 +143,8 @@ export class StockUnloadRequestService extends MongoRepository<StockUnloadReques
   async findAll(query: StockUnloadRequestQueryDto) {
     const { page = 1, limit = 20, searchText, ...requestedFilters } = query;
     const ctx = RequestContextStore.getStore();
+
+    console.log('RequestContextStore:', ctx);
     const isAdmin = String(ctx?.roleId || '')
       .toUpperCase()
       .includes('ADMIN');
