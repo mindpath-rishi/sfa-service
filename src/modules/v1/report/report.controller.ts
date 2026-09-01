@@ -7,6 +7,8 @@ import {
   TimelineReportQueryDto,
   VehicleBreakdownReportQueryDto,
 } from './dto/timeline-report-query.dto';
+import { Public } from 'src/core/decorators/public.decorator';
+import { ReportService } from './report.service';
 
 @ApiTags('Reports')
 @Controller({
@@ -14,7 +16,10 @@ import {
   version: V1,
 })
 export class ReportController {
-  constructor(private readonly employeeService: EmployeeService) {}
+  constructor(
+    private readonly employeeService: EmployeeService,
+    private readonly reportService: ReportService,
+  ) {}
 
   @Get('timeline')
   @HttpCode(HttpStatus.OK)
@@ -35,5 +40,20 @@ export class ReportController {
   @ApiOperation({ summary: 'Get vehicle breakdown status report' })
   vehicleBreakdown(@Query() query: VehicleBreakdownReportQueryDto) {
     return this.employeeService.getVehicleBreakdownReport(query);
+  }
+
+  @Public()
+  @Get('productivity/d1')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Prepare D-1 productivity report' })
+  prepareD1ProductivityReport() {
+    return this.reportService.prepareD1ProductivityReport();
+  }
+  @Public()
+  @Get('productivity/d-day')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Prepare D-Day productivity report' })
+  prepareDDayProductivityReport() {
+    return this.reportService.prepareDDayProductivityReport();
   }
 }
