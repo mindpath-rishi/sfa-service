@@ -5,6 +5,7 @@ import {
   HttpStatus,
   BadRequestException,
 } from '@nestjs/common';
+import { Model } from 'mongoose';
 
 import { MongoService } from 'src/core/database/mongo/mongo.service';
 import { MongoRepository } from 'src/core/database/mongo/mongo.repository';
@@ -14,6 +15,10 @@ import {
   VanInventoryTopup,
   VanInventoryTopupSchema,
 } from 'src/core/database/mongo/schema/van-inventory-topup.schema';
+import {
+  Employee,
+  EmployeeSchema,
+} from 'src/core/database/mongo/schema/employee.schema';
 
 import { VAN_INVENTORY_TOPUP } from './van-inventory-topup.constants';
 import { CreateVanInventoryTopupDto } from './dto/create-van-inventory-topup.dto';
@@ -43,6 +48,8 @@ import { WorkSessionService } from '../work-session/work-session.service';
 
 @Injectable()
 export class VanInventoryTopupService extends MongoRepository<VanInventoryTopup> {
+  private readonly employeeModel: Model<Employee>;
+
   constructor(
     mongo: MongoService,
     private readonly vanInventoryTopupItemService: VanInventoryTopupItemService,
@@ -55,6 +62,7 @@ export class VanInventoryTopupService extends MongoRepository<VanInventoryTopup>
     private readonly workSessionService: WorkSessionService,
   ) {
     super(mongo.getModel(VanInventoryTopup.name, VanInventoryTopupSchema));
+    this.employeeModel = mongo.getModel(Employee.name, EmployeeSchema);
   }
 
   async create(payload: CreateVanInventoryTopupDto) {
@@ -767,10 +775,27 @@ export class VanInventoryTopupService extends MongoRepository<VanInventoryTopup>
       this.model.countDocuments(activeFilter),
     ]);
 
+    const employeeIds = [
+      ...new Set(items.map((item) => item.employeeId).filter(Boolean)),
+    ];
+    const employees = employeeIds.length
+      ? await this.employeeModel
+          .find({ employeeId: { $in: employeeIds } })
+          .select('employeeId name')
+          .lean()
+      : [];
+    const employeeNameById = new Map(
+      employees.map((employee) => [employee.employeeId, employee.name]),
+    );
+    const enrichedItems = items.map((item) => ({
+      ...item,
+      employeeName: employeeNameById.get(item.employeeId),
+    }));
+
     return {
       statusCode: HttpStatus.OK,
       message: VAN_INVENTORY_TOPUP.FETCHED,
-      data: items,
+      data: enrichedItems,
       meta: {
         total,
         page: pageNumber,
@@ -802,10 +827,18 @@ export class VanInventoryTopupService extends MongoRepository<VanInventoryTopup>
       throw new NotFoundException(VAN_INVENTORY_TOPUP.NOT_FOUND);
     }
 
+    const topup = result[0];
+    const employee = topup.employeeId
+      ? await this.employeeModel
+          .findOne({ employeeId: topup.employeeId })
+          .select('name')
+          .lean()
+      : null;
+
     return {
       statusCode: HttpStatus.OK,
       message: VAN_INVENTORY_TOPUP.FETCHED,
-      data: result[0],
+      data: { ...topup, employeeName: employee?.name },
     };
   }
 

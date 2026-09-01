@@ -1,4 +1,5 @@
 import {
+  Body,
   Controller,
   Get,
   HttpCode,
@@ -54,7 +55,10 @@ export class StockUnloadRequestController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Reject stock unload request' })
   @ApiParam({ name: 'unloadRequestId' })
-  reject(@Param('unloadRequestId') unloadRequestId: string) {
-    return this.service.reject(unloadRequestId);
+  reject(
+    @Param('unloadRequestId') unloadRequestId: string,
+    @Body() body: { reason?: string },
+  ) {
+    return this.service.reject(unloadRequestId, body?.reason);
   }
 }

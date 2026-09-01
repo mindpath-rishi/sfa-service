@@ -84,6 +84,9 @@ export class StockUnloadRequest {
 
   @Prop({ type: Date })
   resolvedAt?: Date;
+
+  @Prop({ type: String })
+  rejectionReason?: string;
 }
 
 export const StockUnloadRequestSchema =

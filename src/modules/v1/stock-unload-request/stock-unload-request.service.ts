@@ -275,7 +275,7 @@ export class StockUnloadRequestService extends MongoRepository<StockUnloadReques
     this.assertApprover(request);
     const ctx = RequestContextStore.getStore();
 
-    const updated = await this.withTransaction(async (session) => {
+    await this.withTransaction(async (session) => {
       const claimed = await this.updateOne(
         {
           unloadRequestId,
@@ -334,8 +334,9 @@ export class StockUnloadRequestService extends MongoRepository<StockUnloadReques
         { session },
       );
 
-      return claimed;
     });
+
+    const updated = await this.findOne({ unloadRequestId });
 
     await this.resolveNotifications(request, StockUnloadRequestStatus.APPROVED);
     return {
@@ -345,10 +346,10 @@ export class StockUnloadRequestService extends MongoRepository<StockUnloadReques
     };
   }
 
-  async reject(unloadRequestId: string) {
+  async reject(unloadRequestId: string, reason?: string) {
     const request = await this.getPending(unloadRequestId);
     this.assertApprover(request);
-    const updated = await this.updateOne(
+    const wasUpdated = await this.updateOne(
       {
         unloadRequestId,
         status: StockUnloadRequestStatus.PENDING,
@@ -357,15 +358,21 @@ export class StockUnloadRequestService extends MongoRepository<StockUnloadReques
         status: StockUnloadRequestStatus.REJECTED,
         resolvedBy: RequestContextStore.getStore()?.userId,
         resolvedAt: new Date(),
+        rejectionReason: reason,
       },
-      { new: true },
     );
 
-    if (!updated) {
+    if (!wasUpdated) {
       throw new BadRequestException('Stock unload request is already resolved');
     }
 
-    await this.resolveNotifications(request, StockUnloadRequestStatus.REJECTED);
+    const updated = await this.findOne({ unloadRequestId });
+
+    await this.resolveNotifications(
+      request,
+      StockUnloadRequestStatus.REJECTED,
+      reason,
+    );
     return {
       statusCode: HttpStatus.OK,
       message: 'Stock unload request rejected; van stock was not changed',
@@ -402,6 +409,7 @@ export class StockUnloadRequestService extends MongoRepository<StockUnloadReques
     status:
       | StockUnloadRequestStatus.APPROVED
       | StockUnloadRequestStatus.REJECTED,
+    reason?: string,
   ) {
     await this.notificationService.markStockUnloadRequestResolved(
       request.unloadRequestId,
@@ -416,7 +424,9 @@ export class StockUnloadRequestService extends MongoRepository<StockUnloadReques
       body:
         status === StockUnloadRequestStatus.APPROVED
           ? `Your unload request for van ${request.vanId} was approved and its stock was reset.`
-          : `Your unload request for van ${request.vanId} was rejected. Its stock was not changed.`,
+          : `Your unload request for van ${request.vanId} was rejected.${
+              reason ? ` Reason: ${reason}` : ''
+            } Its stock was not changed.`,
       category: 'stock_unload',
       platform: NotificationPlatform.ANDROID,
       data: {
