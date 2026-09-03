@@ -43,17 +43,10 @@ export class ReportController {
   }
 
   @Public()
-  @Get('productivity/d1')
+  @Get('productivity')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Prepare D-1 productivity report' })
-  prepareD1ProductivityReport() {
-    return this.reportService.prepareD1ProductivityReport();
-  }
-  @Public()
-  @Get('productivity/d-day')
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Prepare D-Day productivity report' })
-  prepareDDayProductivityReport() {
-    return this.reportService.prepareDDayProductivityReport();
+  @ApiOperation({ summary: 'Prepare productivity reports' })
+  prepareProductivityReports() {
+    return this.reportService.prepareProductivityReports();
   }
 }

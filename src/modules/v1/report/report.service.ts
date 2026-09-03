@@ -90,52 +90,345 @@ export class ReportService {
   ) {}
 
   /* ======================================================
-   * PUBLIC SCHEDULER METHODS
+   * HISTORICAL PRODUCTIVITY REPORT
    * ====================================================== */
 
   /**
-   * D-1 scheduler entry point.
+   * Prepare productivity reports for all SALESMEN
+   * from their Employee.createdAt date up to today.
    *
-   * If executed on:
+   * IMPORTANT:
+   * A report is created ONLY for dates on which the
+   * salesman has a WorkSession.dayStartTime.
    *
-   * 2026-08-31 00:01 UTC
+   * Therefore:
    *
-   * it prepares:
-   *
-   * 2026-08-30
+   * - onboarding date is Employee.createdAt
+   * - salesman eligibility is Position.roleId === 'SALESMAN'
+   * - employeeId is Employee.employeeId
+   * - working dates come from WorkSession.dayStartTime
    */
-  async prepareD1ProductivityReport(executionDate: Date = new Date()) {
-    const currentDayStart = this.getUtcDayStart(executionDate);
-
-    const reportDate = new Date(currentDayStart);
-    reportDate.setUTCDate(reportDate.getUTCDate() - 1);
-
-    this.logger.log(
-      `Starting D-1 productivity report for ${this.formatDate(reportDate)}`,
-    );
-
-    return this.prepareProductivityReport(reportDate);
-  }
+  /* ======================================================
+   * PRODUCTIVITY REPORT PREPARATION
+   * ====================================================== */
 
   /**
-   * D-Day scheduler entry point.
+   * Prepare productivity reports for all SALESMEN from their
+   * Employee.createdAt date through the current UTC day.
    *
-   * If executed at any time during:
+   * Rules:
+   * - Only Position.roleId === 'SALESMAN' employees are eligible.
+   * - employeeId is the direct Employee.employeeId value.
+   * - A report is created only for dates where the salesman has
+   *   a WorkSession.dayStartTime.
+   * - Existing historical employee/date reports are skipped.
+   * - Today's employee/date reports are always recalculated because
+   *   today's visits, sales and other metrics can still change.
+   * - If a scheduler run is missed, the next run discovers the missing
+   *   employee/date report and prepares it.
    *
-   * 2026-08-31
-   *
-   * it recalculates:
-   *
-   * 2026-08-31
+   * The ProductivityReport document itself is used as the processing
+   * state. Its unique (reportDate, employeeId) index tells us whether
+   * a historical report already exists, so no separate flag collection
+   * is required.
    */
-  async prepareDDayProductivityReport(executionDate: Date = new Date()) {
-    const reportDate = this.getUtcDayStart(executionDate);
+  async prepareProductivityReports(executionDate: Date = new Date()) {
+    const todayStart = this.getUtcDayStart(executionDate);
+
+    const tomorrowStart = new Date(todayStart);
+    tomorrowStart.setUTCDate(tomorrowStart.getUTCDate() + 1);
 
     this.logger.log(
-      `Starting D-Day productivity report for ${this.formatDate(reportDate)}`,
+      `Starting productivity report preparation from employee onboarding dates through ${this.formatDate(
+        todayStart,
+      )}`,
     );
 
-    return this.prepareProductivityReport(reportDate);
+    /* ======================================================
+     * 1. FIND SALESMAN POSITIONS
+     * ====================================================== */
+
+    const salesmanPositions = await this.positionModel
+      .find({
+        roleId: 'SALESMAN',
+        employeeId: {
+          $exists: true,
+          $ne: null,
+        },
+        isDeleted: {
+          $ne: true,
+        },
+      })
+      .select('positionId employeeId')
+      .lean();
+
+    const salesmanEmployeeIds = [
+      ...new Set(
+        (salesmanPositions as any[])
+          .map((position) => String(position.employeeId))
+          .filter(Boolean),
+      ),
+    ];
+
+    if (!salesmanEmployeeIds.length) {
+      this.logger.warn('No SALESMAN employees found.');
+
+      return {
+        employeesProcessed: 0,
+        workingDaysFound: 0,
+        reportsFound: 0,
+        reportsSkipped: 0,
+        reportsPrepared: 0,
+        upserted: 0,
+        modified: 0,
+      };
+    }
+
+    /* ======================================================
+     * 2. FIND SALESMAN EMPLOYEES
+     * ====================================================== */
+
+    const employees = await this.employeeModel
+      .find({
+        employeeId: {
+          $in: salesmanEmployeeIds,
+        },
+        isDeleted: {
+          $ne: true,
+        },
+        createdAt: {
+          $lt: tomorrowStart,
+        },
+      })
+      .select('employeeId name status hierarchyPath createdAt')
+      .lean();
+
+    if (!employees.length) {
+      this.logger.warn(
+        'No eligible SALESMAN employees found in Employee collection.',
+      );
+
+      return {
+        employeesProcessed: 0,
+        workingDaysFound: 0,
+        reportsFound: 0,
+        reportsSkipped: 0,
+        reportsPrepared: 0,
+        upserted: 0,
+        modified: 0,
+      };
+    }
+
+    const eligibleEmployeeIdSet = new Set(
+      (employees as any[]).map((employee) => String(employee.employeeId)),
+    );
+
+    /* ======================================================
+     * 3. FIND ALL SALESMAN WORKING DATES
+     * ======================================================
+     *
+     * WorkSession is the source of truth for whether a salesman
+     * actually started his day.
+     *
+     * Employee.createdAt is the lower boundary and tomorrowStart
+     * is the upper boundary, which intentionally includes today.
+     */
+
+    const employeeWorkingDates = await this.workSessionModel.aggregate([
+      {
+        $match: {
+          userId: {
+            $in: [...eligibleEmployeeIdSet],
+          },
+          dayStartTime: {
+            $lt: tomorrowStart,
+          },
+          isDeleted: {
+            $ne: true,
+          },
+        },
+      },
+      {
+        $lookup: {
+          from: 'employees',
+          let: {
+            employeeId: '$userId',
+          },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $eq: ['$employeeId', '$$employeeId'],
+                },
+                isDeleted: {
+                  $ne: true,
+                },
+              },
+            },
+            {
+              $project: {
+                _id: 0,
+                employeeId: 1,
+                createdAt: 1,
+              },
+            },
+          ],
+          as: 'employee',
+        },
+      },
+      {
+        $unwind: '$employee',
+      },
+      {
+        $match: {
+          $expr: {
+            $gte: ['$dayStartTime', '$employee.createdAt'],
+          },
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          employeeId: '$userId',
+          reportDate: {
+            $dateTrunc: {
+              date: '$dayStartTime',
+              unit: 'day',
+              timezone: 'UTC',
+            },
+          },
+        },
+      },
+      {
+        $group: {
+          _id: {
+            employeeId: '$employeeId',
+            reportDate: '$reportDate',
+          },
+        },
+      },
+      {
+        $sort: {
+          '_id.employeeId': 1,
+          '_id.reportDate': 1,
+        },
+      },
+    ]);
+
+    /* ======================================================
+     * 4. LOAD EXISTING HISTORICAL REPORTS
+     * ======================================================
+     *
+     * ProductivityReport is the entry-level processing state.
+     *
+     * Existing historical report -> skip.
+     * Existing today's report    -> recalculate.
+     */
+
+    const existingReports = await this.productivityReportModel
+      .find({
+        employeeId: {
+          $in: [...eligibleEmployeeIdSet],
+        },
+        reportDate: {
+          $lt: todayStart,
+        },
+      })
+      .select('employeeId reportDate')
+      .lean();
+
+    const existingReportKeys = new Set<string>();
+
+    for (const report of existingReports as any[]) {
+      existingReportKeys.add(
+        this.getReportKey(
+          String(report.employeeId),
+          new Date(report.reportDate),
+        ),
+      );
+    }
+
+    /* ======================================================
+     * 5. BUILD DATE -> EMPLOYEES TO PROCESS MAP
+     * ======================================================
+     *
+     * Processing one date for all required employees avoids running
+     * the daily aggregation once for every employee/date pair.
+     */
+
+    const employeesByReportDate = new Map<string, Set<string>>();
+
+    let workingDaysFound = 0;
+    let reportsFound = 0;
+    let reportsSkipped = 0;
+
+    for (const row of employeeWorkingDates as any[]) {
+      const employeeId = String(row._id.employeeId);
+      const reportDate = new Date(row._id.reportDate);
+      const reportDateKey = this.formatDate(reportDate);
+      const reportKey = this.getReportKey(employeeId, reportDate);
+
+      workingDaysFound++;
+
+      const isToday = reportDateKey === this.formatDate(todayStart);
+
+      if (!isToday && existingReportKeys.has(reportKey)) {
+        reportsFound++;
+        reportsSkipped++;
+        continue;
+      }
+
+      if (!employeesByReportDate.has(reportDateKey)) {
+        employeesByReportDate.set(reportDateKey, new Set<string>());
+      }
+
+      employeesByReportDate.get(reportDateKey)!.add(employeeId);
+    }
+
+    /* ======================================================
+     * 6. PREPARE MISSING HISTORICAL REPORTS + TODAY
+     * ====================================================== */
+
+    let reportsPrepared = 0;
+    let totalUpserted = 0;
+    let totalModified = 0;
+
+    const datesToProcess = [...employeesByReportDate.keys()].sort();
+
+    for (const reportDateKey of datesToProcess) {
+      const employeeIds = employeesByReportDate.get(reportDateKey)!;
+      const reportDate = this.parseUtcDate(reportDateKey);
+
+      const result = await this.prepareProductivityReport(
+        reportDate,
+        employeeIds,
+      );
+
+      reportsPrepared += result.employeesProcessed;
+      totalUpserted += result.upserted;
+      totalModified += result.modified;
+    }
+
+    this.logger.log(
+      `Productivity report preparation completed. ` +
+        `Employees: ${employees.length}, ` +
+        `Working employee-days: ${workingDaysFound}, ` +
+        `Existing historical reports: ${reportsFound}, ` +
+        `Skipped: ${reportsSkipped}, ` +
+        `Prepared/recalculated: ${reportsPrepared}, ` +
+        `Upserted: ${totalUpserted}, ` +
+        `Modified: ${totalModified}`,
+    );
+
+    return {
+      employeesProcessed: employees.length,
+      workingDaysFound,
+      reportsFound,
+      reportsSkipped,
+      reportsPrepared,
+      upserted: totalUpserted,
+      modified: totalModified,
+    };
   }
 
   /* ======================================================
@@ -147,8 +440,27 @@ export class ReportService {
    *
    * IMPORTANT:
    * Both D-1 and D-Day use this same method.
+   *
+   * REPORT ELIGIBILITY:
+   * -------------------
+   * Only employees assigned to a Position whose:
+   *
+   *     roleId === 'SALESMAN'
+   *
+   * are included in the productivity report.
+   *
+   * employeeId is taken directly from:
+   *
+   *     Position.employeeId
+   *
+   * and corresponds to:
+   *
+   *     Employee.employeeId
    */
-  async prepareProductivityReport(reportDate: Date) {
+  private async prepareProductivityReport(
+    reportDate: Date,
+    eligibleEmployeeIds?: Set<string>,
+  ) {
     const { start, end } = this.getUtcDayRange(reportDate);
 
     this.logger.log(
@@ -168,6 +480,10 @@ export class ReportService {
      * manager
      * teamLeader
      * salesman
+     *
+     * We also need all positions to walk:
+     *
+     * salesman -> team leader -> manager -> category manager -> admin
      */
     const positions = await this.positionModel
       .find({
@@ -181,6 +497,15 @@ export class ReportService {
     /**
      * Only positions whose role is SALESMAN are eligible to
      * generate productivity reports.
+     *
+     * This is the authoritative role check.
+     *
+     * We intentionally do NOT check:
+     * - Employee employeeType
+     * - User role
+     * - Role collection
+     *
+     * Position.roleId is the source of truth.
      */
     const salesmanPositions = (positions as any[]).filter(
       (position) => position.roleId === 'SALESMAN' && position.employeeId,
@@ -197,15 +522,59 @@ export class ReportService {
       ),
     ];
 
+    if (!salesmanEmployeeIds.length) {
+      this.logger.warn(
+        `No SALESMAN positions found for productivity report ${this.formatDate(
+          start,
+        )}`,
+      );
+
+      return {
+        reportDate: this.formatDate(start),
+        employeesProcessed: 0,
+        upserted: 0,
+        modified: 0,
+      };
+    }
+
     /* ======================================================
-     * 2. FETCH SALESMAN EMPLOYEES ONLY
+     * 2. FETCH EMPLOYEES
      * ====================================================== */
 
-    const employees = salesmanEmployeeIds.length
+    /**
+     * IMPORTANT:
+     *
+     * We must NOT fetch only SALESMAN employees here.
+     *
+     * The report is generated only FOR SALESMAN employees,
+     * but the hierarchy contains other employees:
+     *
+     * ADMIN
+     * CATEGORY MANAGER
+     * MANAGER
+     * TEAM LEADER
+     * SALESMAN
+     *
+     * Therefore we first collect all employee IDs assigned
+     * to positions and load them all.
+     *
+     * The final reportDocuments array is still generated only
+     * from salesmanEmployees.
+     */
+    const allPositionEmployeeIds = [
+      ...new Set(
+        (positions as any[])
+          .map((position) => position.employeeId)
+          .filter(Boolean)
+          .map((employeeId) => String(employeeId)),
+      ),
+    ];
+
+    const employees = allPositionEmployeeIds.length
       ? await this.employeeModel
           .find({
             employeeId: {
-              $in: salesmanEmployeeIds,
+              $in: allPositionEmployeeIds,
             },
             isDeleted: {
               $ne: true,
@@ -215,24 +584,74 @@ export class ReportService {
           .lean()
       : [];
 
-    /*
-     * ------------------------------------------------------
-     * 2. BUILD MASTER MAPS
-     * ------------------------------------------------------
+    /**
+     * Keep the SALESMAN employees separately.
+     *
+     * These are the only employees for whom we create reports.
      */
+    const salesmanEmployeeIdSet = new Set(salesmanEmployeeIds);
 
+    const salesmanEmployees = (employees as any[]).filter((employee) => {
+      const employeeId = String(employee.employeeId);
+
+      /**
+       * Employee must first be a SALESMAN.
+       */
+      if (!salesmanEmployeeIdSet.has(employeeId)) {
+        return false;
+      }
+
+      /**
+       * If eligibleEmployeeIds was supplied, only include
+       * those employees.
+       *
+       * This is used by historical backfill where we already
+       * know which salesman actually started his day.
+       */
+      if (eligibleEmployeeIds) {
+        return eligibleEmployeeIds.has(employeeId);
+      }
+
+      return true;
+    });
+
+    /* ======================================================
+     * 3. BUILD MASTER MAPS
+     * ====================================================== */
+
+    /**
+     * Employee lookup:
+     *
+     * employeeId -> Employee
+     *
+     * This now contains employees from the entire position
+     * hierarchy, not only SALESMAN employees.
+     */
     const employeeById = new Map<string, any>();
 
     for (const employee of employees as any[]) {
       employeeById.set(String(employee.employeeId), employee);
     }
 
+    /**
+     * Position lookup:
+     *
+     * positionId -> Position
+     */
     const positionById = new Map<string, any>();
 
     for (const position of positions as any[]) {
       positionById.set(String(position.positionId), position);
     }
 
+    /**
+     * Position lookup:
+     *
+     * employeeId -> Position
+     *
+     * This allows us to find the SALESMAN position directly
+     * from Employee.employeeId.
+     */
     const positionByEmployeeId = new Map<string, any>();
 
     for (const position of positions as any[]) {
@@ -241,11 +660,9 @@ export class ReportService {
       }
     }
 
-    /*
-     * ------------------------------------------------------
-     * 3. COUNTRY / PROVINCE MASTER
-     * ------------------------------------------------------
-     */
+    /* ======================================================
+     * 4. COUNTRY / PROVINCE MASTER
+     * ====================================================== */
 
     const countryIds = [
       ...new Set(
@@ -297,20 +714,35 @@ export class ReportService {
       provinceById.set(String(province.provinceId), province);
     }
 
-    /*
-     * ------------------------------------------------------
-     * 4. HIERARCHY BUILDER
-     * ------------------------------------------------------
+    /* ======================================================
+     * 5. HIERARCHY BUILDER
+     * ====================================================== */
+
+    /**
+     * Position hierarchy:
      *
-     * Existing position hierarchy uses:
+     * hierarchyDepth 1 = ADMIN
+     * hierarchyDepth 2 = CATEGORY MANAGER
+     * hierarchyDepth 3 = MANAGER
+     * hierarchyDepth 4 = TEAM LEADER
+     * hierarchyDepth 5 = SALESMAN
      *
-     * depth 1 = L6
-     * depth 2 = L5
-     * depth 3 = L4
-     * depth 4 = L3
-     * depth 5 = L2
+     * This matches the confirmed Position master structure.
      *
-     * Based on the supplied hierarchy structure.
+     * Example:
+     *
+     * P00005 SALESMAN
+     *     |
+     *     +-- P00004 TEAM LEADER
+     *             |
+     *             +-- P00002 MANAGER
+     *                     |
+     *                     +-- P00001 CATEGORY MANAGER
+     *                             |
+     *                             +-- P00003 ADMIN
+     *
+     * The actual structure is determined by reportTo and
+     * hierarchyDepth from Position master.
      */
     const hierarchyFor = (employee: any) => {
       const hierarchy: Record<number, string> = {
@@ -329,10 +761,19 @@ export class ReportService {
 
       let reportingManager = '';
 
+      /**
+       * Walk from the SALESMAN position upwards using reportTo.
+       */
       while (position) {
         const level = Number(position.hierarchyDepth);
 
         if (level >= 1 && level <= 5) {
+          /**
+           * Get the actual employee assigned to this position.
+           *
+           * Because employeeById now contains all hierarchy
+           * employees, we get the real employee name here.
+           */
           const positionEmployee = position.employeeId
             ? employeeById.get(String(position.employeeId))
             : undefined;
@@ -340,6 +781,10 @@ export class ReportService {
           hierarchy[level] = positionEmployee?.name || position.name || '';
         }
 
+        /**
+         * reportingManager means the employee directly above
+         * the current SALESMAN position.
+         */
         if (!reportingManager && position !== currentPosition) {
           const managerEmployee = position.employeeId
             ? employeeById.get(String(position.employeeId))
@@ -348,13 +793,19 @@ export class ReportService {
           reportingManager = managerEmployee?.name || position.name || '';
         }
 
+        /**
+         * Move to parent position.
+         */
         position = position.reportTo
           ? positionById.get(String(position.reportTo))
           : undefined;
       }
 
-      /*
+      /**
        * Fallback using employee hierarchyPath.
+       *
+       * This is only used if a direct reporting manager could
+       * not be resolved through Position.reportTo.
        */
       if (!reportingManager) {
         const hierarchyPath = Array.isArray(employee.hierarchyPath)
@@ -374,16 +825,30 @@ export class ReportService {
       }
 
       return {
+        /**
+         * Position hierarchy fields.
+         */
         admin: hierarchy[1] || '',
+
         categoryManager: hierarchy[2] || '',
+
         manager: hierarchy[3] || '',
+
         teamLeader: hierarchy[4] || '',
+
         salesman: hierarchy[5] || '',
 
+        /**
+         * Additional existing report fields.
+         */
         reportingManager,
 
         positionOfEmployee: currentPosition?.name || '',
 
+        /**
+         * Country / Province are based on the SALESMAN's
+         * assigned position.
+         */
         country:
           countryById.get(String(currentPosition?.countryId || ''))?.name ||
           currentPosition?.countryId ||
@@ -396,12 +861,15 @@ export class ReportService {
       };
     };
 
-    /*
-     * ------------------------------------------------------
-     * 5. RUN DAILY AGGREGATIONS
-     * ------------------------------------------------------
-     *
+    /* ======================================================
+     * 6. RUN DAILY AGGREGATIONS
+     * ====================================================== */
+
+    /**
      * These execute directly in MongoDB.
+     *
+     * IMPORTANT:
+     * Aggregations are not changed from the existing logic.
      */
     const [
       workSessionMetrics,
@@ -430,11 +898,9 @@ export class ReportService {
         .lean(),
     ]);
 
-    /*
-     * ------------------------------------------------------
-     * 6. NEW OUTLETS
-     * ------------------------------------------------------
-     */
+    /* ======================================================
+     * 7. NEW OUTLETS
+     * ====================================================== */
 
     const newOutletByEmployee = new Map<string, number>();
 
@@ -451,13 +917,31 @@ export class ReportService {
       );
     }
 
-    /*
-     * ------------------------------------------------------
-     * 7. CREATE REPORT DOCUMENTS
-     * ------------------------------------------------------
-     */
+    /* ======================================================
+     * 8. CREATE REPORT DOCUMENTS
+     * ====================================================== */
 
-    const reportDocuments = (employees as any[]).map((employee) => {
+    /**
+     * VERY IMPORTANT:
+     *
+     * We iterate over salesmanEmployees only.
+     *
+     * Therefore:
+     *
+     * - ADMIN does not get a report
+     * - CATEGORY MANAGER does not get a report
+     * - MANAGER does not get a report
+     * - TEAM LEADER does not get a report
+     * - SALESMAN gets a report
+     */
+    const reportDocuments = salesmanEmployees.map((employee) => {
+      /**
+       * employeeId is the actual Employee.employeeId.
+       *
+       * No ERP ID.
+       * No User ID.
+       * No Role ID.
+       */
       const employeeId = String(employee.employeeId);
 
       const hierarchy = hierarchyFor(employee);
@@ -501,17 +985,21 @@ export class ReportService {
 
       const sc = Number(route.sc || 0);
 
-      /*
-       * Productivity %
-       *
+      /* ==================================================
+       * PRODUCTIVITY %
+       * ================================================== */
+
+      /**
        * PC / TC * 100
        */
       const productivityPercentage =
         tc > 0 ? Number(((pc / tc) * 100).toFixed(2)) : 0;
 
-      /*
-       * Average TC
-       *
+      /* ==================================================
+       * AVERAGE TC
+       * ================================================== */
+
+      /**
        * TC / retailing days
        */
       const avgTc =
@@ -519,9 +1007,11 @@ export class ReportService {
           ? Number((tc / countRetailingDays).toFixed(2))
           : 0;
 
-      /*
-       * Average PC
-       *
+      /* ==================================================
+       * AVERAGE PC
+       * ================================================== */
+
+      /**
        * PC / retailing days
        */
       const avgPc =
@@ -529,65 +1019,69 @@ export class ReportService {
           ? Number((pc / countRetailingDays).toFixed(2))
           : 0;
 
-      /*
-       * Zero Order
-       *
+      /* ==================================================
+       * ZERO ORDER
+       * ================================================== */
+
+      /**
        * UTC - UPC
        */
       const zeroOrder = Math.max(utc - upc, 0);
 
-      /*
-       * Not Visited
-       *
+      /* ==================================================
+       * NOT VISITED
+       * ================================================== */
+
+      /**
        * SC - UTC
        */
       const notVisited = Math.max(sc - utc, 0);
 
-      /*
-       * Total
-       *
+      /* ==================================================
+       * TOTAL
+       * ================================================== */
+
+      /**
        * UTC + UPC + ZeroOrder + NotVisited
        */
       const total = utc + upc + zeroOrder + notVisited;
 
-      /*
+      /* ==================================================
        * LPC
+       * ================================================== */
+
+      /**
+       * Sale lines / completed orders
        *
-       * distinct saleId + productId
-       * --------------------------------
-       * distinct saleId
+       * sale_items has:
        *
-       * sale_items has unique:
-       * saleId + productId
+       * unique saleId + productId
        */
       const lineCount = Number(sales.lineCount || 0);
 
       const lpc = pc > 0 ? Number((lineCount / pc).toFixed(2)) : 0;
 
-      /*
-       * Average Value Per PC
-       *
-       * NetValue / PC
-       */
+      /* ==================================================
+       * AVERAGE VALUE PER PC
+       * ================================================== */
+
       const netValue = Number(sales.netValue || 0);
 
       const avgValuePerPc = pc > 0 ? Number((netValue / pc).toFixed(2)) : 0;
 
-      /*
-       * Average Value Per Retailing Day
-       */
+      /* ==================================================
+       * AVERAGE VALUE PER RETAILING DAY
+       * ================================================== */
+
       const avgValuePerRetailingDay =
         countRetailingDays > 0
           ? Number((netValue / countRetailingDays).toFixed(2))
           : 0;
 
-      /*
-       * Average Spent Time Retailing
-       *
-       * SUM(durationSeconds)
-       * /
-       * Retailing Days
-       */
+      /* ==================================================
+       * AVERAGE SPENT TIME RETAILING
+       * ================================================== */
+
       const totalDurationSeconds = Number(visit.totalDurationSeconds || 0);
 
       const avgSpentTimeRetailingSeconds =
@@ -595,11 +1089,21 @@ export class ReportService {
           ? Math.round(totalDurationSeconds / countRetailingDays)
           : 0;
 
+      /* ==================================================
+       * REPORT DOCUMENT
+       * ================================================== */
+
       return {
         reportDate: start,
 
+        /**
+         * Direct Employee.employeeId.
+         */
         employeeId,
 
+        /**
+         * Hierarchy.
+         */
         admin: hierarchy.admin || '',
 
         categoryManager: hierarchy.categoryManager || '',
@@ -610,10 +1114,16 @@ export class ReportService {
 
         salesman: hierarchy.salesman || '',
 
+        /**
+         * Territory.
+         */
         country: hierarchy.country || '',
 
         province: hierarchy.province || '',
 
+        /**
+         * Existing metadata.
+         */
         reportingManager: hierarchy.reportingManager,
 
         positionOfEmployee: hierarchy.positionOfEmployee,
@@ -622,9 +1132,17 @@ export class ReportService {
 
         userStatus: employee.status || '',
 
+        /* ==================================================
+         * ATTENDANCE
+         * ================================================== */
+
         countTotalDays: 1,
 
         countRetailingDays,
+
+        /* ==================================================
+         * CALL / COVERAGE
+         * ================================================== */
 
         sc,
 
@@ -638,6 +1156,10 @@ export class ReportService {
 
         avgPc,
 
+        /* ==================================================
+         * OUTLET METRICS
+         * ================================================== */
+
         upc,
 
         utc,
@@ -647,6 +1169,10 @@ export class ReportService {
         notVisited,
 
         total,
+
+        /* ==================================================
+         * SALES
+         * ================================================== */
 
         lpc,
 
@@ -662,6 +1188,10 @@ export class ReportService {
 
         schemeDiscount: Number(Number(sales.schemeDiscount || 0).toFixed(2)),
 
+        /* ==================================================
+         * FOCUSED OUTLET SALES
+         * ================================================== */
+
         focusedOutletOrderKgs: Number(
           Number(sales.focusedOutletOrderKgs || 0).toFixed(3),
         ),
@@ -674,9 +1204,21 @@ export class ReportService {
           Number(sales.focusedOutletOrderRevenue || 0).toFixed(2),
         ),
 
+        /* ==================================================
+         * NEW OUTLETS
+         * ================================================== */
+
         newOutlets: newOutletByEmployee.get(employeeId) || 0,
 
+        /* ==================================================
+         * RETAILING TIME
+         * ================================================== */
+
         avgSpentTimeRetailingSeconds,
+
+        /* ==================================================
+         * CALCULATION METADATA
+         * ================================================== */
 
         calculatedAt: new Date(),
 
@@ -684,25 +1226,27 @@ export class ReportService {
       };
     });
 
-    /*
-     * ------------------------------------------------------
-     * 8. UPSERT IN CHUNKS
-     * ------------------------------------------------------
-     *
-     * We don't execute one save() per employee.
-     */
+    /* ======================================================
+     * 9. UPSERT IN CHUNKS
+     * ====================================================== */
+
     const result = await this.bulkUpsertReports(reportDocuments);
 
     this.logger.log(
       `Productivity report completed for ${this.formatDate(
         start,
-      )}. Employees: ${reportDocuments.length}, Upserted: ${result.upsertedCount}, Modified: ${result.modifiedCount}`,
+      )}. Employees: ${reportDocuments.length}, Upserted: ${
+        result.upsertedCount
+      }, Modified: ${result.modifiedCount}`,
     );
 
     return {
       reportDate: this.formatDate(start),
+
       employeesProcessed: reportDocuments.length,
+
       upserted: result.upsertedCount,
+
       modified: result.modifiedCount,
     };
   }
@@ -787,22 +1331,22 @@ export class ReportService {
         $group: {
           _id: '$employeeId',
 
-          /*
+          /**
            * TC = total visits/calls
            */
           tc: {
             $sum: 1,
           },
 
-          /*
+          /**
            * UTC = unique visited outlets
            */
           outletIds: {
             $addToSet: '$outletId',
           },
 
-          /*
-           * Total retailing time
+          /**
+           * Total retailing time.
            */
           totalDurationSeconds: {
             $sum: {
@@ -857,11 +1401,10 @@ export class ReportService {
         },
       },
 
-      /*
-       * Sale -> Shop Visit
-       *
-       * Shop visit contains employeeId.
-       */
+      /* ==================================================
+       * SALE -> SHOP VISIT
+       * ================================================== */
+
       {
         $lookup: {
           from: 'shop_visits',
@@ -899,9 +1442,10 @@ export class ReportService {
         $unwind: '$visit',
       },
 
-      /*
-       * Sale -> Sale Items
-       */
+      /* ==================================================
+       * SALE -> SALE ITEMS
+       * ================================================== */
+
       {
         $lookup: {
           from: 'sale_items',
@@ -926,11 +1470,17 @@ export class ReportService {
             {
               $project: {
                 productId: 1,
+
                 isFocusedPack: 1,
+
                 totalNetWeight: 1,
+
                 netCases: 1,
+
                 caseQty: 1,
+
                 totalValue: 1,
+
                 schemeDiscountAmount: 1,
               },
             },
@@ -943,18 +1493,15 @@ export class ReportService {
       {
         $unwind: {
           path: '$items',
+
           preserveNullAndEmptyArrays: true,
         },
       },
 
-      /*
-       * First group by employee + sale.
-       *
-       * This is VERY IMPORTANT.
-       *
-       * Sale-level values must not be multiplied
-       * because one sale can have many sale items.
-       */
+      /* ==================================================
+       * FIRST GROUP BY EMPLOYEE + SALE
+       * ================================================== */
+
       {
         $group: {
           _id: {
@@ -985,9 +1532,9 @@ export class ReportService {
             },
           },
 
-          /*
-           * One sale item = one unique
-           * saleId + productId line.
+          /**
+           * One sale item =
+           * one unique saleId + productId line.
            */
           lineCount: {
             $sum: {
@@ -995,7 +1542,9 @@ export class ReportService {
                 {
                   $ne: ['$items', null],
                 },
+
                 1,
+
                 0,
               ],
             },
@@ -1062,22 +1611,23 @@ export class ReportService {
         },
       },
 
-      /*
-       * Then group by employee.
-       */
+      /* ==================================================
+       * THEN GROUP BY EMPLOYEE
+       * ================================================== */
+
       {
         $group: {
           _id: '$_id.employeeId',
 
-          /*
-           * PC
+          /**
+           * PC = completed orders.
            */
           pc: {
             $sum: 1,
           },
 
-          /*
-           * UPC
+          /**
+           * UPC = unique billed outlets.
            */
           billedOutletIds: {
             $addToSet: '$customerId',
@@ -1226,6 +1776,7 @@ export class ReportService {
       {
         $unwind: {
           path: '$plannedOutlets',
+
           preserveNullAndEmptyArrays: false,
         },
       },
@@ -1275,6 +1826,7 @@ export class ReportService {
     const chunkSize = 500;
 
     let upsertedCount = 0;
+
     let modifiedCount = 0;
 
     for (let index = 0; index < reports.length; index += chunkSize) {
@@ -1309,6 +1861,18 @@ export class ReportService {
       upsertedCount,
       modifiedCount,
     };
+  }
+
+  /* ======================================================
+   * REPORT PROCESSING HELPERS
+   * ====================================================== */
+
+  private getReportKey(employeeId: string, reportDate: Date): string {
+    return `${employeeId}|${this.formatDate(reportDate)}`;
+  }
+
+  private parseUtcDate(dateString: string): Date {
+    return new Date(`${dateString}T00:00:00.000Z`);
   }
 
   /* ======================================================
