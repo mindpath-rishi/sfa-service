@@ -71,6 +71,7 @@ import { OutletVerificationModule } from './modules/v1/outlet-verification/outle
 import { RouteChangeRequestModule } from './modules/v1/route-change-request/route-change-request.module';
 import { StockUnloadRequestModule } from './modules/v1/stock-unload-request/stock-unload-request.module';
 import { ReportModule } from './modules/v1/report/report.module';
+import { ScriptModule } from './modules/v1/script/script.module';
 
 @Global()
 @Module({
@@ -155,6 +156,7 @@ import { ReportModule } from './modules/v1/report/report.module';
     ChannelModule,
     SegmentationModule,
     SyncModule,
+    ScriptModule,
   ],
   providers: [
     AppControlService,
