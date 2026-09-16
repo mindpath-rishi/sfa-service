@@ -4,7 +4,6 @@ import { HydratedDocument } from 'mongoose';
 export type ProductivityReportDocument = HydratedDocument<ProductivityReport>;
 
 @Schema({
-  timestamps: true,
   collection: 'productivity_reports',
 })
 export class ProductivityReport {

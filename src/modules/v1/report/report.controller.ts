@@ -9,7 +9,7 @@ import {
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { Response } from 'express';
 
-import { V1 } from 'src/shared/constants/api.constants';
+import { API_MODULE, V1 } from 'src/shared/constants/api.constants';
 
 import { EmployeeService } from '../employee/employee.service';
 
@@ -25,7 +25,7 @@ import { ReportService } from './report.service';
 
 @ApiTags('Reports')
 @Controller({
-  path: 'reports',
+  path: API_MODULE.REPORTS,
   version: V1,
 })
 export class ReportController {

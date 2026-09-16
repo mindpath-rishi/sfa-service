@@ -70,6 +70,8 @@ export const API_MODULE = {
   PRICE: 'price',
   VAN_ERP_CLOSING: 'van-erp-closing',
   SCHEME: 'scheme',
+  REPORTS: 'reports',
+  SCRIPTS: 'scripts',
 };
 
 export const API_MODULE_ENABLE_KEYS = {

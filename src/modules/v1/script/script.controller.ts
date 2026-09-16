@@ -1,11 +1,11 @@
 import { Controller, HttpCode, HttpStatus, Post } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
-import { V1 } from 'src/shared/constants/api.constants';
+import { API_MODULE, V1 } from 'src/shared/constants/api.constants';
 import { ScriptService } from './script.service';
 
 @ApiTags('Scripts')
 @Controller({
-  path: 'scripts',
+  path: API_MODULE.SCRIPTS,
   version: V1,
 })
 export class ScriptController {
