@@ -405,6 +405,32 @@ export class EmployeeService extends MongoRepository<Employee> {
     await this.positionService.update(positionId, { employeeId }, session);
   }
 
+  /**
+   * Move an employee to another vacant position (or none), releasing the
+   * current one. Hierarchy paths are refreshed by the position updates.
+   */
+  private async changePosition(
+    employeeId: string,
+    nextPositionId: string | undefined,
+    session: ClientSession,
+  ) {
+    const current = await this.positionModel
+      .findOne({ employeeId, isDeleted: { $ne: true } })
+      .select('positionId')
+      .session(session)
+      .lean();
+    if (current?.positionId === nextPositionId) return;
+
+    if (current?.positionId) {
+      await this.positionService.update(
+        current.positionId,
+        { employeeId: '' },
+        session,
+      );
+    }
+    await this.assignPosition(nextPositionId, employeeId, session);
+  }
+
   async create(payload: CreateEmployeeDto) {
     const requestedEmployeeId = payload.employeeId?.trim();
     const initialStatus = payload.status ?? UserStatus.ACTIVE;
@@ -1176,11 +1202,21 @@ export class EmployeeService extends MongoRepository<Employee> {
     if (!existing) {
       throw new NotFoundException(EMPLOYEE.NOT_FOUND);
     }
-    const employeeDto = dto;
+    // positionId lives on the position, not the employee record
+    const { positionId: requestedPositionId, ...employeeDto } = dto;
     const employeeType = existing.employeeType ?? EmployeeType.STAFF;
     if (employeeDto.employeeType && employeeDto.employeeType !== employeeType) {
       throw new BadRequestException(
         'Employee type cannot be changed after creation',
+      );
+    }
+    const nextPositionId =
+      requestedPositionId !== undefined
+        ? requestedPositionId.trim() || undefined
+        : undefined;
+    if (nextPositionId && employeeType !== EmployeeType.STAFF) {
+      throw new BadRequestException(
+        'Supporting staff cannot be assigned to a position',
       );
     }
     const employee = await this.withTransaction(async (session) => {
@@ -1202,6 +1238,10 @@ export class EmployeeService extends MongoRepository<Employee> {
           employeeDto.status,
           session,
         );
+      }
+
+      if (requestedPositionId !== undefined) {
+        await this.changePosition(employeeId, nextPositionId, session);
       }
 
       return this.findOne({ employeeId }, { session, lean: true });

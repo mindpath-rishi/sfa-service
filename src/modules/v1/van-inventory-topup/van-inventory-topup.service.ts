@@ -462,7 +462,8 @@ export class VanInventoryTopupService extends MongoRepository<VanInventoryTopup>
             {
               $set: { isDeleted: true },
             } as any,
-            { session },
+            // Rows created without an isDeleted field must still be matched
+            { session, includeDeleted: true },
           );
         }
 
@@ -1131,8 +1132,16 @@ export class VanInventoryTopupService extends MongoRepository<VanInventoryTopup>
       {
         $lookup: {
           from: 'van_inventory_topup_items',
-          localField: 'vanInventoryTopupId',
-          foreignField: 'vanInventoryTopupId',
+          let: { topupId: '$vanInventoryTopupId' },
+          // Skip items removed while editing the request (soft deleted)
+          pipeline: [
+            {
+              $match: {
+                $expr: { $eq: ['$vanInventoryTopupId', '$$topupId'] },
+                isDeleted: { $ne: true },
+              },
+            },
+          ],
           as: 'items',
         },
       },

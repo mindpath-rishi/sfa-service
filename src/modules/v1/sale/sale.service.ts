@@ -5,6 +5,7 @@ import {
   ConflictException,
   HttpStatus,
   BadRequestException,
+  Logger,
 } from '@nestjs/common';
 import { Model } from 'mongoose';
 
@@ -51,6 +52,7 @@ import {
 
 @Injectable()
 export class SaleService extends MongoRepository<Sale> {
+  private readonly logger = new Logger(SaleService.name);
   private readonly employeeModel: Model<Employee>;
   private readonly productCategoryModel: Model<ProductCategory>;
   private readonly positionModel: Model<Position>;
@@ -77,7 +79,7 @@ export class SaleService extends MongoRepository<Sale> {
 
   async create(payload: CreateSaleDto) {
     try {
-      return await this.withTransaction(async (session) => {
+      const created = await this.withTransaction(async (session) => {
         const { items = [], ...rest } = payload;
         const { type, paidAmount } = rest;
 
@@ -260,7 +262,33 @@ export class SaleService extends MongoRepository<Sale> {
 
         const processedItems: any[] = [];
 
-        for (const item of items) {
+        // Fetch product + price for all items up front, in parallel (these
+        // reads are not part of the transaction). Results are consumed in item
+        // order below, so validation errors surface exactly as before.
+        const productLookups = new Map<string, Promise<any>>();
+        const settledProductLookups = await Promise.allSettled(
+          items.map((item) => {
+            const customerCategoryId =
+              (item as any).customerCategoryId ||
+              (rest as any).customerCategoryId;
+            const compCode = String((item as any).compCode || '').trim();
+            if (!customerCategoryId || !compCode) {
+              return Promise.resolve(undefined);
+            }
+            const key = `${item.productId}::${customerCategoryId}`;
+            if (!productLookups.has(key)) {
+              productLookups.set(
+                key,
+                this.productService.findByProductId(item.productId, {
+                  customerCategoryId,
+                }),
+              );
+            }
+            return productLookups.get(key)!;
+          }),
+        );
+
+        for (const [itemIndex, item] of items.entries()) {
           const caseQty = item.caseQty || 0;
           const pieceQty = item.pieceQty || 0;
 
@@ -281,12 +309,9 @@ export class SaleService extends MongoRepository<Sale> {
             );
           }
 
-          const response = await this.productService.findByProductId(
-            item.productId,
-            {
-              customerCategoryId: itemCustomerCategoryId,
-            },
-          );
+          const productLookup = settledProductLookups[itemIndex];
+          if (productLookup.status === 'rejected') throw productLookup.reason;
+          const response = productLookup.value;
 
           const product = response?.data;
 
@@ -653,25 +678,35 @@ export class SaleService extends MongoRepository<Sale> {
           );
         }
 
-        /* ======================================================
-         * EXPORT SALE TO ERP SFA_ORDER
-         * ====================================================== */
-
-        await this.syncSaleToERP({
-          sale: doc,
-          items: processedItems,
-          saleId,
-          session,
-        });
-
         return {
-          statusCode: HttpStatus.CREATED,
-          message: SALE.CREATED,
-          data: {
-            saleId,
+          result: {
+            statusCode: HttpStatus.CREATED,
+            message: SALE.CREATED,
+            data: {
+              saleId,
+            },
           },
+          erpExport: { sale: doc, items: processedItems, saleId },
         };
       });
+
+      /* ======================================================
+       * EXPORT SALE TO ERP SFA_ORDER
+       * ------------------------------------------------------
+       * Runs after the sale is committed and does not hold up the
+       * response. The sale stays PENDING until this marks it SYNCED or
+       * FAILED; PENDING/FAILED sales are retried by /sales/sync-erp (the
+       * ORDER_SFA MERGE is idempotent, so a retry cannot duplicate rows).
+       * ====================================================== */
+      void this.syncSaleToERP(created.erpExport).catch((error) =>
+        this.logger.error(
+          `Background ERP export failed for sale ${created.erpExport.saleId}: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        ),
+      );
+
+      return created.result;
     } catch (error) {
       this.handleDuplicateError(error);
     }

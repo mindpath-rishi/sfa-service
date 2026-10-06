@@ -271,7 +271,12 @@ export class RouteChangeRequestService extends MongoRepository<RouteChangeReques
     if (request.status !== RouteChangeRequestStatus.PENDING) {
       throw new BadRequestException('Route change request is already resolved');
     }
-    if (request.managerId !== RequestContextStore.getStore()?.userId) {
+    const userId = RequestContextStore.getStore()?.userId;
+    if (
+      !userId ||
+      (request.managerId !== userId &&
+        !(await this.getApproverIds(request.userId)).includes(userId))
+    ) {
       throw new BadRequestException(
         'Only the reporting manager can resolve this request',
       );
@@ -304,9 +309,40 @@ export class RouteChangeRequestService extends MongoRepository<RouteChangeReques
     return updated;
   }
 
+  /**
+   * The two levels above the salesman (e.g. team leader and manager).
+   * hierarchyPath runs top-down, so the direct superior is last.
+   */
+  private async getApproverIds(salesmanId: string) {
+    const employee = await this.employeeModel
+      .findOne({ employeeId: salesmanId })
+      .select('hierarchyPath')
+      .lean();
+    return [
+      ...new Set(
+        ((employee as any)?.hierarchyPath || []).filter(Boolean).slice(-2),
+      ),
+    ] as string[];
+  }
+
   private async notifyManager(request: RouteChangeRequest) {
+    const recipientIds = await this.getApproverIds(request.userId);
+    if (!recipientIds.includes(request.managerId)) {
+      recipientIds.push(request.managerId);
+    }
+    await Promise.all(
+      recipientIds.map((recipientId) =>
+        this.notifyApprover(recipientId, request),
+      ),
+    );
+  }
+
+  private async notifyApprover(
+    recipientId: string,
+    request: RouteChangeRequest,
+  ) {
     await this.notificationService.create({
-      recipientId: request.managerId,
+      recipientId,
       title: 'Route Change Approval Required',
       body: `${request.userName || 'Salesman'} requested a change from ${request.currentRouteName || request.currentRouteId} to ${request.requestedRouteName || request.requestedRouteId}.`,
       category: 'route_change',

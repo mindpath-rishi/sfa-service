@@ -283,12 +283,23 @@ export class VanChangeRequestService extends MongoRepository<VanChangeRequest> {
     const employee = await this.employeeModel
       .findOne({ employeeId: request.userId })
       .lean();
-    const hierarchyPath = employee?.hierarchyPath || [];
-    const managerId = hierarchyPath[hierarchyPath.length - 1];
-    if (!managerId) return;
+    // Notify two levels up (e.g. team leader and manager). hierarchyPath runs
+    // top-down, so the direct superior is last.
+    const recipientIds = [
+      ...new Set((employee?.hierarchyPath || []).filter(Boolean).slice(-2)),
+    ];
+    if (!recipientIds.length) return;
 
+    await Promise.all(
+      recipientIds.map((recipientId) =>
+        this.notifyApprover(recipientId, request),
+      ),
+    );
+  }
+
+  private async notifyApprover(recipientId: string, request: VanChangeRequest) {
     await this.notificationService.create({
-      recipientId: managerId,
+      recipientId,
       title: 'Van Change Approval Required',
       body: `${request.userName || 'Salesman'} requested ${request.requestedVanName || request.requestedVanId} for today.`,
       category: 'van_change',
