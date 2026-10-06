@@ -580,6 +580,14 @@ export class EmployeeController {
     return this.employeeService.shareSalesmanReport('MSR', body);
   }
 
+  @Permissions('EMPLOYEE_CREATE')
+  @Get('/login-id-suggestion')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Suggest a unique login ID from a name' })
+  async suggestLoginId(@Query('name') name?: string) {
+    return this.employeeService.suggestLoginId(name);
+  }
+
   @Get('/export')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Export employees' })

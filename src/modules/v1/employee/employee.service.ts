@@ -348,6 +348,16 @@ export class EmployeeService extends MongoRepository<Employee> {
    * - Prevents duplicate active employees
    */
   /**
+   * Suggest a unique login ID for the create form; the user may edit it.
+   */
+  async suggestLoginId(name?: string) {
+    const loginId = name?.trim()
+      ? await this.userService.generateLoginId(name.trim())
+      : '';
+    return { statusCode: HttpStatus.OK, data: { loginId } };
+  }
+
+  /**
    * Use the given login ID after a duplicate check, or generate one
    * from the employee name (ravi.kumar, ravi.kumar1, ...).
    */

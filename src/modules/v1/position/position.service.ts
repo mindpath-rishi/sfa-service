@@ -568,28 +568,8 @@ export class PositionService extends MongoRepository<Position> {
   ) {
     if (!vanIds.length) return;
 
-    if (reportTo) {
-      const reportingPositionQuery = this.model
-        .findOne({
-          positionId: reportTo,
-          status: 'ACTIVE',
-          isDeleted: { $ne: true },
-        })
-        .select('positionId vanIds')
-        .lean();
-      if (session) reportingPositionQuery.session(session);
-      const reportingPosition = await reportingPositionQuery;
-      const reportingVanIds = new Set(reportingPosition?.vanIds || []);
-      const unavailableFromParent = vanIds.filter(
-        (vanId) => !reportingVanIds.has(vanId),
-      );
-      if (unavailableFromParent.length) {
-        throw new BadRequestException(
-          `Van(s) are not mapped to the selected Report To position: ${unavailableFromParent.join(', ')}`,
-        );
-      }
-    }
-
+    // Vans roll up from sales positions to their reporting chain, so only
+    // sales positions are checked for van conflicts.
     if (roleName !== 'SALESMAN') return;
 
     const excludedPositionIds = [reportTo, currentPositionId].filter(
@@ -621,6 +601,66 @@ export class PositionService extends MongoRepository<Position> {
     }
   }
 
+  /** Sales positions hold their own van; every other position rolls up. */
+  private isVanHoldingRole(roleName?: string) {
+    return ['SALESMAN', 'SALES', 'SALES_EXECUTIVE'].includes(
+      String(roleName ?? '')
+        .trim()
+        .toUpperCase(),
+    );
+  }
+
+  /**
+   * Recompute vans from the given position up to the root: a non-sales
+   * position (team leader, manager, ...) holds the union of the vans of
+   * the active positions reporting directly to it.
+   */
+  private async rollUpVanIds(
+    positionId: string | undefined,
+    session?: ClientSession,
+  ) {
+    const visited = new Set<string>();
+    let currentPositionId = positionId;
+
+    while (currentPositionId && !visited.has(currentPositionId)) {
+      visited.add(currentPositionId);
+
+      const positionQuery = this.model
+        .findOne({ positionId: currentPositionId, isDeleted: { $ne: true } })
+        .select('positionId roleId reportTo')
+        .lean();
+      if (session) positionQuery.session(session);
+      const position = await positionQuery;
+      if (!position) return;
+
+      const roleQuery = this.roleModel
+        .findOne({ roleId: position.roleId })
+        .select('name')
+        .lean();
+      if (session) roleQuery.session(session);
+      const role = await roleQuery;
+
+      if (!this.isVanHoldingRole(role?.name)) {
+        const childVanIdsQuery = this.model.distinct('vanIds', {
+          reportTo: currentPositionId,
+          status: 'ACTIVE',
+          isDeleted: { $ne: true },
+        });
+        if (session) childVanIdsQuery.session(session);
+        const childVanIds = ((await childVanIdsQuery) as string[])
+          .filter(Boolean)
+          .sort();
+        await this.model.updateOne(
+          { positionId: currentPositionId },
+          { $set: { vanIds: childVanIds } },
+          { session },
+        );
+      }
+
+      currentPositionId = position.reportTo;
+    }
+  }
+
   async create(payload: CreatePositionDto) {
     try {
       return await this.withTransaction(async (session) => {
@@ -645,31 +685,30 @@ export class PositionService extends MongoRepository<Position> {
           payload.reportTo,
           session,
         );
+        // Non-sales positions get their vans from the reporting hierarchy.
+        const vanIds = this.isVanHoldingRole(role.name)
+          ? payload.vanIds || []
+          : [];
         await this.validatePositionVanAssignments(
           payload.reportTo,
           payload.roleId,
           String(role.name).trim().toUpperCase(),
-          payload.vanIds || [],
+          vanIds,
           undefined,
           session,
         );
         const isSalesmanRole =
           String(role.name).trim().toUpperCase() === 'SALESMAN';
         const assignedVanCategoryIds = isSalesmanRole
-          ? await this.getAssignedVanCategoryIds(
-              payload.vanIds || [],
-              session,
-            )
+          ? await this.getAssignedVanCategoryIds(vanIds, session)
           : undefined;
         const positionData: Record<string, unknown> = {
           ...payload,
+          vanIds,
           ...(isSalesmanRole
             ? { parentCategoryId: assignedVanCategoryIds }
             : {}),
-          name: TextNormalizer.normalize(
-            payload.name,
-            NormalizeType.TITLE,
-          ),
+          name: TextNormalizer.normalize(payload.name, NormalizeType.TITLE),
           hierarchyPath: hierarchy.positionHierarchyPath,
           hierarchyDepth: hierarchy.hierarchyDepth,
         };
@@ -716,6 +755,7 @@ export class PositionService extends MongoRepository<Position> {
             payload.employeeId,
             session,
           );
+          await this.rollUpVanIds(existing.positionId, session);
           const restored = await this.findOne(
             { positionId: existing.positionId },
             { session, lean: true },
@@ -744,11 +784,18 @@ export class PositionService extends MongoRepository<Position> {
             { session },
           );
         }
+        await this.rollUpVanIds(doc.positionId, session);
+        const created = await this.findOne(
+          { positionId: doc.positionId },
+          { session, lean: true },
+        );
 
         return {
           statusCode: HttpStatus.CREATED,
           message: POSITION.CREATED,
-          data: (await this.attachMappedEmployees([doc], session))[0],
+          data: (
+            await this.attachMappedEmployees([created ?? doc], session)
+          )[0],
         };
       });
     } catch (error) {
@@ -878,11 +925,7 @@ export class PositionService extends MongoRepository<Position> {
           session,
           positionId,
         );
-        await this.validatePositionHierarchyLevel(
-          role,
-          nextReportTo,
-          session,
-        );
+        await this.validatePositionHierarchyLevel(role, nextReportTo, session);
         if (dto.roleId !== undefined || dto.reportTo !== undefined) {
           await this.validateDescendantPositionLevels(
             positionId,
@@ -895,11 +938,12 @@ export class PositionService extends MongoRepository<Position> {
           positionId,
           session,
         );
+        const holdsOwnVans = this.isVanHoldingRole(role.name);
         await this.validatePositionVanAssignments(
           nextReportTo,
           nextRoleId,
           String(role.name).trim().toUpperCase(),
-          nextVanIds,
+          holdsOwnVans ? nextVanIds : [],
           positionId,
           session,
         );
@@ -908,17 +952,19 @@ export class PositionService extends MongoRepository<Position> {
         const assignedVanCategoryIds = isSalesmanRole
           ? await this.getAssignedVanCategoryIds(nextVanIds, session)
           : undefined;
+        // Non-sales vans are recomputed by rollUpVanIds after the update.
+        const { vanIds: requestedVanIds, ...dtoWithoutVans } = dto;
         const normalizedDto = {
-          ...dto,
+          ...dtoWithoutVans,
+          ...(holdsOwnVans && requestedVanIds !== undefined
+            ? { vanIds: requestedVanIds }
+            : {}),
           ...(isSalesmanRole
             ? { parentCategoryId: assignedVanCategoryIds }
             : {}),
           ...(dto.name
             ? {
-                name: TextNormalizer.normalize(
-                  dto.name,
-                  NormalizeType.TITLE,
-                ),
+                name: TextNormalizer.normalize(dto.name, NormalizeType.TITLE),
               }
             : {}),
           hierarchyPath: hierarchy.positionHierarchyPath,
@@ -978,6 +1024,10 @@ export class PositionService extends MongoRepository<Position> {
             session,
           );
         }
+        if (existing.reportTo && existing.reportTo !== nextReportTo) {
+          await this.rollUpVanIds(existing.reportTo, session);
+        }
+        await this.rollUpVanIds(positionId, session);
         const updated = await this.findOne(
           { positionId },
           { session, lean: true },
@@ -1014,6 +1064,7 @@ export class PositionService extends MongoRepository<Position> {
     }
 
     await this.softDelete({ positionId });
+    await this.rollUpVanIds(existing.reportTo);
     if (existing.employeeId) {
       await this.employeeModel.updateOne(
         { employeeId: existing.employeeId, isDeleted: { $ne: true } },

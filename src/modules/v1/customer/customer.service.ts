@@ -595,7 +595,7 @@ export class CustomerService extends MongoRepository<Customer> {
       const routeId = routeByCustomerId.get(customer.customerId);
 
       return {
-        ...customer.toObject(),
+        ...customer,
         routeId,
         routeName: routeId ? routeNameByRouteId.get(routeId) : undefined,
       };
