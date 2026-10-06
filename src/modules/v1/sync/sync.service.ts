@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { sanitizeGroupSchemes } from 'src/shared/utils/group-scheme.utils';
 import { InjectConnection } from '@nestjs/mongoose';
 import { Connection, Types } from 'mongoose';
 
@@ -281,6 +282,20 @@ const normalizeOfflinePayload = (
             .map((item) => String(item.schemeName ?? '').trim())
             .filter(Boolean),
         ),
+      );
+      const groupSchemes = sanitizeGroupSchemes(payload.groupSchemes);
+      payload.groupSchemes = groupSchemes;
+      payload.schemeIds = Array.from(
+        new Set([
+          ...(payload.schemeIds as string[]),
+          ...groupSchemes.map((scheme) => scheme.schemeId),
+        ]),
+      );
+      payload.schemeNames = Array.from(
+        new Set([
+          ...(payload.schemeNames as string[]),
+          ...groupSchemes.map((scheme) => scheme.schemeName),
+        ]),
       );
       payload.netCases = toFixed4(
         items.reduce((sum, item) => sum + toFiniteNumber(item.netCases), 0),

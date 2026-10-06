@@ -73,6 +73,7 @@ import {
   FocusedPackTargetSchema,
 } from 'src/core/database/mongo/schema/focused-pack-target.schema';
 import { LiveLocationModule } from '../live-location/live-location.module';
+import { PositionModule } from '../position/position.module';
 import {
   Country,
   CountrySchema,
@@ -120,6 +121,7 @@ import {
     ]),
     UserModule,
     LiveLocationModule,
+    PositionModule,
   ],
   controllers: [EmployeeController],
   providers: [EmployeeService],

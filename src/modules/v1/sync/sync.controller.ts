@@ -21,6 +21,7 @@ export class SyncController {
   @Post('upload')
   async upload(@Body() body: SyncUploadDto) {
     const user = this.salesman();
+    // Without offline access the app works purely online: no upload, no download.
     await this.assertOfflineAccess(user.id);
     return this.syncService.upload(body.operations, user.id);
   }

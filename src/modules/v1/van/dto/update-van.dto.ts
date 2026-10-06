@@ -10,7 +10,6 @@ import {
   ArrayUnique,
   ArrayMinSize,
   IsOptional,
-  IsNotEmpty,
   IsString,
   IsNumber,
   IsArray,
@@ -52,6 +51,14 @@ export class UpdateVanDto {
   vanNumber?: string;
 
   @ApiPropertyOptional({
+    example: 'PROV-001',
+    description: 'Business identifier for province',
+  })
+  @IsOptional()
+  @IsString()
+  provinceId?: string;
+
+  @ApiPropertyOptional({
     type: [String],
     description: 'Active parent product categories associated with the van',
   })
@@ -70,11 +77,14 @@ export class UpdateVanDto {
   @IsNumber()
   capacity?: number;
 
-  @ApiPropertyOptional({ example: 'EID-DRIVER-001' })
+  @ApiPropertyOptional({
+    example: 'EID-DRIVER-001',
+    description: 'Supporting staff driver; send an empty string or null to remove',
+    nullable: true,
+  })
   @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  driverEmployeeId?: string;
+  driverEmployeeId?: string | null;
 
   @ApiPropertyOptional()
   @IsOptional()

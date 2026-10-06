@@ -1,3 +1,4 @@
+import { sanitizeGroupSchemes } from 'src/shared/utils/group-scheme.utils';
 import {
   Injectable,
   NotFoundException,
@@ -475,6 +476,11 @@ export class SaleService extends MongoRepository<Sale> {
          * ====================================================== */
 
         const saleId = IdGenerator.generate('Sale', 8);
+        const groupSchemes = sanitizeGroupSchemes(payload.groupSchemes);
+        for (const groupScheme of groupSchemes) {
+          schemeIds.add(groupScheme.schemeId);
+          schemeNames.add(groupScheme.schemeName);
+        }
 
         const doc = await this.save(
           {
@@ -492,6 +498,7 @@ export class SaleService extends MongoRepository<Sale> {
             schemeNames: Array.from(schemeNames),
             schemeDiscountAmount,
             schemes: Array.from(schemes.values()),
+            groupSchemes,
             totalValue,
 
             paidAmount,

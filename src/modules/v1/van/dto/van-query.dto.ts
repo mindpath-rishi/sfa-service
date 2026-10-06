@@ -26,6 +26,11 @@ export class VanQueryDto extends PaginationDto {
   @IsEnum(VanStatus)
   status?: VanStatus;
 
+  @ApiPropertyOptional({ example: 'PROV-001' })
+  @IsOptional()
+  @IsString()
+  provinceId?: string;
+
   @ApiPropertyOptional({ example: 'name' })
   @IsOptional()
   @IsString()

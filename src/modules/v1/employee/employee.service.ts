@@ -36,6 +36,7 @@ import {
 } from 'src/core/database/mongo/schema/employee.schema';
 import { UserStatus } from 'src/modules/v1/user/user.enum';
 
+import { PositionService } from '../position/position.service';
 import { UserService } from 'src/modules/v1/user/user.service';
 import { CreateEmployeeDto } from './dto/create-employee.dto';
 import { UpdateEmployeeDto } from './dto/update-employee.dto';
@@ -46,7 +47,7 @@ import { IdGenerator } from 'src/shared/utils/id-generator.utils';
 import { InjectModel } from '@nestjs/mongoose';
 import { Sale } from 'src/core/database/mongo/schema/sale.schema';
 import { Payment } from 'src/core/database/mongo/schema/payment.schema';
-import { Model } from 'mongoose';
+import { ClientSession, Model } from 'mongoose';
 import { ShopVisit } from 'src/core/database/mongo/schema/shop-visit.schema';
 import {
   ShopVisitStatus,
@@ -115,6 +116,7 @@ export class EmployeeService extends MongoRepository<Employee> {
   constructor(
     mongo: MongoService,
     private readonly userService: UserService,
+    private readonly positionService: PositionService,
     @InjectModel(Sale.name)
     private readonly saleModal: Model<Sale>,
     @InjectModel(Payment.name)
@@ -345,15 +347,67 @@ export class EmployeeService extends MongoRepository<Employee> {
    * - Operation is fully transactional
    * - Prevents duplicate active employees
    */
+  /**
+   * Use the given login ID after a duplicate check, or generate one
+   * from the employee name (ravi.kumar, ravi.kumar1, ...).
+   */
+  private async resolveLoginId(
+    payload: CreateEmployeeDto,
+    profileId: string,
+    session: ClientSession,
+  ) {
+    const requested = payload.loginId?.trim();
+    if (requested) {
+      await this.userService.assertLoginIdAvailable(
+        requested,
+        profileId,
+        session,
+      );
+      return requested;
+    }
+    return this.userService.generateLoginId(payload.name, profileId, session);
+  }
+
+  /**
+   * Assign a newly created employee to a vacant position, inside the same
+   * transaction so a failed assignment rolls the employee back too.
+   */
+  private async assignPosition(
+    positionId: string | undefined,
+    employeeId: string,
+    session: ClientSession,
+  ) {
+    if (!positionId) return;
+
+    const position = await this.positionService.findOne(
+      { positionId, status: 'ACTIVE' } as any,
+      { session, lean: true },
+    );
+    if (!position) {
+      throw new NotFoundException(`Active position not found: ${positionId}`);
+    }
+    if (position.employeeId && position.employeeId !== employeeId) {
+      throw new ConflictException(
+        `Position ${positionId} is already assigned to ${position.employeeId}`,
+      );
+    }
+
+    await this.positionService.update(positionId, { employeeId }, session);
+  }
+
   async create(payload: CreateEmployeeDto) {
     const requestedEmployeeId = payload.employeeId?.trim();
     const initialStatus = payload.status ?? UserStatus.ACTIVE;
     const employeeType = payload.employeeType ?? EmployeeType.STAFF;
     const hasAppAccess = employeeType === EmployeeType.STAFF;
 
-    if (hasAppAccess && (!payload.loginId || !payload.password)) {
+    if (hasAppAccess && !payload.password) {
+      throw new BadRequestException('Password is required for staff employees');
+    }
+    const positionId = payload.positionId?.trim() || undefined;
+    if (positionId && !hasAppAccess) {
       throw new BadRequestException(
-        'Login ID and password are required for staff employees',
+        'Supporting staff cannot be assigned to a position',
       );
     }
 
@@ -396,7 +450,13 @@ export class EmployeeService extends MongoRepository<Employee> {
           },
           { session },
         );
+        let restoredLoginId: string | undefined;
         if (hasAppAccess) {
+          restoredLoginId = await this.resolveLoginId(
+            payload,
+            existingEmployee.employeeId,
+            session,
+          );
           await this.userService.restoreUser(
             {
               profileId: existingEmployee.employeeId,
@@ -405,7 +465,7 @@ export class EmployeeService extends MongoRepository<Employee> {
               password: payload.password!,
               isDeleted: false,
               status: initialStatus,
-              loginId: payload.loginId!,
+              loginId: restoredLoginId,
             },
             session,
           );
@@ -416,10 +476,20 @@ export class EmployeeService extends MongoRepository<Employee> {
           );
         }
 
+        await this.assignPosition(
+          positionId,
+          existingEmployee.employeeId,
+          session,
+        );
+
         return {
           statusCode: HttpStatus.OK,
           message: EMPLOYEE.CREATED,
-          data: { employeeId: existingEmployee.employeeId },
+          data: {
+            employeeId: existingEmployee.employeeId,
+            loginId: restoredLoginId,
+            positionId,
+          },
         };
       }
 
@@ -468,24 +538,30 @@ export class EmployeeService extends MongoRepository<Employee> {
         { session },
       );
 
+      let loginId: string | undefined;
       if (hasAppAccess) {
+        loginId = await this.resolveLoginId(payload, employeeId, session);
         await this.userService.createUser(
           {
             profileId: employeeId,
             mobile: payload.mobile,
             email: payload.email,
             password: payload.password!,
-            loginId: payload.loginId!,
+            loginId,
             status: initialStatus,
           },
           session,
         );
       }
+      await this.assignPosition(positionId, employeeId, session);
+
       return {
         statusCode: HttpStatus.CREATED,
         message: EMPLOYEE.CREATED,
         data: {
           ...(employee.toObject?.() ?? employee),
+          loginId,
+          positionId,
           assignedVanIds: [],
         },
       };

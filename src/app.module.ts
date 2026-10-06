@@ -20,6 +20,7 @@ import { JwtAuthGuard } from './core/guards/jwt.guard';
 import { THROTTLE_LIMIT, THROTTLE_TTL } from './shared/constants/app.constants';
 import { AuditLogsModule } from './modules/v1/audit-logs/audit-logs.module';
 import { PermissionsGuard } from './core/guards/permission.guard';
+import { BackOfficeOnlyGuard } from './core/guards/back-office-only.guard';
 import { SeedsModule } from './core/seeds/seeds.module';
 import { PermissionModule } from './modules/v1/permission/permission.module';
 import { MediaModule } from './modules/v1/media/media.module';
@@ -171,6 +172,10 @@ import { ScriptModule } from './modules/v1/script/script.module';
     {
       provide: APP_GUARD,
       useClass: JwtAuthGuard,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: BackOfficeOnlyGuard,
     },
     // {
     //   provide: APP_GUARD,

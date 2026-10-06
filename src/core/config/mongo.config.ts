@@ -5,9 +5,7 @@ import { timestampsPlugin } from '../database/mongo/plugins/timestamps.plugin';
 import { softDeletePlugin } from '../database/mongo/plugins/soft-delete.plugin';
 import { syncAuditPlugin } from '../database/mongo/plugins/sync-audit.plugin';
 import { auditPlugin } from '../database/mongo/plugins/audit-logs.plugin';
-import { EmployeeSchema } from '../database/mongo/schema/employee.schema';
-import { RoleSchema } from '../database/mongo/schema/role.schema';
-import { VanSchema } from '../database/mongo/schema/van.schema';
+import { AUDITED_MODULES } from '../database/mongo/plugins/audit-registry';
 
 export const mongoConfig = (
   uri: string,
@@ -30,9 +28,9 @@ export const mongoConfig = (
     connection.plugin(timestampsPlugin);
     connection.plugin(softDeletePlugin);
     connection.plugin(syncAuditPlugin);
-    EmployeeSchema.plugin(auditPlugin, 'employees');
-    RoleSchema.plugin(auditPlugin, 'roles');
-    VanSchema.plugin(auditPlugin, 'vans');
+    for (const { schema, entity, idField } of AUDITED_MODULES) {
+      schema.plugin(auditPlugin, { entity, idField });
+    }
 
     logger.info(`MongoDB initial readyState: ${connection.readyState}`);
 

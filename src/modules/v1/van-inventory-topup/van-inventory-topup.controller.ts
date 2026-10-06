@@ -50,6 +50,8 @@ import { Permissions } from 'src/core/decorators/permission.decorator';
 import { VanInventoryTopupService } from './van-inventory-topup.service';
 import { CreateVanInventoryTopupDto } from './dto/create-van-inventory-topup.dto';
 import { UpdateVanInventoryTopupDto } from './dto/update-van-inventory-topup.dto';
+import { UpdateVanInventoryTopupItemsDto } from './dto/update-van-inventory-topup-items.dto';
+import { BackOfficeOnly } from 'src/core/decorators/back-office-only.decorator';
 import { VanInventoryTopupQueryDto } from './dto/van-inventory-topup-query.dto';
 import { VAN_INVENTORY_TOPUP } from './van-inventory-topup.constants';
 import { IS_PUBLIC_KEY, Public } from 'src/core/decorators/public.decorator';
@@ -115,6 +117,7 @@ export class VanInventoryTopupController {
    */
   @Permissions('VAN_INVENTORY_TOPUP_UPDATE')
   @SetMetadata(IS_PUBLIC_KEY, false)
+  @BackOfficeOnly()
   @Patch(':vanInventoryTopupId/admin/approve')
   @ApiOperation({ summary: 'Approve a submitted top-up request as admin' })
   @ApiParam({
@@ -128,11 +131,55 @@ export class VanInventoryTopupController {
   }
 
   /**
+   * Edit items of a requested top-up from the admin panel
+   * -----------------------------------------------------
+   * Change quantities, add products or remove products before approval.
+   */
+  @Permissions('VAN_INVENTORY_TOPUP_UPDATE')
+  @SetMetadata(IS_PUBLIC_KEY, false)
+  @BackOfficeOnly()
+  @Patch(':vanInventoryTopupId/items')
+  @ApiOperation({ summary: 'Edit items of a requested top-up' })
+  @ApiParam({
+    name: 'vanInventoryTopupId',
+    description: 'VanInventoryTopup vanInventoryTopupId',
+  })
+  async updateRequestedItems(
+    @Param('vanInventoryTopupId') vanInventoryTopupId: string,
+    @Body() dto: UpdateVanInventoryTopupItemsDto,
+  ) {
+    return this.service.updateRequestedItems(vanInventoryTopupId, dto);
+  }
+
+  /**
+   * Edit items of own requested top-up (salesman, mobile app)
+   * ---------------------------------------------------------
+   * Same rules as the admin edit, limited to the requester's own top-ups.
+   */
+  @Permissions('VAN_INVENTORY_TOPUP_CREATE')
+  @SetMetadata(IS_PUBLIC_KEY, false)
+  @Patch(':vanInventoryTopupId/my-items')
+  @ApiOperation({ summary: 'Edit items of my requested top-up' })
+  @ApiParam({
+    name: 'vanInventoryTopupId',
+    description: 'VanInventoryTopup vanInventoryTopupId',
+  })
+  async updateMyRequestedItems(
+    @Param('vanInventoryTopupId') vanInventoryTopupId: string,
+    @Body() dto: UpdateVanInventoryTopupItemsDto,
+  ) {
+    return this.service.updateRequestedItems(vanInventoryTopupId, dto, {
+      ownerOnly: true,
+    });
+  }
+
+  /**
    * Reject a submitted top-up from the admin panel
    * -----------------------------------------------
    */
   @Permissions('VAN_INVENTORY_TOPUP_UPDATE')
   @SetMetadata(IS_PUBLIC_KEY, false)
+  @BackOfficeOnly()
   @Patch(':vanInventoryTopupId/admin/reject')
   @ApiOperation({ summary: 'Reject a submitted top-up request as admin' })
   @ApiParam({

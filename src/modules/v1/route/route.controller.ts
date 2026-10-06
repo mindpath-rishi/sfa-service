@@ -50,6 +50,7 @@ import { Permissions } from 'src/core/decorators/permission.decorator';
 
 import { RouteService } from './route.service';
 import { CreateRouteDto, RouteCustomerDto } from './dto/create-route.dto';
+import { BulkUploadRouteDto } from './dto/bulk-upload-route.dto';
 import { UpdateRouteDto } from './dto/update-route.dto';
 import { RouteCustomerQueryDto, RouteQueryDto } from './dto/route-query.dto';
 import { ROUTE } from './route.constants';
@@ -84,6 +85,21 @@ export class RouteController {
   )
   async create(@Body() dto: CreateRouteDto) {
     return this.service.create(dto);
+  }
+
+  /**
+   * Bulk Upload Routes
+   * ------------------
+   * Creates new routes or updates existing ones (matched by name),
+   * including their outlet mapping and visit sequence.
+   */
+  @Permissions('ROUTE_CREATE')
+  @Post('bulk-upload')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Bulk create or update routes with outlets' })
+  @ApiBody({ type: BulkUploadRouteDto })
+  async bulkUpload(@Body() dto: BulkUploadRouteDto) {
+    return this.service.bulkUpload(dto);
   }
 
   /**

@@ -12,7 +12,11 @@ import {
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
-import { SchemeStatus, SchemeType } from 'src/shared/enums/scheme.enums';
+import {
+  SchemeFreeUnit,
+  SchemeStatus,
+  SchemeType,
+} from 'src/shared/enums/scheme.enums';
 
 /**
  * CreateSchemeDto
@@ -124,6 +128,31 @@ export class CreateSchemeDto {
   @IsOptional()
   @IsString()
   freeProductName?: string;
+
+  @ApiPropertyOptional({
+    type: Number,
+    description:
+      'Group schemes: combined cases across all products in scope for one benefit (repeats per multiple)',
+  })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  groupMinCases?: number;
+
+  @ApiPropertyOptional({
+    type: Number,
+    description: 'GROUP_FREE_PERCENT: % of each qualifying line quantity given free',
+  })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  freePercent?: number;
+
+  @ApiPropertyOptional({ enum: SchemeFreeUnit, default: SchemeFreeUnit.CASE })
+  @IsOptional()
+  @IsEnum(SchemeFreeUnit)
+  freeUnit?: SchemeFreeUnit;
 
   /* ======================================================
    * VALIDITY

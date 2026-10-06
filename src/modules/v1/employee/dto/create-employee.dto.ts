@@ -26,6 +26,7 @@ import {
   ArrayUnique,
   IsEnum,
   ValidateIf,
+  MaxLength,
 } from 'class-validator';
 import { UserStatus } from '../../user/user.enum';
 import { EmployeeType } from 'src/shared/enums/employee.enums';
@@ -129,13 +130,27 @@ export class CreateEmployeeDto {
    * Purpose : Unique login identifier for the employee
    */
   @ApiPropertyOptional({
-    example: 'UserId',
-    description: 'Required only for staff employees',
+    example: 'ravi.kumar',
+    description:
+      'Staff only. Generated from the name (e.g. ravi.kumar, ravi.kumar1) when omitted',
   })
-  @ValidateIf((value) => value.employeeType !== EmployeeType.SUPPORTING_STAFF)
+  @IsOptional()
   @IsString({ message: 'Login ID must be a string' })
-  @IsNotEmpty({ message: 'Login ID is required' })
+  @MaxLength(60, { message: 'Login ID cannot exceed 60 characters' })
   loginId?: string;
+
+  /**
+   * Position
+   * --------
+   * Purpose : Assign the new employee to a vacant position (staff only)
+   */
+  @ApiPropertyOptional({
+    example: 'P00012',
+    description: 'Vacant position to assign the employee to (staff only)',
+  })
+  @IsOptional()
+  @IsString({ message: 'Position ID must be a string' })
+  positionId?: string;
 
   /**
    * Full Name

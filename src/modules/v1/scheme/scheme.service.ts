@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   HttpStatus,
   Injectable,
@@ -14,9 +15,13 @@ import {
   SchemeSchema,
 } from 'src/core/database/mongo/schema/scheme.schema';
 import { Van, VanSchema } from 'src/core/database/mongo/schema/van.schema';
+import {
+  Product,
+  ProductSchema,
+} from 'src/core/database/mongo/schema/product.schema';
 import { Model } from 'mongoose';
 
-import { SchemeStatus } from 'src/shared/enums/scheme.enums';
+import { SchemeStatus, SchemeType } from 'src/shared/enums/scheme.enums';
 import { IdGenerator } from 'src/shared/utils/id-generator.utils';
 
 import { SCHEME } from './scheme.constants';
@@ -27,10 +32,84 @@ import { SchemeQueryDto } from './dto/scheme-query.dto';
 @Injectable()
 export class SchemeService extends MongoRepository<Scheme> {
   private readonly vanModel: Model<Van>;
+  private readonly productModel: Model<Product>;
 
   constructor(mongo: MongoService) {
     super(mongo.getModel(Scheme.name, SchemeSchema));
     this.vanModel = mongo.getModel(Van.name, VanSchema);
+    this.productModel = mongo.getModel(Product.name, ProductSchema);
+  }
+
+  /**
+   * Validate the fields a group scheme needs and fill the free product name.
+   * `scheme` is the full (merged) scheme as it will be stored.
+   */
+  private async prepareGroupScheme(
+    scheme: Partial<CreateSchemeDto>,
+  ): Promise<Partial<CreateSchemeDto>> {
+    const { schemeType } = scheme;
+    if (
+      schemeType !== SchemeType.GROUP_FREE_QTY &&
+      schemeType !== SchemeType.GROUP_FREE_PERCENT
+    ) {
+      return {};
+    }
+
+    const hasScope = Boolean(
+      scheme.categoryIds?.length ||
+        scheme.subCategoryIds?.length ||
+        scheme.productIds?.length,
+    );
+    if (!hasScope) throw new BadRequestException(SCHEME.GROUP_SCOPE_REQUIRED);
+    if (!(Number(scheme.groupMinCases) > 0)) {
+      throw new BadRequestException(SCHEME.GROUP_MIN_CASES_REQUIRED);
+    }
+
+    if (schemeType === SchemeType.GROUP_FREE_PERCENT) {
+      if (!(Number(scheme.freePercent) > 0)) {
+        throw new BadRequestException(SCHEME.GROUP_FREE_PERCENT_REQUIRED);
+      }
+      return {};
+    }
+
+    if (!(Number(scheme.freeQty) > 0) || !scheme.freeProductId) {
+      throw new BadRequestException(SCHEME.GROUP_FREE_QTY_REQUIRED);
+    }
+    const product = await this.productModel
+      .findOne({ productId: scheme.freeProductId, isDeleted: { $ne: true } })
+      .select('productId name')
+      .lean();
+    if (!product) {
+      throw new BadRequestException(
+        `Free product not found: ${scheme.freeProductId}`,
+      );
+    }
+    return { freeProductName: scheme.freeProductName || product.name };
+  }
+
+  /**
+   * A scheme must match every geography dimension it defines
+   * (province AND route AND van); within a dimension any listed value matches.
+   * An empty dimension applies everywhere.
+   */
+  private geographyClause(params: {
+    provinceId?: string;
+    routeId?: string;
+    vanId?: string;
+  }): FilterQuery<Scheme>[] {
+    const dimension = (field: 'provinceIds' | 'routeIds' | 'vanIds', value?: string) => ({
+      $or: [
+        { [field]: { $exists: false } },
+        { [field]: { $size: 0 } },
+        ...(value ? [{ [field]: value }] : []),
+      ],
+    });
+
+    return [
+      dimension('provinceIds', params.provinceId),
+      dimension('routeIds', params.routeId),
+      dimension('vanIds', params.vanId),
+    ] as FilterQuery<Scheme>[];
   }
 
   private async getVanProvinceId(vanId?: string) {
@@ -50,9 +129,12 @@ export class SchemeService extends MongoRepository<Scheme> {
         throw new ConflictException(SCHEME.INVALID_PERIOD);
       }
 
+      const groupFields = await this.prepareGroupScheme(payload);
+
       const doc = await this.save({
         schemeId: IdGenerator.generate('SCHM', 8),
         ...payload,
+        ...groupFields,
       });
 
       return {
@@ -142,7 +224,21 @@ export class SchemeService extends MongoRepository<Scheme> {
         throw new ConflictException(SCHEME.INVALID_PERIOD);
       }
 
-      const doc = await this.updateOne({ schemeId }, dto, { new: true });
+      const existingScheme = (
+        typeof (existing as any).toObject === 'function'
+          ? (existing as any).toObject()
+          : existing
+      ) as Partial<CreateSchemeDto>;
+      const groupFields = await this.prepareGroupScheme({
+        ...existingScheme,
+        ...dto,
+      });
+
+      const doc = await this.updateOne(
+        { schemeId },
+        { ...dto, ...groupFields },
+        { new: true },
+      );
 
       return {
         statusCode: HttpStatus.OK,
@@ -189,7 +285,8 @@ export class SchemeService extends MongoRepository<Scheme> {
       vanId,
       date = new Date(),
     } = params;
-    const provinceId = await this.getVanProvinceId(vanId);
+    const provinceId =
+      params.provinceId || (await this.getVanProvinceId(vanId));
     const effectiveDayStart = new Date(date);
     const effectiveDayEnd = new Date(date);
     effectiveDayStart.setUTCHours(0, 0, 0, 0);
@@ -210,22 +307,15 @@ export class SchemeService extends MongoRepository<Scheme> {
       productIds: { $size: 0 },
     });
 
-    const geographyClause: FilterQuery<Scheme>[] = [];
-    if (provinceId) geographyClause.push({ provinceIds: provinceId });
-    if (routeId) geographyClause.push({ routeIds: routeId });
-    if (vanId) geographyClause.push({ vanIds: vanId });
-    geographyClause.push({
-      provinceIds: { $size: 0 },
-      routeIds: { $size: 0 },
-      vanIds: { $size: 0 },
-    });
-
     const filter: FilterQuery<Scheme> = {
       status: SchemeStatus.ACTIVE,
       isDeleted: false,
       startDate: { $lte: effectiveDayEnd },
       endDate: { $gte: effectiveDayStart },
-      $and: [{ $or: productClause }, { $or: geographyClause }],
+      $and: [
+        { $or: productClause },
+        ...this.geographyClause({ provinceId, routeId, vanId }),
+      ],
     };
 
     return this.findLean(filter);
@@ -247,7 +337,8 @@ export class SchemeService extends MongoRepository<Scheme> {
     if (!products.length) return new Map<string, Scheme[]>();
 
     const date = params.date ?? new Date();
-    const provinceId = await this.getVanProvinceId(params.vanId);
+    const provinceId =
+      params.provinceId || (await this.getVanProvinceId(params.vanId));
     const effectiveDayStart = new Date(date);
     const effectiveDayEnd = new Date(date);
     effectiveDayStart.setUTCHours(0, 0, 0, 0);
@@ -273,22 +364,19 @@ export class SchemeService extends MongoRepository<Scheme> {
         productIds: { $size: 0 },
       },
     ];
-    const geographyClause: FilterQuery<Scheme>[] = [];
-    if (provinceId) geographyClause.push({ provinceIds: provinceId });
-    if (params.routeId) geographyClause.push({ routeIds: params.routeId });
-    if (params.vanId) geographyClause.push({ vanIds: params.vanId });
-    geographyClause.push({
-      provinceIds: { $size: 0 },
-      routeIds: { $size: 0 },
-      vanIds: { $size: 0 },
-    });
-
     const schemes = await this.findLean({
       status: SchemeStatus.ACTIVE,
       isDeleted: false,
       startDate: { $lte: effectiveDayEnd },
       endDate: { $gte: effectiveDayStart },
-      $and: [{ $or: productClause }, { $or: geographyClause }],
+      $and: [
+        { $or: productClause },
+        ...this.geographyClause({
+          provinceId,
+          routeId: params.routeId,
+          vanId: params.vanId,
+        }),
+      ],
     });
 
     return new Map(

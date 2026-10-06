@@ -19,6 +19,7 @@
  */
 
 import {
+  ConflictException,
   Injectable,
   UnauthorizedException,
   ForbiddenException,
@@ -126,6 +127,71 @@ export class UserService extends MongoRepository<User> {
   }
 
   /* ======================================================
+   * LOGIN ID
+   * ------------------------------------------------------
+   * Login IDs are unique across all users (including
+   * soft-deleted ones, which still hold the unique index).
+   * ====================================================== */
+
+  private loginIdQuery(loginId: string) {
+    const escaped = loginId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return { loginId: { $regex: `^${escaped}$`, $options: 'i' } };
+  }
+
+  /**
+   * Throw when the login ID is used by another user.
+   * `profileId` excludes that user's own account (restore / re-create).
+   */
+  async assertLoginIdAvailable(
+    loginId: string,
+    profileId?: string,
+    session?: any,
+  ) {
+    const existing = await this.model
+      .findOne({
+        ...this.loginIdQuery(loginId),
+        ...(profileId ? { profileId: { $ne: profileId } } : {}),
+      } as any)
+      .select('profileId')
+      .session(session ?? null)
+      .lean();
+
+    if (existing) {
+      throw new ConflictException(`Login ID "${loginId}" is already in use`);
+    }
+  }
+
+  /**
+   * Build a unique login ID from the user's name:
+   * "Ravi Kumar" -> "ravi.kumar", then "ravi.kumar1", "ravi.kumar2", ...
+   */
+  async generateLoginId(name: string, profileId?: string, session?: any) {
+    const base =
+      name
+        .normalize('NFKD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '.')
+        .replace(/^\.+|\.+$/g, '')
+        .slice(0, 40) || 'user';
+
+    for (let suffix = 0; suffix < 1000; suffix++) {
+      const candidate = suffix ? `${base}${suffix}` : base;
+      const taken = await this.model
+        .exists({
+          ...this.loginIdQuery(candidate),
+          ...(profileId ? { profileId: { $ne: profileId } } : {}),
+        } as any)
+        .session(session ?? null);
+      if (!taken) return candidate;
+    }
+
+    throw new ConflictException(
+      `Unable to generate a unique login ID for "${name}"`,
+    );
+  }
+
+  /* ======================================================
    * LOGIN (DEVICE ANCHORED)
    * ------------------------------------------------------
    * Purpose :
@@ -229,6 +295,18 @@ export class UserService extends MongoRepository<User> {
 
     if (!role) {
       throw new ForbiddenException('Role not found');
+    }
+    // Mobile app: salesmen and managers. System admin roles use the web MIS.
+    if (
+      deviceInfo.deviceType !== 'web' &&
+      (role.isSystemAdmin ||
+        String(role.name ?? '')
+          .trim()
+          .toUpperCase() === 'SUPER_ADMIN')
+    ) {
+      throw new ForbiddenException(
+        'Admin accounts do not have mobile app access. Please use the web portal.',
+      );
     }
 
     /* ---------- DEVICE UPSERT ---------- */

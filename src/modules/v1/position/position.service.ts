@@ -15,6 +15,7 @@ import {
 import { TextNormalizer } from 'src/shared/utils/text-normalizer.utils';
 import { NormalizeType } from 'src/shared/enums/normalize.enums';
 import { POSITION } from './position.constants';
+import { generatePositionId } from './position-id.util';
 import { CreatePositionDto } from './dto/create-position.dto';
 import { PositionQueryDto } from './dto/position-query.dto';
 import { UpdatePositionDto } from './dto/update-position.dto';
@@ -425,32 +426,7 @@ export class PositionService extends MongoRepository<Position> {
   }
 
   private async nextPositionId(session: ClientSession) {
-    const latest = await this.model
-      .findOne({ positionId: /^P\d{5,}$/ })
-      .select('positionId')
-      .sort({ positionId: -1 })
-      .session(session)
-      .lean();
-    const latestSequence = latest?.positionId
-      ? Number(latest.positionId.slice(1))
-      : 0;
-    const counters = this.model.db.collection('id_counters');
-
-    await counters.updateOne(
-      { _id: 'positionId' as any },
-      { $max: { sequence: latestSequence } },
-      { upsert: true, session },
-    );
-    const counter = await counters.findOneAndUpdate(
-      { _id: 'positionId' as any },
-      { $inc: { sequence: 1 } },
-      { returnDocument: 'after', session },
-    );
-    const sequence = Number(counter?.sequence);
-    if (!Number.isSafeInteger(sequence) || sequence < 1) {
-      throw new ConflictException('Unable to generate position ID');
-    }
-    return `P${String(sequence).padStart(5, '0')}`;
+    return generatePositionId(this.model, session);
   }
 
   private async validateVanIds(vanIds?: string[]) {
@@ -467,6 +443,41 @@ export class PositionService extends MongoRepository<Position> {
     if (missingVanIds.length) {
       throw new NotFoundException(
         `Active van not found: ${missingVanIds.join(', ')}`,
+      );
+    }
+  }
+
+  /**
+   * A SALESMAN position is bound to its van; once a van is mapped it
+   * cannot be changed from the position (use van change instead).
+   */
+  private async validateSalesmanVanLocked(
+    roleId: string,
+    currentVanIds: string[],
+    nextVanIds: string[],
+    session: ClientSession,
+  ) {
+    const currentVanIdSet = new Set(currentVanIds.filter(Boolean));
+    if (!currentVanIdSet.size) return;
+
+    const nextVanIdSet = new Set(nextVanIds.filter(Boolean));
+    const vanAssignmentChanged =
+      currentVanIdSet.size !== nextVanIdSet.size ||
+      [...currentVanIdSet].some((vanId) => !nextVanIdSet.has(vanId));
+    if (!vanAssignmentChanged) return;
+
+    const role = await this.roleModel
+      .findOne({ roleId, isDeleted: { $ne: true } })
+      .select('name')
+      .session(session)
+      .lean();
+    if (
+      String(role?.name ?? '')
+        .trim()
+        .toUpperCase() === 'SALESMAN'
+    ) {
+      throw new BadRequestException(
+        'Van of a SALESMAN position cannot be changed.',
       );
     }
   }
@@ -818,7 +829,11 @@ export class PositionService extends MongoRepository<Position> {
     };
   }
 
-  async update(positionId: string, dto: UpdatePositionDto) {
+  async update(
+    positionId: string,
+    dto: UpdatePositionDto,
+    existingSession?: ClientSession,
+  ) {
     try {
       return await this.withTransaction(async (session) => {
         const existing = await this.findOne(
@@ -837,6 +852,12 @@ export class PositionService extends MongoRepository<Position> {
             ? dto.employeeId || undefined
             : existing.employeeId;
         if (dto.vanIds !== undefined) {
+          await this.validateSalesmanVanLocked(
+            existing.roleId,
+            existing.vanIds ?? [],
+            nextVanIds,
+            session,
+          );
           await this.validateSalesmanVanChangeDuringRetailing(
             existing.roleId,
             existing.employeeId,
@@ -968,7 +989,7 @@ export class PositionService extends MongoRepository<Position> {
           message: POSITION.UPDATED,
           data: (await this.attachMappedEmployees([updated], session))[0],
         };
-      });
+      }, existingSession);
     } catch (error) {
       this.handleDuplicateError(error);
     }

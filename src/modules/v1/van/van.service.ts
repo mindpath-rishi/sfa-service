@@ -44,6 +44,10 @@ import {
 } from 'src/core/database/mongo/schema/position.schema';
 import { Role, RoleSchema } from 'src/core/database/mongo/schema/role.schema';
 import {
+  Route,
+  RouteSchema,
+} from 'src/core/database/mongo/schema/route.schema';
+import {
   ProductCategory,
   ProductCategorySchema,
 } from 'src/core/database/mongo/schema/product-category';
@@ -59,6 +63,9 @@ import { OracleRepository } from 'src/core/database/oracle/oracle.repository';
 import * as XLSX from 'xlsx';
 import { ClientSession } from 'mongoose';
 import { EmployeeType } from 'src/shared/enums/employee.enums';
+import { generatePositionId } from '../position/position-id.util';
+import { TextNormalizer } from 'src/shared/utils/text-normalizer.utils';
+import { NormalizeType } from 'src/shared/enums/normalize.enums';
 
 const REPORT_TIMEZONE =
   process.env.APP_TIMEZONE || process.env.TZ || 'Asia/Kolkata';
@@ -69,6 +76,7 @@ export class VanService extends MongoRepository<Van> {
   private readonly provinceModel;
   private readonly positionModel;
   private readonly roleModel;
+  private readonly routeModel;
   private readonly productCategoryModel;
 
   constructor(
@@ -80,6 +88,7 @@ export class VanService extends MongoRepository<Van> {
     this.provinceModel = mongo.getModel(Province.name, ProvinceSchema);
     this.positionModel = mongo.getModel(Position.name, PositionSchema);
     this.roleModel = mongo.getModel(Role.name, RoleSchema);
+    this.routeModel = mongo.getModel(Route.name, RouteSchema);
     this.productCategoryModel = mongo.getModel(
       ProductCategory.name,
       ProductCategorySchema,
@@ -91,12 +100,143 @@ export class VanService extends MongoRepository<Van> {
 
     const provinceQuery = this.provinceModel
       .findOne({ provinceId, status: 'ACTIVE', isDeleted: { $ne: true } })
-      .select('provinceId')
+      .select('provinceId countryId')
       .lean();
     if (session) provinceQuery.session(session);
 
-    if (!(await provinceQuery)) {
+    const province = await provinceQuery;
+    if (!province) {
       throw new BadRequestException(`Active province not found: ${provinceId}`);
+    }
+
+    return province as { provinceId: string; countryId: string };
+  }
+
+  private async getSalesmanRoleId(session?: ClientSession) {
+    const salesmanRoleQuery = this.roleModel
+      .findOne({ name: 'SALESMAN', status: 'ACTIVE', isDeleted: { $ne: true } })
+      .select('roleId')
+      .lean();
+    if (session) salesmanRoleQuery.session(session);
+    const salesmanRole = await salesmanRoleQuery;
+    if (!salesmanRole) {
+      throw new BadRequestException('Active SALESMAN role not found');
+    }
+    return salesmanRole.roleId as string;
+  }
+
+  /**
+   * Create a vacant SALESMAN position for a newly created van,
+   * carrying the van's name, province, country and categories,
+   * with the van assigned to it.
+   */
+  private async createVanPosition(
+    van: Pick<Van, 'vanId' | 'name' | 'categoryIds'>,
+    province: { provinceId: string; countryId: string },
+    session: ClientSession,
+  ) {
+    const salesmanRoleId = await this.getSalesmanRoleId(session);
+
+    // Van already mapped to an active salesman position (e.g. van restore)
+    const mappedPositionQuery = this.positionModel
+      .findOne({
+        roleId: salesmanRoleId,
+        vanIds: van.vanId,
+        status: 'ACTIVE',
+        isDeleted: { $ne: true },
+      })
+      .select('positionId')
+      .lean();
+    mappedPositionQuery.session(session);
+    if (await mappedPositionQuery) return;
+
+    const name = TextNormalizer.normalize(van.name, NormalizeType.TITLE);
+    const positionData = {
+      name,
+      roleId: salesmanRoleId,
+      countryId: province.countryId,
+      provinceId: province.provinceId,
+      parentCategoryId: [
+        ...new Set(van.categoryIds.map((categoryId) => categoryId.trim())),
+      ],
+      vanIds: [van.vanId],
+      hierarchyPath: [],
+      hierarchyDepth: 1,
+      offlineAccessAllowed: false,
+      status: 'ACTIVE',
+      isDeleted: false,
+    };
+
+    const existingQuery = this.positionModel
+      .findOne({ name })
+      .select('positionId isDeleted')
+      .lean();
+    existingQuery.session(session);
+    const existing: any = await existingQuery;
+
+    if (existing && !existing.isDeleted) {
+      throw new ConflictException(`Position already exists with name: ${name}`);
+    }
+
+    if (existing?.isDeleted) {
+      await this.positionModel.updateOne(
+        { _id: existing._id },
+        {
+          $set: positionData,
+          $unset: { employeeId: 1, reportTo: 1, marketId: 1 },
+        },
+        { session },
+      );
+      return;
+    }
+
+    await this.positionModel.create(
+      [
+        {
+          ...positionData,
+          positionId: await generatePositionId(this.positionModel, session),
+        },
+      ],
+      { session },
+    );
+  }
+
+  /**
+   * Routes mapped to a van must belong to the van's province.
+   */
+  private async validateRouteProvinces(
+    associatedRoutes: { routeId: string }[] | undefined,
+    provinceId: string | undefined,
+    session?: ClientSession,
+  ) {
+    const routeIds = [
+      ...new Set((associatedRoutes ?? []).map((route) => route.routeId)),
+    ].filter(Boolean);
+    if (!routeIds.length) return;
+
+    if (!provinceId) {
+      throw new BadRequestException(
+        'Select a province before mapping routes to the van',
+      );
+    }
+
+    const routesQuery = this.routeModel
+      .find({ routeId: { $in: routeIds }, isDeleted: { $ne: true } })
+      .select('routeId provinceId')
+      .lean();
+    if (session) routesQuery.session(session);
+    const routes = await routesQuery;
+    const provinceByRouteId = new Map(
+      routes.map((route: any) => [route.routeId, route.provinceId]),
+    );
+    const invalidRouteIds = routeIds.filter(
+      (routeId) => provinceByRouteId.get(routeId) !== provinceId,
+    );
+
+    if (invalidRouteIds.length) {
+      throw new BadRequestException(
+        `Routes do not belong to the van province: ${invalidRouteIds.join(', ')}`,
+      );
     }
   }
 
@@ -236,8 +376,21 @@ export class VanService extends MongoRepository<Van> {
       reportTo = reportingPosition.reportTo;
     }
 
+    // Each van is bound to its own SALESMAN position; a salesman can only
+    // move to a van whose position is vacant, within the hierarchy or province.
+    const vacantVanIds: string[] = await this.positionModel.distinct('vanIds', {
+      roleId: await this.getSalesmanRoleId(),
+      status: 'ACTIVE',
+      isDeleted: { $ne: true },
+      employeeId: { $in: [null, ''] },
+      $or: [
+        { vanIds: { $in: [...hierarchyVanIds] } },
+        { provinceId: position.provinceId },
+      ],
+    });
+
     return {
-      vanId: { $in: [...hierarchyVanIds] },
+      vanId: { $in: vacantVanIds },
       status: VanStatus.ACTIVE,
       isDeleted: { $ne: true },
     };
@@ -293,7 +446,7 @@ export class VanService extends MongoRepository<Van> {
         fromDate: new Date(route.fromDate),
         toDate: new Date(route.toDate),
       })),
-    };
+    } as Partial<Van>;
   }
 
   private async syncSalesmanPositionCategories(
@@ -330,6 +483,24 @@ export class VanService extends MongoRepository<Van> {
     );
   }
 
+  private async getProvinceNameMap(
+    vans: { provinceId?: string }[],
+  ): Promise<Map<string, string>> {
+    const provinceIds = [
+      ...new Set(vans.map((van) => van.provinceId).filter(Boolean)),
+    ];
+    const provinces = provinceIds.length
+      ? await this.provinceModel
+          .find({ provinceId: { $in: provinceIds } })
+          .select('provinceId name')
+          .lean()
+      : [];
+
+    return new Map(
+      provinces.map((province: any) => [province.provinceId, province.name]),
+    );
+  }
+
   private async buildVanFilter(query: VanQueryDto) {
     const { searchText, status } = query;
     const filter: Record<string, any> = {};
@@ -347,6 +518,10 @@ export class VanService extends MongoRepository<Van> {
 
     if (status) {
       filter.status = status;
+    }
+
+    if (query.provinceId) {
+      filter.provinceId = query.provinceId;
     }
 
     if (searchText) {
@@ -603,27 +778,46 @@ export class VanService extends MongoRepository<Van> {
       }
 
       await this.validateProductCategories(payload.categoryIds, session);
-      const driver = await this.validateDriver(
-        payload.driverEmployeeId,
-        undefined,
+      const province = await this.validateProvince(
+        payload.provinceId,
         session,
       );
+      if (!province) {
+        throw new BadRequestException('Province is required');
+      }
+      await this.validateRouteProvinces(
+        payload.associatedRoutes,
+        payload.provinceId,
+        session,
+      );
+      const driverEmployeeId = payload.driverEmployeeId?.trim() || undefined;
+      const driver = driverEmployeeId
+        ? await this.validateDriver(driverEmployeeId, undefined, session)
+        : null;
+      // Never store an empty driver: driverEmployeeId has a unique sparse index
+      const { driverEmployeeId: _driverEmployeeId, ...vanPayload } = payload;
       const normalizedPayload = {
-        ...payload,
-        driverName: driver.name,
-      };
+        ...vanPayload,
+        ...(driver ? { driverEmployeeId, driverName: driver.name } : {}),
+      } as CreateVanDto & { driverName?: string };
 
       // Restore soft-deleted van
       if (existing?.isDeleted) {
         await this.updateById(
           existing._id.toString(),
-          this.normalizeVanPayload({
-            ...normalizedPayload,
-            status: 'ACTIVE',
-            isDeleted: false,
-          } as CreateVanDto),
+          {
+            $set: this.normalizeVanPayload({
+              ...normalizedPayload,
+              status: 'ACTIVE',
+              isDeleted: false,
+            } as CreateVanDto),
+            ...(driver
+              ? {}
+              : { $unset: { driverEmployeeId: 1, driverName: 1 } }),
+          } as any,
           { session },
         );
+        await this.createVanPosition(normalizedPayload, province, session);
 
         return {
           statusCode: HttpStatus.OK,
@@ -636,6 +830,7 @@ export class VanService extends MongoRepository<Van> {
       const van = await this.save(this.normalizeVanPayload(normalizedPayload), {
         session,
       });
+      await this.createVanPosition(normalizedPayload, province, session);
 
       return {
         statusCode: HttpStatus.CREATED,
@@ -784,11 +979,17 @@ export class VanService extends MongoRepository<Van> {
       sort: this.getSort(query),
       lean: true,
     });
+    const provinceNameById = await this.getProvinceNameMap(result.items);
 
     return {
       statusCode: HttpStatus.OK,
       message: VAN.FETCHED,
-      data: result.items,
+      data: result.items.map((van: any) => ({
+        ...van,
+        provinceName: van.provinceId
+          ? provinceNameById.get(van.provinceId) || ''
+          : '',
+      })),
       meta: result.meta,
     };
   }
@@ -800,18 +1001,7 @@ export class VanService extends MongoRepository<Van> {
     const vans = await this.findLean(await this.buildVanFilter(query), {
       sort: this.getSort(query),
     });
-    const provinceIds = [
-      ...new Set(vans.map((van: any) => van.provinceId).filter(Boolean)),
-    ];
-    const provinces = provinceIds.length
-      ? await this.provinceModel
-          .find({ provinceId: { $in: provinceIds } })
-          .select('provinceId name')
-          .lean()
-      : [];
-    const provinceNameById = new Map(
-      provinces.map((province: any) => [province.provinceId, province.name]),
-    );
+    const provinceNameById = await this.getProvinceNameMap(vans);
     const exportRows = vans.map((van: any) => {
       const routes = Array.isArray(van.associatedRoutes)
         ? van.associatedRoutes
@@ -1065,15 +1255,36 @@ export class VanService extends MongoRepository<Van> {
       }
 
       await this.validateProductCategories(dto.categoryIds, session);
-      const driver = dto.driverEmployeeId
-        ? await this.validateDriver(dto.driverEmployeeId, vanId, session)
+      await this.validateProvince(dto.provinceId, session);
+      if (dto.associatedRoutes !== undefined || dto.provinceId !== undefined) {
+        await this.validateRouteProvinces(
+          dto.associatedRoutes ?? existing.associatedRoutes,
+          dto.provinceId ?? existing.provinceId,
+          session,
+        );
+      }
+      const driverEmployeeId =
+        typeof dto.driverEmployeeId === 'string'
+          ? dto.driverEmployeeId.trim()
+          : dto.driverEmployeeId;
+      const clearDriver =
+        dto.driverEmployeeId !== undefined && !driverEmployeeId;
+      const driver = driverEmployeeId
+        ? await this.validateDriver(driverEmployeeId, vanId, session)
         : null;
+      const { driverEmployeeId: _driverEmployeeId, ...vanDto } = dto;
+      const vanUpdate = this.normalizeVanPayload({
+        ...vanDto,
+        ...(driver ? { driverEmployeeId, driverName: driver.name } : {}),
+      } as UpdateVanDto);
       await this.updateOne(
         { vanId },
-        this.normalizeVanPayload({
-          ...dto,
-          ...(driver ? { driverName: driver.name } : {}),
-        }),
+        clearDriver
+          ? ({
+              $set: vanUpdate,
+              $unset: { driverEmployeeId: 1, driverName: 1 },
+            } as any)
+          : vanUpdate,
         {
           session,
         },
@@ -1377,7 +1588,7 @@ export class VanService extends MongoRepository<Van> {
           status: 'ACTIVE',
           isDeleted: { $ne: true },
         })
-        .select('positionId vanIds')
+        .select('positionId offlineAccessAllowed')
         .session(session)
         .lean();
 
@@ -1385,17 +1596,71 @@ export class VanService extends MongoRepository<Van> {
         throw new BadRequestException('Active employee position not found');
       }
 
-      const nextVanIds = [
-        ...new Set(
-          (position.vanIds || [])
-            .filter((mappedVanId) => mappedVanId !== oldVanId)
-            .concat(vanId),
-        ),
-      ];
+      // Positions keep their van; the salesman moves to the new van's position
+      const targetPosition = await this.positionModel
+        .findOne({
+          roleId: await this.getSalesmanRoleId(session),
+          vanIds: vanId,
+          status: 'ACTIVE',
+          isDeleted: { $ne: true },
+        })
+        .select('positionId employeeId hierarchyPath')
+        .session(session)
+        .lean();
+
+      if (!targetPosition) {
+        throw new BadRequestException(
+          `Salesman position not found for van: ${vanId}`,
+        );
+      }
+      if (
+        targetPosition.employeeId &&
+        targetPosition.employeeId !== employeeId
+      ) {
+        throw new ConflictException(
+          `Van ${vanId} position is already assigned to ${targetPosition.employeeId}`,
+        );
+      }
 
       await this.positionModel.updateOne(
         { positionId: position.positionId },
-        { $set: { vanIds: nextVanIds } },
+        { $unset: { employeeId: 1 } },
+        { session },
+      );
+      // Offline access follows the salesman to the new van's position
+      await this.positionModel.updateOne(
+        { positionId: targetPosition.positionId },
+        {
+          $set: {
+            employeeId,
+            offlineAccessAllowed: position.offlineAccessAllowed === true,
+          },
+        },
+        { session },
+      );
+
+      const reportingPositions = targetPosition.hierarchyPath?.length
+        ? await this.positionModel
+            .find({ positionId: { $in: targetPosition.hierarchyPath } })
+            .select('positionId employeeId')
+            .session(session)
+            .lean()
+        : [];
+      const employeeIdByPositionId = new Map(
+        reportingPositions.map((reporting) => [
+          reporting.positionId,
+          reporting.employeeId,
+        ]),
+      );
+      await this.employeeModel.updateOne(
+        { employeeId, isDeleted: { $ne: true } },
+        {
+          $set: {
+            hierarchyPath: (targetPosition.hierarchyPath || [])
+              .map((positionId) => employeeIdByPositionId.get(positionId))
+              .filter(Boolean),
+          },
+        },
         { session },
       );
     });

@@ -1,3 +1,5 @@
+import { ApiProperty } from '@nestjs/swagger';
+import { IsNotEmpty, IsString } from 'class-validator';
 /**
  * Van Controller
  * --------------
@@ -58,9 +60,20 @@ import { VAN } from './van.constants';
 import { Public } from 'src/core/decorators/public.decorator';
 
 export class ChangeVanDto {
-  oldVanId!: any;
-  vanId!: any; // new van
-  employeeId!: any;
+  @ApiProperty({ example: 'VAN-001', description: 'Current van' })
+  @IsString()
+  @IsNotEmpty()
+  oldVanId!: string;
+
+  @ApiProperty({ example: 'VAN-002', description: 'New van' })
+  @IsString()
+  @IsNotEmpty()
+  vanId!: string;
+
+  @ApiProperty({ example: 'EID-001' })
+  @IsString()
+  @IsNotEmpty()
+  employeeId!: string;
 }
 
 @ApiTags('Van')

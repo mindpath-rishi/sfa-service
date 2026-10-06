@@ -195,6 +195,30 @@ export class CreateSaleDto {
   @Type(() => AppliedSaleSchemeDto)
   schemes?: AppliedSaleSchemeDto[];
 
+  @ApiPropertyOptional({
+    type: 'array',
+    description:
+      'Group schemes earned on the combined quantity of a product group (free goods)',
+    example: [
+      {
+        schemeId: 'SCHM12345678',
+        schemeName: 'Beverages 10+1',
+        schemeType: 'GROUP_FREE_QTY',
+        groupMinCases: 10,
+        qualifyingCases: 21,
+        multiples: 2,
+        freeUnit: 'CASE',
+        freeQty: 2,
+        freeProductId: 'P-001',
+        freeProductName: 'Cola 300ml',
+        lines: [],
+      },
+    ],
+  })
+  @IsOptional()
+  @IsArray()
+  groupSchemes?: Record<string, unknown>[];
+
   @ApiPropertyOptional({ type: Number, default: 0 })
   @IsNotEmpty()
   @IsNumber()

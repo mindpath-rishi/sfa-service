@@ -1,5 +1,7 @@
 import {
   Injectable,
+  Logger,
+  ForbiddenException,
   NotFoundException,
   ConflictException,
   HttpStatus,
@@ -23,6 +25,7 @@ import {
 import { VAN_INVENTORY_TOPUP } from './van-inventory-topup.constants';
 import { CreateVanInventoryTopupDto } from './dto/create-van-inventory-topup.dto';
 import { UpdateVanInventoryTopupDto } from './dto/update-van-inventory-topup.dto';
+import { UpdateVanInventoryTopupItemsDto } from './dto/update-van-inventory-topup-items.dto';
 import { VanInventoryTopupQueryDto } from './dto/van-inventory-topup-query.dto';
 import { IdGenerator } from 'src/shared/utils/id-generator.utils';
 import { VanInventoryTopupItemService } from '../van-inventory-topup-item/van-inventory-topup-item.service';
@@ -48,6 +51,7 @@ import { WorkSessionService } from '../work-session/work-session.service';
 
 @Injectable()
 export class VanInventoryTopupService extends MongoRepository<VanInventoryTopup> {
+  private readonly logger = new Logger(VanInventoryTopupService.name);
   private readonly employeeModel: Model<Employee>;
 
   constructor(
@@ -95,101 +99,19 @@ export class VanInventoryTopupService extends MongoRepository<VanInventoryTopup>
         /* ======================================================
          * 2. PROCESS ITEMS
          * ====================================================== */
-        let totalRequestedQty = 0;
-        let totalRequestedWeight = 0;
-        let totalRequestedValue = 0;
-        let totalRequestedCases = 0;
-        let totalRequestedPieces = 0;
-
-        let totalApprovedQty = 0;
-        let totalApprovedWeight = 0;
-        let totalApprovedValue = 0;
-        let totalApprovedCases = 0;
-        let totalApprovedPieces = 0;
-
-        const processedItems: any[] = [];
-        const resolvedProductIds = new Set<string>();
-
-        for (const item of payload.items) {
-          const productIdentifier = String(item.productId || '').trim();
-          const product = await this.productService.findOne(
-            {
-              $or: [
-                { productId: productIdentifier },
-                { productSysCode: productIdentifier },
-              ],
-            },
-            { lean: true },
-          );
-
-          if (!product) {
-            throw new BadRequestException(
-              `Product not found for identifier: ${productIdentifier}`,
-            );
-          }
-
-          const productId = String(product.productId).trim();
-          if (resolvedProductIds.has(productId)) {
-            throw new ConflictException(
-              `Duplicate product in items: ${productId}`,
-            );
-          }
-          resolvedProductIds.add(productId);
-
-          const unitQtyInCase = product.unitQtyInCase || 1;
-          const unitType = product.unitType || 'CS';
-
-          const casePrice = Number(item.casePrice ?? product.casePrice ?? 0);
-          const piecePrice = Number(
-            item.piecePrice ?? product.piecePrice ?? casePrice / unitQtyInCase,
-          );
-          const pieceWeight = Number(
-            item.pieceNetWeight ?? product.pieceNetWeight ?? 0,
-          );
-
-          const requestedCaseQty = Number(item.requestedCaseQty || 0);
-          const requestedPieceQty = Number(item.requestedPieceQty || 0);
-          const requestedQty =
-            requestedCaseQty * unitQtyInCase + requestedPieceQty;
-
-          const requestedWeight = requestedQty * pieceWeight;
-          const requestedValue =
-            requestedCaseQty * casePrice + requestedPieceQty * piecePrice;
-
-          totalRequestedQty += requestedQty;
-          totalRequestedWeight += requestedWeight;
-          totalRequestedValue += requestedValue;
-          totalRequestedCases += requestedCaseQty;
-          totalRequestedPieces += requestedPieceQty;
-
-          processedItems.push({
-            vanInventoryTopupId: '',
-            productId,
-            productName: product.name,
-            compCode: product.compCode || item.compCode,
-
-            requestedQty,
-            requestedWeight,
-            requestedValue,
-            requestedCaseQty,
-            requestedPieceQty,
-
-            approvedQty: 0,
-            approvedWeight: 0,
-            approvedValue: 0,
-            approvedCaseQty: 0,
-            approvedPieceQty: 0,
-
-            casePrice,
-            piecePrice,
-
-            pieceNetWeight: pieceWeight,
-            caseNetWeight: pieceWeight * unitQtyInCase,
-
-            unitQtyInCase,
-            unitType,
-          });
-        }
+        const {
+          processedItems,
+          totalRequestedQty,
+          totalRequestedWeight,
+          totalRequestedValue,
+          totalRequestedCases,
+          totalRequestedPieces,
+        } = await this.buildTopupItems(payload.items);
+        const totalApprovedQty = 0;
+        const totalApprovedWeight = 0;
+        const totalApprovedValue = 0;
+        const totalApprovedCases = 0;
+        const totalApprovedPieces = 0;
 
         /* ======================================================
          * 3. CREATE HEADER
@@ -254,6 +176,389 @@ export class VanInventoryTopupService extends MongoRepository<VanInventoryTopup>
     }
   }
 
+  /**
+   * Resolve products and compute requested qty / weight / value per item
+   * and for the whole top-up.
+   */
+  private async buildTopupItems(
+    items: {
+      productId: string;
+      compCode?: string;
+      casePrice?: number;
+      piecePrice?: number;
+      pieceNetWeight?: number;
+      requestedCaseQty?: number;
+      requestedPieceQty?: number;
+    }[],
+  ) {
+    let totalRequestedQty = 0;
+    let totalRequestedWeight = 0;
+    let totalRequestedValue = 0;
+    let totalRequestedCases = 0;
+    let totalRequestedPieces = 0;
+
+    const processedItems: any[] = [];
+    const resolvedProductIds = new Set<string>();
+
+    for (const item of items) {
+      const productIdentifier = String(item.productId || '').trim();
+      if (!productIdentifier) {
+        throw new BadRequestException(
+          'Every top-up item must have a product identifier',
+        );
+      }
+      const product = await this.productService.findOne(
+        {
+          $or: [
+            { productId: productIdentifier },
+            { productSysCode: productIdentifier },
+          ],
+        },
+        { lean: true },
+      );
+
+      if (!product) {
+        throw new BadRequestException(
+          `Product not found for identifier: ${productIdentifier}`,
+        );
+      }
+
+      const productId = String(product.productId).trim();
+      if (resolvedProductIds.has(productId)) {
+        throw new ConflictException(`Duplicate product in items: ${productId}`);
+      }
+      resolvedProductIds.add(productId);
+
+      const unitQtyInCase = product.unitQtyInCase || 1;
+      const unitType = product.unitType || 'CS';
+
+      const casePrice = Number(item.casePrice ?? product.casePrice ?? 0);
+      const piecePrice = Number(
+        item.piecePrice ?? product.piecePrice ?? casePrice / unitQtyInCase,
+      );
+      const pieceWeight = Number(
+        item.pieceNetWeight ?? product.pieceNetWeight ?? 0,
+      );
+
+      const requestedCaseQty = Number(item.requestedCaseQty || 0);
+      const requestedPieceQty = Number(item.requestedPieceQty || 0);
+      const requestedQty = requestedCaseQty * unitQtyInCase + requestedPieceQty;
+
+      const requestedWeight = requestedQty * pieceWeight;
+      const requestedValue =
+        requestedCaseQty * casePrice + requestedPieceQty * piecePrice;
+
+      totalRequestedQty += requestedQty;
+      totalRequestedWeight += requestedWeight;
+      totalRequestedValue += requestedValue;
+      totalRequestedCases += requestedCaseQty;
+      totalRequestedPieces += requestedPieceQty;
+
+      processedItems.push({
+        vanInventoryTopupId: '',
+        productId,
+        productName: product.name,
+        compCode: product.compCode || item.compCode,
+
+        requestedQty,
+        requestedWeight,
+        requestedValue,
+        requestedCaseQty,
+        requestedPieceQty,
+
+        approvedQty: 0,
+        approvedWeight: 0,
+        approvedValue: 0,
+        approvedCaseQty: 0,
+        approvedPieceQty: 0,
+
+        casePrice,
+        piecePrice,
+
+        pieceNetWeight: pieceWeight,
+        caseNetWeight: pieceWeight * unitQtyInCase,
+
+        unitQtyInCase,
+        unitType,
+      });
+    }
+
+    return {
+      processedItems,
+      totalRequestedQty,
+      totalRequestedWeight,
+      totalRequestedValue,
+      totalRequestedCases,
+      totalRequestedPieces,
+    };
+  }
+
+  /**
+   * Edit the items of a requested (SUBMITTED) top-up before approval:
+   * change quantities, add products, and remove products.
+   * The ERP stock request / transfer rows are kept in step.
+   */
+  async updateRequestedItems(
+    vanInventoryTopupId: string,
+    dto: UpdateVanInventoryTopupItemsDto,
+    options: { ownerOnly?: boolean } = {},
+  ) {
+    try {
+      return await this.withTransaction(async (session) => {
+        const topup = await this.findOne({ vanInventoryTopupId }, { session });
+
+        if (!topup) {
+          throw new NotFoundException(VAN_INVENTORY_TOPUP.NOT_FOUND);
+        }
+        if (topup.status !== VanInventoryTopupStatus.SUBMITTED) {
+          throw new BadRequestException(
+            `Only requested top-ups can be edited. Current status is ${topup.status}`,
+          );
+        }
+        if (
+          options.ownerOnly &&
+          topup.employeeId !== RequestContextStore.getStore()?.userId
+        ) {
+          throw new ForbiddenException(
+            'You can only edit your own top-up requests',
+          );
+        }
+
+        const emptyItem = dto.items.find(
+          (item) =>
+            !Number(item.requestedCaseQty || 0) &&
+            !Number(item.requestedPieceQty || 0),
+        );
+        if (emptyItem) {
+          throw new BadRequestException(
+            `Enter a case or piece quantity for product ${emptyItem.productId}`,
+          );
+        }
+
+        const {
+          processedItems,
+          totalRequestedQty,
+          totalRequestedWeight,
+          totalRequestedValue,
+          totalRequestedCases,
+          totalRequestedPieces,
+        } = await this.buildTopupItems(dto.items);
+
+        const currentItems =
+          await this.vanInventoryTopupItemService.findAllByVanInventoryTopupId(
+            vanInventoryTopupId,
+            session,
+          );
+        const currentByProductId = new Map(
+          currentItems.map((item: any) => [item.productId, item]),
+        );
+        const nextProductIds = new Set(
+          processedItems.map((item) => item.productId),
+        );
+
+        // Next ERP stock id suffix, never reusing one already sent to ERP
+        const allItems = await this.vanInventoryTopupItemService.findLean(
+          { vanInventoryTopupId } as any,
+          { session, includeDeleted: true },
+        );
+        let nextStockSequence = allItems.reduce((max: number, item: any) => {
+          const sequence = Number(
+            String(item.erpStockId || '').split('-').pop(),
+          );
+          return Number.isFinite(sequence) ? Math.max(max, sequence) : max;
+        }, 0);
+
+        const deletedByProductId = new Map(
+          allItems
+            .filter((item: any) => item.isDeleted)
+            .map((item: any) => [item.productId, item]),
+        );
+
+        const removedItems = currentItems.filter(
+          (item: any) => !nextProductIds.has(item.productId),
+        );
+        const changedItems: any[] = [];
+        const addedItems: any[] = [];
+
+        for (const item of processedItems) {
+          const current: any = currentByProductId.get(item.productId);
+          const previouslyRemoved: any = deletedByProductId.get(item.productId);
+
+          if (!current && previouslyRemoved) {
+            // Re-added product: restore its row and ERP stock id
+            changedItems.push({
+              ...item,
+              erpStockId: previouslyRemoved.erpStockId,
+            });
+            await this.vanInventoryTopupItemService.updateOne(
+              { vanInventoryTopupId, productId: item.productId } as any,
+              {
+                $set: {
+                  ...item,
+                  vanInventoryTopupId,
+                  erpStockId: previouslyRemoved.erpStockId,
+                  isDeleted: false,
+                  erpRequestSyncStatus: VanInventoryTopupErpSyncStatus.PENDING,
+                  erpTransferSyncStatus: VanInventoryTopupErpSyncStatus.PENDING,
+                },
+              } as any,
+              { session, includeDeleted: true },
+            );
+            continue;
+          }
+
+          if (!current) {
+            nextStockSequence += 1;
+            addedItems.push({
+              ...item,
+              vanInventoryTopupId,
+              erpStockId: `${vanInventoryTopupId}-${nextStockSequence}`,
+              erpRequestSyncStatus: VanInventoryTopupErpSyncStatus.PENDING,
+              erpStockTakeSyncStatus: VanInventoryTopupErpSyncStatus.PENDING,
+              erpTransferSyncStatus: VanInventoryTopupErpSyncStatus.PENDING,
+            });
+            continue;
+          }
+
+          if (
+            Number(current.requestedCaseQty || 0) === item.requestedCaseQty &&
+            Number(current.requestedPieceQty || 0) === item.requestedPieceQty
+          ) {
+            continue;
+          }
+
+          changedItems.push({ ...item, erpStockId: current.erpStockId });
+          await this.vanInventoryTopupItemService.updateOne(
+            { vanInventoryTopupId, productId: item.productId } as any,
+            {
+              $set: {
+                requestedQty: item.requestedQty,
+                requestedWeight: item.requestedWeight,
+                requestedValue: item.requestedValue,
+                requestedCaseQty: item.requestedCaseQty,
+                requestedPieceQty: item.requestedPieceQty,
+                casePrice: item.casePrice,
+                piecePrice: item.piecePrice,
+                pieceNetWeight: item.pieceNetWeight,
+                caseNetWeight: item.caseNetWeight,
+                unitQtyInCase: item.unitQtyInCase,
+                unitType: item.unitType,
+                erpRequestSyncStatus: VanInventoryTopupErpSyncStatus.PENDING,
+                erpTransferSyncStatus: VanInventoryTopupErpSyncStatus.PENDING,
+              },
+            } as any,
+            { session },
+          );
+        }
+
+        if (removedItems.length) {
+          await this.vanInventoryTopupItemService.updateMany(
+            {
+              vanInventoryTopupId,
+              productId: {
+                $in: removedItems.map((item: any) => item.productId),
+              },
+            } as any,
+            {
+              $set: { isDeleted: true },
+            } as any,
+            { session },
+          );
+        }
+
+        if (addedItems.length) {
+          await this.vanInventoryTopupItemService.insertMany(
+            addedItems,
+            session,
+          );
+        }
+
+        const doc = await this.model.findOneAndUpdate(
+          {
+            vanInventoryTopupId,
+            status: VanInventoryTopupStatus.SUBMITTED,
+            isDeleted: { $ne: true },
+          } as any,
+          {
+            $set: {
+              totalRequestedQty,
+              totalRequestedWeight,
+              totalRequestedValue,
+              totalRequestedCases,
+              totalRequestedPieces,
+              ...(dto.remark !== undefined ? { remark: dto.remark } : {}),
+            },
+          },
+          { new: true, session },
+        );
+
+        if (!doc) {
+          throw new BadRequestException(
+            'Top-up request is no longer available for editing',
+          );
+        }
+
+        /* ---------- KEEP ERP IN STEP ---------- */
+        const itemsToExport = [...changedItems, ...addedItems];
+        if (itemsToExport.length) {
+          await Promise.all([
+            this.exportItemsToErpStockRequest(doc, itemsToExport, session),
+            this.exportItemsToErpStockTransfer(doc, itemsToExport, session),
+          ]);
+        }
+        await this.cancelErpStockRows(removedItems);
+
+        const items =
+          await this.vanInventoryTopupItemService.findAllByVanInventoryTopupId(
+            vanInventoryTopupId,
+            session,
+          );
+
+        return {
+          statusCode: HttpStatus.OK,
+          message: 'Top-up request items updated successfully',
+          data: { ...doc.toObject(), items },
+        };
+      });
+    } catch (error) {
+      this.handleDuplicateError(error);
+    }
+  }
+
+  /**
+   * Mark ERP stock request / transfer rows of removed items as cancelled.
+   * Failures are logged only; removed items are no longer read back.
+   */
+  private async cancelErpStockRows(items: any[]) {
+    if (!items.length || !this.oracleRepository.isEnabled()) return;
+
+    for (const item of items) {
+      if (!item.erpStockId) continue;
+      try {
+        await this.oracleRepository.execute(
+          `UPDATE VAN_STOCK_REQUEST
+             SET CH_CANCEL = 'Y', DT_MOD_DATE = :modifiedDate
+           WHERE VC_STOCK_ID = :stockId`,
+          { stockId: item.erpStockId, modifiedDate: new Date() },
+          { autoCommit: true },
+        );
+        await this.oracleRepository.execute(
+          `UPDATE VAN_STOCK_TRANSFER
+             SET CH_STK_CANCEL = 'Y', DT_MOD_DATE = :modifiedDate
+           WHERE VC_STOCK_ID = :stockId`,
+          { stockId: item.erpStockId, modifiedDate: new Date() },
+          { autoCommit: true },
+        );
+      } catch (error) {
+        this.logger.warn(
+          `Failed to cancel ERP stock rows for ${item.erpStockId}: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+      }
+    }
+  }
+
   private async exportItemsToErpStockRequest(
     topup: any,
     items: any[],
@@ -276,6 +581,11 @@ export class VanInventoryTopupService extends MongoRepository<VanInventoryTopup>
           `MERGE INTO VAN_STOCK_REQUEST target
            USING (SELECT :stockId AS VC_STOCK_ID FROM DUAL) source
            ON (target.VC_STOCK_ID = source.VC_STOCK_ID)
+           WHEN MATCHED THEN UPDATE SET
+             target.NU_QTY = :qty,
+             target.VC_UNIT = :unit,
+             target.DT_MOD_DATE = :modifiedDate,
+             target.CH_CANCEL = 'N'
            WHEN NOT MATCHED THEN INSERT (
              VC_REQ_NO, VC_ITEM_CODE, VC_WH_CODE, VC_UNIT, DT_REQ_DATE,
              NU_QTY, VC_STOCK_ID, DT_DOC_DATE, CH_INT_UPD, DT_MOD_DATE,
@@ -361,6 +671,11 @@ export class VanInventoryTopupService extends MongoRepository<VanInventoryTopup>
            FROM DUAL
          ) source
          ON (target.VC_STOCK_ID = source.VC_STOCK_ID)
+         WHEN MATCHED THEN UPDATE SET
+           target.NU_QTY_CASES = :caseQty,
+           target.NU_QTY_PCS = :pieceQty,
+           target.DT_MOD_DATE = :modifiedDate,
+           target.CH_STK_CANCEL = :stockCancel
          WHEN NOT MATCHED THEN
          INSERT (
            VC_TRANS_NO,
@@ -460,6 +775,7 @@ export class VanInventoryTopupService extends MongoRepository<VanInventoryTopup>
 
   async syncTopupRequestsToERP() {
     const items = await this.vanInventoryTopupItemService.findLean({
+      isDeleted: { $ne: true },
       erpRequestSyncStatus: {
         $in: [
           VanInventoryTopupErpSyncStatus.PENDING,

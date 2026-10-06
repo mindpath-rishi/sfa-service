@@ -1,6 +1,7 @@
 import {
   Injectable,
   NotFoundException,
+  BadRequestException,
   ConflictException,
   HttpStatus,
 } from '@nestjs/common';
@@ -16,6 +17,7 @@ import {
 
 import { ROUTE } from './route.constants';
 import { CreateRouteDto, RouteCustomerDto } from './dto/create-route.dto';
+import { BulkUploadRouteDto } from './dto/bulk-upload-route.dto';
 import { UpdateRouteDto } from './dto/update-route.dto';
 import { RouteCustomerQueryDto, RouteQueryDto } from './dto/route-query.dto';
 import { IdGenerator } from 'src/shared/utils/id-generator.utils';
@@ -128,6 +130,43 @@ export class RouteService extends MongoRepository<Route> {
       .replace(/\\/g, '\\\\')
       .replace(/\(/g, '\\(')
       .replace(/\)/g, '\\)');
+  }
+
+  /**
+   * Outlets mapped to a route must belong to the route's province.
+   */
+  private async validateCustomerProvinces(
+    customers: RouteCustomerDto[] | undefined,
+    provinceId: string | undefined,
+    session?: ClientSession,
+  ) {
+    const customerIds = [
+      ...new Set((customers ?? []).map((customer) => customer.customerId)),
+    ].filter(Boolean);
+    if (!customerIds.length) return;
+
+    if (!provinceId) {
+      throw new BadRequestException(
+        'Select a province before mapping outlets to the route',
+      );
+    }
+
+    const outlets = await this.customerService.find(
+      { customerId: { $in: customerIds } } as any,
+      { session },
+    );
+    const provinceByCustomerId = new Map(
+      outlets.map((outlet: any) => [outlet.customerId, outlet.provinceId]),
+    );
+    const invalidCustomerIds = customerIds.filter(
+      (customerId) => provinceByCustomerId.get(customerId) !== provinceId,
+    );
+
+    if (invalidCustomerIds.length) {
+      throw new BadRequestException(
+        `Outlets do not belong to the route province: ${invalidCustomerIds.join(', ')}`,
+      );
+    }
   }
 
   private async syncRouteCustomers(
@@ -365,6 +404,11 @@ export class RouteService extends MongoRepository<Route> {
           );
         }
         routePayload.outletCount = associatedCustomers.length;
+        await this.validateCustomerProvinces(
+          associatedCustomers,
+          routePayload.provinceId,
+          session,
+        );
 
         const filter: FilterQuery<Route> = { name: routePayload.name };
 
@@ -423,6 +467,77 @@ export class RouteService extends MongoRepository<Route> {
     } catch (error) {
       this.handleDuplicateError(error);
     }
+  }
+
+  /**
+   * Bulk create / update routes.
+   * Each route is processed on its own so one bad row does not
+   * block the rest; a route is matched by its (normalized) name.
+   */
+  async bulkUpload(dto: BulkUploadRouteDto) {
+    const results: Array<{
+      row: number;
+      name: string;
+      action: 'CREATED' | 'UPDATED' | 'FAILED';
+      routeId?: string;
+      outletCount: number;
+      error?: string;
+    }> = [];
+
+    for (const [index, route] of dto.routes.entries()) {
+      const name = TextNormalizer.normalize(route.name, NormalizeType.TITLE);
+      const outletCount = route.associatedCustomers?.length ?? 0;
+
+      try {
+        const existing = await this.findOne({ name }, { lean: true });
+        if (existing) {
+          await this.update(existing.routeId, route);
+          results.push({
+            row: index + 1,
+            name,
+            action: 'UPDATED',
+            routeId: existing.routeId,
+            outletCount,
+          });
+          continue;
+        }
+
+        const created: any = await this.create(route);
+        results.push({
+          row: index + 1,
+          name,
+          action: 'CREATED',
+          routeId: created?.data?.routeId,
+          outletCount,
+        });
+      } catch (error) {
+        const response: any = (error as any)?.getResponse?.();
+        const errorMessage = Array.isArray(response?.message)
+          ? response.message.join(', ')
+          : response?.message ||
+            (error instanceof Error ? error.message : String(error));
+        results.push({
+          row: index + 1,
+          name,
+          action: 'FAILED',
+          outletCount,
+          error: errorMessage,
+        });
+      }
+    }
+
+    const summary = {
+      total: results.length,
+      created: results.filter((result) => result.action === 'CREATED').length,
+      updated: results.filter((result) => result.action === 'UPDATED').length,
+      failed: results.filter((result) => result.action === 'FAILED').length,
+    };
+
+    return {
+      statusCode: HttpStatus.OK,
+      message: `Bulk route upload completed: ${summary.created} created, ${summary.updated} updated, ${summary.failed} failed`,
+      data: { summary, results },
+    };
   }
 
   async findAll(query: RouteQueryDto) {
@@ -2465,6 +2580,14 @@ export class RouteService extends MongoRepository<Route> {
 
         const existing = await this.findOne({ routeId }, { session });
         if (!existing) throw new NotFoundException(ROUTE.NOT_FOUND);
+
+        if (associatedCustomers) {
+          await this.validateCustomerProvinces(
+            associatedCustomers as RouteCustomerDto[],
+            dto.provinceId !== undefined ? dto.provinceId : existing.provinceId,
+            session,
+          );
+        }
 
         const doc = await this.updateOne({ routeId }, routeDto, {
           session,

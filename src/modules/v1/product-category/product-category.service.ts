@@ -49,7 +49,11 @@ export class ProductCategoryService extends MongoRepository<ProductCategory> imp
   }
 
   async onModuleInit() {
-    const indexes = await this.model.collection.indexes();
+    // On a fresh database the collection does not exist yet (NamespaceNotFound)
+    const indexes = await this.model.collection.indexes().catch((error) => {
+      if (error?.code === 26) return [];
+      throw error;
+    });
     const obsoleteNameIndex = indexes.find(
       (index) => index.unique && Object.keys(index.key).length === 1 && index.key.name === 1,
     );

@@ -65,10 +65,14 @@ export class CreateVanDto {
   @IsString()
   name!: string;
 
-  @ApiProperty({ example: 'EID-DRIVER-001' })
+  @ApiProperty({
+    example: 'EID-DRIVER-001',
+    required: false,
+    description: 'Optional supporting staff driver',
+  })
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  driverEmployeeId!: string;
+  driverEmployeeId?: string;
 
   /**
    * Van Number
@@ -79,6 +83,14 @@ export class CreateVanDto {
   @ApiProperty({ example: 'KA01AB1234' })
   @IsString()
   vanNumber!: string;
+
+  @ApiProperty({
+    example: 'PROV-001',
+    description: 'Business identifier for province',
+  })
+  @IsString()
+  @IsNotEmpty()
+  provinceId!: string;
 
   @ApiProperty({
     type: [String],

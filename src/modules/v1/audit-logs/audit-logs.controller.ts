@@ -22,12 +22,16 @@ import {
 } from 'src/shared/constants/api.constants';
 import { AUDIT_LOGS } from './audit-logs.constants';
 import { AuditLogsQueryDto } from './dto/audit-logs-query.dto';
+import { Permissions } from 'src/core/decorators/permission.decorator';
+import { BackOfficeOnly } from 'src/core/decorators/back-office-only.decorator';
+import { AUDITED_MODULES } from 'src/core/database/mongo/plugins/audit-registry';
 
 /**
  * Audit log endpoints.
  * Provides read-only access to system audit trails.
  */
 @ApiTags('Audit Logs')
+@BackOfficeOnly()
 @FeatureFlag(API_MODULE_ENABLE_KEYS.AUDIT_LOGS)
 @Controller({
   path: API_MODULE.AUDIT_LOGS,
@@ -41,7 +45,20 @@ export class AuditLogsController {
    * Supports filtering, search, date range, and pagination.
    * ====================================================== */
 
+  @Get('modules')
+  @Permissions('AUDIT_LOG_VIEW')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'List audited modules (entity key and label)' })
+  modules() {
+    return {
+      statusCode: HttpStatus.OK,
+      message: AUDIT_LOGS.FETCH,
+      data: AUDITED_MODULES.map(({ entity, label }) => ({ entity, label })),
+    };
+  }
+
   @Get()
+  @Permissions('AUDIT_LOG_VIEW')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Get audit logs' })
   @ApiSuccessResponse(
@@ -66,6 +83,7 @@ export class AuditLogsController {
    * ====================================================== */
 
   @Get(':id')
+  @Permissions('AUDIT_LOG_VIEW')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Get audit log by id' })
   @ApiParam({ name: 'id', description: 'Audit log document ID' })
