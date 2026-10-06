@@ -124,8 +124,14 @@ export abstract class MongoRepository<T> {
 
     const query = this.applySoftDelete(filter, options);
 
+    const findQuery = this.model
+      .find(query)
+      .sort(options.sort)
+      .skip(skip)
+      .limit(limit);
+
     const [items, total] = await Promise.all([
-      this.model.find(query).sort(options.sort).skip(skip).limit(limit).exec(),
+      (options.lean ? findQuery.lean() : findQuery).exec() as Promise<Doc<T>[]>,
       this.model.countDocuments(query),
     ]);
 
