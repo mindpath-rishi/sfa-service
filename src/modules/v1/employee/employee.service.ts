@@ -359,7 +359,7 @@ export class EmployeeService extends MongoRepository<Employee> {
 
   /**
    * Use the given login ID after a duplicate check, or generate one
-   * from the employee name (ravi.kumar, ravi.kumar1, ...).
+   * from the employee name (ravi_kumar, ravi_kumar1, ...).
    */
   private async resolveLoginId(
     payload: CreateEmployeeDto,

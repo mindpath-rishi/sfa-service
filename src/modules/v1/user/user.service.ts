@@ -163,7 +163,7 @@ export class UserService extends MongoRepository<User> {
 
   /**
    * Build a unique login ID from the user's name:
-   * "Ravi Kumar" -> "ravi.kumar", then "ravi.kumar1", "ravi.kumar2", ...
+   * "Ravi Kumar" -> "ravi_kumar", then "ravi_kumar1", "ravi_kumar2", ...
    */
   async generateLoginId(name: string, profileId?: string, session?: any) {
     const base =
@@ -171,9 +171,9 @@ export class UserService extends MongoRepository<User> {
         .normalize('NFKD')
         .replace(/[\u0300-\u036f]/g, '')
         .toLowerCase()
-        .replace(/[^a-z0-9]+/g, '.')
-        .replace(/^\.+|\.+$/g, '')
-        .slice(0, 40) || 'user';
+        .replace(/[^a-z0-9]+/g, '_')
+        .slice(0, 40)
+        .replace(/^_+|_+$/g, '') || 'user';
 
     for (let suffix = 0; suffix < 1000; suffix++) {
       const candidate = suffix ? `${base}${suffix}` : base;
