@@ -407,6 +407,8 @@ export class ShopVisitService extends MongoRepository<ShopVisit> {
             orderValue: { $sum: '$totalValue' },
             orderCases: { $sum: '$totalCases' },
             orderWeight: { $sum: '$totalWeight' },
+            // When the visit's first order was placed
+            orderPlacedAt: { $min: { $ifNull: ['$createdAt', '$date'] } },
             saleIds: { $push: '$saleId' },
           },
         },
@@ -465,6 +467,7 @@ export class ShopVisitService extends MongoRepository<ShopVisit> {
         orderValue: summaryByVisitId.get(visit.visitId)?.orderValue || 0,
         orderCases: summaryByVisitId.get(visit.visitId)?.orderCases || 0,
         orderWeight: summaryByVisitId.get(visit.visitId)?.orderWeight || 0,
+        orderPlacedAt: summaryByVisitId.get(visit.visitId)?.orderPlacedAt,
         paymentCount: paymentCountByVisitId.get(visit.visitId) || 0,
       }));
     }

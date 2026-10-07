@@ -30,6 +30,24 @@ import {
 
 export type SchemeDocument = HydratedDocument<Scheme>;
 
+/** COMBO_FREE_QTY: one product of the combo and the quantity required */
+@Schema({ _id: false })
+export class SchemeComboItem {
+  @Prop({ required: true, type: String, ref: 'Product' })
+  productId!: string;
+
+  @Prop({ trim: true, type: String })
+  productName?: string;
+
+  @Prop({ required: true, type: Number, min: 0 })
+  qty!: number;
+
+  @Prop({ type: String, enum: SchemeFreeUnit, default: SchemeFreeUnit.CASE })
+  unit?: SchemeFreeUnit;
+}
+
+const SchemeComboItemSchema = SchemaFactory.createForClass(SchemeComboItem);
+
 @Schema({ collection: 'scheme_master', timestamps: true })
 export class Scheme {
   /* ======================================================
@@ -123,7 +141,14 @@ export class Scheme {
   @Prop({ type: Number, min: 0, max: 100 })
   freePercent?: number;
 
-  /** GROUP_FREE_QTY: unit of `freeQty` */
+  /**
+   * COMBO_FREE_QTY: every product and quantity that must be bought together.
+   * `productIds` mirrors these product ids so the scheme reaches each line.
+   */
+  @Prop({ type: [SchemeComboItemSchema], default: undefined })
+  comboItems?: SchemeComboItem[];
+
+  /** GROUP_FREE_QTY / COMBO_FREE_QTY: unit of `freeQty` */
   @Prop({ type: String, enum: SchemeFreeUnit, default: SchemeFreeUnit.CASE })
   freeUnit?: SchemeFreeUnit;
 

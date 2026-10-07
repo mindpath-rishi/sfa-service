@@ -21,7 +21,11 @@ import {
 } from 'src/core/database/mongo/schema/product.schema';
 import { Model } from 'mongoose';
 
-import { SchemeStatus, SchemeType } from 'src/shared/enums/scheme.enums';
+import {
+  SchemeFreeUnit,
+  SchemeStatus,
+  SchemeType,
+} from 'src/shared/enums/scheme.enums';
 import { IdGenerator } from 'src/shared/utils/id-generator.utils';
 
 import { SCHEME } from './scheme.constants';
@@ -48,6 +52,9 @@ export class SchemeService extends MongoRepository<Scheme> {
     scheme: Partial<CreateSchemeDto>,
   ): Promise<Partial<CreateSchemeDto>> {
     const { schemeType } = scheme;
+    if (schemeType === SchemeType.COMBO_FREE_QTY) {
+      return this.prepareComboScheme(scheme);
+    }
     if (
       schemeType !== SchemeType.GROUP_FREE_QTY &&
       schemeType !== SchemeType.GROUP_FREE_PERCENT
@@ -57,8 +64,8 @@ export class SchemeService extends MongoRepository<Scheme> {
 
     const hasScope = Boolean(
       scheme.categoryIds?.length ||
-        scheme.subCategoryIds?.length ||
-        scheme.productIds?.length,
+      scheme.subCategoryIds?.length ||
+      scheme.productIds?.length,
     );
     if (!hasScope) throw new BadRequestException(SCHEME.GROUP_SCOPE_REQUIRED);
     if (!(Number(scheme.groupMinCases) > 0)) {
@@ -88,6 +95,63 @@ export class SchemeService extends MongoRepository<Scheme> {
   }
 
   /**
+   * COMBO_FREE_QTY: validate the combo products and free product, fill product
+   * names, and scope the scheme to exactly the combo products so it is attached
+   * to each of their cart lines.
+   */
+  private async prepareComboScheme(
+    scheme: Partial<CreateSchemeDto>,
+  ): Promise<Partial<CreateSchemeDto>> {
+    const comboItems = (scheme.comboItems ?? []).map((item) => ({
+      productId: String(item.productId ?? '').trim(),
+      productName: item.productName,
+      qty: Number(item.qty) || 0,
+      unit:
+        item.unit === SchemeFreeUnit.PIECE
+          ? SchemeFreeUnit.PIECE
+          : SchemeFreeUnit.CASE,
+    }));
+    if (
+      !comboItems.length ||
+      comboItems.some((item) => !item.productId || item.qty <= 0)
+    ) {
+      throw new BadRequestException(SCHEME.COMBO_ITEMS_REQUIRED);
+    }
+    const comboProductIds = comboItems.map((item) => item.productId);
+    if (new Set(comboProductIds).size !== comboProductIds.length) {
+      throw new BadRequestException(SCHEME.COMBO_DUPLICATE_PRODUCT);
+    }
+    if (!(Number(scheme.freeQty) > 0) || !scheme.freeProductId) {
+      throw new BadRequestException(SCHEME.COMBO_FREE_QTY_REQUIRED);
+    }
+
+    const productIds = [...new Set([...comboProductIds, scheme.freeProductId])];
+    const products = await this.productModel
+      .find({ productId: { $in: productIds }, isDeleted: { $ne: true } })
+      .select('productId name')
+      .lean();
+    const nameById = new Map(
+      products.map((product) => [product.productId, product.name]),
+    );
+    const missing = productIds.filter((productId) => !nameById.has(productId));
+    if (missing.length) {
+      throw new BadRequestException(`Product not found: ${missing.join(', ')}`);
+    }
+
+    return {
+      comboItems: comboItems.map((item) => ({
+        ...item,
+        productName: item.productName || nameById.get(item.productId),
+      })),
+      productIds: comboProductIds,
+      categoryIds: [],
+      subCategoryIds: [],
+      freeProductName:
+        scheme.freeProductName || nameById.get(scheme.freeProductId),
+    };
+  }
+
+  /**
    * A scheme must match every geography dimension it defines
    * (province AND route AND van); within a dimension any listed value matches.
    * An empty dimension applies everywhere.
@@ -97,7 +161,10 @@ export class SchemeService extends MongoRepository<Scheme> {
     routeId?: string;
     vanId?: string;
   }): FilterQuery<Scheme>[] {
-    const dimension = (field: 'provinceIds' | 'routeIds' | 'vanIds', value?: string) => ({
+    const dimension = (
+      field: 'provinceIds' | 'routeIds' | 'vanIds',
+      value?: string,
+    ) => ({
       $or: [
         { [field]: { $exists: false } },
         { [field]: { $size: 0 } },

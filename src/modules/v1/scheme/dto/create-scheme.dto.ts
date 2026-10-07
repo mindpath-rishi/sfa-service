@@ -9,6 +9,7 @@ import {
   IsString,
   Max,
   Min,
+  ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
@@ -17,6 +18,33 @@ import {
   SchemeStatus,
   SchemeType,
 } from 'src/shared/enums/scheme.enums';
+
+/** COMBO_FREE_QTY: a product of the combo and its required quantity */
+export class SchemeComboItemDto {
+  @ApiProperty({ type: String })
+  @IsNotEmpty()
+  @IsString()
+  productId!: string;
+
+  @ApiPropertyOptional({ type: String })
+  @IsOptional()
+  @IsString()
+  productName?: string;
+
+  @ApiProperty({
+    type: Number,
+    description: 'Quantity of this product required',
+  })
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  qty!: number;
+
+  @ApiPropertyOptional({ enum: SchemeFreeUnit, default: SchemeFreeUnit.CASE })
+  @IsOptional()
+  @IsEnum(SchemeFreeUnit)
+  unit?: SchemeFreeUnit;
+}
 
 /**
  * CreateSchemeDto
@@ -141,7 +169,8 @@ export class CreateSchemeDto {
 
   @ApiPropertyOptional({
     type: Number,
-    description: 'GROUP_FREE_PERCENT: % of each qualifying line quantity given free',
+    description:
+      'GROUP_FREE_PERCENT: % of each qualifying line quantity given free',
   })
   @IsOptional()
   @IsNumber()
@@ -153,6 +182,17 @@ export class CreateSchemeDto {
   @IsOptional()
   @IsEnum(SchemeFreeUnit)
   freeUnit?: SchemeFreeUnit;
+
+  @ApiPropertyOptional({
+    type: [SchemeComboItemDto],
+    description:
+      'COMBO_FREE_QTY: products and quantities that must all be bought (e.g. A x3 + B x1)',
+  })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => SchemeComboItemDto)
+  comboItems?: SchemeComboItemDto[];
 
   /* ======================================================
    * VALIDITY
