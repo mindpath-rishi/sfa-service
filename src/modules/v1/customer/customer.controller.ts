@@ -50,6 +50,7 @@ import { Permissions } from 'src/core/decorators/permission.decorator';
 
 import { CustomerService } from './customer.service';
 import { CreateCustomerDto } from './dto/create-customer.dto';
+import { BulkUploadCustomerDto } from './dto/bulk-upload-customer.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
 import { CustomerQueryDto } from './dto/customer-query.dto';
 import { CUSTOMER } from './customer.constants';
@@ -82,6 +83,20 @@ export class CustomerController {
   )
   async create(@Body() dto: CreateCustomerDto) {
     return this.service.create(dto);
+  }
+
+  /**
+   * Bulk Upload Customers
+   * ---------------------
+   * Create new outlets or update existing ones (by customerId).
+   */
+  @Permissions('CUSTOMER_CREATE')
+  @Post('bulk-upload')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Bulk create or update outlets' })
+  @ApiBody({ type: BulkUploadCustomerDto })
+  async bulkUpload(@Body() dto: BulkUploadCustomerDto) {
+    return this.service.bulkUpload(dto);
   }
 
   /**

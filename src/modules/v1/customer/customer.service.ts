@@ -17,6 +17,7 @@ import {
 import { CUSTOMER } from './customer.constants';
 import { CreateCustomerDto } from './dto/create-customer.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
+import { BulkUploadCustomerDto } from './dto/bulk-upload-customer.dto';
 import { CustomerQueryDto } from './dto/customer-query.dto';
 import { IdGenerator } from 'src/shared/utils/id-generator.utils';
 import { RouteCustomerMappingService } from '../route-customer-mapping/route-customer-mapping.service';
@@ -507,6 +508,72 @@ export class CustomerService extends MongoRepository<Customer> {
     } catch (error) {
       this.handleDuplicateError(error);
     }
+  }
+
+  /**
+   * Bulk create / update outlets.
+   * Each row is processed on its own so one bad row does not
+   * block the rest; a row with customerId updates that outlet.
+   */
+  async bulkUpload(dto: BulkUploadCustomerDto) {
+    const results: Array<{
+      row: number;
+      name: string;
+      action: 'CREATED' | 'UPDATED' | 'FAILED';
+      customerId?: string;
+      error?: string;
+    }> = [];
+
+    for (const [index, item] of dto.customers.entries()) {
+      const { customerId, ...payload } = item;
+
+      try {
+        if (customerId) {
+          await this.update(customerId, payload);
+          results.push({
+            row: index + 1,
+            name: payload.name,
+            action: 'UPDATED',
+            customerId,
+          });
+          continue;
+        }
+
+        const created = await this.create(payload);
+        results.push({
+          row: index + 1,
+          name: payload.name,
+          action: 'CREATED',
+          customerId: created?.data?.customerId,
+        });
+      } catch (error) {
+        const response: any = (error as any)?.getResponse?.();
+        const errorMessage = Array.isArray(response?.message)
+          ? response.message.join(', ')
+          : response?.message ||
+            (error instanceof Error ? error.message : String(error));
+        results.push({
+          row: index + 1,
+          name: payload.name,
+          action: 'FAILED',
+          customerId,
+          error: errorMessage,
+        });
+      }
+    }
+
+    const summary = {
+      total: results.length,
+      created: results.filter((result) => result.action === 'CREATED').length,
+      updated: results.filter((result) => result.action === 'UPDATED').length,
+      failed: results.filter((result) => result.action === 'FAILED').length,
+    };
+
+    return {
+      statusCode: HttpStatus.OK,
+      message: `Bulk outlet upload completed: ${summary.created} created, ${summary.updated} updated, ${summary.failed} failed`,
+      data: { summary, results },
+    };
   }
 
   private async notifyReportingManager(customerId: string, creatorId: string) {
