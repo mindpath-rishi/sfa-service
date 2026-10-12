@@ -22,7 +22,7 @@ import {
 import { Type } from 'class-transformer';
 import { CreateCustomerDto } from './create-customer.dto';
 
-export const CUSTOMER_BULK_UPLOAD_LIMIT = 1000;
+export const CUSTOMER_BULK_UPLOAD_LIMIT = 100000;
 
 export class BulkUploadCustomerItemDto extends CreateCustomerDto {
   @ApiPropertyOptional({
