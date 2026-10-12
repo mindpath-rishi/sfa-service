@@ -1,13 +1,13 @@
 /**
  * Bulk Customer (Outlet) Upload DTO
  * ---------------------------------
- * Purpose : Create or update many outlets in one request
+ * Purpose : Create many outlets in one request
  * Used by : ADMIN PANEL bulk outlet upload
  *
  * Notes:
- * - A row with customerId updates that outlet, otherwise a new
- *   outlet is created through the normal create flow
- *   (verification pending + outlet verification record)
+ * - Create only: every row goes through the normal create flow
+ *   (verification pending + outlet verification record).
+ *   customerId is not accepted, so existing outlets cannot be updated.
  */
 
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -25,14 +25,6 @@ import { CreateCustomerDto } from './create-customer.dto';
 export const CUSTOMER_BULK_UPLOAD_LIMIT = 100000;
 
 export class BulkUploadCustomerItemDto extends CreateCustomerDto {
-  @ApiPropertyOptional({
-    type: String,
-    description: 'Existing outlet ID; when set the outlet is updated',
-  })
-  @IsOptional()
-  @IsString()
-  customerId?: string;
-
   @ApiPropertyOptional({ type: String })
   @Transform(({ value }) =>
     value === null || String(value).trim() === '' ? undefined : value,

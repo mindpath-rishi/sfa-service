@@ -88,12 +88,12 @@ export class CustomerController {
   /**
    * Bulk Upload Customers
    * ---------------------
-   * Create new outlets or update existing ones (by customerId).
+   * Create new outlets only; existing outlets are never updated.
    */
   @Permissions('CUSTOMER_CREATE')
   @Post('bulk-upload')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Bulk create or update outlets' })
+  @ApiOperation({ summary: 'Bulk create outlets' })
   @ApiBody({ type: BulkUploadCustomerDto })
   async bulkUpload(@Body() dto: BulkUploadCustomerDto) {
     return this.service.bulkUpload(dto);

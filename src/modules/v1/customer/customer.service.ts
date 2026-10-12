@@ -510,34 +510,21 @@ export class CustomerService extends MongoRepository<Customer> {
   }
 
   /**
-   * Bulk create / update outlets.
+   * Bulk create outlets (create only, never updates).
    * Each row is processed on its own so one bad row does not
-   * block the rest; a row with customerId updates that outlet.
+   * block the rest.
    */
   async bulkUpload(dto: BulkUploadCustomerDto) {
     const results: Array<{
       row: number;
       name: string;
-      action: 'CREATED' | 'UPDATED' | 'FAILED';
+      action: 'CREATED' | 'FAILED';
       customerId?: string;
       error?: string;
     }> = [];
 
-    for (const [index, item] of dto.customers.entries()) {
-      const { customerId, ...payload } = item;
-
+    for (const [index, payload] of dto.customers.entries()) {
       try {
-        if (customerId) {
-          await this.update(customerId, payload);
-          results.push({
-            row: index + 1,
-            name: payload.name,
-            action: 'UPDATED',
-            customerId,
-          });
-          continue;
-        }
-
         const created = await this.create(payload);
         results.push({
           row: index + 1,
@@ -555,7 +542,6 @@ export class CustomerService extends MongoRepository<Customer> {
           row: index + 1,
           name: payload.name,
           action: 'FAILED',
-          customerId,
           error: errorMessage,
         });
       }
@@ -564,13 +550,12 @@ export class CustomerService extends MongoRepository<Customer> {
     const summary = {
       total: results.length,
       created: results.filter((result) => result.action === 'CREATED').length,
-      updated: results.filter((result) => result.action === 'UPDATED').length,
       failed: results.filter((result) => result.action === 'FAILED').length,
     };
 
     return {
       statusCode: HttpStatus.OK,
-      message: `Bulk outlet upload completed: ${summary.created} created, ${summary.updated} updated, ${summary.failed} failed`,
+      message: `Bulk outlet upload completed: ${summary.created} created, ${summary.failed} failed`,
       data: { summary, results },
     };
   }
