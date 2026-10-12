@@ -19,7 +19,7 @@ import {
   IsString,
   ValidateNested,
 } from 'class-validator';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import { CreateCustomerDto } from './create-customer.dto';
 
 export const CUSTOMER_BULK_UPLOAD_LIMIT = 100000;
@@ -32,6 +32,14 @@ export class BulkUploadCustomerItemDto extends CreateCustomerDto {
   @IsOptional()
   @IsString()
   customerId?: string;
+
+  @ApiPropertyOptional({ type: String })
+  @Transform(({ value }) =>
+    value === null || String(value).trim() === '' ? undefined : value,
+  )
+  @IsOptional()
+  @IsString()
+  declare phoneNumber: string;
 }
 
 export class BulkUploadCustomerDto {

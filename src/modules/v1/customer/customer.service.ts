@@ -418,14 +418,13 @@ export class CustomerService extends MongoRepository<Customer> {
     try {
       const creatorId = String(RequestContextStore.getStore()?.userId ?? '');
       const result = await this.withTransaction(async (session) => {
-        const filter: FilterQuery<Customer> = {
-          phoneNumber: payload.phoneNumber,
-        };
-
-        const existing = await this.findOne(filter, {
-          session,
-          includeDeleted: true,
-        });
+        // Outlets without a phone number (bulk upload) skip the duplicate check
+        const existing = payload.phoneNumber
+          ? await this.findOne(
+              { phoneNumber: payload.phoneNumber } as FilterQuery<Customer>,
+              { session, includeDeleted: true },
+            )
+          : null;
 
         let customerId: string;
 

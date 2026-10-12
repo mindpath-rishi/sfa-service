@@ -106,12 +106,11 @@ export class Customer {
   ownerName!: string;
 
   @Prop({
-    required: true,
     trim: true,
     index: true,
     type: String,
   })
-  phoneNumber!: string;
+  phoneNumber?: string;
 
   @Prop({ required: true, trim: true, type: String })
   name!: string;
