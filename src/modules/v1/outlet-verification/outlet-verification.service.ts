@@ -65,6 +65,7 @@ export class OutletVerificationService extends MongoRepository<OutletVerificatio
     customerId: string,
     requestedByEmployeeId: string,
     session?: ClientSession,
+    autoVerify = false,
   ) {
     if (!requestedByEmployeeId) {
       throw new BadRequestException('Requesting employee is required');
@@ -89,7 +90,15 @@ export class OutletVerificationService extends MongoRepository<OutletVerificatio
         requestedByEmployeeId,
         requestedByEmployeeName: employee?.name,
         assignedReviewerId: employee?.hierarchyPath?.at(-1),
-        status: OutletVerificationStatus.PENDING,
+        status: autoVerify
+          ? OutletVerificationStatus.APPROVED
+          : OutletVerificationStatus.PENDING,
+        ...(autoVerify
+          ? {
+              reviewedByEmployeeId: requestedByEmployeeId,
+              reviewedAt: new Date(),
+            }
+          : {}),
       },
       { session },
     );

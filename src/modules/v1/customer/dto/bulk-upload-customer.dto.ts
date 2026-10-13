@@ -5,8 +5,8 @@
  * Used by : ADMIN PANEL bulk outlet upload
  *
  * Notes:
- * - Create only: every row goes through the normal create flow
- *   (verification pending + outlet verification record).
+ * - Create only: rows default to verification pending; rows with ACTIVE
+ *   status are automatically approved by the logged-in uploader.
  *   An optional customerId can be supplied; otherwise the system generates one.
  */
 
@@ -28,7 +28,10 @@ export class BulkUploadCustomerItemDto extends CreateCustomerDto {
   @ApiPropertyOptional({ type: String, description: 'Outlet ID; generated when omitted' })
   @Transform(({ value }) => {
     if (value === null || value === undefined) return undefined;
-    const normalized = String(value).trim().replace(/^FO_TKON_/, '');
+    const normalized = String(value)
+      .trim()
+      .replace(/^FO_TOKEN_/, '')
+      .replace(/^FO_TKON_/, '');
     return normalized || undefined;
   })
   @IsOptional()

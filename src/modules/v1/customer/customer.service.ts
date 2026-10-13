@@ -414,17 +414,40 @@ export class CustomerService extends MongoRepository<Customer> {
   //   }
   // }
 
-  async create(payload: CreateCustomerDto) {
+  async create(
+    payload: CreateCustomerDto & { customerId?: string },
+    allowActiveBulkStatus = false,
+  ) {
     try {
       const creatorId = String(RequestContextStore.getStore()?.userId ?? '');
+      const customerStatus =
+        allowActiveBulkStatus && payload.status === CustomerStatus.ACTIVE
+          ? CustomerStatus.ACTIVE
+          : CustomerStatus.VERIFICATION_PENDING;
       const result = await this.withTransaction(async (session) => {
         // Outlets without a phone number (bulk upload) skip the duplicate check
-        const existing = payload.phoneNumber
-          ? await this.findOne(
-              { phoneNumber: payload.phoneNumber } as FilterQuery<Customer>,
-              { session, includeDeleted: true },
-            )
-          : null;
+        const [existingByPhone, existingById] = await Promise.all([
+          payload.phoneNumber
+            ? this.findOne(
+                { phoneNumber: payload.phoneNumber } as FilterQuery<Customer>,
+                { session, includeDeleted: true },
+              )
+            : null,
+          allowActiveBulkStatus && payload.customerId
+            ? this.findOne(
+                { customerId: payload.customerId } as FilterQuery<Customer>,
+                { session, includeDeleted: true },
+              )
+            : null,
+        ]);
+        if (
+          existingByPhone &&
+          existingById &&
+          String(existingByPhone._id) !== String(existingById._id)
+        ) {
+          throw new ConflictException(CUSTOMER.DUPLICATE);
+        }
+        const existing = existingById ?? existingByPhone;
 
         let customerId: string;
 
@@ -439,7 +462,7 @@ export class CustomerService extends MongoRepository<Customer> {
             existing._id.toString(),
             {
               ...payload,
-              status: CustomerStatus.VERIFICATION_PENDING,
+              status: customerStatus,
               createdByEmployeeId: creatorId || undefined,
               isDeleted: false,
             },
@@ -451,9 +474,11 @@ export class CustomerService extends MongoRepository<Customer> {
           // ✅ CASE 3: Create new customer
           const doc = await this.save(
             {
-              customerId: IdGenerator.generateRandomNumber(12),
               ...payload,
-              status: CustomerStatus.VERIFICATION_PENDING,
+              customerId:
+                (allowActiveBulkStatus ? payload.customerId : undefined) ||
+                IdGenerator.generateRandomNumber(12),
+              status: customerStatus,
               createdByEmployeeId: creatorId || undefined,
             },
             { session },
@@ -466,6 +491,7 @@ export class CustomerService extends MongoRepository<Customer> {
           customerId,
           creatorId,
           session,
+          customerStatus === CustomerStatus.ACTIVE,
         );
 
         // =====================================================
@@ -501,7 +527,7 @@ export class CustomerService extends MongoRepository<Customer> {
           data: { customerId },
         };
       });
-      if (creatorId)
+      if (creatorId && customerStatus === CustomerStatus.VERIFICATION_PENDING)
         await this.notifyReportingManager(result.data.customerId, creatorId);
       return result;
     } catch (error) {
@@ -525,7 +551,7 @@ export class CustomerService extends MongoRepository<Customer> {
 
     for (const [index, payload] of dto.customers.entries()) {
       try {
-        const created = await this.create(payload);
+        const created = await this.create(payload, true);
         results.push({
           row: index + 1,
           name: payload.name,

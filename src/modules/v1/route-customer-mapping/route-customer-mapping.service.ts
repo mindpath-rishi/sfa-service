@@ -53,7 +53,7 @@ export class RouteCustomerMappingService extends MongoRepository<RouteCustomerMa
             mappingId: IdGenerator.generate('ROUT', 8),
             ...payload,
             status: RouteCustomerMappingStatus.ACTIVE,
-            effectiveFrom: new Date(),
+            effectiveFrom: payload.effectiveFrom ?? new Date(),
           },
           { session },
         );

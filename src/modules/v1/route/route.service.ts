@@ -173,6 +173,7 @@ export class RouteService extends MongoRepository<Route> {
     routeId: string,
     nextCustomers: RouteCustomerDto[] = [],
     session?: ClientSession,
+    allowOutletReassignment = false,
   ) {
     const nextByCustomerId = new Map(
       nextCustomers
@@ -191,14 +192,31 @@ export class RouteService extends MongoRepository<Route> {
       { session },
     );
 
-    const conflictingMapping = activeMappings.find(
+    const conflictingMappings = activeMappings.filter(
       (mapping: any) =>
         nextByCustomerId.has(mapping.customerId) && mapping.routeId !== routeId,
     );
 
-    if (conflictingMapping) {
+    if (conflictingMappings.length && !allowOutletReassignment) {
       throw new ConflictException(
-        `Outlet ${conflictingMapping.customerId} is already mapped to route ${conflictingMapping.routeId}`,
+        `Outlet ${conflictingMappings[0].customerId} is already mapped to route ${conflictingMappings[0].routeId}`,
+      );
+    }
+
+    if (allowOutletReassignment) {
+      await Promise.all(
+        conflictingMappings.map((mapping: any) =>
+          this.routeCustomerMappingService.updateOne(
+            { mappingId: mapping.mappingId },
+            {
+              $set: {
+                status: RouteCustomerMappingStatus.INACTIVE,
+                effectiveTo: new Date(),
+              },
+            },
+            { session },
+          ),
+        ),
       );
     }
 
@@ -224,8 +242,29 @@ export class RouteService extends MongoRepository<Route> {
           return;
         }
 
+        const now = new Date();
+        const effectiveFrom = new Date(
+          now.getFullYear(),
+          now.getMonth(),
+          now.getDate(),
+        );
+        const effectiveTo = new Date(
+          now.getFullYear(),
+          now.getMonth() + 1,
+          0,
+          23,
+          59,
+          59,
+          999,
+        );
+
         await this.routeCustomerMappingService.create(
-          { routeId, customerId, sequence },
+          {
+            routeId,
+            customerId,
+            sequence,
+            ...(allowOutletReassignment ? { effectiveFrom, effectiveTo } : {}),
+          },
           session,
         );
       }),
@@ -392,7 +431,7 @@ export class RouteService extends MongoRepository<Route> {
     return Buffer.from(pdf);
   }
 
-  async create(payload: CreateRouteDto) {
+  async create(payload: CreateRouteDto, allowOutletReassignment = false) {
     try {
       return await this.withTransaction(async (session) => {
         const { associatedCustomers = [], ...routePayload } = payload;
@@ -435,6 +474,7 @@ export class RouteService extends MongoRepository<Route> {
             existing.routeId,
             associatedCustomers,
             session,
+            allowOutletReassignment,
           );
 
           return {
@@ -455,6 +495,7 @@ export class RouteService extends MongoRepository<Route> {
           doc.routeId,
           associatedCustomers,
           session,
+          allowOutletReassignment,
         );
         const [route] = await this.attachRouteMappings([doc], session);
 
@@ -491,14 +532,17 @@ export class RouteService extends MongoRepository<Route> {
         ...route,
         associatedCustomers: route.associatedCustomers?.map((outlet) => ({
           ...outlet,
-          customerId: outlet.customerId.replace(/^FO_TKON_/, ''),
+          customerId: outlet.customerId
+            .trim()
+            .replace(/^FO_TOKEN_/, '')
+            .replace(/^FO_TKON_/, ''),
         })),
       };
 
       try {
         const existing = await this.findOne({ name }, { lean: true });
         if (existing) {
-          await this.update(existing.routeId, normalizedRoute);
+          await this.update(existing.routeId, normalizedRoute, true);
           results.push({
             row: index + 1,
             name,
@@ -509,7 +553,7 @@ export class RouteService extends MongoRepository<Route> {
           continue;
         }
 
-        const created: any = await this.create(normalizedRoute);
+        const created: any = await this.create(normalizedRoute, true);
         results.push({
           row: index + 1,
           name,
@@ -2570,7 +2614,11 @@ export class RouteService extends MongoRepository<Route> {
     };
   }
 
-  async update(routeId: string, dto: UpdateRouteDto) {
+  async update(
+    routeId: string,
+    dto: UpdateRouteDto,
+    allowOutletReassignment = false,
+  ) {
     try {
       return await this.withTransaction(async (session) => {
         const { associatedCustomers, ...routeDto } = dto;
@@ -2607,6 +2655,7 @@ export class RouteService extends MongoRepository<Route> {
             routeId,
             associatedCustomers as RouteCustomerDto[],
             session,
+            allowOutletReassignment,
           );
         }
         const route = await this.findOne({ routeId }, { session, lean: true });
