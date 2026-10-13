@@ -107,7 +107,7 @@ export class RouteCustomerQueryDto extends PaginationDto {
   @ApiPropertyOptional({
     type: [String],
     description: 'Filter by customer IDs',
-    example: ['CUST-001', 'CUST-002'],
+    example: ['561943761', '561943762'],
   })
   @IsOptional()
   customerIds?: string[];

@@ -431,20 +431,18 @@ export class CustomerService extends MongoRepository<Customer> {
           : undefined;
       const result = await this.withTransaction(async (session) => {
         // Outlets without a phone number (bulk upload) skip the duplicate check
-        const [existingByPhone, existingById] = await Promise.all([
-          payload.phoneNumber
-            ? this.findOne(
-                { phoneNumber: payload.phoneNumber } as FilterQuery<Customer>,
-                { session, includeDeleted: true },
-              )
-            : null,
-          uploadedCustomerId
-            ? this.findOne(
-                { customerId: uploadedCustomerId } as FilterQuery<Customer>,
-                { session, includeDeleted: true },
-              )
-            : null,
-        ]);
+        const existingByPhone = payload.phoneNumber
+          ? await this.findOne(
+              { phoneNumber: payload.phoneNumber } as FilterQuery<Customer>,
+              { session, includeDeleted: true },
+            )
+          : null;
+        const existingById = uploadedCustomerId
+          ? await this.findOne(
+              { customerId: uploadedCustomerId } as FilterQuery<Customer>,
+              { session, includeDeleted: true },
+            )
+          : null;
         if (
           existingByPhone &&
           existingById &&

@@ -70,16 +70,16 @@ export class OutletVerificationService extends MongoRepository<OutletVerificatio
     if (!requestedByEmployeeId) {
       throw new BadRequestException('Requesting employee is required');
     }
-    const [customer, employee, existing] = await Promise.all([
-      this.customerModel.findOne({ customerId, isDeleted: false }).session(session || null),
-      this.employeeModel
-        .findOne({ employeeId: requestedByEmployeeId, isDeleted: false })
-        .session(session || null),
-      this.findOne(
-        { customerId, status: OutletVerificationStatus.PENDING },
-        { session },
-      ),
-    ]);
+    const customer = await this.customerModel
+      .findOne({ customerId, isDeleted: false })
+      .session(session || null);
+    const employee = await this.employeeModel
+      .findOne({ employeeId: requestedByEmployeeId, isDeleted: false })
+      .session(session || null);
+    const existing = await this.findOne(
+      { customerId, status: OutletVerificationStatus.PENDING },
+      { session },
+    );
     if (!customer) throw new NotFoundException('Outlet not found');
     if (existing) throw new ConflictException(OUTLET_VERIFICATION.DUPLICATE);
 

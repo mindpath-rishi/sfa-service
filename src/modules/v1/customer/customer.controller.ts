@@ -77,7 +77,7 @@ export class CustomerController {
   @ApiOperation({ summary: 'Create customer' })
   @ApiBody({ type: CreateCustomerDto })
   @ApiSuccessResponse(
-    { customerId: 'CUST-001' },
+    { customerId: '561943761' },
     CUSTOMER.CREATED,
     HttpStatus.CREATED,
   )

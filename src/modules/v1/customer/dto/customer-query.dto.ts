@@ -95,7 +95,7 @@ export class CustomerQueryDto extends PaginationDto {
     type: [String],
     isArray: true,
     description: 'Filter by multiple customerIds',
-    example: ['CUST-001', 'CUST-002'],
+    example: ['561943761', '561943762'],
   })
   @IsOptional()
   @IsArray()
