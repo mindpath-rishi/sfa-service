@@ -424,11 +424,10 @@ export class CustomerService extends MongoRepository<Customer> {
         ? payload.status ?? CustomerStatus.VERIFICATION_PENDING
         : CustomerStatus.VERIFICATION_PENDING;
       const uploadedCustomerId =
-        allowActiveBulkStatus && payload.customerId
+        payload.customerId
           ? payload.customerId
               .trim()
-              .replace(/^FO_TOKEN_/, '')
-              .replace(/^FO_TKON_/, '') || undefined
+              .replace(/^FO_(?:TOKEN|TKON)_/i, '') || undefined
           : undefined;
       const result = await this.withTransaction(async (session) => {
         // Outlets without a phone number (bulk upload) skip the duplicate check
@@ -558,7 +557,11 @@ export class CustomerService extends MongoRepository<Customer> {
 
     for (const [index, payload] of dto.customers.entries()) {
       try {
-        const created = await this.create(payload, true);
+        const { outletId, ...customerPayload } = payload;
+        const created = await this.create(
+          { ...customerPayload, customerId: outletId ?? payload.customerId },
+          true,
+        );
         results.push({
           row: index + 1,
           name: payload.name,

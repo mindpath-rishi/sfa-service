@@ -28,10 +28,17 @@ export class BulkUploadCustomerItemDto extends CreateCustomerDto {
   @ApiPropertyOptional({ type: String, description: 'Outlet ID; generated when omitted' })
   @Transform(({ value }) => {
     if (value === null || value === undefined) return undefined;
-    const normalized = String(value)
-      .trim()
-      .replace(/^FO_TOKEN_/, '')
-      .replace(/^FO_TKON_/, '');
+    const normalized = String(value).trim().replace(/^FO_(?:TOKEN|TKON)_/i, '');
+    return normalized || undefined;
+  })
+  @IsOptional()
+  @IsString()
+  declare outletId?: string;
+
+  // Accept customerId for older clients; MIS sends outletId.
+  @Transform(({ value }) => {
+    if (value === null || value === undefined) return undefined;
+    const normalized = String(value).trim().replace(/^FO_(?:TOKEN|TKON)_/i, '');
     return normalized || undefined;
   })
   @IsOptional()
