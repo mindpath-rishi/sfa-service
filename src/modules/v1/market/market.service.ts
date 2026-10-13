@@ -33,10 +33,10 @@ export class MarketService extends MongoRepository<Market> {
           payload.name = TextNormalizer.normalize(payload.name, NormalizeType.TITLE);
         }
 
-        const filter: FilterQuery<Market> = {};
-
-        
-        if (payload.name) filter.name = payload.name;
+        const filter: FilterQuery<Market> = {
+          provinceId: payload.provinceId,
+          name: payload.name,
+        };
 
         const existing = await this.findOne(filter, {
           session,
@@ -129,6 +129,21 @@ export class MarketService extends MongoRepository<Market> {
       return await this.withTransaction(async (session) => {
         if (dto.name) {
           dto.name = TextNormalizer.normalize(dto.name, NormalizeType.TITLE);
+        }
+
+        const current = await this.findOne({ marketId }, { session, includeDeleted: true });
+        if (!current) throw new NotFoundException(MARKET.NOT_FOUND);
+
+        if (dto.name || dto.provinceId) {
+          const duplicate = await this.findOne(
+            {
+              name: dto.name ?? current.name,
+              provinceId: dto.provinceId ?? current.provinceId,
+              marketId: { $ne: marketId },
+            } as FilterQuery<Market>,
+            { session, includeDeleted: true },
+          );
+          if (duplicate) throw new ConflictException(MARKET.DUPLICATE);
         }
 
         const doc = await this.updateOne(
