@@ -65,7 +65,7 @@ export class OutletVerificationService extends MongoRepository<OutletVerificatio
     customerId: string,
     requestedByEmployeeId: string,
     session?: ClientSession,
-    autoVerify = false,
+    customerStatus = CustomerStatus.VERIFICATION_PENDING,
   ) {
     if (!requestedByEmployeeId) {
       throw new BadRequestException('Requesting employee is required');
@@ -83,6 +83,12 @@ export class OutletVerificationService extends MongoRepository<OutletVerificatio
     if (!customer) throw new NotFoundException('Outlet not found');
     if (existing) throw new ConflictException(OUTLET_VERIFICATION.DUPLICATE);
 
+    const verificationStatus =
+      customerStatus === CustomerStatus.VERIFICATION_PENDING
+        ? OutletVerificationStatus.PENDING
+        : customerStatus === CustomerStatus.REJECTED
+          ? OutletVerificationStatus.REJECTED
+          : OutletVerificationStatus.APPROVED;
     return this.save(
       {
         outletVerificationId: IdGenerator.generate('OVR', 8),
@@ -90,14 +96,15 @@ export class OutletVerificationService extends MongoRepository<OutletVerificatio
         requestedByEmployeeId,
         requestedByEmployeeName: employee?.name,
         assignedReviewerId: employee?.hierarchyPath?.at(-1),
-        status: autoVerify
-          ? OutletVerificationStatus.APPROVED
-          : OutletVerificationStatus.PENDING,
-        ...(autoVerify
+        status: verificationStatus,
+        ...(verificationStatus !== OutletVerificationStatus.PENDING
           ? {
               reviewedByEmployeeId: requestedByEmployeeId,
               reviewedAt: new Date(),
             }
+          : {}),
+        ...(verificationStatus === OutletVerificationStatus.REJECTED
+          ? { reason: 'Rejected during bulk upload' }
           : {}),
       },
       { session },

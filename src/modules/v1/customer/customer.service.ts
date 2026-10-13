@@ -420,10 +420,16 @@ export class CustomerService extends MongoRepository<Customer> {
   ) {
     try {
       const creatorId = String(RequestContextStore.getStore()?.userId ?? '');
-      const customerStatus =
-        allowActiveBulkStatus && payload.status === CustomerStatus.ACTIVE
-          ? CustomerStatus.ACTIVE
-          : CustomerStatus.VERIFICATION_PENDING;
+      const customerStatus = allowActiveBulkStatus
+        ? payload.status ?? CustomerStatus.VERIFICATION_PENDING
+        : CustomerStatus.VERIFICATION_PENDING;
+      const uploadedCustomerId =
+        allowActiveBulkStatus && payload.customerId
+          ? payload.customerId
+              .trim()
+              .replace(/^FO_TOKEN_/, '')
+              .replace(/^FO_TKON_/, '') || undefined
+          : undefined;
       const result = await this.withTransaction(async (session) => {
         // Outlets without a phone number (bulk upload) skip the duplicate check
         const [existingByPhone, existingById] = await Promise.all([
@@ -433,9 +439,9 @@ export class CustomerService extends MongoRepository<Customer> {
                 { session, includeDeleted: true },
               )
             : null,
-          allowActiveBulkStatus && payload.customerId
+          uploadedCustomerId
             ? this.findOne(
-                { customerId: payload.customerId } as FilterQuery<Customer>,
+                { customerId: uploadedCustomerId } as FilterQuery<Customer>,
                 { session, includeDeleted: true },
               )
             : null,
@@ -462,6 +468,7 @@ export class CustomerService extends MongoRepository<Customer> {
             existing._id.toString(),
             {
               ...payload,
+              ...(uploadedCustomerId ? { customerId: uploadedCustomerId } : {}),
               status: customerStatus,
               createdByEmployeeId: creatorId || undefined,
               isDeleted: false,
@@ -469,14 +476,14 @@ export class CustomerService extends MongoRepository<Customer> {
             { session },
           );
 
-          customerId = existing.customerId;
+          customerId = uploadedCustomerId ?? existing.customerId;
         } else {
           // ✅ CASE 3: Create new customer
           const doc = await this.save(
             {
               ...payload,
               customerId:
-                (allowActiveBulkStatus ? payload.customerId : undefined) ||
+                uploadedCustomerId ||
                 IdGenerator.generateRandomNumber(12),
               status: customerStatus,
               createdByEmployeeId: creatorId || undefined,
@@ -491,7 +498,7 @@ export class CustomerService extends MongoRepository<Customer> {
           customerId,
           creatorId,
           session,
-          customerStatus === CustomerStatus.ACTIVE,
+          customerStatus,
         );
 
         // =====================================================
