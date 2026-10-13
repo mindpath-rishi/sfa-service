@@ -487,11 +487,18 @@ export class RouteService extends MongoRepository<Route> {
     for (const [index, route] of dto.routes.entries()) {
       const name = TextNormalizer.normalize(route.name, NormalizeType.TITLE);
       const outletCount = route.associatedCustomers?.length ?? 0;
+      const normalizedRoute = {
+        ...route,
+        associatedCustomers: route.associatedCustomers?.map((outlet) => ({
+          ...outlet,
+          customerId: outlet.customerId.replace(/^FO_TKON_/, ''),
+        })),
+      };
 
       try {
         const existing = await this.findOne({ name }, { lean: true });
         if (existing) {
-          await this.update(existing.routeId, route);
+          await this.update(existing.routeId, normalizedRoute);
           results.push({
             row: index + 1,
             name,
@@ -502,7 +509,7 @@ export class RouteService extends MongoRepository<Route> {
           continue;
         }
 
-        const created: any = await this.create(route);
+        const created: any = await this.create(normalizedRoute);
         results.push({
           row: index + 1,
           name,
