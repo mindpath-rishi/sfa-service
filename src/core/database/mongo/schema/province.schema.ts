@@ -37,7 +37,7 @@ export class Province {
   countryId!: string;
 
   // Display name of province
-  @Prop({ required: true, unique: true, trim: true, type: String })
+  @Prop({ required: true, trim: true, type: String })
   name!: string;
 
   /* ======================================================
@@ -54,3 +54,11 @@ export class Province {
 }
 
 export const ProvinceSchema = SchemaFactory.createForClass(Province);
+ProvinceSchema.index(
+  { countryId: 1, name: 1 },
+  {
+    unique: true,
+    collation: { locale: 'en', strength: 2 },
+    name: 'unique_province_name_per_country',
+  },
+);

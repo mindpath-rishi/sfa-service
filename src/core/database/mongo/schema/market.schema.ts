@@ -54,5 +54,12 @@ export class Market {
 }
 
 export const MarketSchema = SchemaFactory.createForClass(Market);
-MarketSchema.index({ provinceId: 1, name: 1 }, { unique: true });
+MarketSchema.index(
+  { provinceId: 1, name: 1 },
+  {
+    unique: true,
+    collation: { locale: 'en', strength: 2 },
+    name: 'unique_market_name_per_province',
+  },
+);
 MarketSchema.index({ provinceId: 1, status: 1 });

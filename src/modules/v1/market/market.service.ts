@@ -4,6 +4,7 @@ import {
   NotFoundException,
   ConflictException,
   HttpStatus,
+  OnModuleInit,
 } from '@nestjs/common';
 
 import { MongoService } from 'src/core/database/mongo/mongo.service';
@@ -20,10 +21,46 @@ import { IdGenerator } from 'src/shared/utils/id-generator.utils';
 import { TextNormalizer } from 'src/shared/utils/text-normalizer.utils';
 import { NormalizeType } from 'src/shared/enums/normalize.enums';
 
+const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 @Injectable()
-export class MarketService extends MongoRepository<Market> {
+export class MarketService
+  extends MongoRepository<Market>
+  implements OnModuleInit
+{
   constructor(mongo: MongoService) {
     super(mongo.getModel(Market.name, MarketSchema));
+  }
+
+  async onModuleInit() {
+    const indexes = await this.model.collection.indexes().catch((error) => {
+      if (error?.code === 26) return [];
+      throw error;
+    });
+    const obsoleteGlobalNameIndex = indexes.find(
+      (index) =>
+        index.unique &&
+        Object.keys(index.key).length === 1 &&
+        index.key.name === 1,
+    );
+    if (obsoleteGlobalNameIndex?.name) {
+      await this.model.collection.dropIndex(obsoleteGlobalNameIndex.name);
+    }
+
+    try {
+      await this.model.collection.createIndex(
+        { provinceId: 1, name: 1 },
+        {
+          unique: true,
+          collation: { locale: 'en', strength: 2 },
+          name: 'unique_market_name_per_province',
+        },
+      );
+    } catch (error: any) {
+      // Keep the service available if legacy case-only duplicates prevent
+      // building the new index; create/update still check names case-insensitively.
+      if (error?.code !== 11000) throw error;
+    }
   }
 
   async create(payload: CreateMarketDto) {
@@ -35,7 +72,7 @@ export class MarketService extends MongoRepository<Market> {
 
         const filter: FilterQuery<Market> = {
           provinceId: payload.provinceId,
-          name: payload.name,
+          name: new RegExp(`^${escapeRegex(payload.name)}$`, 'i'),
         };
 
         const existing = await this.findOne(filter, {
@@ -137,7 +174,10 @@ export class MarketService extends MongoRepository<Market> {
         if (dto.name || dto.provinceId) {
           const duplicate = await this.findOne(
             {
-              name: dto.name ?? current.name,
+              name: new RegExp(
+                `^${escapeRegex(dto.name ?? current.name)}$`,
+                'i',
+              ),
               provinceId: dto.provinceId ?? current.provinceId,
               marketId: { $ne: marketId },
             } as FilterQuery<Market>,

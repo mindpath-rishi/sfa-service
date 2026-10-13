@@ -20,6 +20,8 @@ import { IdGenerator } from 'src/shared/utils/id-generator.utils';
 import { TextNormalizer } from 'src/shared/utils/text-normalizer.utils';
 import { NormalizeType } from 'src/shared/enums/normalize.enums';
 
+const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 @Injectable()
 export class ProvinceService extends MongoRepository<Province> {
   constructor(mongo: MongoService) {
@@ -33,10 +35,10 @@ export class ProvinceService extends MongoRepository<Province> {
           payload.name = TextNormalizer.normalize(payload.name, NormalizeType.TITLE);
         }
 
-        const filter: FilterQuery<Province> = {};
-
-        
-        if (payload.name) filter.name = payload.name;
+        const filter: FilterQuery<Province> = {
+          countryId: payload.countryId,
+          name: new RegExp(`^${escapeRegex(payload.name)}$`, 'i'),
+        };
 
         const existing = await this.findOne(filter, {
           session,
@@ -128,6 +130,24 @@ export class ProvinceService extends MongoRepository<Province> {
       return await this.withTransaction(async (session) => {
         if (dto.name) {
           dto.name = TextNormalizer.normalize(dto.name, NormalizeType.TITLE);
+        }
+
+        const current = await this.findOne({ provinceId }, { session });
+        if (!current) throw new NotFoundException(PROVINCE.NOT_FOUND);
+
+        if (dto.name !== undefined || dto.countryId !== undefined) {
+          const duplicate = await this.findOne(
+            {
+              countryId: dto.countryId ?? current.countryId,
+              name: new RegExp(
+                `^${escapeRegex(dto.name ?? current.name)}$`,
+                'i',
+              ),
+              provinceId: { $ne: provinceId },
+            } as FilterQuery<Province>,
+            { session, includeDeleted: true },
+          );
+          if (duplicate) throw new ConflictException(PROVINCE.DUPLICATE);
         }
 
         const doc = await this.updateOne(
