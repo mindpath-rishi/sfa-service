@@ -19,6 +19,7 @@ import {
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { CreateSaleItemDto } from '../../sale-item/dto/create-sale-item.dto';
+import { SchemeFreeUnit } from 'src/shared/enums/scheme.enums';
 
 export class AppliedSaleSchemeDto {
   @ApiProperty({ type: String })
@@ -41,6 +42,11 @@ export class AppliedSaleSchemeDto {
   @IsNumber()
   minimumQuantity?: number;
 
+  @ApiPropertyOptional({ enum: SchemeFreeUnit })
+  @IsOptional()
+  @IsEnum(SchemeFreeUnit)
+  minimumQuantityUnit?: SchemeFreeUnit;
+
   @ApiPropertyOptional({ type: Number })
   @IsOptional()
   @IsNumber()
@@ -56,6 +62,11 @@ export class AppliedSaleSchemeDto {
   @IsNumber()
   buyQty?: number;
 
+  @ApiPropertyOptional({ enum: SchemeFreeUnit })
+  @IsOptional()
+  @IsEnum(SchemeFreeUnit)
+  buyUnit?: SchemeFreeUnit;
+
   @ApiPropertyOptional({ type: Number, default: 0 })
   @IsOptional()
   @IsNumber()
@@ -65,6 +76,11 @@ export class AppliedSaleSchemeDto {
   @IsOptional()
   @IsNumber()
   freeQty?: number;
+
+  @ApiPropertyOptional({ enum: SchemeFreeUnit })
+  @IsOptional()
+  @IsEnum(SchemeFreeUnit)
+  freeUnit?: SchemeFreeUnit;
 
   @ApiPropertyOptional({ type: String })
   @IsOptional()

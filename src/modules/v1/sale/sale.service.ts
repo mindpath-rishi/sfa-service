@@ -250,9 +250,12 @@ export class SaleService extends MongoRepository<Sale> {
             schemeName: string;
             schemeType: string;
             minimumQuantity: number;
+            minimumQuantityUnit?: 'CASE' | 'PIECE';
             discountPercent?: number;
             discountValue?: number;
             buyQty?: number;
+            buyUnit?: 'CASE' | 'PIECE';
+            freeUnit?: 'CASE' | 'PIECE';
             discountAmount: number;
             freeQty: number;
             freeProductId?: string;
@@ -387,9 +390,12 @@ export class SaleService extends MongoRepository<Sale> {
               schemeName,
               schemeType,
               minimumQuantity: schemeMinimumQuantity,
+              minimumQuantityUnit: (item as any).schemeMinimumQuantityUnit,
               discountPercent: (item as any).schemeDiscountPercent,
               discountValue: (item as any).schemeDiscountValue,
               buyQty: (item as any).schemeBuyQty,
+              buyUnit: (item as any).schemeBuyUnit,
+              freeUnit: (item as any).schemeFreeUnit,
               discountAmount: toFixed4(
                 (existingScheme?.discountAmount ?? 0) + itemSchemeDiscount,
               ),
@@ -428,11 +434,14 @@ export class SaleService extends MongoRepository<Sale> {
             schemeName: schemeName || undefined,
             schemeType: schemeType || undefined,
             schemeMinimumQuantity,
+            schemeMinimumQuantityUnit: (item as any).schemeMinimumQuantityUnit,
             schemeDiscountPercent: (item as any).schemeDiscountPercent,
             schemeDiscountValue: (item as any).schemeDiscountValue,
             schemeBuyQty: (item as any).schemeBuyQty,
+            schemeBuyUnit: (item as any).schemeBuyUnit,
             schemeDiscountAmount: itemSchemeDiscount,
             schemeFreeQty,
+            schemeFreeUnit: (item as any).schemeFreeUnit,
             schemeFreeProductId: (item as any).schemeFreeProductId,
             schemeFreeProductName: (item as any).schemeFreeProductName,
 

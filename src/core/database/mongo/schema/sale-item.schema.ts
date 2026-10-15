@@ -113,6 +113,9 @@ export class SaleItem {
   @Prop({ type: Number, default: 0 })
   schemeMinimumQuantity?: number;
 
+  @Prop({ type: String, enum: ['CASE', 'PIECE'] })
+  schemeMinimumQuantityUnit?: 'CASE' | 'PIECE';
+
   @Prop({ type: Number })
   schemeDiscountPercent?: number;
 
@@ -122,11 +125,17 @@ export class SaleItem {
   @Prop({ type: Number })
   schemeBuyQty?: number;
 
+  @Prop({ type: String, enum: ['CASE', 'PIECE'] })
+  schemeBuyUnit?: 'CASE' | 'PIECE';
+
   @Prop({ type: Number, default: 0 })
   schemeDiscountAmount?: number;
 
   @Prop({ type: Number, default: 0 })
   schemeFreeQty?: number;
+
+  @Prop({ type: String, enum: ['CASE', 'PIECE'] })
+  schemeFreeUnit?: 'CASE' | 'PIECE';
 
   @Prop({ type: String })
   schemeFreeProductId?: string;

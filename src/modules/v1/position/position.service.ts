@@ -68,7 +68,7 @@ export class PositionService extends MongoRepository<Position> {
         employeeId: { $in: employeeIds },
         isDeleted: { $ne: true },
       })
-      .select('employeeId manNumber name mobile status')
+      .select('employeeId manNumber name mobile email status')
       .lean();
     if (session) employeesQuery.session(session);
     const employees = employeeIds.length ? await employeesQuery : [];
@@ -813,6 +813,7 @@ export class PositionService extends MongoRepository<Position> {
       provinceId,
       marketId,
       employeeId,
+      vanId,
       hierarchyDepth,
       page = 1,
       limit = 20,
@@ -833,6 +834,7 @@ export class PositionService extends MongoRepository<Position> {
     if (provinceId) filter.provinceId = provinceId;
     if (marketId) filter.marketId = marketId;
     if (employeeId) filter.employeeId = employeeId;
+    if (vanId) filter.vanIds = vanId;
     if (hierarchyDepth) filter.hierarchyDepth = hierarchyDepth;
 
     if (searchText) {

@@ -56,8 +56,27 @@ export class SchemeService extends MongoRepository<Scheme> {
       return this.prepareComboScheme(scheme);
     }
     if (
-      schemeType !== SchemeType.GROUP_FREE_QTY &&
-      schemeType !== SchemeType.GROUP_FREE_PERCENT
+      schemeType === SchemeType.FREE_ITEM ||
+      schemeType === SchemeType.BUY_X_GET_Y
+    ) {
+      if (!(Number(scheme.freeQty) > 0) || !scheme.freeProductId) {
+        throw new BadRequestException(
+          'Buy X Get Y and Free Item schemes need a free quantity above 0 and a free product',
+        );
+      }
+      const product = await this.productModel
+        .findOne({ productId: scheme.freeProductId, isDeleted: { $ne: true } })
+        .select('productId name')
+        .lean();
+      if (!product) {
+        throw new BadRequestException(
+          `Free product not found: ${scheme.freeProductId}`,
+        );
+      }
+      return { freeProductName: scheme.freeProductName || product.name };
+    }
+    if (
+      schemeType !== SchemeType.GROUP_FREE_QTY
     ) {
       return {};
     }
@@ -70,13 +89,6 @@ export class SchemeService extends MongoRepository<Scheme> {
     if (!hasScope) throw new BadRequestException(SCHEME.GROUP_SCOPE_REQUIRED);
     if (!(Number(scheme.groupMinCases) > 0)) {
       throw new BadRequestException(SCHEME.GROUP_MIN_CASES_REQUIRED);
-    }
-
-    if (schemeType === SchemeType.GROUP_FREE_PERCENT) {
-      if (!(Number(scheme.freePercent) > 0)) {
-        throw new BadRequestException(SCHEME.GROUP_FREE_PERCENT_REQUIRED);
-      }
-      return {};
     }
 
     if (!(Number(scheme.freeQty) > 0) || !scheme.freeProductId) {
@@ -92,6 +104,23 @@ export class SchemeService extends MongoRepository<Scheme> {
       );
     }
     return { freeProductName: scheme.freeProductName || product.name };
+  }
+
+  private validateApplicabilityScope(scheme: Partial<CreateSchemeDto>) {
+    const hasProductScope = Boolean(
+      scheme.productIds?.length ||
+      scheme.categoryIds?.length ||
+      scheme.subCategoryIds?.length,
+    );
+    if (!hasProductScope) {
+      throw new BadRequestException(SCHEME.PRODUCT_SCOPE_REQUIRED);
+    }
+    const hasGeographyScope = Boolean(
+      scheme.provinceIds?.length || scheme.routeIds?.length || scheme.vanIds?.length,
+    );
+    if (!hasGeographyScope) {
+      throw new BadRequestException(SCHEME.GEOGRAPHY_SCOPE_REQUIRED);
+    }
   }
 
   /**
@@ -151,11 +180,7 @@ export class SchemeService extends MongoRepository<Scheme> {
     };
   }
 
-  /**
-   * A scheme must match every geography dimension it defines
-   * (province AND route AND van); within a dimension any listed value matches.
-   * An empty dimension applies everywhere.
-   */
+  /** Every selected geography dimension must match, and at least one is required. */
   private geographyClause(params: {
     provinceId?: string;
     routeId?: string;
@@ -173,6 +198,13 @@ export class SchemeService extends MongoRepository<Scheme> {
     });
 
     return [
+      {
+        $or: [
+          { provinceIds: { $exists: true, $ne: [] } },
+          { routeIds: { $exists: true, $ne: [] } },
+          { vanIds: { $exists: true, $ne: [] } },
+        ],
+      },
       dimension('provinceIds', params.provinceId),
       dimension('routeIds', params.routeId),
       dimension('vanIds', params.vanId),
@@ -197,6 +229,7 @@ export class SchemeService extends MongoRepository<Scheme> {
       }
 
       const groupFields = await this.prepareGroupScheme(payload);
+      this.validateApplicabilityScope({ ...payload, ...groupFields });
 
       const doc = await this.save({
         schemeId: IdGenerator.generate('SCHM', 8),
@@ -300,6 +333,11 @@ export class SchemeService extends MongoRepository<Scheme> {
         ...existingScheme,
         ...dto,
       });
+      this.validateApplicabilityScope({
+        ...existingScheme,
+        ...dto,
+        ...groupFields,
+      });
 
       const doc = await this.updateOne(
         { schemeId },
@@ -368,12 +406,6 @@ export class SchemeService extends MongoRepository<Scheme> {
         { subCategoryIds: categoryValue },
       );
     }
-    productClause.push({
-      categoryIds: { $size: 0 },
-      subCategoryIds: { $size: 0 },
-      productIds: { $size: 0 },
-    });
-
     const filter: FilterQuery<Scheme> = {
       status: SchemeStatus.ACTIVE,
       isDeleted: false,
@@ -425,11 +457,6 @@ export class SchemeService extends MongoRepository<Scheme> {
       { productIds: { $in: productIds } },
       { categoryIds: { $in: categoryIds } },
       { subCategoryIds: { $in: categoryIds } },
-      {
-        categoryIds: { $size: 0 },
-        subCategoryIds: { $size: 0 },
-        productIds: { $size: 0 },
-      },
     ];
     const schemes = await this.findLean({
       status: SchemeStatus.ACTIVE,
@@ -454,7 +481,7 @@ export class SchemeService extends MongoRepository<Scheme> {
             scheme.categoryIds?.length ||
             scheme.subCategoryIds?.length,
           );
-          if (!hasProductScope) return true;
+          if (!hasProductScope) return false;
 
           return (
             scheme.productIds?.includes(product.productId) ||

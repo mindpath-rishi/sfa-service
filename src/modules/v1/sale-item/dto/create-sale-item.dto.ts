@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsNotEmpty, IsNumber, IsOptional, IsString } from 'class-validator';
+import { IsEnum, IsNotEmpty, IsNumber, IsOptional, IsString } from 'class-validator';
+import { SchemeFreeUnit } from 'src/shared/enums/scheme.enums';
 
 export class CreateSaleItemDto {
   /**
@@ -142,6 +143,11 @@ export class CreateSaleItemDto {
   @IsNumber()
   schemeMinimumQuantity?: number;
 
+  @ApiPropertyOptional({ enum: SchemeFreeUnit })
+  @IsOptional()
+  @IsEnum(SchemeFreeUnit)
+  schemeMinimumQuantityUnit?: SchemeFreeUnit;
+
   @ApiPropertyOptional({ type: Number })
   @IsOptional()
   @IsNumber()
@@ -157,6 +163,11 @@ export class CreateSaleItemDto {
   @IsNumber()
   schemeBuyQty?: number;
 
+  @ApiPropertyOptional({ enum: SchemeFreeUnit })
+  @IsOptional()
+  @IsEnum(SchemeFreeUnit)
+  schemeBuyUnit?: SchemeFreeUnit;
+
   @ApiPropertyOptional({ type: Number, default: 0 })
   @IsOptional()
   @IsNumber()
@@ -166,6 +177,11 @@ export class CreateSaleItemDto {
   @IsOptional()
   @IsNumber()
   schemeFreeQty?: number;
+
+  @ApiPropertyOptional({ enum: SchemeFreeUnit })
+  @IsOptional()
+  @IsEnum(SchemeFreeUnit)
+  schemeFreeUnit?: SchemeFreeUnit;
 
   @ApiPropertyOptional({ type: String })
   @IsOptional()

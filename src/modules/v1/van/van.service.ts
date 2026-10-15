@@ -867,7 +867,7 @@ export class VanService extends MongoRepository<Van> {
     SELECT
       VC_WAREHOUSE_CODE AS "warehouseCode",
       VC_WAREHOUSE_DESC AS "warehouseDesc",
-      VC_ADD1           AS "address1",
+      VC_ADD1           AS "provinceName",
       VC_ADD2           AS "address2",
       VC_MASTER_CODE    AS "masterCode"
     FROM VAN_MASTER
@@ -900,6 +900,40 @@ export class VanService extends MongoRepository<Van> {
 
     const uniqueRows = Array.from(uniqueRowsMap.values());
 
+    const provinceNameByKey = new Map<
+      string,
+      { provinceId: string; countryId: string }
+    >();
+    const ambiguousProvinceNames = new Set<string>();
+    const provinceNames = Array.from(
+      new Set(
+        uniqueRows
+          .map((row) => toStringSafe(row.provinceName).toLowerCase())
+          .filter(Boolean),
+      ),
+    );
+    const provinces = provinceNames.length
+      ? await this.provinceModel
+          .find({ status: 'ACTIVE', isDeleted: { $ne: true } })
+          .select('provinceId countryId name')
+          .lean()
+      : [];
+    for (const province of provinces as any[]) {
+      const key = toStringSafe(province.name).toLowerCase();
+      if (!provinceNames.includes(key)) continue;
+      if (provinceNameByKey.has(key)) {
+        provinceNameByKey.delete(key);
+        ambiguousProvinceNames.add(key);
+        continue;
+      }
+      if (!ambiguousProvinceNames.has(key)) {
+        provinceNameByKey.set(key, {
+          provinceId: province.provinceId,
+          countryId: province.countryId,
+        });
+      }
+    }
+
     const operations = uniqueRows.map((row) => {
       const warehouseCode = toStringSafe(row.warehouseCode);
 
@@ -910,6 +944,9 @@ export class VanService extends MongoRepository<Van> {
         toStringSafe(row.warehouseDesc) ||
         toStringSafe(row.masterCode) ||
         warehouseCode;
+      const province = provinceNameByKey.get(
+        toStringSafe(row.provinceName).toLowerCase(),
+      );
 
       return {
         updateOne: {
@@ -921,6 +958,7 @@ export class VanService extends MongoRepository<Van> {
               vanId,
               name,
               vanNumber,
+              ...(province ? { provinceId: province.provinceId } : {}),
             },
             $setOnInsert: {
               associatedRoutes: [],
@@ -941,8 +979,31 @@ export class VanService extends MongoRepository<Van> {
       };
     }
 
-    const result = await this.model.bulkWrite(operations, {
-      ordered: false,
+    const result = await this.withTransaction(async (session) => {
+      const writeResult = await this.model.bulkWrite(operations, {
+        ordered: false,
+        session,
+      });
+
+      for (const row of uniqueRows) {
+        const warehouseCode = toStringSafe(row.warehouseCode);
+        const province = provinceNameByKey.get(
+          toStringSafe(row.provinceName).toLowerCase(),
+        );
+        if (!province) continue;
+
+        const name =
+          toStringSafe(row.warehouseDesc) ||
+          toStringSafe(row.masterCode) ||
+          warehouseCode;
+        await this.createVanPosition(
+          { vanId: warehouseCode, name, categoryIds: [] } as any,
+          province,
+          session,
+        );
+      }
+
+      return writeResult;
     });
 
     return {

@@ -107,6 +107,9 @@ export class Scheme {
   @Prop({ type: Number, min: 0, default: 0 })
   minQty!: number;
 
+  @Prop({ type: String, enum: SchemeFreeUnit, default: SchemeFreeUnit.CASE })
+  minQtyUnit?: SchemeFreeUnit;
+
   // Percentage discount, used when schemeType is DISCOUNT_PERCENT
   @Prop({ type: Number, min: 0, max: 100 })
   discountPercent?: number;
@@ -118,6 +121,9 @@ export class Scheme {
   // Buy quantity, used when schemeType is BUY_X_GET_Y
   @Prop({ type: Number, min: 0 })
   buyQty?: number;
+
+  @Prop({ type: String, enum: SchemeFreeUnit, default: SchemeFreeUnit.CASE })
+  buyUnit?: SchemeFreeUnit;
 
   // Free/get quantity, used when schemeType is BUY_X_GET_Y or FREE_ITEM
   @Prop({ type: Number, min: 0 })
@@ -137,7 +143,7 @@ export class Scheme {
   @Prop({ type: Number, min: 0 })
   groupMinCases?: number;
 
-  /** GROUP_FREE_PERCENT: % of each qualifying line's quantity given free */
+  /** Retained to read legacy group percentage schemes; no longer configurable. */
   @Prop({ type: Number, min: 0, max: 100 })
   freePercent?: number;
 

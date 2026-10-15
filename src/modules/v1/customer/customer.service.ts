@@ -34,6 +34,11 @@ import { Market } from 'src/core/database/mongo/schema/market.schema';
 import { Route } from 'src/core/database/mongo/schema/route.schema';
 import { RouteCustomerMapping } from 'src/core/database/mongo/schema/route-customer-mapping.schema';
 import { Van } from 'src/core/database/mongo/schema/van.schema';
+import { Position, PositionSchema } from 'src/core/database/mongo/schema/position.schema';
+import { Role, RoleSchema } from 'src/core/database/mongo/schema/role.schema';
+import { generatePositionId } from '../position/position-id.util';
+import { TextNormalizer } from 'src/shared/utils/text-normalizer.utils';
+import { NormalizeType } from 'src/shared/enums/normalize.enums';
 import { CustomerStatus } from 'src/shared/enums/customer.enums';
 import { Employee } from 'src/core/database/mongo/schema/employee.schema';
 import { NotificationService } from '../notification/notification.service';
@@ -46,6 +51,9 @@ const REPORT_TIMEZONE =
 
 @Injectable()
 export class CustomerService extends MongoRepository<Customer> {
+  private readonly positionModel: Model<Position>;
+  private readonly roleModel: Model<Role>;
+
   constructor(
     mongo: MongoService,
     @InjectModel(ShopVisit.name)
@@ -76,6 +84,70 @@ export class CustomerService extends MongoRepository<Customer> {
     private readonly outletVerificationService: OutletVerificationService,
   ) {
     super(mongo.getModel(Customer.name, CustomerSchema));
+    this.positionModel = mongo.getModel(Position.name, PositionSchema);
+    this.roleModel = mongo.getModel(Role.name, RoleSchema);
+  }
+
+  private async createImportedVanPosition(
+    van: Pick<Van, 'vanId' | 'name'>,
+    routeId: string | undefined,
+    session: import('mongoose').ClientSession,
+  ) {
+    if (!routeId) return;
+
+    const routeQuery = this.routeModel
+      .findOne({ routeId, isDeleted: { $ne: true } })
+      .select('provinceId countryId')
+      .lean();
+    routeQuery.session(session);
+    const route = await routeQuery;
+    if (!route?.provinceId || !route.countryId) return;
+
+    const roleQuery = this.roleModel
+      .findOne({ name: 'SALESMAN', status: 'ACTIVE', isDeleted: { $ne: true } })
+      .select('roleId')
+      .lean();
+    roleQuery.session(session);
+    const role = await roleQuery;
+    if (!role?.roleId) throw new BadRequestException('Active SALESMAN role not found');
+
+    const name = TextNormalizer.normalize(van.name, NormalizeType.TITLE);
+    const existingQuery = this.positionModel
+      .findOne({ name })
+      .select('positionId isDeleted')
+      .lean<any>();
+    existingQuery.session(session);
+    const existing = await existingQuery;
+    if (existing && !existing.isDeleted) {
+      throw new ConflictException(`Position already exists with name: ${name}`);
+    }
+
+    const positionData = {
+      name,
+      roleId: role.roleId,
+      countryId: route.countryId,
+      provinceId: route.provinceId,
+      parentCategoryId: [],
+      vanIds: [van.vanId],
+      hierarchyPath: [],
+      hierarchyDepth: 1,
+      offlineAccessAllowed: false,
+      status: 'ACTIVE',
+      isDeleted: false,
+    };
+    if (existing?.isDeleted) {
+      await this.positionModel.updateOne(
+        { positionId: existing.positionId },
+        { $set: positionData, $unset: { employeeId: 1, reportTo: 1, marketId: 1 } },
+        { session },
+      );
+      return;
+    }
+
+    await this.positionModel.create(
+      [{ ...positionData, positionId: await generatePositionId(this.positionModel, session) }],
+      { session },
+    );
   }
 
   private buildCustomerFilter(query: CustomerQueryDto) {
@@ -2199,6 +2271,12 @@ export class CustomerService extends MongoRepository<Customer> {
 
                 associatedRoutes: [],
               });
+
+              await this.createImportedVanPosition(
+                van,
+                routeId,
+                session,
+              );
 
               stats.vans++;
 

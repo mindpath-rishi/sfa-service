@@ -47,6 +47,8 @@ import * as XLSX from 'xlsx';
 import {
   ProductCategory,
   ProductCategorySchema,
+  ProductCategoryStatus,
+  ProductCategoryType,
 } from 'src/core/database/mongo/schema/product-category';
 import { Van, VanSchema } from 'src/core/database/mongo/schema/van.schema';
 import {
@@ -502,6 +504,75 @@ export class ProductService extends MongoRepository<Product> {
     }
 
     const uniqueRows = Array.from(uniqueRowsMap.values());
+
+    const parentCategories = new Map<string, string>();
+    const childCategories = new Map<
+      string,
+      { categoryId: string; name: string; parentId: string }
+    >();
+    for (const row of uniqueRows) {
+      const parentId = toStringSafe(row.parentCategoryCode);
+      const parentName = toStringSafe(row.parentCategoryName);
+      const childId = toStringSafe(row.categoryCode);
+      const childName = toStringSafe(row.categoryName);
+
+      if (parentId) parentCategories.set(parentId, parentName || parentId);
+      if (parentId && childId) {
+        childCategories.set(childId, {
+          categoryId: childId,
+          name: childName || childId,
+          parentId,
+        });
+      }
+    }
+
+    const parentCategoryOperations = Array.from(parentCategories).map(
+      ([categoryId, name]) => ({
+        updateOne: {
+          filter: { categoryId },
+          update: {
+            $set: {
+              categoryId,
+              name,
+              type: ProductCategoryType.PARENT,
+              status: ProductCategoryStatus.ACTIVE,
+              isDeleted: false,
+            },
+            $unset: { parentId: 1 },
+          },
+          upsert: true,
+        },
+      }),
+    );
+    if (parentCategoryOperations.length) {
+      await this.productCategoryModel.bulkWrite(parentCategoryOperations, {
+        ordered: false,
+      });
+    }
+
+    const childCategoryOperations = Array.from(childCategories.values()).map(
+      ({ categoryId, name, parentId }) => ({
+        updateOne: {
+          filter: { categoryId },
+          update: {
+            $set: {
+              categoryId,
+              name,
+              type: ProductCategoryType.CHILD,
+              parentId,
+              status: ProductCategoryStatus.ACTIVE,
+              isDeleted: false,
+            },
+          },
+          upsert: true,
+        },
+      }),
+    );
+    if (childCategoryOperations.length) {
+      await this.productCategoryModel.bulkWrite(childCategoryOperations, {
+        ordered: false,
+      });
+    }
 
     const operations: any = uniqueRows.map((row) => {
       const compCode = toStringSafe(row.compCode);
@@ -1274,7 +1345,7 @@ export class ProductService extends MongoRepository<Product> {
     }
 
     const pageNumber = Math.max(Number(page) || 1, 1);
-    const limitNumber = Math.min(Math.max(Number(limit) || 20, 1), 100);
+    const limitNumber = Math.min(Math.max(Number(limit) || 20, 1), 1000);
     const skip = (pageNumber - 1) * limitNumber;
     const now = new Date();
 

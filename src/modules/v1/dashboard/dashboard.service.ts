@@ -412,9 +412,9 @@ export class DashboardService {
   }
 
   private formatCurrency(value: number) {
-    if (value >= 10000000) return `Rs ${(value / 10000000).toFixed(2)} Cr`;
-    if (value >= 100000) return `Rs ${(value / 100000).toFixed(2)} L`;
-    return `Rs ${this.formatNumber(Math.round(value))}`;
+    if (value >= 10000000) return `ZMW ${(value / 10000000).toFixed(2)} Cr`;
+    if (value >= 100000) return `ZMW ${(value / 100000).toFixed(2)} L`;
+    return `ZMW ${this.formatNumber(Math.round(value))}`;
   }
 
   private formatNumber(value: number) {

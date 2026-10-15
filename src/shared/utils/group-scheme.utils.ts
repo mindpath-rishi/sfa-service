@@ -1,8 +1,8 @@
 /**
  * Group scheme snapshots on a sale
  * --------------------------------
- * Group schemes (GROUP_FREE_QTY / GROUP_FREE_PERCENT) are evaluated by the
- * app across all lines of a cart and give free goods. They are stored on the
+ * Group free-quantity schemes are evaluated by the app across all lines of a
+ * cart and give free goods. Historical percentage fields remain readable. They are stored on the
  * sale header as `groupSchemes`; this keeps only known fields and clamps
  * quantities so both the online sale API and offline sync store the same shape.
  */

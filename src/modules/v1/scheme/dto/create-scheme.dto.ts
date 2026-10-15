@@ -122,6 +122,11 @@ export class CreateSchemeDto {
   @Min(0)
   minQty?: number;
 
+  @ApiPropertyOptional({ enum: SchemeFreeUnit, default: SchemeFreeUnit.CASE })
+  @IsOptional()
+  @IsEnum(SchemeFreeUnit)
+  minQtyUnit?: SchemeFreeUnit;
+
   @ApiPropertyOptional({ type: Number })
   @IsOptional()
   @IsNumber()
@@ -140,6 +145,11 @@ export class CreateSchemeDto {
   @IsNumber()
   @Min(0)
   buyQty?: number;
+
+  @ApiPropertyOptional({ enum: SchemeFreeUnit, default: SchemeFreeUnit.CASE })
+  @IsOptional()
+  @IsEnum(SchemeFreeUnit)
+  buyUnit?: SchemeFreeUnit;
 
   @ApiPropertyOptional({ type: Number })
   @IsOptional()
@@ -166,17 +176,6 @@ export class CreateSchemeDto {
   @IsNumber()
   @Min(0)
   groupMinCases?: number;
-
-  @ApiPropertyOptional({
-    type: Number,
-    description:
-      'GROUP_FREE_PERCENT: % of each qualifying line quantity given free',
-  })
-  @IsOptional()
-  @IsNumber()
-  @Min(0)
-  @Max(100)
-  freePercent?: number;
 
   @ApiPropertyOptional({ enum: SchemeFreeUnit, default: SchemeFreeUnit.CASE })
   @IsOptional()

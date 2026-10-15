@@ -56,6 +56,11 @@ export class PositionQueryDto extends PaginationDto {
   @IsString()
   employeeId?: string;
 
+  @ApiPropertyOptional({ description: 'Filter by assigned van ID' })
+  @IsOptional()
+  @IsString()
+  vanId?: string;
+
   @ApiPropertyOptional({
     type: Number,
     minimum: 1,
