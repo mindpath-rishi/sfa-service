@@ -81,12 +81,9 @@ export class SchemeService extends MongoRepository<Scheme> {
       return {};
     }
 
-    const hasScope = Boolean(
-      scheme.categoryIds?.length ||
-      scheme.subCategoryIds?.length ||
-      scheme.productIds?.length,
-    );
-    if (!hasScope) throw new BadRequestException(SCHEME.GROUP_SCOPE_REQUIRED);
+    if (!scheme.productIds?.length) {
+      throw new BadRequestException(SCHEME.GROUP_SCOPE_REQUIRED);
+    }
     if (!(Number(scheme.groupMinCases) > 0)) {
       throw new BadRequestException(SCHEME.GROUP_MIN_CASES_REQUIRED);
     }
@@ -107,12 +104,8 @@ export class SchemeService extends MongoRepository<Scheme> {
   }
 
   private validateApplicabilityScope(scheme: Partial<CreateSchemeDto>) {
-    const hasProductScope = Boolean(
-      scheme.productIds?.length ||
-      scheme.categoryIds?.length ||
-      scheme.subCategoryIds?.length,
-    );
-    if (!hasProductScope) {
+    // Combo schemes are scoped to their combo products in prepareComboScheme
+    if (!scheme.productIds?.length) {
       throw new BadRequestException(SCHEME.PRODUCT_SCOPE_REQUIRED);
     }
     const hasGeographyScope = Boolean(
@@ -382,14 +375,8 @@ export class SchemeService extends MongoRepository<Scheme> {
     vanId?: string;
     date?: Date;
   }) {
-    const {
-      productId,
-      categoryId,
-      subCategoryId,
-      routeId,
-      vanId,
-      date = new Date(),
-    } = params;
+    // A scheme applies only to its selected products, so categories are not used
+    const { productId, routeId, vanId, date = new Date() } = params;
     const provinceId =
       params.provinceId || (await this.getVanProvinceId(vanId));
     const effectiveDayStart = new Date(date);
@@ -397,24 +384,13 @@ export class SchemeService extends MongoRepository<Scheme> {
     effectiveDayStart.setUTCHours(0, 0, 0, 0);
     effectiveDayEnd.setUTCHours(23, 59, 59, 999);
 
-    const productClause: FilterQuery<Scheme>[] = [{ productIds: productId }];
-
-    for (const categoryValue of [categoryId, subCategoryId]) {
-      if (!categoryValue) continue;
-      productClause.push(
-        { categoryIds: categoryValue },
-        { subCategoryIds: categoryValue },
-      );
-    }
     const filter: FilterQuery<Scheme> = {
       status: SchemeStatus.ACTIVE,
       isDeleted: false,
       startDate: { $lte: effectiveDayEnd },
       endDate: { $gte: effectiveDayStart },
-      $and: [
-        { $or: productClause },
-        ...this.geographyClause({ provinceId, routeId, vanId }),
-      ],
+      productIds: productId,
+      $and: this.geographyClause({ provinceId, routeId, vanId }),
     };
 
     return this.findLean(filter);
@@ -446,53 +422,24 @@ export class SchemeService extends MongoRepository<Scheme> {
     const productIds = [
       ...new Set(products.map((product) => product.productId)),
     ];
-    const categoryIds = [
-      ...new Set(
-        products
-          .flatMap((product) => [product.categoryId, product.parentCategoryId])
-          .filter((value): value is string => Boolean(value)),
-      ),
-    ];
-    const productClause: FilterQuery<Scheme>[] = [
-      { productIds: { $in: productIds } },
-      { categoryIds: { $in: categoryIds } },
-      { subCategoryIds: { $in: categoryIds } },
-    ];
     const schemes = await this.findLean({
       status: SchemeStatus.ACTIVE,
       isDeleted: false,
       startDate: { $lte: effectiveDayEnd },
       endDate: { $gte: effectiveDayStart },
-      $and: [
-        { $or: productClause },
-        ...this.geographyClause({
-          provinceId,
-          routeId: params.routeId,
-          vanId: params.vanId,
-        }),
-      ],
+      productIds: { $in: productIds },
+      $and: this.geographyClause({
+        provinceId,
+        routeId: params.routeId,
+        vanId: params.vanId,
+      }),
     });
 
     return new Map(
       products.map((product) => {
-        const applicable = schemes.filter((scheme) => {
-          const hasProductScope = Boolean(
-            scheme.productIds?.length ||
-            scheme.categoryIds?.length ||
-            scheme.subCategoryIds?.length,
-          );
-          if (!hasProductScope) return false;
-
-          return (
-            scheme.productIds?.includes(product.productId) ||
-            (product.categoryId &&
-              (scheme.categoryIds?.includes(product.categoryId) ||
-                scheme.subCategoryIds?.includes(product.categoryId))) ||
-            (product.parentCategoryId &&
-              (scheme.categoryIds?.includes(product.parentCategoryId) ||
-                scheme.subCategoryIds?.includes(product.parentCategoryId)))
-          );
-        });
+        const applicable = schemes.filter((scheme) =>
+          scheme.productIds?.includes(product.productId),
+        );
 
         return [product.productId, applicable];
       }),

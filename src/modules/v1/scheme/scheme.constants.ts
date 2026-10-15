@@ -6,10 +6,8 @@ export const SCHEME = {
   NOT_FOUND: 'Scheme not found',
   DUPLICATE: 'Scheme already exists',
   INVALID_PERIOD: 'Scheme start date must be before end date',
-  GROUP_SCOPE_REQUIRED:
-    'Group schemes need at least one category, sub-category or product',
-  PRODUCT_SCOPE_REQUIRED:
-    'Select at least one product, category or sub-category for the scheme',
+  GROUP_SCOPE_REQUIRED: 'Group schemes need at least one product in the group',
+  PRODUCT_SCOPE_REQUIRED: 'Select at least one product for the scheme',
   GEOGRAPHY_SCOPE_REQUIRED:
     'Select at least one province, route or van for the scheme',
   GROUP_MIN_CASES_REQUIRED:
