@@ -227,6 +227,39 @@ export class SchemeService extends MongoRepository<Scheme> {
     return van?.provinceId;
   }
 
+  /** Start of today (UTC), the same day boundary scheme lookups use. */
+  private startOfToday() {
+    const today = new Date();
+    today.setUTCHours(0, 0, 0, 0);
+    return today;
+  }
+
+  /**
+   * Status that follows the validity period: a scheme whose end date has
+   * passed is EXPIRED; an EXPIRED scheme moved to a current/future end date is
+   * ACTIVE again. INACTIVE is a manual choice and is kept.
+   */
+  private statusForPeriod(
+    endDate: Date | string,
+    status?: SchemeStatus | string,
+  ): SchemeStatus {
+    if (new Date(endDate) < this.startOfToday()) return SchemeStatus.EXPIRED;
+    if (!status || status === SchemeStatus.EXPIRED) return SchemeStatus.ACTIVE;
+    return status as SchemeStatus;
+  }
+
+  /** Marks active schemes whose end date has passed as EXPIRED. */
+  private async expireLapsedSchemes() {
+    await this.model.updateMany(
+      {
+        status: SchemeStatus.ACTIVE,
+        endDate: { $lt: this.startOfToday() },
+        isDeleted: { $ne: true },
+      },
+      { $set: { status: SchemeStatus.EXPIRED } },
+    );
+  }
+
   async create(payload: CreateSchemeDto) {
     try {
       if (new Date(payload.startDate) > new Date(payload.endDate)) {
@@ -240,6 +273,7 @@ export class SchemeService extends MongoRepository<Scheme> {
         schemeId: IdGenerator.generate('SCHM', 8),
         ...payload,
         ...groupFields,
+        status: this.statusForPeriod(payload.endDate, payload.status),
       });
 
       return {
@@ -253,6 +287,7 @@ export class SchemeService extends MongoRepository<Scheme> {
   }
 
   async findAll(query: SchemeQueryDto) {
+    await this.expireLapsedSchemes();
     const {
       searchText,
       page = 1,
@@ -305,6 +340,7 @@ export class SchemeService extends MongoRepository<Scheme> {
   }
 
   async findBySchemeId(schemeId: string) {
+    await this.expireLapsedSchemes();
     const doc = await this.findOne({ schemeId }, { lean: true });
 
     if (!doc) throw new NotFoundException(SCHEME.NOT_FOUND);
@@ -346,7 +382,11 @@ export class SchemeService extends MongoRepository<Scheme> {
 
       const doc = await this.updateOne(
         { schemeId },
-        { ...dto, ...groupFields },
+        {
+          ...dto,
+          ...groupFields,
+          status: this.statusForPeriod(endDate, dto.status ?? existing.status),
+        },
         { new: true },
       );
 
