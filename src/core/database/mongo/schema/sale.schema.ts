@@ -146,6 +146,7 @@ export class Sale {
         schemeName: { type: String, required: true, trim: true },
         schemeType: { type: String, required: true, trim: true },
         groupMinCases: { type: Number, default: 0 },
+        groupMinUnit: { type: String, default: 'CASE' },
         qualifyingCases: { type: Number, default: 0 },
         multiples: { type: Number, default: 0 },
         freePercent: { type: Number },

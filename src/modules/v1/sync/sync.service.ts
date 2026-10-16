@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { sanitizeGroupSchemes } from 'src/shared/utils/group-scheme.utils';
+import { toLineSchemes } from 'src/shared/utils/sale-line-scheme.utils';
 import { InjectConnection } from '@nestjs/mongoose';
 import { Connection, Types } from 'mongoose';
 
@@ -212,6 +213,7 @@ const calculateOfflineSaleItem = (value: unknown) => {
     grossValue,
     schemeDiscountAmount,
     totalValue: toFixed4(grossValue - schemeDiscountAmount),
+    appliedSchemes: toLineSchemes(item, schemeDiscountAmount),
   };
 };
 
@@ -269,19 +271,16 @@ const normalizeOfflinePayload = (
           0,
         ),
       );
+      const lineSchemes = items.flatMap((item) =>
+        Array.isArray(item.appliedSchemes)
+          ? (item.appliedSchemes as { schemeId: string; schemeName: string }[])
+          : [],
+      );
       payload.schemeIds = Array.from(
-        new Set(
-          items
-            .map((item) => String(item.schemeId ?? '').trim())
-            .filter(Boolean),
-        ),
+        new Set(lineSchemes.map((scheme) => scheme.schemeId).filter(Boolean)),
       );
       payload.schemeNames = Array.from(
-        new Set(
-          items
-            .map((item) => String(item.schemeName ?? '').trim())
-            .filter(Boolean),
-        ),
+        new Set(lineSchemes.map((scheme) => scheme.schemeName).filter(Boolean)),
       );
       const groupSchemes = sanitizeGroupSchemes(payload.groupSchemes);
       payload.groupSchemes = groupSchemes;

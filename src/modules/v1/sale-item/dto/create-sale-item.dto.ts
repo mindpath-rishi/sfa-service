@@ -1,6 +1,87 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEnum, IsNotEmpty, IsNumber, IsOptional, IsString } from 'class-validator';
+import {
+  IsArray,
+  IsEnum,
+  IsNotEmpty,
+  IsNumber,
+  IsOptional,
+  IsString,
+  ValidateNested,
+} from 'class-validator';
+import { Type } from 'class-transformer';
 import { SchemeFreeUnit } from 'src/shared/enums/scheme.enums';
+
+export class AppliedSaleSchemeDto {
+  @ApiProperty({ type: String })
+  @IsNotEmpty()
+  @IsString()
+  schemeId!: string;
+
+  @ApiProperty({ type: String })
+  @IsNotEmpty()
+  @IsString()
+  schemeName!: string;
+
+  @ApiProperty({ type: String })
+  @IsNotEmpty()
+  @IsString()
+  schemeType!: string;
+
+  @ApiPropertyOptional({ type: Number, default: 0 })
+  @IsOptional()
+  @IsNumber()
+  minimumQuantity?: number;
+
+  @ApiPropertyOptional({ enum: SchemeFreeUnit })
+  @IsOptional()
+  @IsEnum(SchemeFreeUnit)
+  minimumQuantityUnit?: SchemeFreeUnit;
+
+  @ApiPropertyOptional({ type: Number })
+  @IsOptional()
+  @IsNumber()
+  discountPercent?: number;
+
+  @ApiPropertyOptional({ type: Number })
+  @IsOptional()
+  @IsNumber()
+  discountValue?: number;
+
+  @ApiPropertyOptional({ type: Number })
+  @IsOptional()
+  @IsNumber()
+  buyQty?: number;
+
+  @ApiPropertyOptional({ enum: SchemeFreeUnit })
+  @IsOptional()
+  @IsEnum(SchemeFreeUnit)
+  buyUnit?: SchemeFreeUnit;
+
+  @ApiPropertyOptional({ type: Number, default: 0 })
+  @IsOptional()
+  @IsNumber()
+  discountAmount?: number;
+
+  @ApiPropertyOptional({ type: Number, default: 0 })
+  @IsOptional()
+  @IsNumber()
+  freeQty?: number;
+
+  @ApiPropertyOptional({ enum: SchemeFreeUnit })
+  @IsOptional()
+  @IsEnum(SchemeFreeUnit)
+  freeUnit?: SchemeFreeUnit;
+
+  @ApiPropertyOptional({ type: String })
+  @IsOptional()
+  @IsString()
+  freeProductId?: string;
+
+  @ApiPropertyOptional({ type: String })
+  @IsOptional()
+  @IsString()
+  freeProductName?: string;
+}
 
 export class CreateSaleItemDto {
   /**
@@ -192,4 +273,15 @@ export class CreateSaleItemDto {
   @IsOptional()
   @IsString()
   schemeFreeProductName?: string;
+
+  @ApiPropertyOptional({
+    type: [AppliedSaleSchemeDto],
+    description:
+      'Every scheme applied to this line. The scheme* fields above describe the main one.',
+  })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => AppliedSaleSchemeDto)
+  appliedSchemes?: AppliedSaleSchemeDto[];
 }

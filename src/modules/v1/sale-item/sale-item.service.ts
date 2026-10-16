@@ -18,6 +18,7 @@ import {
   SaleItem,
   SaleItemSchema,
 } from 'src/core/database/mongo/schema/sale-item.schema';
+import { toLineSchemes } from 'src/shared/utils/sale-line-scheme.utils';
 
 @Injectable()
 export class SaleItemService extends MongoRepository<SaleItem> {
@@ -64,6 +65,10 @@ export class SaleItemService extends MongoRepository<SaleItem> {
         const doc = await this.save(
           {
             ...payload,
+            appliedSchemes: toLineSchemes(
+              payload,
+              Math.max(Number(payload.schemeDiscountAmount) || 0, 0),
+            ),
           },
           { session },
         );

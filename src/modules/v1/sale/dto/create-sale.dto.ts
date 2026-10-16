@@ -18,80 +18,11 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import { CreateSaleItemDto } from '../../sale-item/dto/create-sale-item.dto';
-import { SchemeFreeUnit } from 'src/shared/enums/scheme.enums';
-
-export class AppliedSaleSchemeDto {
-  @ApiProperty({ type: String })
-  @IsNotEmpty()
-  @IsString()
-  schemeId!: string;
-
-  @ApiProperty({ type: String })
-  @IsNotEmpty()
-  @IsString()
-  schemeName!: string;
-
-  @ApiProperty({ type: String })
-  @IsNotEmpty()
-  @IsString()
-  schemeType!: string;
-
-  @ApiPropertyOptional({ type: Number, default: 0 })
-  @IsOptional()
-  @IsNumber()
-  minimumQuantity?: number;
-
-  @ApiPropertyOptional({ enum: SchemeFreeUnit })
-  @IsOptional()
-  @IsEnum(SchemeFreeUnit)
-  minimumQuantityUnit?: SchemeFreeUnit;
-
-  @ApiPropertyOptional({ type: Number })
-  @IsOptional()
-  @IsNumber()
-  discountPercent?: number;
-
-  @ApiPropertyOptional({ type: Number })
-  @IsOptional()
-  @IsNumber()
-  discountValue?: number;
-
-  @ApiPropertyOptional({ type: Number })
-  @IsOptional()
-  @IsNumber()
-  buyQty?: number;
-
-  @ApiPropertyOptional({ enum: SchemeFreeUnit })
-  @IsOptional()
-  @IsEnum(SchemeFreeUnit)
-  buyUnit?: SchemeFreeUnit;
-
-  @ApiPropertyOptional({ type: Number, default: 0 })
-  @IsOptional()
-  @IsNumber()
-  discountAmount?: number;
-
-  @ApiPropertyOptional({ type: Number, default: 0 })
-  @IsOptional()
-  @IsNumber()
-  freeQty?: number;
-
-  @ApiPropertyOptional({ enum: SchemeFreeUnit })
-  @IsOptional()
-  @IsEnum(SchemeFreeUnit)
-  freeUnit?: SchemeFreeUnit;
-
-  @ApiPropertyOptional({ type: String })
-  @IsOptional()
-  @IsString()
-  freeProductId?: string;
-
-  @ApiPropertyOptional({ type: String })
-  @IsOptional()
-  @IsString()
-  freeProductName?: string;
-}
+import {
+  AppliedSaleSchemeDto,
+  CreateSaleItemDto,
+} from '../../sale-item/dto/create-sale-item.dto';
+export { AppliedSaleSchemeDto };
 
 export class CreateSaleDto {
   /**

@@ -55,6 +55,18 @@ export class SchemeService extends MongoRepository<Scheme> {
     if (schemeType === SchemeType.COMBO_FREE_QTY) {
       return this.prepareComboScheme(scheme);
     }
+    if (schemeType === SchemeType.BUY_ONE_GET_ONE) {
+      // The free item is the purchased product itself: 1 free per 1 bought
+      const unit = scheme.buyUnit || SchemeFreeUnit.CASE;
+      return {
+        buyQty: 1,
+        buyUnit: unit,
+        freeQty: 1,
+        freeUnit: unit,
+        freeProductId: undefined,
+        freeProductName: undefined,
+      };
+    }
     if (
       schemeType === SchemeType.FREE_ITEM ||
       schemeType === SchemeType.BUY_X_GET_Y

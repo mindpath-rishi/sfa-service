@@ -177,6 +177,15 @@ export class CreateSchemeDto {
   @Min(0)
   groupMinCases?: number;
 
+  @ApiPropertyOptional({
+    enum: SchemeFreeUnit,
+    default: SchemeFreeUnit.CASE,
+    description: 'Group schemes: unit of groupMinCases (cases or pieces)',
+  })
+  @IsOptional()
+  @IsEnum(SchemeFreeUnit)
+  groupMinUnit?: SchemeFreeUnit;
+
   @ApiPropertyOptional({ enum: SchemeFreeUnit, default: SchemeFreeUnit.CASE })
   @IsOptional()
   @IsEnum(SchemeFreeUnit)

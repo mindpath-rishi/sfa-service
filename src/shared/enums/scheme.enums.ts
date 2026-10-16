@@ -8,6 +8,8 @@ export enum SchemeType {
   DISCOUNT_PERCENT = 'DISCOUNT_PERCENT',
   DISCOUNT_VALUE = 'DISCOUNT_VALUE',
   BUY_X_GET_Y = 'BUY_X_GET_Y',
+  /** Buy 1 of a selected product, get 1 of the same product free, per 1 bought (in buyUnit) */
+  BUY_ONE_GET_ONE = 'BUY_ONE_GET_ONE',
   FREE_ITEM = 'FREE_ITEM',
   /** Group buys `groupMinCases` cases -> `freeQty` of `freeProductId`, per multiple */
   GROUP_FREE_QTY = 'GROUP_FREE_QTY',

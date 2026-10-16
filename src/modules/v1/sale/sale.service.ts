@@ -1,4 +1,5 @@
 import { sanitizeGroupSchemes } from 'src/shared/utils/group-scheme.utils';
+import { toLineSchemes } from 'src/shared/utils/sale-line-scheme.utils';
 import {
   Injectable,
   NotFoundException,
@@ -381,31 +382,24 @@ export class SaleService extends MongoRepository<Sale> {
             Number((item as any).schemeFreeQty) || 0,
             0,
           );
-          if (schemeId) schemeIds.add(schemeId);
-          if (schemeName) schemeNames.add(schemeName);
-          if (schemeId && schemeName && schemeType) {
-            const existingScheme = schemes.get(schemeId);
-            schemes.set(schemeId, {
-              schemeId,
-              schemeName,
-              schemeType,
-              minimumQuantity: schemeMinimumQuantity,
-              minimumQuantityUnit: (item as any).schemeMinimumQuantityUnit,
-              discountPercent: (item as any).schemeDiscountPercent,
-              discountValue: (item as any).schemeDiscountValue,
-              buyQty: (item as any).schemeBuyQty,
-              buyUnit: (item as any).schemeBuyUnit,
-              freeUnit: (item as any).schemeFreeUnit,
+
+          // Every scheme on the line; older apps send only the single scheme* fields
+          const lineSchemes = toLineSchemes(item, itemSchemeDiscount);
+          for (const lineScheme of lineSchemes) {
+            schemeIds.add(lineScheme.schemeId);
+            schemeNames.add(lineScheme.schemeName);
+            const existingScheme = schemes.get(lineScheme.schemeId);
+            schemes.set(lineScheme.schemeId, {
+              ...lineScheme,
+              minimumQuantity: lineScheme.minimumQuantity ?? 0,
               discountAmount: toFixed4(
-                (existingScheme?.discountAmount ?? 0) + itemSchemeDiscount,
+                (existingScheme?.discountAmount ?? 0) + lineScheme.discountAmount,
               ),
-              freeQty: (existingScheme?.freeQty ?? 0) + schemeFreeQty,
+              freeQty: (existingScheme?.freeQty ?? 0) + lineScheme.freeQty,
               freeProductId:
-                (item as any).schemeFreeProductId ||
-                existingScheme?.freeProductId,
+                lineScheme.freeProductId || existingScheme?.freeProductId,
               freeProductName:
-                (item as any).schemeFreeProductName ||
-                existingScheme?.freeProductName,
+                lineScheme.freeProductName || existingScheme?.freeProductName,
             });
           }
 
@@ -444,6 +438,7 @@ export class SaleService extends MongoRepository<Sale> {
             schemeFreeUnit: (item as any).schemeFreeUnit,
             schemeFreeProductId: (item as any).schemeFreeProductId,
             schemeFreeProductName: (item as any).schemeFreeProductName,
+            appliedSchemes: lineSchemes,
 
             categoryId: (item as any).categoryId || (rest as any).categoryId,
             parentCategoryId:

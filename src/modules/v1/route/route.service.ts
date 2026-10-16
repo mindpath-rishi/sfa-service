@@ -1780,7 +1780,7 @@ export class RouteService extends MongoRepository<Route> {
     const {
       searchText,
       page = 1,
-      limit = 20,
+      limit = 500,
       status,
       routeSessionId,
       visitStatus,

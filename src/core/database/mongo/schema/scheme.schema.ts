@@ -118,14 +118,14 @@ export class Scheme {
   @Prop({ type: Number, min: 0 })
   discountValue?: number;
 
-  // Buy quantity, used when schemeType is BUY_X_GET_Y
+  // Buy quantity, used when schemeType is BUY_X_GET_Y (always 1 for BUY_ONE_GET_ONE)
   @Prop({ type: Number, min: 0 })
   buyQty?: number;
 
   @Prop({ type: String, enum: SchemeFreeUnit, default: SchemeFreeUnit.CASE })
   buyUnit?: SchemeFreeUnit;
 
-  // Free/get quantity, used when schemeType is BUY_X_GET_Y or FREE_ITEM
+  // Free/get quantity, used when schemeType is BUY_X_GET_Y or FREE_ITEM (always 1 for BUY_ONE_GET_ONE)
   @Prop({ type: Number, min: 0 })
   freeQty?: number;
 
@@ -137,11 +137,16 @@ export class Scheme {
   freeProductName?: string;
 
   /**
-   * Group schemes: combined cases (pieces counted as fractions of a case)
-   * across all products in scope needed for one benefit; repeats per multiple.
+   * Group schemes: combined quantity, in `groupMinUnit`, across all products
+   * in scope needed for one benefit; repeats per multiple. In cases, loose
+   * pieces count as fractions of a case.
    */
   @Prop({ type: Number, min: 0 })
   groupMinCases?: number;
+
+  /** Unit of `groupMinCases`; cases when not set. */
+  @Prop({ type: String, enum: SchemeFreeUnit, default: SchemeFreeUnit.CASE })
+  groupMinUnit?: SchemeFreeUnit;
 
   /** Retained to read legacy group percentage schemes; no longer configurable. */
   @Prop({ type: Number, min: 0, max: 100 })

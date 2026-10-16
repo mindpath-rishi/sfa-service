@@ -1498,7 +1498,9 @@ export class ProductService extends MongoRepository<Product> {
           from: 'inventories',
           let: {
             productId: '$productId',
-            vanId: userVanId,
+            // Stock of the van being sold from (the app sends it), falling back
+            // to the van of the salesman's active work session
+            vanId: requestedVanId,
           },
           pipeline: [
             {

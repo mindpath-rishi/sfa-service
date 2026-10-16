@@ -14,6 +14,23 @@ import { HydratedDocument } from 'mongoose';
 
 export type SaleItemDocument = HydratedDocument<SaleItem>;
 
+export type SaleLineScheme = {
+  schemeId: string;
+  schemeName: string;
+  schemeType: string;
+  minimumQuantity?: number;
+  minimumQuantityUnit?: 'CASE' | 'PIECE';
+  discountPercent?: number;
+  discountValue?: number;
+  buyQty?: number;
+  buyUnit?: 'CASE' | 'PIECE';
+  discountAmount: number;
+  freeQty: number;
+  freeUnit?: 'CASE' | 'PIECE';
+  freeProductId?: string;
+  freeProductName?: string;
+};
+
 @Schema({ collection: 'sale_items', timestamps: true })
 export class SaleItem {
   /* ================= REFERENCES ================= */
@@ -142,6 +159,13 @@ export class SaleItem {
 
   @Prop({ type: String, trim: true })
   schemeFreeProductName?: string;
+
+  /**
+   * Every scheme applied to this line (several can apply together). The
+   * scheme* fields above describe the main one for older readers.
+   */
+  @Prop({ type: [Object], default: [] })
+  appliedSchemes?: SaleLineScheme[];
 
   /* ================= CONVERSION ================= */
 

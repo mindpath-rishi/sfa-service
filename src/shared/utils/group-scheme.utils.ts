@@ -18,6 +18,8 @@ export type SaleGroupScheme = {
   schemeName: string;
   schemeType: string;
   groupMinCases: number;
+  /** Unit of groupMinCases / qualifyingCases */
+  groupMinUnit: 'CASE' | 'PIECE';
   qualifyingCases: number;
   multiples: number;
   freePercent?: number;
@@ -67,6 +69,7 @@ export function sanitizeGroupSchemes(value: unknown): SaleGroupScheme[] {
         schemeName,
         schemeType,
         groupMinCases: Math.max(toNumber(scheme.groupMinCases), 0),
+        groupMinUnit: toText(scheme.groupMinUnit) === 'PIECE' ? 'PIECE' : 'CASE',
         qualifyingCases: Number(
           Math.max(toNumber(scheme.qualifyingCases), 0).toFixed(4),
         ),
