@@ -213,8 +213,6 @@ export class RouteSessionService extends MongoRepository<RouteSession> {
             includeDeleted: true,
           });
 
-          console.log(existing, '================ex');
-
           /* ======================================================
            * IF SESSION EXISTS -> REOPEN / ACTIVATE
            * ====================================================== */

@@ -25,6 +25,15 @@ import {
 export { AppliedSaleSchemeDto };
 
 export class CreateSaleDto {
+  @ApiPropertyOptional({
+    type: String,
+    description:
+      'Idempotency key for this checkout; retries with the same key return the existing sale',
+  })
+  @IsOptional()
+  @IsString()
+  clientSaleId?: string;
+
   /**
    * CreateSaleDto
    * =================

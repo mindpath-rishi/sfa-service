@@ -7,12 +7,11 @@ import compression from 'compression';
 import { GlobalExceptionFilter } from './core/filters/exception.filter';
 import { ResponseInterceptor } from './core/interceptors/response.interceptor';
 import * as bodyParser from 'body-parser';
-import { Logger } from 'nestjs-pino';
+import { Logger, PinoLogger } from 'nestjs-pino';
 import { API_MODULE, API_PREFIX, V1 } from './shared/constants/api.constants';
 import {
   BODY_PARSER_LIMIT,
   ENVIRONMENT,
-  REQUEST_ID,
   SWAGGER_API_DESCRIPTION,
   SWAGGER_API_TITLE,
   SWAGGER_API_VERSION,
@@ -26,7 +25,6 @@ import { NestExpressApplication } from '@nestjs/platform-express';
 import { join } from 'path';
 import { SeederRunner } from './core/seeds/seed.runner';
 import { CustomerService } from './modules/v1/customer/customer.service';
-import * as crypto from 'crypto';
 import * as oracledb from 'oracledb';
 import { ORACLE_POOL } from './core/database/oracle/oracle.provider';
 
@@ -34,14 +32,19 @@ import { ORACLE_POOL } from './core/database/oracle/oracle.provider';
 const cookieParser = require('cookie-parser');
 
 async function bootstrap() {
-  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+    // Hold Nest's startup logs until pino is attached, so they share its format.
+    bufferLogs: true,
+  });
+  app.useLogger(app.get(Logger));
 
   app.useStaticAssets(join(process.cwd(), 'uploads'), {
     prefix: '/uploads',
   });
 
-  const logger = app.get(LoggerService);
-  AppLogger.init(logger);
+  const logger = await app.resolve(LoggerService);
+  AppLogger.init(await app.resolve(LoggerService));
+  registerProcessErrorHandlers(logger);
 
   /* ---------------- ORACLE POOL STARTUP CHECK ---------------- */
   try {
@@ -76,8 +79,6 @@ async function bootstrap() {
     credentials: true,
   });
 
-  app.useLogger(app.get(Logger));
-
   /* ---------------- API PREFIX & VERSIONING ---------------- */
   app.setGlobalPrefix(API_PREFIX, {
     exclude: [{ path: API_MODULE.METRIC, method: RequestMethod.GET }],
@@ -101,16 +102,9 @@ async function bootstrap() {
   app.useGlobalFilters(new GlobalExceptionFilter());
 
   app.useGlobalInterceptors(
-    new RequestContextInterceptor(),
+    new RequestContextInterceptor(await app.resolve(PinoLogger)),
     new ResponseInterceptor(),
   );
-
-  /* ---------------- GLOBAL REQUEST ID ---------------- */
-  app.use((req, res, next) => {
-    req.headers[REQUEST_ID] ||= crypto.randomUUID();
-    res.setHeader(REQUEST_ID, req.headers[REQUEST_ID]);
-    next();
-  });
 
   /* ---------------- SWAGGER (DEV ONLY) ---------------- */
   if (process.env.NODE_ENV !== ENVIRONMENT.PRODUCTION) {
@@ -145,11 +139,19 @@ async function bootstrap() {
   await app.listen(process.env.PORT || 3000);
 
   logger.setContext('Bootstrap');
-  logger.info(`🚀 Server running on http://localhost:${process.env.PORT || 3000}`);
+  logger.info(`Server running on http://localhost:${process.env.PORT || 3000}`, {
+    env: process.env.NODE_ENV,
+  });
 
   if (process.env.SEED_PERMISSIONS === 'true') {
-    const seederRunner = app.get(SeederRunner);
-    await seederRunner.run();
+    // Seeding is idempotent housekeeping and runs on every start; a failure
+    // (e.g. inconsistent seed data) must never take the running API down.
+    try {
+      const seederRunner = app.get(SeederRunner);
+      await seederRunner.run();
+    } catch (error) {
+      logger.error('Seeding failed; the API keeps running', error);
+    }
   }
 
   /* ---------------- IMPORT EXCEL ---------------- */
@@ -159,11 +161,32 @@ async function bootstrap() {
 
       await customerService.importFromExcel('./uploads/Outlet Master.xlsx');
 
-      logger.info('✅ CUSTOMER IMPORT COMPLETED');
+      logger.info('Customer import completed');
     } catch (error) {
-      logger.error('❌ CUSTOMER IMPORT FAILED', error);
+      logger.error('Customer import failed', error);
     }
   }
 }
 
-bootstrap();
+/**
+ * Without these, an unhandled rejection is printed by Node without a request
+ * id or timestamp, and an uncaught exception kills the process silently.
+ */
+function registerProcessErrorHandlers(logger: LoggerService) {
+  process.on('unhandledRejection', (reason) => {
+    logger.error('Unhandled promise rejection', reason);
+  });
+
+  process.on('uncaughtException', (error) => {
+    logger.error('Uncaught exception; shutting down', error);
+    // State is unknown after an uncaught exception: exit and let the
+    // process manager restart us. Give pino a moment to flush.
+    setTimeout(() => process.exit(1), 500).unref();
+  });
+}
+
+bootstrap().catch((error) => {
+  // The pino logger may not exist yet, so fall back to stderr.
+  console.error('Fatal: application failed to start', error);
+  process.exit(1);
+});

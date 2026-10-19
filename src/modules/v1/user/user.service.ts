@@ -218,19 +218,12 @@ export class UserService extends MongoRepository<User> {
     //   throw new BadRequestException(USER.AGENT_MISSED);
     // }
 
-    console.log(
-      deviceInfo,
-      '============================Device Info============================',
-    );
-
     if (!deviceInfo) {
       throw new BadRequestException('Device info missing');
     }
 
     /* ---------- USER AUTH ---------- */
     const user: any = await this.findOneWithSelect({ loginId }, '+password');
-
-    console.log('User found for login:', user || 'No user');
 
     if (!user || user.status !== UserStatus.ACTIVE) {
       throw new UnauthorizedException(USER.INVALID_CREDENTIALS);

@@ -195,11 +195,5 @@ export const SchemeSchema = SchemaFactory.createForClass(Scheme);
  * INDEXES
  * ====================================================== */
 
-SchemeSchema.index({ categoryIds: 1 });
-SchemeSchema.index({ subCategoryIds: 1 });
-SchemeSchema.index({ productIds: 1 });
-SchemeSchema.index({ provinceIds: 1 });
-SchemeSchema.index({ routeIds: 1 });
-SchemeSchema.index({ vanIds: 1 });
 SchemeSchema.index({ startDate: 1, endDate: 1 });
 SchemeSchema.index({ status: 1, isDeleted: 1 });

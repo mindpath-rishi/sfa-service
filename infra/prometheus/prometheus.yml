@@ -1,8 +1,28 @@
 global:
-  scrape_interval: 5s
+  scrape_interval: 15s
+  evaluation_interval: 30s
+
+rule_files:
+  - /etc/prometheus/alerts.yml
 
 scrape_configs:
-  - job_name: 'nestjs-backend'
+  # NestJS API: /metrics (outside the /api prefix).
+  - job_name: 'sfa-backend'
     metrics_path: /metrics
     static_configs:
       - targets: ['backend:3000']
+    # When METRICS_TOKEN is set on the backend (recommended in production),
+    # put the same value in infra/prometheus/metrics_token and uncomment:
+    # authorization:
+    #   type: Bearer
+    #   credentials_file: /etc/prometheus/metrics_token
+
+  # Host CPU, memory, disk and network.
+  - job_name: 'node'
+    static_configs:
+      - targets: ['node-exporter:9100']
+
+  # Redis memory, clients, commands.
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis-exporter:9121']

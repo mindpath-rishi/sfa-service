@@ -19,6 +19,12 @@ import { AppControlGuard } from './core/guards/app-control.guard';
 import { JwtAuthGuard } from './core/guards/jwt.guard';
 import { THROTTLE_LIMIT, THROTTLE_TTL } from './shared/constants/app.constants';
 import { AuditLogsModule } from './modules/v1/audit-logs/audit-logs.module';
+import { SystemLogsModule } from './modules/v1/system-logs/system-logs.module';
+import { FeatureDebugModule } from './modules/v1/feature-debug/feature-debug.module';
+import { DiagnosticsModule } from './modules/v1/diagnostics/diagnostics.module';
+import { AppVersionGuard } from './modules/v1/diagnostics/app-version.guard';
+import { MonitoringModule } from './modules/v1/monitoring/monitoring.module';
+import { BulkImportModule } from './modules/v1/bulk-import/bulk-import.module';
 import { PermissionsGuard } from './core/guards/permission.guard';
 import { BackOfficeOnlyGuard } from './core/guards/back-office-only.guard';
 import { SeedsModule } from './core/seeds/seeds.module';
@@ -81,7 +87,7 @@ import { ScriptModule } from './modules/v1/script/script.module';
     /* ================= CONFIG ================= */
     ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: [`.env.${process.env.NODE_ENV}`],
+      envFilePath: [`.env.${process.env.NODE_ENV ?? 'development'}`, '.env'],
       validationSchema: envValidationSchema,
     }),
 
@@ -105,6 +111,11 @@ import { ScriptModule } from './modules/v1/script/script.module';
     MetricsModule,
     HealthModule,
     AuditLogsModule,
+    SystemLogsModule,
+    FeatureDebugModule,
+    DiagnosticsModule,
+    MonitoringModule,
+    BulkImportModule,
     RoleModule,
     SeedsModule,
     PermissionModule,
@@ -177,6 +188,11 @@ import { ScriptModule } from './modules/v1/script/script.module';
       provide: APP_GUARD,
       useClass: BackOfficeOnlyGuard,
     },
+    /* ===== MINIMUM MOBILE APP VERSION (set in MIS) ===== */
+    {
+      provide: APP_GUARD,
+      useExisting: AppVersionGuard,
+    },
     // {
     //   provide: APP_GUARD,
     //   useClass: PermissionsGuard,
@@ -186,6 +202,6 @@ import { ScriptModule } from './modules/v1/script/script.module';
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
-    consumer.apply(SessionMiddleware).forRoutes('*');
+    consumer.apply(SessionMiddleware).forRoutes('{*splat}');
   }
 }

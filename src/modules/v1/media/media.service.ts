@@ -205,8 +205,6 @@ export class MediaService extends MongoRepository<Media> {
       ...cleanRest,
     };
 
-    console.log(cleanRest, '===================cleanRest============');
-
     if (searchText) {
       const regex = new RegExp(searchText, 'i');
       filter.$or = [

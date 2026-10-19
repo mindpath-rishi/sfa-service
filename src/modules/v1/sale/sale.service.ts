@@ -7,6 +7,7 @@ import {
   HttpStatus,
   BadRequestException,
   Logger,
+  OnModuleInit,
 } from '@nestjs/common';
 import { Model } from 'mongoose';
 
@@ -52,7 +53,7 @@ import {
 } from 'src/core/database/mongo/schema/position.schema';
 
 @Injectable()
-export class SaleService extends MongoRepository<Sale> {
+export class SaleService extends MongoRepository<Sale> implements OnModuleInit {
   private readonly logger = new Logger(SaleService.name);
   private readonly employeeModel: Model<Employee>;
   private readonly productCategoryModel: Model<ProductCategory>;
@@ -78,7 +79,48 @@ export class SaleService extends MongoRepository<Sale> {
     this.positionModel = mongo.getModel(Position.name, PositionSchema);
   }
 
+  /**
+   * Production runs with autoIndex off, so make sure the idempotency index
+   * exists. Idempotent and cheap: it only covers sales that carry the key.
+   */
+  async onModuleInit() {
+    try {
+      await this.model.collection.createIndex(
+        { clientSaleId: 1 },
+        {
+          unique: true,
+          partialFilterExpression: { clientSaleId: { $type: 'string' } },
+          name: 'unique_client_sale_id',
+        },
+      );
+    } catch (error) {
+      this.logger.error(
+        `Could not ensure unique_client_sale_id index: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+  }
+
+  /** Sale already created for this checkout's idempotency key, if any. */
+  private async findByClientSaleId(clientSaleId?: string) {
+    const key = clientSaleId?.trim();
+    if (!key) return null;
+    return this.model.findOne({ clientSaleId: key }).select('saleId').lean();
+  }
+
   async create(payload: CreateSaleDto) {
+    // A retried checkout (same key) returns the existing sale: no second
+    // sale, no second stock deduction.
+    const alreadyCreated = await this.findByClientSaleId(payload.clientSaleId);
+    if (alreadyCreated) {
+      return {
+        statusCode: HttpStatus.OK,
+        message: SALE.CREATED,
+        data: { saleId: alreadyCreated.saleId },
+      };
+    }
+
     try {
       const created = await this.withTransaction(async (session) => {
         const { items = [], ...rest } = payload;
@@ -712,6 +754,18 @@ export class SaleService extends MongoRepository<Sale> {
 
       return created.result;
     } catch (error) {
+      // Two copies of the same checkout arrived together: the second one
+      // hit the unique key and was rolled back; return the first.
+      if (error?.code === 11000 || error?.code === 11001) {
+        const concurrent = await this.findByClientSaleId(payload.clientSaleId);
+        if (concurrent) {
+          return {
+            statusCode: HttpStatus.OK,
+            message: SALE.CREATED,
+            data: { saleId: concurrent.saleId },
+          };
+        }
+      }
       this.handleDuplicateError(error);
     }
   }
@@ -1596,7 +1650,6 @@ export class SaleService extends MongoRepository<Sale> {
         data: finalData,
       };
     } catch (error) {
-      console.log(error);
       throw error;
     }
   }
@@ -2205,6 +2258,15 @@ export class SaleService extends MongoRepository<Sale> {
       );
       return false;
     }
+  }
+
+  /** Retry one sale to ERP (used by the Feature Debugger repair action). */
+  async retrySaleToERP(saleId: string) {
+    const sale = await this.findOne({ saleId } as any);
+    if (!sale) throw new NotFoundException(`Sale ${saleId} not found`);
+    const items = await this.saleItemService.findLean({ saleId });
+    const synced = await this.syncSaleToERP({ sale, items, saleId });
+    return { saleId, synced };
   }
 
   async syncPendingSalesToERP() {

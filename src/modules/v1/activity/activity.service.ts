@@ -321,7 +321,6 @@ export class ActivityService extends MongoRepository<Activity> {
             }
           }
         } catch (error) {
-          console.error('Van daily stock error:', error);
           throw error;
         }
       }

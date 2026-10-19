@@ -4,11 +4,14 @@
  * Every main business module whose changes are written to `audit_logs`.
  * Add a module here to audit it; the plugin is attached at connection start.
  *
+ * Stock and line items are audited because they settle stock and money
+ * disputes; line items are logged under their parent (sale / top-up / count).
+ *
  * Deliberately NOT audited (high-volume ledgers / telemetry / derived data):
  * live location, interaction logs, notifications, devices, media, inventory
- * transactions, van inventory, van daily stock, sale items, top-up items,
- * stock count items, shop visits, work / route sessions, activities,
- * productivity reports, permissions (seeded), audit logs themselves.
+ * transactions (itself a stock ledger), van daily stock (derived), shop
+ * visits, work / route sessions, activities, productivity reports,
+ * permissions (seeded), audit logs themselves.
  */
 
 import type { Schema } from 'mongoose';
@@ -36,15 +39,19 @@ import { RoleSchema } from '../schema/role.schema';
 import { RouteChangeRequestSchema } from '../schema/route-change-request.schema';
 import { RouteCustomerMappingSchema } from '../schema/route-customer-mapping.schema';
 import { RouteSchema } from '../schema/route.schema';
+import { SaleItemSchema } from '../schema/sale-item.schema';
 import { SaleSchema } from '../schema/sale.schema';
 import { SchemeSchema } from '../schema/scheme.schema';
 import { SegmentationSchema } from '../schema/segmentation.schema';
+import { StockCountItemSchema } from '../schema/stock-count-item.schema';
 import { StockCountSchema } from '../schema/stock-count.schema';
 import { StockUnloadRequestSchema } from '../schema/stock-unload-request.schema';
 import { TargetSchema } from '../schema/target.schema';
 import { UserSchema } from '../schema/user.schema';
 import { VanChangeRequestSchema } from '../schema/van-change-request.schema';
+import { VanInventoryTopupItemSchema } from '../schema/van-inventory-topup-item.schema';
 import { VanInventoryTopupSchema } from '../schema/van-inventory-topup.schema';
+import { VanInventorySchema } from '../schema/van-inventory.schema';
 import { VanSchema } from '../schema/van.schema';
 
 export type AuditedModule = AuditPluginOptions & {
@@ -90,6 +97,12 @@ export const AUDITED_MODULES: AuditedModule[] = [
   { schema: VanInventoryTopupSchema, entity: 'topups', idField: 'vanInventoryTopupId', label: 'Top-ups' },
   { schema: StockCountSchema, entity: 'stock-counts', idField: 'stockCountId', label: 'Stock Counts' },
   { schema: StockUnloadRequestSchema, entity: 'stock-unloads', idField: 'unloadRequestId', label: 'Stock Unloads' },
+
+  /* ---------- Stock & line items ---------- */
+  { schema: VanInventorySchema, entity: 'van-stock', idField: 'inventoryId', label: 'Van Stock' },
+  { schema: SaleItemSchema, entity: 'sale-items', idField: 'saleId', label: 'Sale Items' },
+  { schema: VanInventoryTopupItemSchema, entity: 'topup-items', idField: 'vanInventoryTopupId', label: 'Top-up Items' },
+  { schema: StockCountItemSchema, entity: 'stock-count-items', idField: 'stockCountId', label: 'Stock Count Items' },
 
   /* ---------- Requests & targets ---------- */
   { schema: VanChangeRequestSchema, entity: 'van-change-requests', idField: 'vanChangeRequestId', label: 'Van Change Requests' },

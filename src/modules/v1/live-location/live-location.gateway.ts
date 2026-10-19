@@ -1,3 +1,5 @@
+import { Logger, OnModuleInit } from '@nestjs/common';
+import { registerSocketCounter } from 'src/core/metrics/app-metrics';
 import { JwtService } from '@nestjs/jwt';
 import {
   ConnectedSocket,
@@ -20,7 +22,9 @@ const MANAGER_ROOM = 'live-location-managers';
   transports: ['websocket'],
 })
 @Public()
-export class LiveLocationGateway implements OnGatewayConnection {
+export class LiveLocationGateway implements OnGatewayConnection, OnModuleInit {
+  private readonly logger = new Logger(LiveLocationGateway.name);
+
   @WebSocketServer()
   private readonly server!: Server;
 
@@ -28,6 +32,10 @@ export class LiveLocationGateway implements OnGatewayConnection {
     private readonly jwtService: JwtService,
     private readonly liveLocationService: LiveLocationService,
   ) {}
+
+  onModuleInit() {
+    registerSocketCounter('liveLocation', () => this.server?.sockets.sockets.size ?? 0);
+  }
 
   async handleConnection(client: Socket) {
     try {
@@ -72,9 +80,9 @@ export class LiveLocationGateway implements OnGatewayConnection {
       );
       this.server.to(MANAGER_ROOM).emit('live-location:update', data);
       void this.liveLocationService.persistByDistance(data).catch((error) => {
-        console.error(
-          '[LiveLocation] Failed to persist sampled location',
-          error,
+        this.logger.error(
+          `Failed to persist sampled location (van ${data.vanId})`,
+          error instanceof Error ? error.stack : String(error),
         );
       });
       return {

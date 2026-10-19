@@ -145,7 +145,3 @@ export class Employee {
 
 export const EmployeeSchema = SchemaFactory.createForClass(Employee);
 
-// Useful indexes
-EmployeeSchema.index({ employeeId: 1 }, { unique: true });
-EmployeeSchema.index({ manNumber: 1 });
-EmployeeSchema.index({ hierarchyPath: 1 });

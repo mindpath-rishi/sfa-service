@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { sanitizeGroupSchemes } from 'src/shared/utils/group-scheme.utils';
 import { toLineSchemes } from 'src/shared/utils/sale-line-scheme.utils';
 import { InjectConnection } from '@nestjs/mongoose';
@@ -7,8 +7,9 @@ import { Connection, Types } from 'mongoose';
 import { SyncOperationDto } from './dto/sync.dto';
 import { IdGenerator } from 'src/shared/utils/id-generator.utils';
 import { NotificationService } from '../notification/notification.service';
+import { syncOperationsTotal } from 'src/core/metrics/app-metrics';
 
-const COLLECTIONS = {
+export const COLLECTIONS = {
   customers: 'customer_master',
   outlets: 'customer_master',
   products: 'product_master',
@@ -44,7 +45,7 @@ const COLLECTIONS = {
   inventoryTransactions: 'inventory_transactions',
 } as const;
 
-const ENTITY_ID_FIELDS: Record<keyof typeof COLLECTIONS, string> = {
+export const ENTITY_ID_FIELDS: Record<keyof typeof COLLECTIONS, string> = {
   customers: 'customerId',
   outlets: 'customerId',
   products: 'productId',
@@ -318,8 +319,14 @@ const normalizeOfflinePayload = (
   return payload;
 };
 
+export const SYNC_RESOLUTIONS_COLLECTION = 'offline_sync_resolutions';
+
+export type SyncResolutionAction = 'APPLY_CLIENT' | 'DISCARD';
+
 @Injectable()
 export class SyncService {
+  private readonly logger = new Logger(SyncService.name);
+
   constructor(
     @InjectConnection() private readonly connection: Connection,
     private readonly notificationService: NotificationService,
@@ -970,10 +977,12 @@ export class SyncService {
     existing: Record<string, unknown>,
     payload: Record<string, unknown>,
     operation: SyncOperationDto,
+    force = false,
   ) {
     const serverVersion = Number(existing.version ?? 1);
     const clientVersion = Number(operation.payload.version ?? 0);
-    const isConflict = clientVersion > 0 && serverVersion > clientVersion;
+    const isConflict =
+      !force && clientVersion > 0 && serverVersion > clientVersion;
 
     if (!isConflict) {
       return {
@@ -1145,10 +1154,22 @@ export class SyncService {
 
   async upload(operations: SyncOperationDto[], ownerId: string) {
     const results = [] as Record<string, unknown>[];
+    const resolutions = await this.loadWaitingResolutions(operations, ownerId);
+
     for (const operation of operations) {
       let auditObjectId: unknown | null = null;
+      const resolution = resolutions.get(
+        resolutionKey(operation.queueId, operation.localId),
+      );
 
       try {
+        if (resolution?.action === 'DISCARD') {
+          results.push(
+            await this.applyDiscardResolution(operation, ownerId, resolution),
+          );
+          continue;
+        }
+
         const collectionName =
           COLLECTIONS[operation.entity as keyof typeof COLLECTIONS];
         if (!collectionName)
@@ -1504,6 +1525,8 @@ export class SyncService {
           existing,
           payload,
           operation,
+          // A Super Admin chose the salesman's version in MIS.
+          resolution?.action === 'APPLY_CLIENT',
         );
 
         if (conflictResult.hasConflict) {
@@ -1676,7 +1699,213 @@ export class SyncService {
         });
       }
     }
+
+    await this.finishApplyResolutions(resolutions, results);
+    this.logUploadOutcome(operations, results);
     return { results };
+  }
+
+  /* ==================== MIS CONFLICT RESOLUTION ==================== */
+
+  /**
+   * Decisions a Super Admin made in MIS for operations that kept failing.
+   * They are applied when the device retries the same queue item, so the
+   * phone's queue clears without an app update.
+   */
+  private async loadWaitingResolutions(
+    operations: SyncOperationDto[],
+    ownerId: string,
+  ) {
+    const map = new Map<string, Record<string, any>>();
+    if (!operations.length) return map;
+
+    let rows: Record<string, any>[] = [];
+    try {
+      rows = await this.connection
+        .collection(SYNC_RESOLUTIONS_COLLECTION)
+        .find({
+          ownerId,
+          status: 'WAITING',
+          queueId: {
+            $in: operations.map((operation) => String(operation.queueId)),
+          },
+        })
+        .toArray();
+    } catch (error) {
+      // Never block a salesman's sync because the decision lookup failed.
+      this.logger.warn(
+        `Could not load sync resolutions: ${(error as Error)?.message}`,
+      );
+    }
+
+    for (const row of rows) {
+      map.set(resolutionKey(row.queueId, row.localId), row);
+    }
+    return map;
+  }
+
+  /** "Discard on device": acknowledge without writing, keep the server copy. */
+  private async applyDiscardResolution(
+    operation: SyncOperationDto,
+    ownerId: string,
+    resolution: Record<string, any>,
+  ) {
+    const existing = await this.findServerRecord({
+      entity: operation.entity,
+      ownerId,
+      localId: operation.localId,
+      businessId: undefined,
+      serverId: String(operation.payload.serverId ?? ''),
+      payload: operation.payload,
+    }).catch(() => null);
+
+    if (existing?.record) {
+      // The device dropped its change; bump updatedAt so the next download
+      // sends the server copy back and the phone matches the server again.
+      await existing.collection.updateOne(
+        { _id: existing.record._id },
+        { $set: { updatedAt: new Date() } },
+      );
+    }
+
+    const result = {
+      queueId: operation.queueId,
+      localId: operation.localId,
+      success: true,
+      ...(existing?.record
+        ? {
+            serverId: String(existing.record._id),
+            version: Number(existing.record.version ?? 1),
+          }
+        : {}),
+      discarded: true,
+    };
+
+    const auditObjectId = await this.createOfflineSyncAudit({
+      operation,
+      ownerId,
+      businessId: operation.localId,
+      rawPayload: operation.payload,
+      cleanedPayload: null,
+      before: existing?.record ?? null,
+    });
+    await this.markOfflineSyncAuditSuccess(auditObjectId, {
+      serverId: result.serverId,
+      version: result.version,
+      after: existing?.record ?? null,
+      result: { ...result, resolutionId: resolution.resolutionId },
+    });
+    await this.markResolution(resolution, 'APPLIED', result);
+
+    this.logger.log(
+      `Discarded offline ${operation.entity} ${operation.operation} on device (resolution ${resolution.resolutionId})`,
+    );
+    return result;
+  }
+
+  private async finishApplyResolutions(
+    resolutions: Map<string, Record<string, any>>,
+    results: Record<string, unknown>[],
+  ) {
+    for (const resolution of resolutions.values()) {
+      if (resolution.action !== 'APPLY_CLIENT') continue;
+      const result = results.find(
+        (entry) =>
+          String(entry.queueId) === resolution.queueId &&
+          String(entry.localId) === resolution.localId,
+      );
+      if (!result) continue;
+      await this.markResolution(
+        resolution,
+        result.success ? 'APPLIED' : 'FAILED',
+        result,
+      );
+    }
+  }
+
+  private async markResolution(
+    resolution: Record<string, any>,
+    status: 'APPLIED' | 'FAILED',
+    result: Record<string, unknown>,
+  ) {
+    try {
+      await this.connection.collection(SYNC_RESOLUTIONS_COLLECTION).updateOne(
+        { _id: resolution._id },
+        {
+          $set: {
+            status,
+            result,
+            error: result.success ? null : (result.error ?? 'Failed'),
+            appliedAt: new Date(),
+            updatedAt: new Date(),
+          },
+        },
+      );
+    } catch (error) {
+      // The sync itself succeeded; only the MIS status is stale.
+      this.logger.warn(
+        `Could not update sync resolution ${resolution.resolutionId}: ${(error as Error)?.message}`,
+      );
+    }
+  }
+
+  /**
+   * Best-effort lookup of the server document an offline operation targets,
+   * used by MIS to show "server version" next to the salesman's change.
+   */
+  async findServerRecord(params: {
+    entity: string;
+    ownerId: string;
+    localId: string;
+    businessId?: string;
+    serverId?: string;
+    payload?: Record<string, unknown> | null;
+  }) {
+    const collectionName =
+      COLLECTIONS[params.entity as keyof typeof COLLECTIONS];
+    if (!collectionName) return null;
+
+    const collection = this.connection.collection(collectionName);
+    const idField = ENTITY_ID_FIELDS[params.entity as keyof typeof COLLECTIONS];
+    const businessId =
+      params.businessId ??
+      (idField ? params.payload?.[idField] : undefined) ??
+      params.localId;
+
+    const or: Record<string, unknown>[] = [{ uuid: params.localId }];
+    if (params.serverId && Types.ObjectId.isValid(params.serverId)) {
+      or.push({ _id: new Types.ObjectId(params.serverId) });
+    }
+    if (idField && idField !== '_id' && businessId) {
+      or.push({ [idField]: businessId });
+    }
+
+    const record = await collection.findOne({ $or: or });
+    return record ? { collection, record } : null;
+  }
+
+  /** One summary line per upload, one warning per failed operation. */
+  private logUploadOutcome(
+    operations: SyncOperationDto[],
+    results: Record<string, unknown>[],
+  ) {
+    const failed = results.filter((result) => !result.success);
+    for (const result of results) {
+      const entity = operations.find((entry) => entry.queueId === result.queueId)?.entity ?? 'unknown';
+      syncOperationsTotal.labels(entity, result.success ? 'success' : result.conflict ? 'conflict' : 'failed').inc();
+    }
+    const message = `Offline sync upload: ${operations.length} operations, ${failed.length} failed`;
+    if (failed.length) this.logger.warn(message);
+    else this.logger.log(message);
+
+    for (const result of failed.slice(0, 50)) {
+      const operation = operations.find(
+        (entry) => entry.queueId === result.queueId,
+      );
+      this.logger.warn(
+        `Offline ${operation?.entity ?? '?'} ${operation?.operation ?? ''} failed: ${String(result.error ?? 'unknown')} (queue ${String(result.queueId)}, local ${String(result.localId)})`,
+      );
+    }
   }
 
   private async repairDownloadMetadata(
@@ -1883,3 +2112,6 @@ export class SyncService {
     };
   }
 }
+
+const resolutionKey = (queueId: unknown, localId: unknown) =>
+  `${String(queueId)}|${String(localId)}`;

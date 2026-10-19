@@ -34,7 +34,8 @@
     "sync:topup-stock-take": "ts-node -r tsconfig-paths/register scripts/sync-topup-erp.ts stock-take",
     "sync:sales-erp": "ts-node -r tsconfig-paths/register scripts/sync-sales-erp.ts",
     "migrate:position-mapping": "ts-node -r tsconfig-paths/register scripts/migrate-position-mapping.ts",
-    "migrate:sales-position-hierarchy": "ts-node -r tsconfig-paths/register scripts/migrate-sales-position-hierarchy.ts"
+    "migrate:sales-position-hierarchy": "ts-node -r tsconfig-paths/register scripts/migrate-sales-position-hierarchy.ts",
+    "migrate:unique-visit-indexes": "ts-node -r tsconfig-paths/register scripts/migrate-unique-visit-indexes.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",
@@ -120,6 +121,9 @@
       "**/*.(t|j)s"
     ],
     "coverageDirectory": "../coverage",
-    "testEnvironment": "node"
+    "testEnvironment": "node",
+    "moduleNameMapper": {
+      "^src/(.*)$": "<rootDir>/$1"
+    }
   }
 }

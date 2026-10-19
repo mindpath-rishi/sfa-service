@@ -73,9 +73,13 @@ export class InteractionLog {
 export const InteractionLogSchema =
   SchemaFactory.createForClass(InteractionLog);
 
+// One open (ARRIVED) interaction per salesman. Keyed on employeeId+status
+// rather than employeeId alone because MongoDB 4.4 cannot hold two indexes
+// on the same key, and the plain employeeId index above serves lookups.
 InteractionLogSchema.index(
-  { employeeId: 1 },
+  { employeeId: 1, status: 1 },
   {
+    name: 'employeeId_arrived_unique',
     unique: true,
     partialFilterExpression: { status: InteractionStatus.ARRIVED },
   },

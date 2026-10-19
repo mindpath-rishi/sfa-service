@@ -32,6 +32,14 @@ export class Sale {
   @Prop({ type: String, required: true, unique: true, index: true })
   saleId!: string;
 
+  /**
+   * Idempotency key sent by the app for one checkout. A retried request
+   * (e.g. after a network timeout) returns the sale already created instead
+   * of creating a second one.
+   */
+  @Prop({ type: String, trim: true })
+  clientSaleId?: string;
+
   /* ======================================================
    * REFERENCES
    * ====================================================== */
@@ -259,6 +267,15 @@ export const SaleSchema = SchemaFactory.createForClass(Sale);
 /* ======================================================
  * INDEXES
  * ====================================================== */
+
+SaleSchema.index(
+  { clientSaleId: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { clientSaleId: { $type: 'string' } },
+    name: 'unique_client_sale_id',
+  },
+);
 
 SaleSchema.index(
   { vanId: 1, customerId: 1, date: 1 },

@@ -3,10 +3,10 @@ import {
   NestInterceptor,
   ExecutionContext,
   CallHandler,
+  StreamableFile,
 } from '@nestjs/common';
 import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
-import { v4 as uuid } from 'uuid';
 import { Request, Response } from 'express';
 import { ApiResponse } from '../../shared/interfaces/api-response.interface';
 
@@ -24,14 +24,20 @@ export class ResponseInterceptor<T>
 
     const startTime = process.hrtime.bigint();
 
-    const requestId =
-      (request.headers['x-request-id'] as string) ??
-      uuid();
-
-    (request as any).requestId = requestId;
+    // Assigned by the pino-http middleware (logger.module.ts), so the id in
+    // the response body matches the one in the logs.
+    const requestId = (request as any).id as string;
 
     return next.handle().pipe(
       map((result: any) => {
+        /**
+         * 0️⃣ Handlers that write the response themselves (@Res: file
+         * downloads, /metrics) return nothing; wrapping would throw.
+         */
+        if (response.headersSent || result === undefined) {
+          return result;
+        }
+
         /**
          * 1️⃣ Avoid double wrapping
          */
@@ -44,6 +50,7 @@ export class ResponseInterceptor<T>
          */
         if (
           result instanceof Buffer ||
+          result instanceof StreamableFile ||
           typeof result?.pipe === 'function'
         ) {
           return result;

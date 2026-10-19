@@ -120,8 +120,3 @@ InventoryTransactionSchema.index({
   direction: 1,
   transactionDate: -1,
 });
-
-// Reference lookup
-InventoryTransactionSchema.index({
-  referenceNo: 1,
-});

@@ -147,21 +147,43 @@ export class ShopVisitService extends MongoRepository<ShopVisit> {
     const visitType =
       distanceMeters <= radius ? ShopVisitType.ON_SITE : ShopVisitType.OFF_SITE;
 
-    const doc = await this.interactionModel.create({
-      interactionId: IdGenerator.generate('InteractionLog', 10),
-      customerId: payload.customerId,
-      employeeId,
-      routeSessionId: payload.routeSessionId,
-      workSessionId: payload.workSessionId,
-      vanId: payload.vanId,
-      customerLocation: { latitude: customerLat, longitude: customerLng },
-      arrivalLocation: payload.salesmanLocation,
-      distanceMeters: Number(distanceMeters.toFixed(2)),
-      configuredRadiusMeters: radius,
-      visitType,
-      arrivalTime,
-      status: InteractionStatus.ARRIVED,
-    });
+    let doc;
+    try {
+      doc = await this.interactionModel.create({
+        interactionId: IdGenerator.generate('InteractionLog', 10),
+        customerId: payload.customerId,
+        employeeId,
+        routeSessionId: payload.routeSessionId,
+        workSessionId: payload.workSessionId,
+        vanId: payload.vanId,
+        customerLocation: { latitude: customerLat, longitude: customerLng },
+        arrivalLocation: payload.salesmanLocation,
+        distanceMeters: Number(distanceMeters.toFixed(2)),
+        configuredRadiusMeters: radius,
+        visitType,
+        arrivalTime,
+        status: InteractionStatus.ARRIVED,
+      });
+    } catch (error: any) {
+      // A concurrent arrival (double tap / app retry) won the unique
+      // one-ARRIVED-per-salesman index; return its interaction instead.
+      if (error?.code !== 11000) throw error;
+      const winner = await this.interactionModel.findOne({
+        employeeId,
+        status: InteractionStatus.ARRIVED,
+      });
+      if (!winner) throw error;
+      if (winner.customerId !== payload.customerId) {
+        throw new ConflictException(
+          'Another arrival is already in progress; please retry',
+        );
+      }
+      return {
+        statusCode: HttpStatus.OK,
+        message: 'Interaction already arrived',
+        data: winner,
+      };
+    }
 
     return {
       statusCode: HttpStatus.CREATED,
@@ -481,8 +503,6 @@ export class ShopVisitService extends MongoRepository<ShopVisit> {
   }
 
   async status(query: ShopVisitStatusQueryDto) {
-    console.log(query, '==================query=================');
-
     const match = Object.fromEntries(
       Object.entries({
         ...query,
@@ -539,8 +559,6 @@ export class ShopVisitService extends MongoRepository<ShopVisit> {
     ];
 
     const result = await this.model.aggregate(pipeline);
-
-    console.log(result[0], '=====================195=============');
 
     return {
       statusCode: HttpStatus.OK,

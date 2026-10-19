@@ -8,8 +8,15 @@ services:
     environment:
       NODE_ENV: production
     command: ["node", "dist/main.js"]
+    volumes:
+      # Not baked into the image: push-notification credentials (the API does
+      # not start without them) and uploaded media (must survive redeploys).
+      - ./firebase-admin.json:/app/firebase-admin.json:ro
+      - ./uploads:/app/uploads
 
   grafana:
     environment:
-      GF_SECURITY_ADMIN_USER: admin
-      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      # Required: the default admin/admin must never reach production.
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?Set GRAFANA_ADMIN_PASSWORD}
+      GF_USERS_ALLOW_SIGN_UP: "false"

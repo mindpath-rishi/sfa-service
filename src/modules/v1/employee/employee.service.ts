@@ -10034,7 +10034,6 @@ export class EmployeeService extends MongoRepository<Employee> {
       ),
     ];
 
-    console.log(routeIds, 'routeIds');
     /* ==========================================
      * ASSIGNED OUTLETS
      * ========================================== */

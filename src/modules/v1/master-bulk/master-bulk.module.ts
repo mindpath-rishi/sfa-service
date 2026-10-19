@@ -16,5 +16,6 @@ import { RoleModule } from '../role/role.module';
   imports: [CountryModule, ProvinceModule, PositionModule, CustomerCategoryModule, ChannelModule, OutletTypeModule, MarketModule, ProductCategoryModule, SegmentationModule, RoleModule],
   controllers: [MasterBulkController],
   providers: [MasterBulkService],
+  exports: [MasterBulkService],
 })
 export class MasterBulkModule {}

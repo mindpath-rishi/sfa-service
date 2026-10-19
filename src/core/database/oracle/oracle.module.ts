@@ -1,4 +1,4 @@
-import { Global, Module, OnApplicationShutdown } from '@nestjs/common';
+import { Global, Logger, Module, OnApplicationShutdown } from '@nestjs/common';
 import * as oracledb from 'oracledb';
 import { OracleProvider } from './oracle.provider';
 import { OracleRepository } from './oracle.repository';
@@ -9,16 +9,21 @@ import { OracleRepository } from './oracle.repository';
   exports: [OracleRepository],
 })
 export class OracleModule implements OnApplicationShutdown {
+  private readonly logger = new Logger('OracleDB');
+
   async onApplicationShutdown(signal?: string) {
     try {
       const pool = oracledb.getPool();
 
       if (pool) {
         await pool.close(10);
-        console.log(`OracleDB pool closed. Signal: ${signal}`);
+        this.logger.log(`OracleDB pool closed. Signal: ${signal}`);
       }
     } catch (error) {
-      console.error('Error while closing OracleDB pool', error);
+      this.logger.error(
+        'Error while closing OracleDB pool',
+        error instanceof Error ? error.stack : String(error),
+      );
     }
   }
 }

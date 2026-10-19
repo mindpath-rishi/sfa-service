@@ -33,7 +33,9 @@ export class MarketService
   }
 
   async onModuleInit() {
-    const indexes = await this.model.collection.indexes().catch((error) => {
+    // Typed explicitly: `.catch(() => [])` otherwise makes this never[].
+    const indexes: { name?: string; unique?: boolean; key: Record<string, unknown> }[] =
+      await this.model.collection.indexes().catch((error) => {
       if (error?.code === 26) return [];
       throw error;
     });

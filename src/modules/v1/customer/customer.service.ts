@@ -1,5 +1,6 @@
 import {
   Injectable,
+  Logger,
   NotFoundException,
   ConflictException,
   HttpStatus,
@@ -51,6 +52,8 @@ const REPORT_TIMEZONE =
 
 @Injectable()
 export class CustomerService extends MongoRepository<Customer> {
+  private readonly logger = new Logger(CustomerService.name);
+
   private readonly positionModel: Model<Position>;
   private readonly roleModel: Model<Role>;
 
@@ -1759,13 +1762,13 @@ export class CustomerService extends MongoRepository<Customer> {
 
     try {
       return await this.withTransaction(async (session) => {
-        console.log('🚀 ================= IMPORT STARTED =================');
+        this.logger.log('🚀 ================= IMPORT STARTED =================');
 
         /* ======================================================
          * EXCEL READ
          * ====================================================== */
 
-        console.log(`📄 Reading Excel File: ${filePath}`);
+        this.logger.debug(`📄 Reading Excel File: ${filePath}`);
 
         const workbook = XLSX.readFile(filePath);
 
@@ -1773,7 +1776,7 @@ export class CustomerService extends MongoRepository<Customer> {
 
         const rows: any[] = XLSX.utils.sheet_to_json(sheet);
 
-        console.log(`✅ Total Rows Found: ${rows.length}`);
+        this.logger.log(`✅ Total Rows Found: ${rows.length}`);
 
         /* ======================================================
          * COLUMN MAPPING
@@ -1833,9 +1836,7 @@ export class CustomerService extends MongoRepository<Customer> {
          * COUNTRY
          * ====================================================== */
 
-        console.log(
-          '🌍 ================= IMPORTING COUNTRIES =================',
-        );
+        this.logger.log('🌍 ================= IMPORTING COUNTRIES =================');
 
         for (const row of rows) {
           try {
@@ -1860,14 +1861,14 @@ export class CustomerService extends MongoRepository<Customer> {
 
               stats.countries++;
 
-              console.log(`✅ COUNTRY CREATED: ${countryName}`);
+              this.logger.debug(`✅ COUNTRY CREATED: ${countryName}`);
             } else {
-              console.log(`♻️ COUNTRY EXISTS: ${countryName}`);
+              this.logger.debug(`♻️ COUNTRY EXISTS: ${countryName}`);
             }
 
             countryMap.set(countryName, country.countryId);
           } catch (error: any) {
-            console.log(`❌ COUNTRY ERROR`, error.message);
+            this.logger.warn(`❌ COUNTRY ERROR: ${error.message}`);
 
             errors.push({
               type: 'COUNTRY',
@@ -1880,9 +1881,7 @@ export class CustomerService extends MongoRepository<Customer> {
          * PROVINCE
          * ====================================================== */
 
-        console.log(
-          '🏛 ================= IMPORTING PROVINCES =================',
-        );
+        this.logger.log('🏛 ================= IMPORTING PROVINCES =================');
 
         for (const row of rows) {
           try {
@@ -1916,14 +1915,14 @@ export class CustomerService extends MongoRepository<Customer> {
 
               stats.provinces++;
 
-              console.log(`✅ PROVINCE CREATED: ${provinceName}`);
+              this.logger.debug(`✅ PROVINCE CREATED: ${provinceName}`);
             } else {
-              console.log(`♻️ PROVINCE EXISTS: ${provinceName}`);
+              this.logger.debug(`♻️ PROVINCE EXISTS: ${provinceName}`);
             }
 
             provinceMap.set(provinceKey, province.provinceId);
           } catch (error: any) {
-            console.log(`❌ PROVINCE ERROR`, error.message);
+            this.logger.warn(`❌ PROVINCE ERROR: ${error.message}`);
 
             errors.push({
               type: 'PROVINCE',
@@ -1936,7 +1935,7 @@ export class CustomerService extends MongoRepository<Customer> {
          * MARKET
          * ====================================================== */
 
-        console.log('🏪 ================= IMPORTING MARKETS =================');
+        this.logger.log('🏪 ================= IMPORTING MARKETS =================');
 
         for (const row of rows) {
           try {
@@ -1973,14 +1972,14 @@ export class CustomerService extends MongoRepository<Customer> {
 
               stats.markets++;
 
-              console.log(`✅ MARKET CREATED: ${marketName}`);
+              this.logger.debug(`✅ MARKET CREATED: ${marketName}`);
             } else {
-              console.log(`♻️ MARKET EXISTS: ${marketName}`);
+              this.logger.debug(`♻️ MARKET EXISTS: ${marketName}`);
             }
 
             marketMap.set(marketKey, market.marketId);
           } catch (error: any) {
-            console.log(`❌ MARKET ERROR`, error.message);
+            this.logger.warn(`❌ MARKET ERROR: ${error.message}`);
 
             errors.push({
               type: 'MARKET',
@@ -1997,9 +1996,7 @@ export class CustomerService extends MongoRepository<Customer> {
          * CUSTOMER
          * ====================================================== */
 
-        console.log(
-          '👥 ================= IMPORTING CUSTOMERS =================',
-        );
+        this.logger.log('👥 ================= IMPORTING CUSTOMERS =================');
 
         for (const row of rows) {
           try {
@@ -2050,16 +2047,14 @@ export class CustomerService extends MongoRepository<Customer> {
              * ====================================================== */
 
             if (duplicateCustomers.length > 1) {
-              console.log(`⚠️ DUPLICATE CUSTOMER FOUND: ${customerName}`);
+              this.logger.debug(`⚠️ DUPLICATE CUSTOMER FOUND: ${customerName}`);
 
               const primaryCustomer = duplicateCustomers[0];
 
               const duplicateList = duplicateCustomers.slice(1);
 
               for (const duplicate of duplicateList) {
-                console.log(
-                  `🗑 REMOVING DUPLICATE CUSTOMER: ${duplicate.customerId}`,
-                );
+                this.logger.debug(`🗑 REMOVING DUPLICATE CUSTOMER: ${duplicate.customerId}`);
 
                 /* ======================================================
                  * UPDATE ROUTE MAPPINGS
@@ -2077,7 +2072,7 @@ export class CustomerService extends MongoRepository<Customer> {
                   { session },
                 );
 
-                console.log(`🔄 ROUTE MAPPINGS UPDATED`);
+                this.logger.debug(`🔄 ROUTE MAPPINGS UPDATED`);
 
                 /* ======================================================
                  * DELETE DUPLICATE CUSTOMER
@@ -2085,7 +2080,7 @@ export class CustomerService extends MongoRepository<Customer> {
 
                 await this.delete(duplicate.customerId);
 
-                console.log(`✅ DUPLICATE CUSTOMER REMOVED`);
+                this.logger.debug(`✅ DUPLICATE CUSTOMER REMOVED`);
               }
 
               customer = primaryCustomer;
@@ -2106,7 +2101,7 @@ export class CustomerService extends MongoRepository<Customer> {
               if (existingByName) {
                 customerName = `${customerName}_${outletErpId}`;
 
-                console.log(`♻️ CUSTOMER NAME UPDATED: ${customerName}`);
+                this.logger.debug(`♻️ CUSTOMER NAME UPDATED: ${customerName}`);
               }
 
               customer = await this.save({
@@ -2151,14 +2146,14 @@ export class CustomerService extends MongoRepository<Customer> {
 
               stats.customers++;
 
-              console.log(`✅ CUSTOMER CREATED: ${customer.name}`);
+              this.logger.debug(`✅ CUSTOMER CREATED: ${customer.name}`);
             } else {
-              console.log(`♻️ CUSTOMER EXISTS: ${customer.name}`);
+              this.logger.debug(`♻️ CUSTOMER EXISTS: ${customer.name}`);
             }
 
             customerMap.set(outletErpId, customer.customerId);
           } catch (error: any) {
-            console.log(`❌ CUSTOMER ERROR`, error.message);
+            this.logger.warn(`❌ CUSTOMER ERROR: ${error.message}`);
 
             errors.push({
               type: 'CUSTOMER',
@@ -2171,7 +2166,7 @@ export class CustomerService extends MongoRepository<Customer> {
          * ROUTE
          * ====================================================== */
 
-        console.log('🛣 ================= IMPORTING ROUTES =================');
+        this.logger.log('🛣 ================= IMPORTING ROUTES =================');
 
         for (const row of rows) {
           try {
@@ -2220,14 +2215,14 @@ export class CustomerService extends MongoRepository<Customer> {
 
               stats.routes++;
 
-              console.log(`✅ ROUTE CREATED: ${route.name}`);
+              this.logger.debug(`✅ ROUTE CREATED: ${route.name}`);
             } else {
-              console.log(`♻️ ROUTE EXISTS: ${route.name}`);
+              this.logger.debug(`♻️ ROUTE EXISTS: ${route.name}`);
             }
 
             routeMap.set(beatErpId, route.routeId);
           } catch (error: any) {
-            console.log(`❌ ROUTE ERROR`, error.message);
+            this.logger.warn(`❌ ROUTE ERROR: ${error.message}`);
 
             errors.push({
               type: 'ROUTE',
@@ -2240,7 +2235,7 @@ export class CustomerService extends MongoRepository<Customer> {
          * VAN
          * ====================================================== */
 
-        console.log('🚚 ================= IMPORTING VANS =================');
+        this.logger.log('🚚 ================= IMPORTING VANS =================');
 
         for (const row of rows) {
           try {
@@ -2280,9 +2275,9 @@ export class CustomerService extends MongoRepository<Customer> {
 
               stats.vans++;
 
-              console.log(`✅ VAN CREATED: ${van.name}`);
+              this.logger.debug(`✅ VAN CREATED: ${van.name}`);
             } else {
-              console.log(`♻️ VAN EXISTS: ${van.name}`);
+              this.logger.debug(`♻️ VAN EXISTS: ${van.name}`);
             }
 
             if (routeId) {
@@ -2314,15 +2309,15 @@ export class CustomerService extends MongoRepository<Customer> {
                   },
                 );
 
-                console.log(`🔗 ROUTE ${routeId} ATTACHED TO VAN ${vanNumber}`);
+                this.logger.debug(`🔗 ROUTE ${routeId} ATTACHED TO VAN ${vanNumber}`);
               } else {
-                console.log(`♻️ ROUTE ALREADY ATTACHED TO VAN ${vanNumber}`);
+                this.logger.debug(`♻️ ROUTE ALREADY ATTACHED TO VAN ${vanNumber}`);
               }
             }
 
             vanMap.set(vanNumber, van.vanId);
           } catch (error: any) {
-            console.log(`❌ VAN ERROR`, error.message);
+            this.logger.warn(`❌ VAN ERROR: ${error.message}`);
 
             errors.push({
               type: 'VAN',
@@ -2335,9 +2330,7 @@ export class CustomerService extends MongoRepository<Customer> {
          * ROUTE CUSTOMER MAPPING
          * ====================================================== */
 
-        console.log(
-          '🔗 ================= IMPORTING MAPPINGS =================',
-        );
+        this.logger.log('🔗 ================= IMPORTING MAPPINGS =================');
 
         let sequence = 1;
 
@@ -2363,7 +2356,7 @@ export class CustomerService extends MongoRepository<Customer> {
               .lean();
 
             if (existing) {
-              console.log(`♻️ MAPPING EXISTS`);
+              this.logger.debug(`♻️ MAPPING EXISTS`);
 
               const totalMappings =
                 await this.routeCustomerMappingModel.countDocuments({
@@ -2382,7 +2375,7 @@ export class CustomerService extends MongoRepository<Customer> {
                 { session },
               );
 
-              console.log(`🔄 ROUTE OUTLET COUNT UPDATED: ${totalMappings}`);
+              this.logger.debug(`🔄 ROUTE OUTLET COUNT UPDATED: ${totalMappings}`);
 
               continue;
             }
@@ -2400,7 +2393,7 @@ export class CustomerService extends MongoRepository<Customer> {
 
             stats.mappings++;
 
-            console.log(`✅ MAPPING CREATED`);
+            this.logger.debug(`✅ MAPPING CREATED`);
 
             const totalMappings =
               await this.routeCustomerMappingModel.countDocuments({
@@ -2419,9 +2412,9 @@ export class CustomerService extends MongoRepository<Customer> {
               { session },
             );
 
-            console.log(`🔄 ROUTE OUTLET COUNT UPDATED: ${totalMappings}`);
+            this.logger.debug(`🔄 ROUTE OUTLET COUNT UPDATED: ${totalMappings}`);
           } catch (error: any) {
-            console.log(`❌ MAPPING ERROR`, error.message);
+            this.logger.warn(`❌ MAPPING ERROR: ${error.message}`);
 
             errors.push({
               type: 'MAPPING',
@@ -2430,23 +2423,23 @@ export class CustomerService extends MongoRepository<Customer> {
           }
         }
 
-        console.log('🎉 ================= IMPORT COMPLETED =================');
+        this.logger.log('🎉 ================= IMPORT COMPLETED =================');
 
-        console.log(`🌍 Countries Created: ${stats.countries}`);
+        this.logger.log(`🌍 Countries Created: ${stats.countries}`);
 
-        console.log(`🏛 Provinces Created: ${stats.provinces}`);
+        this.logger.log(`🏛 Provinces Created: ${stats.provinces}`);
 
-        console.log(`🏪 Markets Created: ${stats.markets}`);
+        this.logger.log(`🏪 Markets Created: ${stats.markets}`);
 
-        console.log(`👥 Customers Created: ${stats.customers}`);
+        this.logger.log(`👥 Customers Created: ${stats.customers}`);
 
-        console.log(`🛣 Routes Created: ${stats.routes}`);
+        this.logger.log(`🛣 Routes Created: ${stats.routes}`);
 
-        console.log(`🚚 Vans Created: ${stats.vans}`);
+        this.logger.log(`🚚 Vans Created: ${stats.vans}`);
 
-        console.log(`🔗 Mappings Created: ${stats.mappings}`);
+        this.logger.log(`🔗 Mappings Created: ${stats.mappings}`);
 
-        console.log(`❌ Total Errors: ${errors.length}`);
+        this.logger.log(`❌ Total Errors: ${errors.length}`);
 
         return {
           statusCode: HttpStatus.OK,
@@ -2459,7 +2452,7 @@ export class CustomerService extends MongoRepository<Customer> {
         };
       });
     } catch (error) {
-      console.log('💥 IMPORT FAILED', error);
+      this.logger.error('💥 IMPORT FAILED', error instanceof Error ? error.stack : String(error));
 
       throw error;
     }

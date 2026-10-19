@@ -636,11 +636,6 @@ export class WorkSessionService extends MongoRepository<WorkSession> {
           workSessionId,
         );
 
-        console.log(
-          summaryRes,
-          '=================day end summary=================',
-        );
-
         const summary: any = summaryRes?.data?.summary;
         const products = summaryRes?.data?.products || [];
 
@@ -754,7 +749,6 @@ export class WorkSessionService extends MongoRepository<WorkSession> {
         }
 
         const carryForward = payload?.carryForwardStock === true;
-        console.log('Carry Forward Stock:', carryForward);
 
         if (!carryForward) {
           unloadRequest = await this.stockUnloadRequestService.createFromDayEnd(

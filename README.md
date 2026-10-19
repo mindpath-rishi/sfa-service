@@ -1,6 +1,8 @@
 # 🚀 SFA Service – Backend API
 
 > Enterprise-grade backend service built with **NestJS**, **Node.js 22**, **MongoDB (Replica Set)**, **Docker**, and full observability using **Prometheus & Grafana**.
+>
+> **Deploying or operating in production?** See [docs/production-setup.md](docs/production-setup.md): configuration, deploy, monitoring (Prometheus/Grafana), the MIS developer tools, app version control and a runbook.
 
 ---
 

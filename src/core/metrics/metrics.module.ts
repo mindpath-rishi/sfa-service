@@ -12,6 +12,8 @@ export class MetricsModule {
     consumer
       .apply(MetricsMiddleware)
       .exclude({ path: 'metrics', method: RequestMethod.GET })
-      .forRoutes({ path: 'api/*path', method: RequestMethod.ALL });
+      // The global "api" prefix is added to middleware routes automatically;
+      // the old 'api/*path' became /api/api/* and never matched anything.
+      .forRoutes({ path: '{*splat}', method: RequestMethod.ALL });
   }
 }

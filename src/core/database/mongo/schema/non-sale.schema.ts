@@ -31,7 +31,7 @@ export class NonSale {
    * ====================================================== */
 
   // 🔗 Link with ShopVisit (single source of truth)
-  @Prop({ required: true, ref: 'shop_visits', index: true, type: String })
+  @Prop({ required: true, ref: 'shop_visits', type: String })
   visitId!: string;
 
   // Outlet / Customer

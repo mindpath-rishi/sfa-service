@@ -50,7 +50,9 @@ export class ProductCategoryService extends MongoRepository<ProductCategory> imp
 
   async onModuleInit() {
     // On a fresh database the collection does not exist yet (NamespaceNotFound)
-    const indexes = await this.model.collection.indexes().catch((error) => {
+    // Typed explicitly: `.catch(() => [])` otherwise makes this never[].
+    const indexes: { name?: string; unique?: boolean; key: Record<string, unknown> }[] =
+      await this.model.collection.indexes().catch((error) => {
       if (error?.code === 26) return [];
       throw error;
     });
