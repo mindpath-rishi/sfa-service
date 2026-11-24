@@ -7,6 +7,8 @@ export interface JwtPayload {
   exp?: number;
   name: string;
   deviceId: string;
+  /** Client kind (android | ios | web), for the single device login check */
+  dt?: string;
   vanId?: string; // optional but useful
   vanName?: string; // optional but useful
   offlineAccessAllowed?: boolean;

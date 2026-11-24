@@ -57,3 +57,4 @@ report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 uploads/media
 # Prometheus bearer token for /metrics (matches METRICS_TOKEN)
 infra/prometheus/metrics_token
+infra/osrm/data/

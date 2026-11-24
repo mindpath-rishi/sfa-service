@@ -24,6 +24,7 @@ import {
   HttpStatus,
   Param,
   Patch,
+  UseGuards,
   Post,
   Query,
 } from '@nestjs/common';
@@ -45,6 +46,7 @@ import {
 } from 'src/shared/constants/api.constants';
 
 import { Permissions } from 'src/core/decorators/permission.decorator';
+import { SuperAdminGuard } from 'src/core/guards/super-admin.guard';
 
 import { WorkSessionService } from './work-session.service';
 import { CreateWorkSessionDto } from './dto/create-work-session.dto';
@@ -137,6 +139,19 @@ export class WorkSessionController {
     // @Param('workSessionId') workSessionId: string,
     // @Body() dto: UpdateWorkSessionDto,
     return this.service.update();
+  }
+
+  /**
+   * Release the device lock of an active day (lost / broken phone):
+   * the next device the user signs in with takes the day over, and the
+   * old device is signed out.
+   */
+  @UseGuards(SuperAdminGuard)
+  @Patch(':workSessionId/release-device')
+  @ApiOperation({ summary: 'Let the user continue an active day on another device' })
+  @ApiParam({ name: 'workSessionId', description: 'WorkSession workSessionId' })
+  async releaseDevice(@Param('workSessionId') workSessionId: string) {
+    return this.service.releaseDeviceLock(workSessionId);
   }
 
   /**

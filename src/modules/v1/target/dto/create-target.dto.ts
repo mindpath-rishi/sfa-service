@@ -35,15 +35,18 @@ export class CreateTargetDto {
   @IsString()
   parentCategory!: string;
 
-  @ApiProperty({ type: String, description: 'Child category ID' })
-  @IsNotEmpty()
+  @ApiPropertyOptional({
+    type: String,
+    description: 'Legacy child category ID. Targets are set per category only.',
+  })
+  @IsOptional()
   @IsString()
-  categoryId!: string;
+  categoryId?: string;
 
-  @ApiProperty({ type: String, description: 'Child category name' })
-  @IsNotEmpty()
+  @ApiPropertyOptional({ type: String, description: 'Legacy child category name' })
+  @IsOptional()
   @IsString()
-  category!: string;
+  category?: string;
 
   @ApiPropertyOptional({ type: String })
   @IsOptional()

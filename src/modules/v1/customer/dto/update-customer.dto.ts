@@ -8,6 +8,7 @@ import {
   IsOptional,
   IsString,
   Length,
+  Matches,
   Max,
   Min,
   ValidateNested,
@@ -45,6 +46,12 @@ class AddressDto {
 }
 
 export class UpdateCustomerDto {
+  @ApiPropertyOptional({ example: '500123456', description: 'TIN (9 digits)' })
+  @IsOptional()
+  @IsString()
+  @Matches(/^\d{9}$/, { message: 'TIN number must be exactly 9 digits' })
+  tinNumber?: string;
+
   /**
    * Customer Update DTO
    * ====================

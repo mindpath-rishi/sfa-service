@@ -12,4 +12,9 @@ export class MongoService {
   getModel<T>(name: string, schema: any): Model<HydratedDocument<T>> {
     return this.connection.model<HydratedDocument<T>>(name, schema);
   }
+
+  /** Native database handle, for collections without a mongoose model (time series, caches). */
+  getDb() {
+    return this.connection.db!;
+  }
 }

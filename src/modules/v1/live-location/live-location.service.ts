@@ -6,25 +6,16 @@ import {
 } from '@nestjs/common';
 import { Model } from 'mongoose';
 import { RequestContextStore } from 'src/core/context/request-context';
-import { MongoRepository } from 'src/core/database/mongo/mongo.repository';
 import { MongoService } from 'src/core/database/mongo/mongo.service';
-import {
-  LiveLocation,
-  LiveLocationSchema,
-} from 'src/core/database/mongo/schema/live-location.schema';
 import {
   WorkSession,
   WorkSessionSchema,
 } from 'src/core/database/mongo/schema/work-session.schema';
-import { WorkSessionStatus } from 'src/shared/enums/work-session.enums';
-import { IdGenerator } from 'src/shared/utils/id-generator.utils';
 import { CreateLiveLocationDto } from './dto/create-live-location.dto';
 import { LiveLocationQueryDto } from './dto/live-location-query.dto';
-import { UpdateLiveLocationDto } from './dto/update-live-location.dto';
 import { TrackLiveLocationDto } from './dto/track-live-location.dto';
 import { LIVE_LOCATION } from './live-location.constants';
-
-const DATABASE_SAMPLE_DISTANCE_METERS = 5;
+import { LocationPointsStore, type StoredPoint } from './location-points.store';
 
 export type LiveLocationUpdate = {
   workSessionId: string;
@@ -43,16 +34,21 @@ export type LiveLocationUpdate = {
 };
 
 @Injectable()
-export class LiveLocationService extends MongoRepository<LiveLocation> {
+export class LiveLocationService {
   private readonly workSessionModel: Model<WorkSession>;
-  private readonly lastPersistedLocation = new Map<
-    string,
-    { latitude: number; longitude: number }
-  >();
-  private readonly persistenceInFlight = new Map<string, Promise<boolean>>();
+  /** workSessionId:userId → session check result (avoids a DB read per point) */
+  private readonly sessionCheck = new Map<string, { ok: boolean; at: number }>();
+  /** Set by the gateway: pushes points received over HTTP to live viewers too. */
+  private realtimeListener?: (update: LiveLocationUpdate) => void;
 
-  constructor(mongo: MongoService) {
-    super(mongo.getModel(LiveLocation.name, LiveLocationSchema));
+  setRealtimeListener(listener: (update: LiveLocationUpdate) => void) {
+    this.realtimeListener = listener;
+  }
+
+  constructor(
+    mongo: MongoService,
+    private readonly pointsStore: LocationPointsStore,
+  ) {
     this.workSessionModel = mongo.getModel(WorkSession.name, WorkSessionSchema);
   }
 
@@ -95,79 +91,40 @@ export class LiveLocationService extends MongoRepository<LiveLocation> {
     };
   }
 
-  /** Persist the first point, then points at least five metres apart. */
-  persistByDistance(update: LiveLocationUpdate): Promise<boolean> {
-    const key = `${update.workSessionId}:${update.vanId || ''}`;
-    const previous = this.lastPersistedLocation.get(key);
-    if (
-      previous &&
-      this.distanceInMeters(previous, update.location) <
-        DATABASE_SAMPLE_DISTANCE_METERS
-    ) {
-      return Promise.resolve(false);
+  /**
+   * Stores the point in the time-series store, which keeps only points that
+   * add information (movement, turns, a keep-alive while stopped).
+   * Resolves true when the point will be stored.
+   */
+  async storePoint(update: LiveLocationUpdate): Promise<boolean> {
+    if (!(await this.isUserSession(update.workSessionId, update.employeeId))) {
+      throw new NotFoundException('Work session not found');
     }
-    const existing = this.persistenceInFlight.get(key);
-    if (existing) return existing;
-
-    this.lastPersistedLocation.set(key, {
+    return this.pointsStore.add({
+      userId: update.employeeId,
+      workSessionId: update.workSessionId,
+      vanId: update.vanId,
       latitude: update.location.latitude,
       longitude: update.location.longitude,
+      accuracy: update.location.accuracy,
+      speed: update.location.speed,
+      heading: update.location.heading,
+      capturedAt: update.location.capturedAt,
     });
-    const operation = this.persistUpdate(update)
-      .then(() => true)
-      .catch((error) => {
-        if (previous) this.lastPersistedLocation.set(key, previous);
-        else this.lastPersistedLocation.delete(key);
-        throw error;
-      })
-      .finally(() => this.persistenceInFlight.delete(key));
-    this.persistenceInFlight.set(key, operation);
-    return operation;
   }
 
-  private async persistUpdate(update: LiveLocationUpdate) {
-    const workSession = await this.workSessionModel
-      .findOne({
-        workSessionId: update.workSessionId,
-        userId: update.employeeId,
-        status: WorkSessionStatus.ACTIVE,
-        isDeleted: false,
-      })
-      .lean();
-    if (!workSession) throw new NotFoundException('Work session not found');
-    if (!workSession.vanId)
-      throw new BadRequestException('Work session has no van');
-
-    const date = this.utcStartOfDay(update.location.capturedAt);
-    const point = {
-      source: update.location.source,
-      latitude: update.location.latitude,
-      longitude: update.location.longitude,
-      accuracy: update.location.accuracy ?? undefined,
-      altitude: update.location.altitude ?? undefined,
-      speed: update.location.speed ?? undefined,
-      heading: update.location.heading ?? undefined,
-      capturedAt: update.location.capturedAt,
-    };
-
-    await this.model.updateOne(
-      {
-        workSessionId: workSession.workSessionId,
-        vanId: workSession.vanId,
-        date,
-      } as any,
-      {
-        $setOnInsert: {
-          locationId: IdGenerator.generate('LOC', 10),
-          userId: workSession.userId,
-          workSessionId: workSession.workSessionId,
-          vanId: workSession.vanId,
-          date,
-        },
-        $push: { locations: point },
-      },
-      { upsert: true },
+  /** The session exists and belongs to the user (late offline points are accepted). */
+  private async isUserSession(workSessionId: string, userId: string) {
+    const key = `${workSessionId}:${userId}`;
+    const cached = this.sessionCheck.get(key);
+    const ttl = cached?.ok ? 10 * 60_000 : 60_000;
+    if (cached && Date.now() - cached.at < ttl) return cached.ok;
+    const ok = Boolean(
+      await this.workSessionModel.exists({ workSessionId, userId, isDeleted: false } as any),
     );
+    if (this.sessionCheck.size > 5000) this.sessionCheck.clear();
+    this.sessionCheck.set(key, { ok, at: Date.now() });
+    return ok;
   }
 
   async track(payload: TrackLiveLocationDto, authenticatedUserId?: string) {
@@ -195,7 +152,22 @@ export class LiveLocationService extends MongoRepository<LiveLocation> {
         RequestContextStore.getStore()?.vanId,
       );
       updates.push(update);
-      if (await this.persistByDistance(update)) persistedCount += 1;
+      if (await this.storePoint(update)) persistedCount += 1;
+    }
+    // Background / offline batches arrive over HTTP; broadcast them so the
+    // portal stays real time (in capture order, so trails grow correctly).
+    if (this.realtimeListener) {
+      for (const update of [...updates].sort(
+        (a, b) =>
+          new Date(a.location.capturedAt).getTime() -
+          new Date(b.location.capturedAt).getTime(),
+      )) {
+        try {
+          this.realtimeListener(update);
+        } catch {
+          /* live delivery is best effort */
+        }
+      }
     }
 
     return {
@@ -225,7 +197,7 @@ export class LiveLocationService extends MongoRepository<LiveLocation> {
         source: payload.source || 'BACKGROUND',
       },
     };
-    await this.persistUpdate(update);
+    await this.storePoint(update);
     return {
       statusCode: HttpStatus.CREATED,
       message: LIVE_LOCATION.CREATED,
@@ -233,150 +205,52 @@ export class LiveLocationService extends MongoRepository<LiveLocation> {
     };
   }
 
+  /** Stored points, filtered by user / session / time range (newest first, max 5000). */
   async findAll(query: LiveLocationQueryDto) {
-    const {
-      userId,
-      workSessionId,
-      startDate,
-      endDate,
-      page = 1,
-      limit = 20,
-    } = query;
-    const match: Record<string, unknown> = {};
-    if (userId) match.userId = userId;
-    if (workSessionId) match.workSessionId = workSessionId;
-    if (startDate || endDate) {
-      match['locations.capturedAt'] = {
-        ...(startDate ? { $gte: new Date(startDate) } : {}),
-        ...(endDate ? { $lte: new Date(endDate) } : {}),
+    const filter: Record<string, unknown> = {};
+    if (query.userId) filter['m.userId'] = query.userId;
+    if (query.workSessionId) filter['m.workSessionId'] = query.workSessionId;
+    if (query.startDate || query.endDate) {
+      filter.t = {
+        ...(query.startDate ? { $gte: new Date(query.startDate) } : {}),
+        ...(query.endDate ? { $lte: new Date(query.endDate) } : {}),
       };
     }
-    const [result] = await this.model.aggregate([
-      { $match: match },
-      { $unwind: '$locations' },
-      ...(startDate || endDate
-        ? [
-            {
-              $match: { 'locations.capturedAt': match['locations.capturedAt'] },
-            },
-          ]
-        : []),
-      { $sort: { 'locations.capturedAt': -1 } },
-      {
-        $facet: {
-          items: [{ $skip: (page - 1) * limit }, { $limit: limit }],
-          total: [{ $count: 'count' }],
-        },
-      },
-    ]);
-    const total = result?.total?.[0]?.count || 0;
+    await this.pointsStore.flush();
+    const points = await this.pointsStore.collection
+      .find(filter, { projection: { _id: 0 } })
+      .sort({ t: -1 })
+      .limit(5000)
+      .toArray();
     return {
       statusCode: HttpStatus.OK,
       message: LIVE_LOCATION.FETCHED,
-      data: (result?.items || []).map((item: any) => this.flattenPoint(item)),
-      meta: { page, limit, total, totalPages: Math.ceil(total / limit) },
+      data: points.map((point) => this.fromStored(point)),
     };
   }
 
-  async findByLocationId(locationId: string) {
-    const doc = await this.model.findOne({ locationId }).lean();
-    if (!doc) throw new NotFoundException(LIVE_LOCATION.NOT_FOUND);
-    return {
-      statusCode: HttpStatus.OK,
-      message: LIVE_LOCATION.FETCHED,
-      data: doc,
-    };
-  }
-
-  async updateLocation(locationId: string, payload: UpdateLiveLocationDto) {
-    const doc = await this.model.findOneAndUpdate(
-      { locationId },
-      { $set: payload },
-      { new: true },
-    );
-    if (!doc) throw new NotFoundException(LIVE_LOCATION.NOT_FOUND);
-    return {
-      statusCode: HttpStatus.OK,
-      message: LIVE_LOCATION.UPDATED,
-      data: doc,
-    };
-  }
-
-  async deleteLocation(locationId: string) {
-    const doc = await this.model.findOneAndDelete({ locationId });
-    if (!doc) throw new NotFoundException(LIVE_LOCATION.NOT_FOUND);
-    return {
-      statusCode: HttpStatus.OK,
-      message: LIVE_LOCATION.DELETED,
-      data: doc,
-    };
-  }
-
-  async findForSessions(
-    workSessionIds: string[],
-    startDate: Date,
-    endDate: Date,
-  ) {
-    if (!workSessionIds.length) return [];
-    const docs = await this.model.aggregate([
-      { $match: { workSessionId: { $in: workSessionIds } } },
-      { $unwind: '$locations' },
-      {
-        $match: { 'locations.capturedAt': { $gte: startDate, $lte: endDate } },
-      },
-      { $sort: { 'locations.capturedAt': 1 } },
-    ]);
-    return docs.map((doc: any) => this.flattenPoint(doc));
+  async findForSessions(workSessionIds: string[], startDate: Date, endDate: Date) {
+    const points = await this.pointsStore.findBySessions(workSessionIds, startDate, endDate);
+    return points.map((point) => this.fromStored(point));
   }
 
   async findLatestForSession(workSessionId?: string) {
     if (!workSessionId) return null;
-    const [latest] = await this.model.aggregate([
-      { $match: { workSessionId } },
-      { $unwind: '$locations' },
-      { $sort: { 'locations.capturedAt': -1 } },
-      { $limit: 1 },
-    ]);
-    return latest ? this.flattenPoint(latest) : null;
+    const stored = await this.pointsStore.findLatest(workSessionId);
+    return stored ? this.fromStored(stored) : null;
   }
 
-  private flattenPoint(doc: any) {
+  private fromStored(point: StoredPoint) {
     return {
-      locationId: doc.locationId,
-      userId: doc.userId,
-      workSessionId: doc.workSessionId,
-      vanId: doc.vanId,
-      date: doc.date,
-      ...doc.locations,
+      userId: point.m.userId,
+      workSessionId: point.m.workSessionId,
+      vanId: point.m.vanId,
+      latitude: point.lat,
+      longitude: point.lng,
+      accuracy: point.acc ?? null,
+      speed: point.spd ?? null,
+      heading: point.hdg ?? null,
+      capturedAt: point.t,
     };
-  }
-
-  private utcStartOfDay(value: Date) {
-    return new Date(
-      Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate()),
-    );
-  }
-
-  private distanceInMeters(
-    from: { latitude: number; longitude: number },
-    to: { latitude: number; longitude: number },
-  ) {
-    const earthRadius = 6_371_000;
-    const radians = (degrees: number) => (degrees * Math.PI) / 180;
-    const latitudeDelta = radians(to.latitude - from.latitude);
-    const longitudeDelta = radians(to.longitude - from.longitude);
-    const fromLatitude = radians(from.latitude);
-    const toLatitude = radians(to.latitude);
-    const haversine =
-      Math.sin(latitudeDelta / 2) ** 2 +
-      Math.cos(fromLatitude) *
-        Math.cos(toLatitude) *
-        Math.sin(longitudeDelta / 2) ** 2;
-
-    return (
-      earthRadius *
-      2 *
-      Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine))
-    );
   }
 }

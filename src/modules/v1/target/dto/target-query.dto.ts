@@ -7,6 +7,7 @@ import {
   IsDate,
   IsIn,
 } from 'class-validator';
+import { Type } from 'class-transformer';
 import { PaginationDto } from 'src/shared/dto/pagination.dto';
 
 /**
@@ -76,14 +77,19 @@ export class TargetQueryDto extends PaginationDto {
   @IsNumber()
   uboTarget?: number;
 
-  @ApiPropertyOptional({ type: Date })
+  @ApiPropertyOptional({
+    type: Date,
+    description: 'Period start: returns targets overlapping startDate..endDate',
+  })
   @IsOptional()
   @IsDate()
+  @Type(() => Date)
   startDate?: Date;
 
-  @ApiPropertyOptional({ type: Date })
+  @ApiPropertyOptional({ type: Date, description: 'Period end' })
   @IsOptional()
   @IsDate()
+  @Type(() => Date)
   endDate?: Date;
 
   @ApiPropertyOptional({ enum: ['excel', 'pdf'] })

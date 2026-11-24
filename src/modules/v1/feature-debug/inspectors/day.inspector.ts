@@ -56,7 +56,7 @@ export const dayInspector: FeatureInspector = {
       db.collection('inventory_transactions').find({ vanId: session.vanId, transactionDate: { $gte: from, $lte: to }, isDeleted: { $ne: true } }).toArray(),
       db.collection('stock_unload_requests').find({ workSessionId }).toArray(),
       db.collection('interaction_logs').countDocuments({ workSessionId, status: 'ARRIVED' }),
-      db.collection('live_location_tracking').find({ workSessionId }, { projection: { locations: 1, updatedAt: 1 } }).toArray(),
+      db.collection('live_location_points').countDocuments({ 'm.workSessionId': workSessionId }),
     ]);
 
     const checks: DebugCheck[] = [];
@@ -149,7 +149,7 @@ export const dayInspector: FeatureInspector = {
     }
 
     // Tracking
-    const points = tracking.reduce((sum, row) => sum + (row.locations?.length ?? 0), 0);
+    const points = tracking;
     checks.push(
       points
         ? check('Location tracking', 'PASS', `${points} location points recorded`)

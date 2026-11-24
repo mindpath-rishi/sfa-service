@@ -1,3 +1,4 @@
+import { UserSkuStockReportQueryDto } from './dto/user-sku-stock-report-query.dto';
 import {
   Controller,
   Get,
@@ -50,6 +51,15 @@ export class ReportController {
   })
   productPerformance(@Query() query: ProductPerformanceReportQueryDto) {
     return this.employeeService.getProductPerformanceReport(query);
+  }
+
+  @Get('user-sku-stock')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'User wise SKU wise opening, top up, sales and closing stock',
+  })
+  userSkuStock(@Query() query: UserSkuStockReportQueryDto) {
+    return this.reportService.getUserSkuStockReport(query);
   }
 
   @Get('vehicle-breakdown')

@@ -38,6 +38,7 @@ import { UserStatus } from 'src/modules/v1/user/user.enum';
 
 import { PositionService } from '../position/position.service';
 import { UserService } from 'src/modules/v1/user/user.service';
+import { DeviceStatusService } from '../device-status/device-status.service';
 import { CreateEmployeeDto } from './dto/create-employee.dto';
 import { UpdateEmployeeDto } from './dto/update-employee.dto';
 import { EmployeeQueryDto } from './dto/employee.query.dto';
@@ -71,6 +72,7 @@ import { NonSaleStatus } from 'src/shared/enums/non-sale.enums';
 import { NonSale } from 'src/core/database/mongo/schema/non-sale.schema';
 import { SaleItem } from 'src/core/database/mongo/schema/sale-item.schema';
 import { WorkSession } from 'src/core/database/mongo/schema/work-session.schema';
+import { WorkSessionStatus } from 'src/shared/enums/work-session.enums';
 import { RouteSession } from 'src/core/database/mongo/schema/route-session.schema';
 import { VanDailyStock } from 'src/core/database/mongo/schema/van-daily-stock.schema';
 import { RouteSessionStatus } from 'src/shared/enums/route-session.enums';
@@ -117,6 +119,7 @@ export class EmployeeService extends MongoRepository<Employee> {
     mongo: MongoService,
     private readonly userService: UserService,
     private readonly positionService: PositionService,
+    private readonly deviceStatusService: DeviceStatusService,
     @InjectModel(Sale.name)
     private readonly saleModal: Model<Sale>,
     @InjectModel(Payment.name)
@@ -184,12 +187,18 @@ export class EmployeeService extends MongoRepository<Employee> {
     const loginIdByProfileId = new Map(
       users.map((user) => [user.profileId, user.loginId]),
     );
+    const deviceByUser =
+      await this.deviceStatusService.getByUserIds(employeeIds);
 
     return employees.map((employee) => ({
       ...employee,
       loginId: employee.employeeId
         ? loginIdByProfileId.get(employee.employeeId)
         : undefined,
+      // Battery %, last active time and offline time (admin view)
+      device: employee.employeeId
+        ? (deviceByUser.get(employee.employeeId) ?? null)
+        : null,
     }));
   }
 
@@ -350,6 +359,17 @@ export class EmployeeService extends MongoRepository<Employee> {
   /**
    * Suggest a unique login ID for the create form; the user may edit it.
    */
+  async checkLoginId(loginId?: string) {
+    const formatted = loginId?.trim() ? UserService.formatLoginId(loginId) : '';
+    const available = formatted
+      ? await this.userService.isLoginIdAvailable(formatted)
+      : false;
+    return {
+      statusCode: HttpStatus.OK,
+      data: { loginId: formatted, available },
+    };
+  }
+
   async suggestLoginId(name?: string) {
     const loginId = name?.trim()
       ? await this.userService.generateLoginId(name.trim())
@@ -366,7 +386,9 @@ export class EmployeeService extends MongoRepository<Employee> {
     profileId: string,
     session: ClientSession,
   ) {
-    const requested = payload.loginId?.trim();
+    const requested = payload.loginId?.trim()
+      ? UserService.formatLoginId(payload.loginId)
+      : '';
     if (requested) {
       await this.userService.assertLoginIdAvailable(
         requested,
@@ -9926,6 +9948,129 @@ export class EmployeeService extends MongoRepository<Employee> {
   //   };
   // }
 
+  /**
+   * Van stock of a team user, with prices (manager / TL / admin view).
+   * Uses today's live daily stock of the user's van when the day is started,
+   * else the van inventory snapshot.
+   */
+  async getManagerUserStock(employeeId: string) {
+    const ctx: any = RequestContextStore.getStore();
+    const managerId = ctx?.userId;
+    if (!employeeId) throw new BadRequestException('employeeId is required');
+
+    const employee: any = await this.model
+      .findOne({ employeeId, isDeleted: { $ne: true } })
+      .select('employeeId name hierarchyPath')
+      .lean();
+    if (!employee) throw new NotFoundException('User not found');
+    const inTeam =
+      employeeId === managerId ||
+      (Array.isArray(employee.hierarchyPath)
+        ? employee.hierarchyPath.includes(managerId)
+        : String(employee.hierarchyPath || '').includes(managerId));
+    const isAdmin = /admin/i.test(String(ctx?.role || ctx?.roleName || ''));
+    if (!inTeam && !isAdmin) {
+      throw new BadRequestException('User is not in your team');
+    }
+
+    const session: any = await this.workSessionModel
+      .findOne({
+        userId: employeeId,
+        status: WorkSessionStatus.ACTIVE,
+        isDeleted: { $ne: true },
+      })
+      .sort({ createdAt: -1 })
+      .select('workSessionId vanId')
+      .lean();
+    const vanId =
+      session?.vanId || (await this.getVanIdsForEmployees([employeeId]))[0];
+    if (!vanId) {
+      return {
+        statusCode: HttpStatus.OK,
+        message: 'No van assigned',
+        data: { employeeId, name: employee.name, vanId: null, products: [], totals: null },
+      };
+    }
+
+    const db = this.model.db;
+    const products: any[] = await db
+      .collection('product_master')
+      .find({}, { projection: { _id: 0, productId: 1, name: 1, productSysCode: 1, unitQtyInCase: 1, piecePrice: 1, casePrice: 1, categoryId: 1, parentCategoryId: 1 } })
+      .toArray();
+    const productById = new Map(products.map((product) => [product.productId, product]));
+
+    let rows: any[] = [];
+    let source: 'DAILY_STOCK' | 'INVENTORY' = 'INVENTORY';
+    if (session?.workSessionId) {
+      rows = await db
+        .collection('van_daily_stock')
+        .find({ vanId, workSessionId: session.workSessionId, isDeleted: { $ne: true } })
+        .toArray();
+      if (rows.length) source = 'DAILY_STOCK';
+    }
+    if (!rows.length) {
+      rows = await db
+        .collection('inventories')
+        .find({ vanId, isDeleted: { $ne: true }, quantity: { $gt: 0 } })
+        .toArray();
+    }
+
+    const round2 = (value: number) => Math.round(value * 100) / 100;
+    const byProduct = new Map<string, any>();
+    for (const row of rows) {
+      const product = productById.get(row.productId) ?? {};
+      const unitQtyInCase = Math.max(Number(row.unitQtyInCase ?? product.unitQtyInCase) || 1, 1);
+      const quantity =
+        source === 'DAILY_STOCK' ? Number(row.closingQty) || 0 : Number(row.quantity) || 0;
+      const piecePrice = Number(row.piecePrice ?? product.piecePrice) || 0;
+      const casePrice = Number(product.casePrice) || piecePrice * unitQtyInCase;
+      const existing = byProduct.get(row.productId);
+      if (existing) {
+        existing.quantity += quantity;
+        continue;
+      }
+      byProduct.set(row.productId, {
+        productId: row.productId,
+        name: product.name || row.productName || row.productId,
+        productSysCode: product.productSysCode,
+        unitQtyInCase,
+        quantity,
+        casePrice: round2(casePrice),
+        piecePrice: round2(piecePrice),
+        openingQty: source === 'DAILY_STOCK' ? Number(row.openingQty) || 0 : undefined,
+        inQty: source === 'DAILY_STOCK' ? Number(row.inQty) || 0 : undefined,
+        outQty: source === 'DAILY_STOCK' ? Number(row.outQty) || 0 : undefined,
+      });
+    }
+
+    const list = Array.from(byProduct.values())
+      .map((item) => ({
+        ...item,
+        cases: Math.floor(item.quantity / item.unitQtyInCase),
+        pieces: item.quantity % item.unitQtyInCase,
+        value: round2(item.quantity * item.piecePrice),
+      }))
+      .sort((a, b) => String(a.name).localeCompare(String(b.name)));
+
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'User stock fetched successfully',
+      data: {
+        employeeId,
+        name: employee.name,
+        vanId,
+        source,
+        products: list,
+        totals: {
+          products: list.length,
+          cases: list.reduce((sum, item) => sum + item.cases, 0),
+          pieces: list.reduce((sum, item) => sum + item.pieces, 0),
+          value: round2(list.reduce((sum, item) => sum + item.value, 0)),
+        },
+      },
+    };
+  }
+
   async getTeamCoverage() {
     const managerId = RequestContextStore.getStore()?.userId;
 
@@ -10149,6 +10294,10 @@ export class EmployeeService extends MongoRepository<Employee> {
      * ========================================== */
     const uic = upc;
 
+    const deviceStatusByUser = await this.deviceStatusService.getByUserIds(
+      users.map((user: any) => user.employeeId),
+    );
+
     return {
       statusCode: HttpStatus.OK,
       message: 'Team coverage fetched successfully',
@@ -10166,6 +10315,8 @@ export class EmployeeService extends MongoRepository<Employee> {
           employeeId: user.employeeId,
           name: user.name,
           mobile: user.mobile,
+          // Battery %, last active time and offline time for managers / TLs
+          device: deviceStatusByUser.get(user.employeeId) ?? null,
         })),
         vanList: vans.map((van: any) => ({
           vanId: van.vanId,
@@ -12832,6 +12983,7 @@ export class EmployeeService extends MongoRepository<Employee> {
         user: employee?.name || session.userName || session.userId,
         userErpId: employee?.employeeId || session.userId || '',
         userLevel: role?.displayName || role?.name || position?.name || '',
+        vanId: van?.vanId || session.vanId || '',
         driverName: session.driverName || van?.driverName || '',
         isOvt: false,
         isOvc: false,
@@ -12932,6 +13084,7 @@ export class EmployeeService extends MongoRepository<Employee> {
             row.user,
             row.userErpId,
             row.driverName,
+            row.vanId,
             row.description,
             row.outlets,
             row.outletsErpId,

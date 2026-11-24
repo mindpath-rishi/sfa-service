@@ -274,17 +274,42 @@ export class DiagnosticsService implements OnModuleInit, OnModuleDestroy {
   }
 
   async deviceDetail(userId: string) {
-    const [devices, commands, reports, debug, employee] = await Promise.all([
+    const [devices, commands, reports, debug, employee, loginDevices, logins, activeDay] = await Promise.all([
       this.col(DIAGNOSTICS).find({ userId }).sort({ lastHeartbeatAt: -1 }).toArray(),
       this.col(COMMANDS).find({ userId }).sort({ createdAt: -1 }).limit(20).toArray(),
       this.col(REPORTS).find({ userId }, { projection: { logs: 0, queue: 0 } }).sort({ createdAt: -1 }).limit(10).toArray(),
       this.col(DEBUG_USERS).findOne({ userId, until: { $gt: new Date() } }),
       this.col('employees').findOne({ employeeId: userId }, { projection: { _id: 0, name: 1, mobile: 1, status: 1 } }),
+      // Devices stored at login (hardware / build details) and the login history
+      this.col('user_devices')
+        .find({ userId }, { projection: { _id: 0, fcmToken: 0, sessionId: 0 } })
+        .sort({ lastLoginAt: -1 })
+        .limit(20)
+        .toArray(),
+      this.col('user_login_history')
+        .find({ userId }, { projection: { _id: 0, sessionId: 0 } })
+        .sort({ at: -1 })
+        .limit(50)
+        .toArray(),
+      this.col('work_sessions').findOne(
+        { userId, status: 'ACTIVE', isDeleted: { $ne: true } },
+        { sort: { dayStartTime: -1 }, projection: { _id: 0, workSessionId: 1, deviceId: 1, deviceLockReleased: 1, dayStartTime: 1 } },
+      ),
     ]);
     return {
       statusCode: HttpStatus.OK,
       message: 'Device detail fetched',
-      data: { userId, employee, devices, commands, reports, debugLoggingUntil: debug?.until ?? null },
+      data: {
+        userId,
+        employee,
+        devices,
+        commands,
+        reports,
+        debugLoggingUntil: debug?.until ?? null,
+        loginDevices,
+        logins,
+        activeDay,
+      },
     };
   }
 

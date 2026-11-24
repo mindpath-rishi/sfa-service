@@ -156,6 +156,10 @@ export class Customer {
   })
   geoTag?: GeoTag;
 
+  /** Tax Identification Number (optional). */
+  @Prop({ type: String, required: false, trim: true })
+  tinNumber?: string;
+
   /* ======================================================
    * STATUS
    * ====================================================== */

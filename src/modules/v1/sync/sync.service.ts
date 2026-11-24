@@ -8,6 +8,10 @@ import { SyncOperationDto } from './dto/sync.dto';
 import { IdGenerator } from 'src/shared/utils/id-generator.utils';
 import { NotificationService } from '../notification/notification.service';
 import { syncOperationsTotal } from 'src/core/metrics/app-metrics';
+import {
+  filterBatch,
+  POINTS_COLLECTION,
+} from '../live-location/location-points.store';
 
 export const COLLECTIONS = {
   customers: 'customer_master',
@@ -1191,7 +1195,7 @@ export class SyncService {
           Array.isArray(payload[legacyLocationField])
             ? (payload[legacyLocationField] as Record<string, unknown>[])
             : [];
-        // High-frequency points belong exclusively to live_location_tracking.
+        // High-frequency points belong exclusively to the time-series point store.
         delete payload[legacyLocationField];
         const idField =
           ENTITY_ID_FIELDS[operation.entity as keyof typeof COLLECTIONS];
@@ -1234,22 +1238,24 @@ export class SyncService {
         const persistOfflineLocations = async () => {
           if (!offlineLocations.length) return;
           const now = new Date();
-          await this.connection.collection('live_location_tracking').insertMany(
+          // Same write-time filter / rounding as live points
+          const points = filterBatch(
             offlineLocations.map((location) => ({
-              locationId: IdGenerator.generate('LOC', 10),
               userId: ownerId,
               workSessionId: String(businessId),
-              vanId: payload.vanId,
-              source: 'OFFLINE',
-              ...location,
-              capturedAt: location.capturedAt
-                ? new Date(String(location.capturedAt))
-                : now,
-              isDeleted: false,
-              createdAt: now,
-              updatedAt: now,
+              vanId: payload.vanId as string | undefined,
+              latitude: Number(location.latitude),
+              longitude: Number(location.longitude),
+              accuracy: location.accuracy as number | null | undefined,
+              speed: location.speed as number | null | undefined,
+              heading: location.heading as number | null | undefined,
+              capturedAt: location.capturedAt ? new Date(String(location.capturedAt)) : now,
             })),
           );
+          if (!points.length) return;
+          await this.connection
+            .collection(POINTS_COLLECTION)
+            .insertMany(points, { ordered: false });
         };
         const serverId = String(operation.payload.serverId ?? '');
         const serverObjectId = Types.ObjectId.isValid(serverId)

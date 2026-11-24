@@ -19,7 +19,9 @@ import {
   Controller,
   Post,
   Patch,
+  Put,
   Get,
+  UseGuards,
   Body,
   Res,
   Req,
@@ -37,6 +39,9 @@ import {
 import type { Request, Response } from 'express';
 
 import { UserService } from './user.service';
+import { LoginPolicyService } from './login-policy.service';
+import { UpdateLoginPolicyDto } from './dto/login-policy.dto';
+import { SuperAdminGuard } from 'src/core/guards/super-admin.guard';
 import { ChangePasswordDto, LoginDto, UpdateOwnProfileDto, UpdatePushTokenDto } from './dto/login.dto';
 
 import { ApiSuccessResponse } from 'src/core/swagger/api.response.swagger';
@@ -66,7 +71,29 @@ import { Agent } from 'src/modules/v1/user/user.enum';
   version: V1,
 })
 export class UserController {
-  constructor(private readonly userService: UserService) {}
+  constructor(
+    private readonly userService: UserService,
+    private readonly loginPolicy: LoginPolicyService,
+  ) {}
+
+  /* ======================================================
+   * LOGIN POLICY (Super Admin only)
+   * ====================================================== */
+
+  @Get('login-policy')
+  @UseGuards(SuperAdminGuard)
+  @ApiOperation({ summary: 'Login policy: single device login, day locked to device' })
+  getLoginPolicy() {
+    return this.loginPolicy.getPolicy();
+  }
+
+  @Put('login-policy')
+  @UseGuards(SuperAdminGuard)
+  @ApiOperation({ summary: 'Update the login policy' })
+  @ApiBody({ type: UpdateLoginPolicyDto })
+  updateLoginPolicy(@Body() dto: UpdateLoginPolicyDto) {
+    return this.loginPolicy.updatePolicy(dto);
+  }
 
   private getAccessToken(req: Request) {
     const authHeader = req.headers.authorization;

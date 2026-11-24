@@ -9,7 +9,7 @@ import {
   Logger,
   OnModuleInit,
 } from '@nestjs/common';
-import { Model } from 'mongoose';
+import { ClientSession, Model } from 'mongoose';
 
 import { MongoService } from 'src/core/database/mongo/mongo.service';
 import { MongoRepository } from 'src/core/database/mongo/mongo.repository';
@@ -34,6 +34,10 @@ import { SALE } from './sale.constants';
 import { VanInventoryStatus } from 'src/shared/enums/van-inventory.enums';
 import { VanInventoryService } from '../van-inventory/van-inventory.service';
 import {
+  collectFreeGoods,
+  freeGoodPieces,
+} from 'src/shared/utils/free-goods.utils';
+import {
   Direction,
   TransactionType,
 } from 'src/shared/enums/inventory-transaction.enums';
@@ -42,6 +46,8 @@ import { CustomerService } from '../customer/customer.service';
 import { VanDailyStockService } from '../van-daily-stock/van-daily-stock.service';
 import { OracleRepository } from 'src/core/database/oracle/oracle.repository';
 import { RequestContextStore } from 'src/core/context/request-context';
+import { ShopVisitService } from '../shop-visit/shop-visit.service';
+import { ShopVisitStatus } from 'src/shared/enums/shop-visit.enums';
 import { ErpSyncStatus } from 'src/shared/enums/stock-sales.enums';
 import {
   ProductCategory,
@@ -69,6 +75,7 @@ export class SaleService extends MongoRepository<Sale> implements OnModuleInit {
     private readonly customerService: CustomerService,
     private readonly vanDailyStockService: VanDailyStockService,
     private readonly oracleRepository: OracleRepository,
+    private readonly shopVisitService: ShopVisitService,
   ) {
     super(mongo.getModel(Sale.name, SaleSchema));
     this.employeeModel = mongo.getModel(Employee.name, EmployeeSchema);
@@ -123,7 +130,13 @@ export class SaleService extends MongoRepository<Sale> implements OnModuleInit {
 
     try {
       const created = await this.withTransaction(async (session) => {
-        const { items = [], ...rest } = payload;
+        // Visit-completion fields drive the visit update below; they are not sale fields.
+        const {
+          items = [],
+          completeVisit,
+          checkOutLocation,
+          ...rest
+        } = payload;
         const { type, paidAmount } = rest;
 
         if (!items.length) {
@@ -682,6 +695,83 @@ export class SaleService extends MongoRepository<Sale> implements OnModuleInit {
         }
 
         /* ======================================================
+         * FREE GOODS DEDUCTION (scheme free SKUs, price 0)
+         * ====================================================== */
+
+        for (const good of collectFreeGoods(items, groupSchemes)) {
+          const inventory = await this.inventoryService.findOne(
+            {
+              productId: good.productId,
+              vanId: doc.vanId,
+              status: VanInventoryStatus.ACTIVE,
+            },
+            { session },
+          );
+          const label = good.productName || good.productId;
+          if (!inventory) {
+            throw new BadRequestException(
+              `Inventory not found for free product: ${label}`,
+            );
+          }
+
+          const freeDayStart = new Date();
+          freeDayStart.setHours(0, 0, 0, 0);
+          const freeDayEnd = new Date(freeDayStart);
+          freeDayEnd.setHours(23, 59, 59, 999);
+          const freeDailyStock = await this.vanDailyStockService.findOne(
+            {
+              productId: good.productId,
+              vanId: doc.vanId,
+              date: { $gte: freeDayStart, $lte: freeDayEnd },
+            },
+            { session, sort: { createdAt: -1 } },
+          );
+          if (!freeDailyStock) {
+            throw new BadRequestException(
+              `Daily stock not initialized for free product: ${label}`,
+            );
+          }
+
+          const unitQtyInCase =
+            Number((freeDailyStock as any).unitQtyInCase) ||
+            Number((inventory as any).unitQtyInCase) ||
+            1;
+          const freePieces = freeGoodPieces(good, unitQtyInCase);
+          if (inventory.quantity < freePieces) {
+            throw new BadRequestException(
+              `Insufficient stock for free product ${label}. Available: ${inventory.quantity}, Required: ${freePieces}`,
+            );
+          }
+
+          await this.inventoryService.updateOne(
+            { inventoryId: inventory.inventoryId },
+            { $inc: { quantity: -freePieces } },
+            { session },
+          );
+          await this.vanDailyStockService.updateById(
+            freeDailyStock._id.toString(),
+            { $inc: { outQty: freePieces, closingQty: -freePieces } },
+            { session },
+          );
+          await this.inventoryTxnService.create(
+            {
+              productId: good.productId,
+              vanId: doc.vanId,
+              employeeId: primaryEmployee.employeeId,
+              transactionType: TransactionType.SALE,
+              direction: Direction.OUT,
+              quantity: freePieces,
+              cases: good.unit === 'CASE' ? good.qty : 0,
+              pieces: good.unit === 'PIECE' ? good.qty : 0,
+              referenceNo: saleId,
+              remark: 'Free goods (scheme) deducted from sale',
+              transactionDate: doc.date,
+            },
+            session,
+          );
+        }
+
+        /* ======================================================
          * CREATE PAYMENT
          * ====================================================== */
 
@@ -721,6 +811,23 @@ export class SaleService extends MongoRepository<Sale> implements OnModuleInit {
               },
             },
             { session },
+          );
+        }
+
+        /* ======================================================
+         * COMPLETE THE SHOP VISIT
+         * ------------------------------------------------------
+         * Closed in the same transaction as the sale, so there is no
+         * separate request that can be lost if the app is closed right
+         * after checkout. Skipped (never fails the sale) when the visit is
+         * missing or already closed.
+         * ====================================================== */
+
+        if (completeVisit && payload.visitId) {
+          await this.completeVisitWithSale(
+            payload.visitId,
+            checkOutLocation,
+            session,
           );
         }
 
@@ -768,6 +875,27 @@ export class SaleService extends MongoRepository<Sale> implements OnModuleInit {
       }
       this.handleDuplicateError(error);
     }
+  }
+
+  /** Close the sale's visit inside the sale transaction; no-op if missing/closed. */
+  private async completeVisitWithSale(
+    visitId: string,
+    checkOutLocation: CreateSaleDto['checkOutLocation'],
+    session: ClientSession,
+  ) {
+    const visit = await this.shopVisitService.findOne({ visitId }, { session });
+    if (!visit || visit.status === ShopVisitStatus.COMPLETED) return false;
+
+    await this.shopVisitService.update(
+      visitId,
+      {
+        status: ShopVisitStatus.COMPLETED,
+        checkOutTime: new Date(),
+        ...(checkOutLocation && { checkOutLocation }),
+      },
+      session,
+    );
+    return true;
   }
 
   async findAll(query: SaleQueryDto) {

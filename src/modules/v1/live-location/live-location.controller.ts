@@ -1,12 +1,13 @@
 import {
   Body,
   Controller,
-  Delete,
   Get,
+  Param,
+  ParseIntPipe,
+  Put,
+  UseGuards,
   HttpCode,
   HttpStatus,
-  Param,
-  Patch,
   Post,
   Query,
 } from '@nestjs/common';
@@ -14,14 +15,62 @@ import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Permissions } from 'src/core/decorators/permission.decorator';
 import { CreateLiveLocationDto } from './dto/create-live-location.dto';
 import { LiveLocationQueryDto } from './dto/live-location-query.dto';
-import { UpdateLiveLocationDto } from './dto/update-live-location.dto';
 import { LiveLocationService } from './live-location.service';
+import { DayRouteService } from './day-route.service';
+import { TrackingSettingsService } from './tracking-settings.service';
+import {
+  RestoreTrackingSettingsDto,
+  UpdateTrackingSettingsDto,
+} from './dto/tracking-settings.dto';
+import { SuperAdminGuard } from 'src/core/guards/super-admin.guard';
 import { TrackLiveLocationDto } from './dto/track-live-location.dto';
 
 @ApiTags('Live Location Tracking')
 @Controller({ path: 'live-location-tracking', version: '1' })
 export class LiveLocationController {
-  constructor(private readonly service: LiveLocationService) {}
+  constructor(
+    private readonly service: LiveLocationService,
+    private readonly dayRoute: DayRouteService,
+    private readonly trackingSettings: TrackingSettingsService,
+  ) {}
+
+  @Get('settings')
+  @Permissions('LIVE_LOCATION_VIEW')
+  @ApiOperation({ summary: 'Location tracking settings (global + per-user overrides)' })
+  getSettings() {
+    return this.trackingSettings.getSettings();
+  }
+
+  @Put('settings')
+  @Permissions('LIVE_LOCATION_UPDATE')
+  @ApiOperation({ summary: 'Update location tracking settings' })
+  updateSettings(@Body() dto: UpdateTrackingSettingsDto) {
+    return this.trackingSettings.updateSettings(dto as any);
+  }
+
+  @Get('settings/history')
+  @UseGuards(SuperAdminGuard)
+  @ApiOperation({ summary: 'Tracking settings versions (Super Admin)' })
+  settingsHistory(@Query('limit') limit?: string) {
+    return this.trackingSettings.getHistory(Number(limit) || 50);
+  }
+
+  @Post('settings/restore/:revision')
+  @UseGuards(SuperAdminGuard)
+  @ApiOperation({ summary: 'Restore a tracking settings version (Super Admin)' })
+  restoreSettings(
+    @Param('revision', ParseIntPipe) revision: number,
+    @Body() dto: RestoreTrackingSettingsDto,
+  ) {
+    return this.trackingSettings.restore(revision, dto?.note);
+  }
+
+  @Get('settings/me')
+  @Permissions('LIVE_LOCATION_CREATE')
+  @ApiOperation({ summary: 'Effective tracking settings for the current user (app)' })
+  mySettings() {
+    return this.trackingSettings.getMySettings();
+  }
 
   @Post('track')
   @Permissions('LIVE_LOCATION_CREATE')
@@ -45,24 +94,10 @@ export class LiveLocationController {
     return this.service.findAll(query);
   }
 
-  @Get(':locationId')
+  @Get('day-route')
   @Permissions('LIVE_LOCATION_VIEW')
-  findOne(@Param('locationId') locationId: string) {
-    return this.service.findByLocationId(locationId);
-  }
-
-  @Patch(':locationId')
-  @Permissions('LIVE_LOCATION_UPDATE')
-  update(
-    @Param('locationId') locationId: string,
-    @Body() dto: UpdateLiveLocationDto,
-  ) {
-    return this.service.updateLocation(locationId, dto);
-  }
-
-  @Delete(':locationId')
-  @Permissions('LIVE_LOCATION_DELETE')
-  delete(@Param('locationId') locationId: string) {
-    return this.service.deleteLocation(locationId);
+  @ApiOperation({ summary: 'Day route of a user: road path, stops, visits, timeline, stats' })
+  dayRouteOf(@Query('employeeId') employeeId: string, @Query('date') date?: string) {
+    return this.dayRoute.getDayRoute(employeeId, date);
   }
 }

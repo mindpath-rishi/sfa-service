@@ -9,6 +9,31 @@ services:
     restart: unless-stopped
     depends_on:
       - redis
+    environment:
+      # Own road matching for day routes (no data sent to Google)
+      OSRM_URL: ${OSRM_URL:-http://osrm:5000}
+    networks:
+      - observability
+
+  # Road matching (OpenStreetMap roads). Prepare data once:
+  #   ./infra/osrm/setup.sh africa/zambia
+  # Until then it waits, and day routes show the cleaned GPS path.
+  osrm:
+    image: ghcr.io/project-osrm/osrm-backend:v5.27.1
+    container_name: sfa-osrm
+    restart: unless-stopped
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >
+        if [ -f /data/region.osrm.mldgr ]; then
+          exec osrm-routed --algorithm mld --max-matching-size 100 /data/region.osrm;
+        else
+          echo 'OSRM: no road data yet. Run infra/osrm/setup.sh, then restart this container.';
+          exec sleep infinity;
+        fi
+    volumes:
+      - ./infra/osrm/data:/data:ro
+    mem_limit: 3g
     networks:
       - observability
 

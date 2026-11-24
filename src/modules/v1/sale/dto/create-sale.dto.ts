@@ -9,6 +9,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   ArrayMinSize,
   IsArray,
+  IsBoolean,
   IsDate,
   IsEnum,
   IsNotEmpty,
@@ -18,6 +19,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
+import { LocationPointDto } from 'src/shared/dto/location-point.dto';
 import {
   AppliedSaleSchemeDto,
   CreateSaleItemDto,
@@ -80,6 +82,24 @@ export class CreateSaleDto {
   @IsNotEmpty()
   @IsString()
   visitId!: string;
+
+  @ApiPropertyOptional({
+    type: Boolean,
+    description:
+      'Close the shop visit in the same transaction as the sale (check-out time = sale time)',
+  })
+  @IsOptional()
+  @IsBoolean()
+  completeVisit?: boolean;
+
+  @ApiPropertyOptional({
+    type: LocationPointDto,
+    description: 'Check-out location captured at checkout; used when completeVisit is true',
+  })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => LocationPointDto)
+  checkOutLocation?: LocationPointDto;
 
   @ApiProperty({ type: String, description: 'Customer name' })
   @IsNotEmpty()

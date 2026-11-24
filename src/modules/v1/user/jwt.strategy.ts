@@ -7,11 +7,15 @@ import { JwtPayload } from '../../../shared/interfaces/jwt-payload.interface';
 import { jwtConfig } from '../../../core/config/jwt.config';
 import { jwtExtractor } from '../../../core/auth/jwt-extractor';
 import { RequestContextStore } from 'src/core/context/request-context';
+import { LoginPolicyService } from './login-policy.service';
 
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
-  constructor(config: ConfigService) {
+  constructor(
+    config: ConfigService,
+    private readonly loginPolicy: LoginPolicyService,
+  ) {
     const secret = config.get<string>('JWT_SECRET');
     if (!secret) {
       throw new Error('JWT_SECRET missing');
@@ -30,6 +34,17 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       throw new UnauthorizedException('Invalid JWT payload');
     }
 
+    // Single device login: a newer sign-in on another device ends this session
+    if (
+      payload.dt &&
+      this.loginPolicy.appliesTo(payload.dt) &&
+      !(await this.loginPolicy.isCurrentSession(payload.sub, payload.sid))
+    ) {
+      throw new UnauthorizedException(
+        'You were signed out because your account was signed in on another device.',
+      );
+    }
+
     /**
      * ✅ SET CONTEXT HERE (MOST IMPORTANT PART)
      */
@@ -41,6 +56,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       store.roleId = payload.roleId;
       store.name = payload.name;
       store.vanId = payload.vanId; // ✅ FIX: SET VAN ID
+      store.deviceId = payload.deviceId;
       store.offlineAccessAllowed = payload.offlineAccessAllowed === true;
     }
 
@@ -52,6 +68,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       role: payload.role,
       roleId: payload.roleId,
       sessionId: payload.sid,
+      deviceId: payload.deviceId,
       name: payload.name,
       vanId: payload.vanId, // optional but useful
       offlineAccessAllowed: payload.offlineAccessAllowed === true,

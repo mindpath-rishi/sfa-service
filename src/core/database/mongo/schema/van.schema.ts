@@ -124,6 +124,20 @@ export class Van {
 
   @Prop({ type: String, enum: VanBreakdownReason })
   breakdownReason?: VanBreakdownReason;
+
+  /** When the van was marked breakdown; it stays BREAKDOWN until a manager marks it working. */
+  @Prop({ type: Date })
+  breakdownAt?: Date;
+
+  @Prop({ type: Date })
+  breakdownResolvedAt?: Date;
+
+  @Prop({ type: String })
+  breakdownResolvedBy?: string;
+
+  /** Manager remark when marking the van as working again. */
+  @Prop({ type: String })
+  breakdownResolvedRemark?: string;
 }
 
 export const VanSchema = SchemaFactory.createForClass(Van);

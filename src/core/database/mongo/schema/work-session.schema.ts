@@ -102,6 +102,14 @@ export class WorkSession {
     default: WorkSessionStatus.ACTIVE,
   })
   status!: WorkSessionStatus;
+
+  /** Device that started the day; other devices cannot sign in while ACTIVE. */
+  @Prop({ type: String })
+  deviceId?: string;
+
+  /** Set by an admin to let the user continue the day on another device. */
+  @Prop({ type: Boolean, default: false })
+  deviceLockReleased?: boolean;
 }
 
 export const WorkSessionSchema = SchemaFactory.createForClass(WorkSession);

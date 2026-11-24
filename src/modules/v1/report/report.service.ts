@@ -1,4 +1,10 @@
-import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import { UserSkuStockReportQueryDto } from './dto/user-sku-stock-report-query.dto';
+import {
+  BadRequestException,
+  HttpStatus,
+  Injectable,
+  Logger,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 
@@ -78,6 +84,145 @@ export class ReportService {
     @InjectModel(ProductivityReport.name)
     private readonly productivityReportModel: Model<ProductivityReportDocument>,
   ) {}
+
+  /**
+   * User wise SKU wise stock: opening + top up − sales (± adjustment) = closing,
+   * from van daily stock over a date range. Opening is the first day's
+   * opening, closing the last day's closing, in/out are summed.
+   */
+  async getUserSkuStockReport(query: UserSkuStockReportQueryDto) {
+    const today = new Date();
+    const from = new Date(query.fromDate || query.toDate || today);
+    const to = new Date(query.toDate || query.fromDate || today);
+    from.setHours(0, 0, 0, 0);
+    to.setHours(23, 59, 59, 999);
+    if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime()) || to < from) {
+      throw new BadRequestException('Invalid date range');
+    }
+
+    const db = this.productivityReportModel.db;
+    let productFilter: string[] | undefined;
+    if (query.categoryId) {
+      const products = await db
+        .collection('product_master')
+        .find(
+          {
+            $or: [
+              { categoryId: query.categoryId },
+              { parentCategoryId: query.categoryId },
+              { categoryIds: query.categoryId },
+            ],
+          },
+          { projection: { _id: 0, productId: 1 } },
+        )
+        .toArray();
+      productFilter = products.map((product) => String(product.productId));
+    }
+
+    const match: Record<string, unknown> = {
+      date: { $gte: from, $lte: to },
+      isDeleted: { $ne: true },
+      ...(query.employeeId ? { employeeId: query.employeeId } : {}),
+      ...(query.vanId ? { vanId: query.vanId } : {}),
+      ...(productFilter ? { productId: { $in: productFilter } } : {}),
+    };
+
+    const grouped: any[] = await db
+      .collection('van_daily_stock')
+      .aggregate(
+        [
+          { $match: match },
+          { $sort: { date: 1, createdAt: 1 } },
+          {
+            $group: {
+              _id: { employeeId: '$employeeId', vanId: '$vanId', productId: '$productId' },
+              openingQty: { $first: { $ifNull: ['$openingQty', 0] } },
+              topupQty: { $sum: { $ifNull: ['$inQty', 0] } },
+              salesQty: { $sum: { $ifNull: ['$outQty', 0] } },
+              adjustmentQty: { $sum: { $ifNull: ['$adjustmentQty', 0] } },
+              closingQty: { $last: { $ifNull: ['$closingQty', 0] } },
+              unitQtyInCase: { $last: '$unitQtyInCase' },
+              piecePrice: { $last: '$piecePrice' },
+              days: { $addToSet: '$workSessionId' },
+            },
+          },
+        ],
+        { allowDiskUse: true },
+      )
+      .toArray();
+
+    const employeeIds = [...new Set(grouped.map((row) => row._id.employeeId).filter(Boolean))];
+    const productIds = [...new Set(grouped.map((row) => row._id.productId).filter(Boolean))];
+    const [employees, products, categories] = await Promise.all([
+      db
+        .collection('employees')
+        .find({ employeeId: { $in: employeeIds } }, { projection: { _id: 0, employeeId: 1, name: 1 } })
+        .toArray(),
+      db
+        .collection('product_master')
+        .find(
+          { productId: { $in: productIds } },
+          { projection: { _id: 0, productId: 1, name: 1, productSysCode: 1, categoryId: 1, parentCategoryId: 1, unitQtyInCase: 1, piecePrice: 1 } },
+        )
+        .toArray(),
+      db
+        .collection('productcategories')
+        .find({}, { projection: { _id: 0, categoryId: 1, name: 1 } })
+        .toArray(),
+    ]);
+    const employeeName = new Map(employees.map((row) => [row.employeeId, row.name]));
+    const productById = new Map(products.map((row) => [row.productId, row]));
+    const categoryName = new Map(categories.map((row) => [row.categoryId, row.name]));
+
+    const round = (value: number) => Math.round(value * 1000) / 1000;
+    const rows = grouped
+      .map((row) => {
+        const product: any = productById.get(row._id.productId) ?? {};
+        const unitQtyInCase = Math.max(Number(row.unitQtyInCase ?? product.unitQtyInCase) || 1, 1);
+        const piecePrice = Number(row.piecePrice ?? product.piecePrice) || 0;
+        const opening = Number(row.openingQty) || 0;
+        const topup = Number(row.topupQty) || 0;
+        const sales = Number(row.salesQty) || 0;
+        const adjustment = Number(row.adjustmentQty) || 0;
+        const closing = Number(row.closingQty) || 0;
+        const expectedClosing = opening + topup - sales + adjustment;
+        return {
+          id: `${row._id.employeeId}-${row._id.vanId}-${row._id.productId}`,
+          employeeId: row._id.employeeId,
+          employeeName: employeeName.get(row._id.employeeId) || row._id.employeeId,
+          vanId: row._id.vanId,
+          productId: row._id.productId,
+          productName: product.name || row._id.productId,
+          productSysCode: product.productSysCode || '',
+          primaryCategory: categoryName.get(product.parentCategoryId) || '',
+          secondaryCategory: categoryName.get(product.categoryId) || '',
+          unitQtyInCase,
+          days: (row.days || []).filter(Boolean).length,
+          openingQty: opening,
+          topupQty: topup,
+          salesQty: sales,
+          adjustmentQty: adjustment,
+          closingQty: closing,
+          openingCases: round(opening / unitQtyInCase),
+          topupCases: round(topup / unitQtyInCase),
+          salesCases: round(sales / unitQtyInCase),
+          closingCases: round(closing / unitQtyInCase),
+          closingValue: Math.round(closing * piecePrice * 100) / 100,
+          difference: round(closing - expectedClosing),
+        };
+      })
+      .sort(
+        (a, b) =>
+          String(a.employeeName).localeCompare(String(b.employeeName)) ||
+          String(a.productName).localeCompare(String(b.productName)),
+      );
+
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'User wise SKU stock report fetched',
+      data: rows,
+    };
+  }
 
   /**
    * Prepare the productivity report Excel file.

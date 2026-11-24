@@ -109,10 +109,16 @@ export class WorkSessionService extends MongoRepository<WorkSession> {
         const van = vanId
           ? await this.vanModel
               .findOne({ vanId, isDeleted: { $ne: true } })
-              .select('name driverEmployeeId driverName')
+              .select('name driverEmployeeId driverName status')
               .session(session)
               .lean()
           : undefined;
+        // A broken-down van stays unavailable until a manager marks it working.
+        if ((van as any)?.status === 'BREAKDOWN') {
+          throw new BadRequestException(
+            `Vehicle ${vanId} is under breakdown and cannot be used until a manager marks it as working`,
+          );
+        }
 
         const newWork: Partial<WorkSession> = {
           userId: ctx?.userId,
@@ -136,6 +142,8 @@ export class WorkSessionService extends MongoRepository<WorkSession> {
           {
             workSessionId: IdGenerator.generate('WORK', 8),
             ...newWork,
+            // Locks the day to this device (see UserService login)
+            ...(ctx?.deviceId ? { deviceId: ctx.deviceId } : {}),
           },
           { session },
         );
@@ -1247,6 +1255,29 @@ export class WorkSessionService extends MongoRepository<WorkSession> {
       statusCode: HttpStatus.OK,
       message: WORK_SESSION.FETCHED,
       data: leave ? { ...doc, type: 'LEAVE', leave } : doc,
+    };
+  }
+
+  async releaseDeviceLock(workSessionId: string) {
+    const ctx = RequestContextStore.getStore();
+    const day: any = await this.model
+      .findOne({ workSessionId, status: WorkSessionStatus.ACTIVE, isDeleted: false } as any)
+      .lean();
+    if (!day) throw new NotFoundException('Active work day not found');
+    await this.model.updateOne(
+      { workSessionId } as any,
+      { $set: { deviceLockReleased: true, deviceLockReleasedBy: ctx?.userId, deviceLockReleasedAt: new Date() } } as any,
+    );
+    // Sign the old device out (its token refresh fails from now on)
+    if (day.deviceId) {
+      await this.model.db
+        .collection('user_devices')
+        .updateMany({ userId: day.userId, deviceId: day.deviceId }, { $set: { isActive: false, updatedAt: new Date() } });
+    }
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'Device lock released. The user can now sign in on another device.',
+      data: { workSessionId },
     };
   }
 

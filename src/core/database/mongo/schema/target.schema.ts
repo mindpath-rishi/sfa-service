@@ -42,13 +42,13 @@ export class Target {
   @Prop({ required: true, trim: true, type: String })
   parentCategory!: string;
 
-  // Child category reference
-  @Prop({ required: true, type: String })
-  categoryId!: string;
+  // Child category reference (legacy: targets are now set per parent category only)
+  @Prop({ type: String })
+  categoryId?: string;
 
-  // Child category name snapshot
-  @Prop({ required: true, trim: true, type: String })
-  category!: string;
+  // Child category name snapshot (legacy)
+  @Prop({ trim: true, type: String })
+  category?: string;
 
   // Remarks / description
   @Prop({ trim: true, type: String })

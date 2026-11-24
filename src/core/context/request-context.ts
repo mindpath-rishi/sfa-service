@@ -7,6 +7,8 @@ export interface RequestContext {
   roleId?: string;
   vanId?: string;
   vanName?: string;
+  /** Device the request comes from (from the access token) */
+  deviceId?: string;
   offlineAccessAllowed?: boolean;
 }
 

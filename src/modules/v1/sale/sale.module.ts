@@ -10,6 +10,7 @@ import { VanInventoryModule } from '../van-inventory/van-inventory.module';
 import { InventoryTransactionModule } from '../inventory-transaction/inventory-transaction.module';
 import { CustomerModule } from '../customer/customer.module';
 import { VanDailyStockModule } from '../van-daily-stock/van-daily-stock.module';
+import { ShopVisitModule } from '../shop-visit/shop-visit.module';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { VanDailyStockModule } from '../van-daily-stock/van-daily-stock.module';
     InventoryTransactionModule,
     CustomerModule,
     VanDailyStockModule,
+    ShopVisitModule,
   ],
   controllers: [SalesController],
   providers: [SaleService],

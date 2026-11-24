@@ -35,6 +35,9 @@ export class LiveLocationGateway implements OnGatewayConnection, OnModuleInit {
 
   onModuleInit() {
     registerSocketCounter('liveLocation', () => this.server?.sockets.sockets.size ?? 0);
+    this.liveLocationService.setRealtimeListener((update) =>
+      this.server?.to(MANAGER_ROOM).emit('live-location:update', update),
+    );
   }
 
   async handleConnection(client: Socket) {
@@ -71,15 +74,15 @@ export class LiveLocationGateway implements OnGatewayConnection, OnModuleInit {
     if (!auth?.sub) return { success: false, statusCode: 401 };
 
     try {
-      // Real-time delivery must not wait for MongoDB. Persistence is sampled
-      // independently whenever the user moves at least five metres.
+      // Real-time delivery must not wait for MongoDB. Every point is broadcast;
+      // storage keeps only points that add information (see LocationPointsStore).
       const data = this.liveLocationService.createRealtimeUpdate(
         payload,
         auth.sub,
         auth.vanId,
       );
       this.server.to(MANAGER_ROOM).emit('live-location:update', data);
-      void this.liveLocationService.persistByDistance(data).catch((error) => {
+      void this.liveLocationService.storePoint(data).catch((error) => {
         this.logger.error(
           `Failed to persist sampled location (van ${data.vanId})`,
           error instanceof Error ? error.stack : String(error),

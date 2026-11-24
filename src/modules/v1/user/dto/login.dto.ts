@@ -26,6 +26,8 @@ import {
   IsIn,
   ValidateIf,
   IsEmail,
+  IsNumber,
+  IsBoolean,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
@@ -142,6 +144,60 @@ export class DeviceInfoDto {
   @IsOptional()
   @IsString()
   fcmToken?: string;
+
+  /* ---------- Hardware / build details (optional, for support & audit) ---------- */
+
+  @IsOptional() @IsString() @MaxLength(100)
+  brand?: string;
+
+  @IsOptional() @IsString() @MaxLength(100)
+  manufacturer?: string;
+
+  @IsOptional() @IsString() @MaxLength(150)
+  modelName?: string;
+
+  @IsOptional() @IsString() @MaxLength(100)
+  modelId?: string;
+
+  @IsOptional() @IsString() @MaxLength(150)
+  deviceName?: string;
+
+  @IsOptional() @IsString() @MaxLength(200)
+  osBuildId?: string;
+
+  @IsOptional() @IsNumber()
+  totalMemoryMb?: number;
+
+  /** false = emulator / simulator */
+  @IsOptional() @IsBoolean()
+  isPhysicalDevice?: boolean;
+
+  @IsOptional() @IsBoolean()
+  isRooted?: boolean;
+
+  @IsOptional() @IsString() @MaxLength(50)
+  appBuildVersion?: string;
+
+  @IsOptional() @IsString() @MaxLength(100)
+  applicationId?: string;
+
+  @IsOptional() @IsString() @MaxLength(50)
+  locale?: string;
+
+  @IsOptional() @IsString() @MaxLength(80)
+  timezone?: string;
+
+  @IsOptional() @IsNumber()
+  screenWidth?: number;
+
+  @IsOptional() @IsNumber()
+  screenHeight?: number;
+
+  @IsOptional() @IsString() @MaxLength(30)
+  networkType?: string;
+
+  @IsOptional() @IsString() @MaxLength(300)
+  userAgent?: string;
 }
 
 /**

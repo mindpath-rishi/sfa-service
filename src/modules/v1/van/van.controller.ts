@@ -55,7 +55,10 @@ import { VanService } from './van.service';
 import { CreateVanDto } from './dto/create-van.dto';
 import { UpdateVanDto } from './dto/update-van.dto';
 import { VanQueryDto } from './dto/van-query.dto';
-import { UpdateVanBreakdownDto } from './dto/update-van-breakdown.dto';
+import {
+  ResolveVanBreakdownDto,
+  UpdateVanBreakdownDto,
+} from './dto/update-van-breakdown.dto';
 import { VAN } from './van.constants';
 import { Public } from 'src/core/decorators/public.decorator';
 
@@ -237,6 +240,15 @@ export class VanController {
   @ApiBody({ type: UpdateVanBreakdownDto })
   async updateBreakdown(@Body() dto: UpdateVanBreakdownDto) {
     return this.vanService.updateBreakdown(dto);
+  }
+
+  @Permissions('VAN_UPDATE')
+  @Patch('breakdown/resolve')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Mark broken-down vans as working (with remark)' })
+  @ApiBody({ type: ResolveVanBreakdownDto })
+  async resolveBreakdown(@Body() dto: ResolveVanBreakdownDto) {
+    return this.vanService.resolveBreakdown(dto);
   }
 
   /**

@@ -8,6 +8,7 @@ import {
   IsOptional,
   IsString,
   Length,
+  Matches,
   Max,
   Min,
   ValidateNested,
@@ -114,6 +115,15 @@ export class CreateCustomerDto {
   @IsNotEmpty()
   @IsNumber()
   creditDays!: number;
+
+  @ApiPropertyOptional({
+    example: '500123456',
+    description: 'Tax Identification Number (optional, 9 digits)',
+  })
+  @IsOptional()
+  @IsString()
+  @Matches(/^\d{9}$/, { message: 'TIN number must be exactly 9 digits' })
+  tinNumber?: string;
 
   @ApiPropertyOptional({
     type: () => GeoTagDto,

@@ -4,7 +4,9 @@ import {
   ArrayUnique,
   IsArray,
   IsEnum,
+  IsOptional,
   IsString,
+  MaxLength,
 } from 'class-validator';
 import { VanBreakdownReason } from 'src/shared/enums/van.enums';
 
@@ -26,4 +28,20 @@ export class UpdateVanBreakdownDto {
   })
   @IsEnum(VanBreakdownReason)
   reason!: VanBreakdownReason;
+}
+
+/** Manager marks broken-down vans as working again. */
+export class ResolveVanBreakdownDto {
+  @ApiProperty({ type: [String], example: ['BAC-4530'] })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayUnique()
+  @IsString({ each: true })
+  vanIds!: string[];
+
+  @ApiProperty({ required: false, example: 'Engine repaired, vehicle working' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  remark?: string;
 }

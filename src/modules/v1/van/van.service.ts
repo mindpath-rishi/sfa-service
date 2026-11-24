@@ -53,7 +53,10 @@ import {
 } from 'src/core/database/mongo/schema/product-category';
 import { CreateVanDto } from './dto/create-van.dto';
 import { UpdateVanDto } from './dto/update-van.dto';
-import { UpdateVanBreakdownDto } from './dto/update-van-breakdown.dto';
+import {
+  ResolveVanBreakdownDto,
+  UpdateVanBreakdownDto,
+} from './dto/update-van-breakdown.dto';
 import { VanQueryDto } from './dto/van-query.dto';
 import { VAN } from './van.constants';
 import { RequestContextStore } from 'src/core/context/request-context';
@@ -547,6 +550,7 @@ export class VanService extends MongoRepository<Van> {
       madeYear: 'madeYear',
       name: 'name',
       vanNumber: 'vanNumber',
+      vanId: 'vanId',
       driverName: 'driverName',
       provinceId: 'provinceId',
       capacity: 'capacity',
@@ -562,8 +566,8 @@ export class VanService extends MongoRepository<Van> {
   private getExportColumns(columns?: string) {
     const definitions = [
       { key: 'primary', title: 'Van' },
-      { key: 'vanId', title: 'Van ID' },
-      { key: 'secondary', title: 'Van Number' },
+      { key: 'vanId', title: 'Vehicle No.' },
+      { key: 'secondary', title: 'ERP Warehouse Code' },
       { key: 'owner', title: 'Driver' },
       { key: 'provinceId', title: 'Province' },
       { key: 'metric', title: 'Capacity (Cases)' },
@@ -1386,6 +1390,12 @@ export class VanService extends MongoRepository<Van> {
             $set: {
               status: VanStatus.BREAKDOWN,
               breakdownReason: dto.reason,
+              breakdownAt: new Date(),
+            },
+            $unset: {
+              breakdownResolvedAt: 1,
+              breakdownResolvedBy: 1,
+              breakdownResolvedRemark: 1,
             },
           },
         );
@@ -1404,6 +1414,56 @@ export class VanService extends MongoRepository<Van> {
         status: VanStatus.BREAKDOWN,
         reason: dto.reason,
       },
+    };
+  }
+
+  /**
+   * Mark broken-down vans as working (manager). Breakdown stays in force
+   * until this is done, so users cannot pick the van in the meantime.
+   */
+  async resolveBreakdown(dto: ResolveVanBreakdownDto) {
+    const vanIds = dto.vanIds.map((vanId) => vanId.trim()).filter(Boolean);
+    const vans = await this.findLean({
+      vanId: { $in: vanIds },
+      isDeleted: { $ne: true },
+    });
+    const notBroken = vanIds.filter(
+      (vanId) =>
+        !vans.some(
+          (van) => van.vanId === vanId && van.status === VanStatus.BREAKDOWN,
+        ),
+    );
+    if (notBroken.length) {
+      throw new BadRequestException(
+        `Van not in breakdown: ${notBroken.join(', ')}`,
+      );
+    }
+
+    const resolvedBy = RequestContextStore.getStore()?.userId;
+    const remark = dto.remark?.trim() || 'Marked as working';
+    await Promise.all(
+      vanIds.map((vanId) => {
+        const query = this.model.updateOne(
+          { vanId, isDeleted: { $ne: true }, status: VanStatus.BREAKDOWN },
+          {
+            $set: {
+              status: VanStatus.ACTIVE,
+              breakdownResolvedAt: new Date(),
+              breakdownResolvedBy: resolvedBy,
+              breakdownResolvedRemark: remark,
+            },
+            $unset: { breakdownReason: 1 },
+          },
+        );
+        (query as any)._auditMetadata = { breakdownResolvedRemark: remark };
+        return query.exec();
+      }),
+    );
+
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'Vehicle marked as working',
+      data: { vanIds, status: VanStatus.ACTIVE, remark },
     };
   }
 

@@ -1,3 +1,4 @@
+import { DeviceStatusModule } from '../device-status/device-status.module';
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 
@@ -93,6 +94,7 @@ import {
 
 @Module({
   imports: [
+    DeviceStatusModule,
     MongooseModule.forFeature([
       { name: Employee.name, schema: EmployeeSchema },
       { name: Payment.name, schema: PaymentSchema },

@@ -265,6 +265,13 @@ export class EmployeeController {
     return this.employeeService.getManagerOrderSummary(query);
   }
 
+  @Get('/manager/user-stock')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Van stock of a team user with prices' })
+  async getManagerUserStock(@Query('employeeId') employeeId: string) {
+    return this.employeeService.getManagerUserStock(employeeId);
+  }
+
   @Get('/manager/team-coverage')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Get team coverage' })
@@ -586,6 +593,14 @@ export class EmployeeController {
   @ApiOperation({ summary: 'Suggest a unique login ID from a name' })
   async suggestLoginId(@Query('name') name?: string) {
     return this.employeeService.suggestLoginId(name);
+  }
+
+  @Permissions('EMPLOYEE_CREATE')
+  @Get('/login-id-check')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Check whether a login ID is free (case-insensitive)' })
+  async checkLoginId(@Query('loginId') loginId?: string) {
+    return this.employeeService.checkLoginId(loginId);
   }
 
   @Get('/export')

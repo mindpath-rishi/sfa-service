@@ -33,7 +33,8 @@ function readTargetRow(row: SheetRow, headers: string[], required: string[]): { 
     if (!value) continue;
     payload[header] = NUMBERS.includes(header) ? Number(value) : value;
   }
-  for (const field of required) if (!payload[field]) errors.push(`${field} is required`);
+  // Blank dates fall back to the current month, so only the columns must exist.
+  for (const field of required) if (!payload[field] && field !== 'startDate' && field !== 'endDate') errors.push(`${field} is required`);
   for (const field of NUMBERS) {
     if (payload[field] !== undefined && (!Number.isFinite(payload[field] as number) || (payload[field] as number) < 0)) {
       errors.push(`${field} must be 0 or more`);
@@ -43,8 +44,9 @@ function readTargetRow(row: SheetRow, headers: string[], required: string[]): { 
     const parsed = new Date(String(value ?? ''));
     return Number.isNaN(parsed.getTime()) ? '' : parsed.toISOString();
   };
-  const startDate = date(payload.startDate);
-  const endDate = date(payload.endDate);
+  const month = monthRange();
+  const startDate = date(payload.startDate || month.startDate);
+  const endDate = date(payload.endDate || month.endDate);
   if (payload.startDate && !startDate) errors.push('startDate is invalid');
   if (payload.endDate && !endDate) errors.push('endDate is invalid');
   if (startDate && endDate && endDate < startDate) errors.push('endDate must be on or after startDate');
@@ -73,13 +75,14 @@ const describe = (result: Record<string, any>) => {
 
 /* ==================== CATEGORY TARGETS ==================== */
 
-const TARGET_HEADERS = ['userId', 'userName', 'parentCategoryId', 'parentCategory', 'categoryId', 'category', 'description', 'targetCases', 'targetTonnage', 'targetValue', 'startDate', 'endDate'];
-const TARGET_REQUIRED = ['userId', 'parentCategoryId', 'parentCategory', 'categoryId', 'category', 'startDate', 'endDate'];
+// Targets are set per category (parent) only, not per sub category.
+const TARGET_HEADERS = ['userId', 'userName', 'parentCategoryId', 'parentCategory', 'description', 'targetCases', 'targetTonnage', 'targetValue', 'startDate', 'endDate'];
+const TARGET_REQUIRED = ['userId', 'parentCategoryId', 'parentCategory', 'startDate', 'endDate'];
 
 export const targetsDefinition = (targets: TargetService): ImportDefinition<Record<string, unknown>> => ({
   type: 'targets',
   label: 'Category targets',
-  description: 'Create or update monthly targets per user and child category.',
+  description: 'Create or update monthly targets per user and category. Dates default to the current month.',
   requiredHeaders: TARGET_REQUIRED,
   optionalHeaders: TARGET_HEADERS.filter((header) => !TARGET_REQUIRED.includes(header)),
   limit: 100_000,
@@ -92,11 +95,10 @@ export const targetsDefinition = (targets: TargetService): ImportDefinition<Reco
     const payloads = units.map((unit) => unit.payload);
     const [users, categories] = await Promise.all([
       existing(db, 'employees', 'employeeId', payloads.map((p) => String(p.userId ?? ''))),
-      existing(db, 'productcategories', 'categoryId', payloads.flatMap((p) => [String(p.categoryId ?? ''), String(p.parentCategoryId ?? '')])),
+      existing(db, 'productcategories', 'categoryId', payloads.map((p) => String(p.parentCategoryId ?? '')), { type: 'PARENT' }),
     ]);
     checkExists(units, 'userId', users, 'User');
-    checkExists(units, 'categoryId', categories, 'Category');
-    checkExists(units, 'parentCategoryId', categories, 'Parent category');
+    checkExists(units, 'parentCategoryId', categories, 'Category');
     return units;
   },
 
@@ -112,20 +114,19 @@ export const targetsDefinition = (targets: TargetService): ImportDefinition<Reco
         .sort({ name: 1 })
         .toArray(),
     ]);
-    const parentName = new Map(categories.filter((c) => c.type === 'PARENT').map((c) => [c.categoryId, c.name]));
-    const children = categories.filter((c) => c.type === 'CHILD' && c.parentId);
+    const parents = categories.filter((c) => c.type === 'PARENT');
     const { startDate, endDate } = monthRange();
 
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet('Targets');
     sheet.addRow(TARGET_HEADERS);
     for (const employee of employees) {
-      for (const category of children) {
-        sheet.addRow([employee.employeeId, employee.name ?? '', category.parentId, parentName.get(category.parentId) ?? category.parentId, category.categoryId, category.name, 'Monthly target', 0, 0, 0, startDate, endDate]);
+      for (const category of parents) {
+        sheet.addRow([employee.employeeId, employee.name ?? '', category.categoryId, category.name, 'Monthly target', 0, 0, 0, startDate, endDate]);
       }
     }
     styleHeader(sheet, TARGET_HEADERS.map(() => 18));
-    sheet.autoFilter = { from: 'A1', to: 'L1' };
+    sheet.autoFilter = { from: 'A1', to: 'J1' };
     return { buffer: await toBuffer(workbook), fileName: 'all-users-target-template.xlsx' };
   },
 });

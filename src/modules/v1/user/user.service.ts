@@ -26,7 +26,9 @@ import {
   HttpStatus,
   NotFoundException,
   BadRequestException,
+  Logger,
 } from '@nestjs/common';
+import { LoginPolicyService } from './login-policy.service';
 import { JwtService } from '@nestjs/jwt';
 import { Response } from 'express';
 import * as bcrypt from 'bcrypt';
@@ -70,6 +72,7 @@ export class UserService extends MongoRepository<User> {
     private readonly userDeviceModel: Model<UserDevice>,
     @InjectModel(Role.name)
     private readonly roleModel: Model<Role>,
+    private readonly loginPolicy: LoginPolicyService,
   ) {
     super(mongo.getModel(User.name, UserSchema));
     this.positionModel = mongo.getModel(Position.name, PositionSchema);
@@ -133,6 +136,22 @@ export class UserService extends MongoRepository<User> {
    * soft-deleted ones, which still hold the unique index).
    * ====================================================== */
 
+  /** Login IDs start with a capital letter (ravi_kumar -> Ravi_kumar). */
+  static formatLoginId(loginId: string) {
+    const trimmed = loginId.trim();
+    return trimmed.charAt(0).toUpperCase() + trimmed.slice(1);
+  }
+
+  /** Whether a login ID is free (case-insensitive), for live form checks. */
+  async isLoginIdAvailable(loginId: string, profileId?: string) {
+    if (!loginId.trim()) return false;
+    const taken = await this.model.exists({
+      ...this.loginIdQuery(loginId.trim()),
+      ...(profileId ? { profileId: { $ne: profileId } } : {}),
+    } as any);
+    return !taken;
+  }
+
   private loginIdQuery(loginId: string) {
     const escaped = loginId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     return { loginId: { $regex: `^${escaped}$`, $options: 'i' } };
@@ -176,7 +195,9 @@ export class UserService extends MongoRepository<User> {
         .replace(/^_+|_+$/g, '') || 'user';
 
     for (let suffix = 0; suffix < 1000; suffix++) {
-      const candidate = suffix ? `${base}${suffix}` : base;
+      const candidate = UserService.formatLoginId(
+        suffix ? `${base}${suffix}` : base,
+      );
       const taken = await this.model
         .exists({
           ...this.loginIdQuery(candidate),
@@ -223,7 +244,11 @@ export class UserService extends MongoRepository<User> {
     }
 
     /* ---------- USER AUTH ---------- */
-    const user: any = await this.findOneWithSelect({ loginId }, '+password');
+    // Case-insensitive, so "ravi_kumar" still signs in as "Ravi_kumar".
+    const user: any = await this.findOneWithSelect(
+      this.loginIdQuery(String(loginId ?? '').trim()) as any,
+      '+password',
+    );
 
     if (!user || user.status !== UserStatus.ACTIVE) {
       throw new UnauthorizedException(USER.INVALID_CREDENTIALS);
@@ -302,25 +327,48 @@ export class UserService extends MongoRepository<User> {
       );
     }
 
-    /* ---------- DEVICE UPSERT ---------- */
+    /* ---------- ONE DEVICE WHILE THE DAY IS ACTIVE ---------- */
+    const policyApplies = this.loginPolicy.appliesTo(deviceInfo.deviceType);
+    if (policyApplies && this.loginPolicy.current.lockDayToDevice) {
+      await this.assertDeviceAllowedForActiveDay(user.profileId, deviceId, deviceInfo, ipAddress);
+    }
+
+    /* ---------- DEVICE UPSERT (details refreshed on every login) ---------- */
+    const loginAt = new Date();
+    const details = this.deviceDetails(deviceInfo);
     await this.userDeviceModel.findOneAndUpdate(
       { userId: user.profileId, deviceId },
       {
         $set: {
           sessionId,
-          deviceType: deviceInfo.deviceType,
-          os: deviceInfo.os,
-          osVersion: deviceInfo.osVersion,
-          browser: deviceInfo.browser,
-          appVersion: deviceInfo.appVersion,
+          ...details,
           ipAddress,
-          lastLoginAt: new Date(),
+          lastLoginAt: loginAt,
           fcmToken: deviceInfo.fcmToken,
           isActive: true,
         },
+        $setOnInsert: { firstLoginAt: loginAt },
+        $inc: { loginCount: 1 },
       },
       { upsert: true },
     );
+
+    /* ---------- SINGLE DEVICE: sign older devices out ---------- */
+    if (policyApplies && this.loginPolicy.current.singleDeviceLogin) {
+      await this.signOutOtherDevices(user.profileId, deviceId, deviceInfo.deviceType);
+      await this.loginPolicy.setCurrentSession(user.profileId, sessionId);
+    }
+
+    /* ---------- LOGIN HISTORY (one record per login) ---------- */
+    void this.recordLogin({
+      userId: user.profileId,
+      userName: profile?.name,
+      deviceId,
+      sessionId,
+      ipAddress,
+      status: 'SUCCESS',
+      device: details,
+    });
 
     /* ---------- SESSION CACHE ---------- */
     await this.redis.setJson(
@@ -332,6 +380,7 @@ export class UserService extends MongoRepository<User> {
         roleId,
         offlineAccessAllowed: position.offlineAccessAllowed === true,
         deviceId,
+        deviceType: deviceInfo.deviceType,
         createdAt: new Date().toISOString(),
       },
       60 * 60 * 24 * 7,
@@ -365,7 +414,8 @@ export class UserService extends MongoRepository<User> {
         role: role.name,
         roleId,
         sid: sessionId,
-        // deviceId,
+        deviceId,
+        dt: deviceInfo.deviceType,
         name: profile?.name,
         vanId,
         offlineAccessAllowed: position.offlineAccessAllowed === true,
@@ -462,6 +512,7 @@ export class UserService extends MongoRepository<User> {
         offlineAccessAllowed: session.offlineAccessAllowed === true,
         sid: sessionId,
         deviceId,
+        dt: session.deviceType,
       },
       {
         expiresIn,
@@ -486,6 +537,139 @@ export class UserService extends MongoRepository<User> {
    * - Invalidate session & refresh token
    * - Deactivate device binding
    * ====================================================== */
+  /**
+   * Single device login: revokes the sessions of the user's other devices
+   * (of the same kind: app or web), so they are signed out.
+   */
+  private async signOutOtherDevices(userId: string, deviceId: string, deviceType?: string) {
+    const kind =
+      deviceType === 'web' ? { deviceType: 'web' } : { deviceType: { $ne: 'web' } };
+    const others: any[] = await this.userDeviceModel
+      .find({ userId, deviceId: { $ne: deviceId }, isActive: true, ...kind } as any)
+      .select('deviceId sessionId')
+      .lean();
+    if (!others.length) return;
+    await Promise.all(
+      others
+        .filter((device) => device.sessionId)
+        .flatMap((device) => [
+          this.redis.delete(`session:${device.sessionId}`),
+          this.redis.delete(`refresh:${device.sessionId}`),
+        ]),
+    ).catch(() => undefined);
+    await this.userDeviceModel.updateMany(
+      { userId, deviceId: { $in: others.map((device) => device.deviceId) } } as any,
+      { $set: { isActive: false, signedOutReason: 'SIGNED_IN_ON_ANOTHER_DEVICE', signedOutAt: new Date() } } as any,
+    );
+  }
+
+  /** Device fields stored on `user_devices` and in login history. */
+  private deviceDetails(info: any) {
+    const pick = (key: string) =>
+      info?.[key] === undefined || info?.[key] === null || info?.[key] === '' ? {} : { [key]: info[key] };
+    return {
+      deviceType: info?.deviceType,
+      os: info?.os,
+      osVersion: info?.osVersion,
+      browser: info?.browser,
+      appVersion: info?.appVersion,
+      ...[
+        'appBuildVersion',
+        'applicationId',
+        'brand',
+        'manufacturer',
+        'modelName',
+        'modelId',
+        'deviceName',
+        'osBuildId',
+        'totalMemoryMb',
+        'isPhysicalDevice',
+        'isRooted',
+        'locale',
+        'timezone',
+        'screenWidth',
+        'screenHeight',
+        'networkType',
+        'userAgent',
+      ].reduce((all, key) => ({ ...all, ...pick(key) }), {}),
+    };
+  }
+
+  private async recordLogin(entry: {
+    userId: string;
+    userName?: string;
+    deviceId: string;
+    sessionId?: string;
+    ipAddress?: string;
+    status: 'SUCCESS' | 'BLOCKED_ACTIVE_DAY';
+    reason?: string;
+    device: Record<string, unknown>;
+  }) {
+    try {
+      const history = this.userDeviceModel.db.collection('user_login_history');
+      await history.insertOne({ ...entry, at: new Date() });
+    } catch (error) {
+      Logger.warn(`Login history write failed: ${(error as Error).message}`, 'UserService');
+    }
+  }
+
+  /**
+   * While the user's work day is active, only the device that started the day
+   * may sign in. An admin can release the lock (lost / broken phone); the next
+   * device that signs in then takes it over.
+   */
+  private async assertDeviceAllowedForActiveDay(
+    userId: string,
+    deviceId: string,
+    deviceInfo: any,
+    ipAddress?: string,
+  ) {
+    const workSessions = this.userDeviceModel.db.collection('work_sessions');
+    const activeDay: any = await workSessions.findOne(
+      { userId, status: 'ACTIVE', isDeleted: { $ne: true } },
+      { sort: { dayStartTime: -1 }, projection: { workSessionId: 1, deviceId: 1, deviceLockReleased: 1 } },
+    );
+    if (!activeDay) return;
+
+    if (activeDay.deviceLockReleased) {
+      // Lock released by admin: this device takes the day over
+      await workSessions.updateOne(
+        { workSessionId: activeDay.workSessionId },
+        { $set: { deviceId, deviceLockReleased: false, deviceTakenOverAt: new Date() } },
+      );
+      return;
+    }
+
+    // Days started before the lock existed: the device of the last login
+    let lockedDeviceId: string | undefined = activeDay.deviceId;
+    if (!lockedDeviceId) {
+      const lastDevice: any = await this.userDeviceModel
+        .findOne({ userId, isActive: true })
+        .sort({ lastLoginAt: -1 })
+        .lean();
+      lockedDeviceId = lastDevice?.deviceId;
+    }
+    if (!lockedDeviceId || lockedDeviceId === deviceId) return;
+
+    const lockedDevice: any = await this.userDeviceModel
+      .findOne({ userId, deviceId: lockedDeviceId })
+      .lean();
+    const name =
+      [lockedDevice?.brand, lockedDevice?.modelName].filter(Boolean).join(' ') ||
+      lockedDevice?.deviceName ||
+      'another device';
+    const reason = `Your work day is active on ${name}. Complete the day on that device while it is online (so your data syncs), then sign in here. Lost the device? Ask your admin to release it.`;
+    void this.recordLogin({
+      userId,
+      deviceId,
+      ipAddress,
+      status: 'BLOCKED_ACTIVE_DAY',
+      reason,
+      device: this.deviceDetails(deviceInfo),
+    });
+    throw new ForbiddenException(reason);
+  }
+
   async logout(req: any, res: Response, deviceId: string) {
     const sessionId = req.sessionId;
 

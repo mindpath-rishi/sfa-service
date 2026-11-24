@@ -259,13 +259,7 @@ export class TargetService extends MongoRepository<Target> {
           );
         }
 
-        const filter: FilterQuery<Target> = {
-          userId: payload.userId,
-          parentCategoryId: payload.parentCategoryId,
-          categoryId: payload.categoryId,
-          startDate: payload.startDate,
-          endDate: payload.endDate,
-        };
+        const filter = this.targetKey(payload);
 
         const existing = await this.findOne(filter, {
           session,
@@ -327,13 +321,7 @@ export class TargetService extends MongoRepository<Target> {
         }
         const storedItem = this.toStoredWeight(item);
 
-        const filter: FilterQuery<Target> = {
-          userId: item.userId,
-          parentCategoryId: item.parentCategoryId,
-          categoryId: item.categoryId,
-          startDate: item.startDate,
-          endDate: item.endDate,
-        };
+        const filter = this.targetKey(item);
         const existing = await this.findOne(filter, { includeDeleted: true });
 
         if (!existing) {
@@ -418,15 +406,8 @@ export class TargetService extends MongoRepository<Target> {
   }
 
   async findAll(query: TargetQueryDto) {
-    const { searchText, page = 1, limit = 20 } = query;
-
-    const filter: FilterQuery<Target> = {};
-
-    if (searchText) {
-      const regex = new RegExp(searchText, 'i');
-      filter.$or = [{ userId: regex }];
-    }
-    if (query.uboTarget !== undefined) filter.uboTarget = query.uboTarget;
+    const { page = 1, limit = 20 } = query;
+    const filter = this.buildListFilter(query);
 
     const result = await this.paginate(filter, {
       page,
@@ -444,20 +425,12 @@ export class TargetService extends MongoRepository<Target> {
   }
 
   async exportTargets(query: TargetQueryDto) {
-    const filter: FilterQuery<Target> = {};
-    if (query.searchText)
-      filter.$or = [{ userId: new RegExp(query.searchText, 'i') }];
-    if (query.userId) filter.userId = query.userId;
-    if (query.parentCategoryId)
-      filter.parentCategoryId = query.parentCategoryId;
-    if (query.categoryId) filter.categoryId = query.categoryId;
-    if (query.uboTarget !== undefined) filter.uboTarget = query.uboTarget;
+    const filter = this.buildListFilter(query);
 
     const definitions = [
       { key: 'primary', title: 'User' },
       { key: 'userId', title: 'User ID' },
-      { key: 'parentCategory', title: 'Parent Category' },
-      { key: 'category', title: 'Child Category' },
+      { key: 'parentCategory', title: 'Category' },
       { key: 'targetCases', title: 'Cases' },
       { key: 'targetTonnage', title: 'KG' },
       { key: 'targetValue', title: 'Value' },
@@ -481,17 +454,12 @@ export class TargetService extends MongoRepository<Target> {
           primary: target.userName || target.userId || '',
           userId: target.userId || '',
           parentCategory: target.parentCategory || '',
-          category: target.category || '',
           targetCases: String(target.targetCases ?? 0),
           targetTonnage: String(Number(target.targetTonnage ?? 0) * 1000),
           targetValue: String(target.targetValue ?? 0),
           uboTarget: String(target.uboTarget ?? 0),
-          startDate: target.startDate
-            ? new Date(target.startDate).toISOString().slice(0, 10)
-            : '',
-          endDate: target.endDate
-            ? new Date(target.endDate).toISOString().slice(0, 10)
-            : '',
+          startDate: this.formatDay(target.startDate),
+          endDate: this.formatDay(target.endDate),
         };
         return columns.map((column) => values[column.key] ?? '');
       }),
@@ -510,8 +478,6 @@ export class TargetService extends MongoRepository<Target> {
       'userName',
       'parentCategoryId',
       'parentCategory',
-      'categoryId',
-      'category',
       'description',
       'targetCases',
       'targetTonnage',
@@ -527,24 +493,23 @@ export class TargetService extends MongoRepository<Target> {
         target.userName || '',
         target.parentCategoryId || '',
         target.parentCategory || '',
-        target.categoryId || '',
-        target.category || '',
         target.description || '',
         Number(target.targetCases ?? 0),
         Number(target.targetTonnage ?? 0) * 1000,
         Number(target.targetValue ?? 0),
         Number(target.uboTarget ?? 0),
-        target.startDate
-          ? new Date(target.startDate).toISOString().slice(0, 10)
-          : '',
-        target.endDate
-          ? new Date(target.endDate).toISOString().slice(0, 10)
-          : '',
+        this.formatDay(target.startDate),
+        this.formatDay(target.endDate),
       ]),
     ];
     const workbook = XLSX.utils.book_new();
     const worksheet = XLSX.utils.aoa_to_sheet(uploadRows);
-    worksheet['!autofilter'] = { ref: `A1:L${uploadRows.length}` };
+    worksheet['!autofilter'] = {
+      ref: XLSX.utils.encode_range({
+        s: { r: 0, c: 0 },
+        e: { r: uploadRows.length - 1, c: uploadHeaders.length - 1 },
+      }),
+    };
     worksheet['!cols'] = uploadHeaders.map(() => ({ wch: 18 }));
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Targets');
     return {
@@ -748,6 +713,60 @@ export class TargetService extends MongoRepository<Target> {
       message: TARGET.DELETED,
       data: this.toKgWeight(existing),
     };
+  }
+
+  /** Unique key of a target row: one target per user, category and period. */
+  private targetKey(item: CreateTargetDto): FilterQuery<Target> {
+    return {
+      userId: item.userId,
+      parentCategoryId: item.parentCategoryId,
+      // Category-level targets have no child category; legacy rows keep theirs.
+      categoryId: item.categoryId || { $in: [null, ''] },
+      startDate: item.startDate,
+      endDate: item.endDate,
+    } as FilterQuery<Target>;
+  }
+
+  /** Filters shared by the listing and its export, so both show the same rows. */
+  private buildListFilter(query: TargetQueryDto): FilterQuery<Target> {
+    const filter: FilterQuery<Target> = {};
+    if (query.searchText) {
+      const regex = new RegExp(
+        query.searchText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'),
+        'i',
+      );
+      filter.$or = [{ userId: regex }, { userName: regex }];
+    }
+    if (query.userId) filter.userId = query.userId;
+    if (query.parentCategoryId)
+      filter.parentCategoryId = query.parentCategoryId;
+    if (query.categoryId) filter.categoryId = query.categoryId;
+    if (query.uboTarget !== undefined) filter.uboTarget = query.uboTarget;
+    // Targets whose period overlaps the selected range.
+    if (query.endDate) {
+      const end = new Date(query.endDate);
+      end.setUTCHours(23, 59, 59, 999);
+      filter.startDate = { $lte: end };
+    }
+    if (query.startDate) {
+      const start = new Date(query.startDate);
+      start.setUTCHours(0, 0, 0, 0);
+      filter.endDate = { $gte: start };
+    }
+    return filter;
+  }
+
+  /** Calendar day in the report timezone (toISOString would shift IST dates a day back). */
+  private formatDay(value?: Date | string) {
+    if (!value) return '';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '';
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: REPORT_TIMEZONE,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(date);
   }
 
   private handleDuplicateError(error: any): never {

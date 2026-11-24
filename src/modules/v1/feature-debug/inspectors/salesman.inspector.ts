@@ -24,7 +24,7 @@ export const salesmanInspector: FeatureInspector = {
       db.collection('user_devices').find({ userId: employeeId }).sort({ lastLoginAt: -1 }).limit(10).toArray(),
       db.collection('work_sessions').find({ userId: employeeId, status: { $ne: 'COMPLETED' }, isDeleted: { $ne: true } }).toArray(),
       db.collection('interaction_logs').find({ employeeId, status: 'ARRIVED' }).toArray(),
-      db.collection('live_location_tracking').findOne({ userId: employeeId }, { sort: { updatedAt: -1 }, projection: { updatedAt: 1, workSessionId: 1 } }),
+      db.collection('live_location_points').findOne({ 'm.userId': employeeId }, { sort: { t: -1 }, projection: { t: 1 } }),
       db.collection(APP_LOGS_COLLECTION).countDocuments({ userId: employeeId, statusCode: { $gte: 500 }, time: { $gte: new Date(Date.now() - 24 * 36e5) } }).catch(() => 0),
     ]);
 
@@ -85,8 +85,8 @@ export const salesmanInspector: FeatureInspector = {
     }
 
     checks.push(
-      lastLocation?.updatedAt
-        ? check('Last location', 'INFO', `Last location update ${new Date(lastLocation.updatedAt).toLocaleString()}`)
+      lastLocation?.t
+        ? check('Last location', 'INFO', `Last location update ${new Date(lastLocation.t).toLocaleString()}`)
         : check('Last location', 'INFO', 'No location recorded'),
     );
     if (serverErrors) {

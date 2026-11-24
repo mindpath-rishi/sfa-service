@@ -7,6 +7,7 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { UserController } from './user.controller';
 import { UserService } from './user.service';
 import { JwtStrategy } from './jwt.strategy';
+import { LoginPolicyService } from './login-policy.service';
 import { jwtConfig } from '../../../core/config/jwt.config';
 
 import { User, UserSchema } from 'src/core/database/mongo/schema/user.schema';
@@ -44,7 +45,7 @@ import { VanModule } from '../van/van.module';
     
   ],
   controllers: [UserController],
-  providers: [UserService, JwtStrategy],
+  providers: [UserService, JwtStrategy, LoginPolicyService],
   exports: [UserService],
 })
 export class UserModule {}

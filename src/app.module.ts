@@ -73,6 +73,7 @@ import { ChannelModule } from './modules/v1/channel/channel.module';
 import { SyncModule } from './modules/v1/sync/sync.module';
 import { SegmentationModule } from './modules/v1/segmentation/segmentation.module';
 import { LiveLocationModule } from './modules/v1/live-location/live-location.module';
+import { DeviceStatusModule } from './modules/v1/device-status/device-status.module';
 import { VanChangeRequestModule } from './modules/v1/van-change-request/van-change-request.module';
 import { OutletVerificationModule } from './modules/v1/outlet-verification/outlet-verification.module';
 import { RouteChangeRequestModule } from './modules/v1/route-change-request/route-change-request.module';
@@ -151,6 +152,7 @@ import { ScriptModule } from './modules/v1/script/script.module';
     StockUnloadRequestModule,
     OutletVerificationModule,
     LiveLocationModule,
+    DeviceStatusModule,
     RouteSessionModule,
     ShopVisitModule,
     RouteCustomerMappingModule,
