@@ -17,7 +17,7 @@ describe('SyncService', () => {
     })),
   };
   const connection = { collection: jest.fn(() => collection) };
-  const service = new SyncService(connection as never);
+  const service = new SyncService(connection as never, { send: jest.fn(), sendToUser: jest.fn() } as never);
 
   beforeEach(() => {
     jest.clearAllMocks();

@@ -330,7 +330,7 @@ export class TargetService extends MongoRepository<Target> {
           results.push({
             row: index + 1,
             userName: item.userName,
-            category: item.category,
+            category: item.category || item.parentCategory,
             status: 'CREATED',
           });
           continue;
@@ -354,7 +354,7 @@ export class TargetService extends MongoRepository<Target> {
           results.push({
             row: index + 1,
             userName: item.userName,
-            category: item.category,
+            category: item.category || item.parentCategory,
             status: 'UPDATED',
           });
         } else {
@@ -362,7 +362,7 @@ export class TargetService extends MongoRepository<Target> {
           results.push({
             row: index + 1,
             userName: item.userName,
-            category: item.category,
+            category: item.category || item.parentCategory,
             status: 'UNCHANGED',
           });
         }
@@ -370,7 +370,7 @@ export class TargetService extends MongoRepository<Target> {
         results.push({
           row: index + 1,
           userName: item.userName,
-          category: item.category,
+          category: item.category || item.parentCategory,
           status: 'FAILED',
           message: this.getErrorMessage(error),
         });
