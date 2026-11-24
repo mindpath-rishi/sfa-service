@@ -1,3 +1,4 @@
+import { PositionStatus } from 'src/shared/enums/position.enums';
 import {
   BadRequestException,
   ConflictException,
@@ -118,7 +119,7 @@ export class PositionService extends MongoRepository<Position> {
       const parentQuery = this.model
         .findOne({
           positionId: parentPositionId,
-          status: 'ACTIVE',
+          status: PositionStatus.ACTIVE,
           isDeleted: { $ne: true },
         })
         .select('positionId employeeId reportTo')
@@ -231,7 +232,7 @@ export class PositionService extends MongoRepository<Position> {
     const parentPositionQuery = this.model
       .findOne({
         positionId: reportTo,
-        status: 'ACTIVE',
+        status: PositionStatus.ACTIVE,
         isDeleted: { $ne: true },
       })
       .select('roleId')
@@ -271,7 +272,7 @@ export class PositionService extends MongoRepository<Position> {
     const childrenQuery = this.model
       .find({
         reportTo: positionId,
-        status: 'ACTIVE',
+        status: PositionStatus.ACTIVE,
         isDeleted: { $ne: true },
       })
       .select('positionId roleId')
@@ -354,7 +355,7 @@ export class PositionService extends MongoRepository<Position> {
       const childrenQuery = this.model
         .find({
           reportTo: parent.positionId,
-          status: 'ACTIVE',
+          status: PositionStatus.ACTIVE,
           isDeleted: { $ne: true },
         })
         .select('positionId employeeId')
@@ -580,7 +581,7 @@ export class PositionService extends MongoRepository<Position> {
         positionId: { $nin: excludedPositionIds },
         roleId,
         vanIds: { $in: vanIds },
-        status: 'ACTIVE',
+        status: PositionStatus.ACTIVE,
         isDeleted: { $ne: true },
       })
       .select('positionId vanIds')
@@ -643,7 +644,7 @@ export class PositionService extends MongoRepository<Position> {
       if (!this.isVanHoldingRole(role?.name)) {
         const childVanIdsQuery = this.model.distinct('vanIds', {
           reportTo: currentPositionId,
-          status: 'ACTIVE',
+          status: PositionStatus.ACTIVE,
           isDeleted: { $ne: true },
         });
         if (session) childVanIdsQuery.session(session);

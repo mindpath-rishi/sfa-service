@@ -1,3 +1,4 @@
+import { ProductCategoryType } from 'src/core/database/mongo/schema/product-category';
 import { sanitizeGroupSchemes } from 'src/shared/utils/group-scheme.utils';
 import { toLineSchemes } from 'src/shared/utils/sale-line-scheme.utils';
 import {
@@ -1540,7 +1541,7 @@ export class SaleService extends MongoRepository<Sale> implements OnModuleInit {
      */
     const categories = await this.productCategoryModel
       .find({
-        type: 'PARENT',
+        type: ProductCategoryType.PARENT,
         isDeleted: false,
       })
       .select({
@@ -1826,7 +1827,7 @@ export class SaleService extends MongoRepository<Sale> implements OnModuleInit {
     const category = await this.productCategoryModel
       .findOne({
         name: categoryName,
-        type: 'PARENT',
+        type: ProductCategoryType.PARENT,
         isDeleted: false,
       })
       .select({

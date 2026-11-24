@@ -1,4 +1,4 @@
-import * as admin from 'firebase-admin';
+import { cert, getApps, initializeApp } from 'firebase-admin/app';
 import { Logger, Provider } from '@nestjs/common';
 import * as path from 'path';
 import * as fs from 'fs';
@@ -8,9 +8,7 @@ const logger = new Logger('Firebase');
 export const NotificationProvider: Provider = {
   provide: 'NOTIFICATION_CLIENT',
   useFactory: () => {
-    const existingApp = admin.apps.find(
-      (app): app is admin.app.App => app?.name === '[DEFAULT]',
-    );
+    const existingApp = getApps().find((app) => app.name === '[DEFAULT]');
 
     if (existingApp) {
       logger.log(`Using existing Firebase app: ${existingApp.name}`);
@@ -26,8 +24,8 @@ export const NotificationProvider: Provider = {
     const serviceAccount = require(filePath);
 
     try {
-      const app = admin.initializeApp({
-        credential: admin.credential.cert(serviceAccount),
+      const app = initializeApp({
+        credential: cert(serviceAccount),
       });
 
       // Project id only: key ids and client emails are credentials metadata

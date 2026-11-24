@@ -1,5 +1,10 @@
 import { Inject, Injectable } from '@nestjs/common';
-import * as admin from 'firebase-admin';
+import type { App } from 'firebase-admin/app';
+import {
+  getMessaging,
+  type Message,
+  type MulticastMessage,
+} from 'firebase-admin/messaging';
 import { AppLogger } from 'src/core/logger/app-logger';
 
 interface PushResult {
@@ -33,11 +38,11 @@ const toMessagingData = (data?: Record<string, unknown>) => {
 export class NotificationsService {
   constructor(
     @Inject('NOTIFICATION_CLIENT')
-    private readonly app: admin.app.App,
+    private readonly app: App,
   ) {}
 
   private messaging() {
-    return admin.messaging(this.app);
+    return getMessaging(this.app);
   }
 
   /* ======================================================
@@ -51,7 +56,7 @@ export class NotificationsService {
     data?: Record<string, unknown>,
   ): Promise<PushResult> {
     try {
-      const message: admin.messaging.Message = {
+      const message: Message = {
         token,
         notification: { title, body },
         data: toMessagingData(data),
@@ -96,7 +101,7 @@ export class NotificationsService {
       return { total: 0, success: 0, failed: 0 };
     }
 
-    const message: admin.messaging.MulticastMessage = {
+    const message: MulticastMessage = {
       tokens,
       notification: { title, body },
       data: toMessagingData(data),

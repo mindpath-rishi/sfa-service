@@ -1,3 +1,7 @@
+import { Status } from 'src/shared/enums/app.enums';
+import { PositionStatus } from 'src/shared/enums/position.enums';
+import { SaleStatus } from 'src/shared/enums/sale.enums';
+import { ShopVisitStatus } from 'src/shared/enums/shop-visit.enums';
 import {
   Injectable,
   Logger,
@@ -107,7 +111,11 @@ export class CustomerService extends MongoRepository<Customer> {
     if (!route?.provinceId || !route.countryId) return;
 
     const roleQuery = this.roleModel
-      .findOne({ name: 'SALESMAN', status: 'ACTIVE', isDeleted: { $ne: true } })
+      .findOne({
+        name: 'SALESMAN',
+        status: Status.ACTIVE,
+        isDeleted: { $ne: true },
+      })
       .select('roleId')
       .lean();
     roleQuery.session(session);
@@ -135,7 +143,7 @@ export class CustomerService extends MongoRepository<Customer> {
       hierarchyPath: [],
       hierarchyDepth: 1,
       offlineAccessAllowed: false,
-      status: 'ACTIVE',
+      status: PositionStatus.ACTIVE,
       isDeleted: false,
     };
     if (existing?.isDeleted) {
@@ -1049,7 +1057,7 @@ export class CustomerService extends MongoRepository<Customer> {
     const lastOrder = await this.saleModel
       .findOne({
         customerId,
-        status: 'COMPLETED',
+        status: SaleStatus.COMPLETED,
         isDeleted: false,
       })
       .sort({ date: -1 })
@@ -1059,7 +1067,7 @@ export class CustomerService extends MongoRepository<Customer> {
     const lastVisit = await this.shopVisitModel
       .findOne({
         customerId,
-        status: 'COMPLETED',
+        status: ShopVisitStatus.COMPLETED,
       })
       .sort({ checkInTime: -1 })
       .lean();

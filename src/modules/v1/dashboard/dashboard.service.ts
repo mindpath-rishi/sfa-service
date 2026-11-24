@@ -1,3 +1,4 @@
+import { RouteCustomerMappingStatus } from 'src/shared/enums/route-customer-mapping.enums';
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
@@ -297,7 +298,7 @@ export class DashboardService {
       'customerId',
       {
         routeId: { $in: routeIds },
-        status: { $ne: 'INACTIVE' },
+        status: { $ne: RouteCustomerMappingStatus.INACTIVE },
         isDeleted: { $ne: true },
       },
     );
