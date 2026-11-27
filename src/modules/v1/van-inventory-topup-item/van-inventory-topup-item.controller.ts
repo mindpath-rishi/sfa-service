@@ -51,12 +51,14 @@ import { CreateVanInventoryTopupItemDto } from './dto/create-van-inventory-topup
 import { UpdateVanInventoryTopupItemDto } from './dto/update-van-inventory-topup-item.dto';
 import { VanInventoryTopupItemQueryDto } from './dto/van-inventory-topup-item-query.dto';
 import { VAN_INVENTORY_TOPUP_ITEM } from './van-inventory-topup-item.constants';
+import { BackOfficeOnly } from 'src/core/decorators/back-office-only.decorator';
 
 @ApiTags('Van-inventory-topup-item')
 @FeatureFlag(API_MODULE_ENABLE_KEYS.VAN_INVENTORY_TOPUP_ITEM)
 @ApiUnauthorizedResponse()
 @ApiUnprocessableEntityResponse()
 @ApiInternalErrorResponse()
+@BackOfficeOnly()
 @Controller({
   path: API_MODULE.VAN_INVENTORY_TOPUP_ITEM,
   version: V1,

@@ -18,6 +18,7 @@
  * - Sessions are cached in Redis
  */
 
+import { hasMobileAppAccess } from 'src/core/guards/back-office-only.guard';
 import {
   ConflictException,
   Injectable,
@@ -315,13 +316,7 @@ export class UserService extends MongoRepository<User> {
       throw new ForbiddenException('Role not found');
     }
     // Mobile app: salesmen and managers. System admin roles use the web MIS.
-    if (
-      deviceInfo.deviceType !== 'web' &&
-      (role.isSystemAdmin ||
-        String(role.name ?? '')
-          .trim()
-          .toUpperCase() === 'SUPER_ADMIN')
-    ) {
+    if (!hasMobileAppAccess(deviceInfo.deviceType, role)) {
       throw new ForbiddenException(
         'Admin accounts do not have mobile app access. Please use the web portal.',
       );

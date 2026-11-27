@@ -11974,6 +11974,13 @@ export class EmployeeService extends MongoRepository<Employee> {
       };
     };
 
+    // Battery %, charging and phone online state from the device heartbeat
+    const deviceByUser = await this.deviceStatusService.getByUserIds(
+      employees
+        .map((employee) => String(employee.employeeId || '').trim())
+        .filter(Boolean),
+    );
+
     /**
      * ==========================================
      * FINAL RESPONSE
@@ -12034,6 +12041,7 @@ export class EmployeeService extends MongoRepository<Employee> {
         location,
         routePath,
         routePaths,
+        device: deviceByUser.get(employeeId) ?? null,
       };
     });
 

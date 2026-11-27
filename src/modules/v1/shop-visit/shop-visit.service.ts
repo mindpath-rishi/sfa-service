@@ -207,6 +207,48 @@ export class ShopVisitService extends MongoRepository<ShopVisit> {
     };
   }
 
+  /**
+   * Salesman abandons their own open (ARRIVED) interaction.
+   * Repeating the call is safe (offline retries); a converted one can't be abandoned.
+   */
+  async abandonInteraction(interactionId: string) {
+    const employeeId = String(RequestContextStore.getStore()?.userId ?? '');
+    if (!employeeId) throw new ForbiddenException('User context missing');
+
+    const doc = await this.interactionModel.findOneAndUpdate(
+      { interactionId, employeeId, status: InteractionStatus.ARRIVED },
+      {
+        status: InteractionStatus.ABANDONED,
+        abandonedAt: new Date(),
+        abandonReason: InteractionAbandonReason.USER_CANCELLED,
+      },
+      { new: true },
+    );
+    if (doc) {
+      return {
+        statusCode: HttpStatus.OK,
+        message: 'Interaction abandoned',
+        data: doc,
+      };
+    }
+
+    const current = await this.interactionModel.findOne({
+      interactionId,
+      employeeId,
+    });
+    if (!current) throw new NotFoundException('Interaction not found');
+    if (current.status === InteractionStatus.ABANDONED) {
+      return {
+        statusCode: HttpStatus.OK,
+        message: 'Interaction already abandoned',
+        data: current,
+      };
+    }
+    throw new ConflictException(
+      'Interaction already converted into a shop visit',
+    );
+  }
+
   private async expireTimedOutInteractions(employeeId: string) {
     if (!employeeId) return;
     const timeoutBefore = new Date(Date.now() - 30 * 60 * 1000);

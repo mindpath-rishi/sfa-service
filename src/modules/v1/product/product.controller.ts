@@ -56,6 +56,7 @@ import { ProductCreateDto } from './dto/create-product.dto';
 import { BulkUpdateFocusedPackDto } from './dto/bulk-update-focused-pack.dto';
 import { ProductService } from './product.service';
 import { Public } from 'src/core/decorators/public.decorator';
+import { BackOfficeOnly } from 'src/core/decorators/back-office-only.decorator';
 
 // @Public()
 @ApiTags('Product')
@@ -77,6 +78,7 @@ export class ProductController {
    * Used by : ADMIN FLOWS
    */
   @Permissions('PRODUCT_CREATE')
+  @BackOfficeOnly()
   @Post()
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Create product' })
@@ -154,6 +156,7 @@ export class ProductController {
     return this.productService.findAll(query);
   }
 
+  @BackOfficeOnly()
   @Get('export')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Export products' })
@@ -167,6 +170,7 @@ export class ProductController {
     res.send(file.buffer);
   }
 
+  @BackOfficeOnly()
   @Get('focused-pack/template')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Download Focused Pack product template' })
@@ -181,6 +185,7 @@ export class ProductController {
   }
 
   @Permissions('PRODUCT_UPDATE')
+  @BackOfficeOnly()
   @Post('focused-pack/bulk-upload')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Bulk update Focused Pack values' })
@@ -195,6 +200,7 @@ export class ProductController {
    * Purpose : Retrieve single product
    * Used by : PRODUCT DETAIL VIEW
    */
+  @BackOfficeOnly()
   @Get(':productId')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Get product by id' })
@@ -223,6 +229,7 @@ export class ProductController {
    * Used by : ADMIN FLOWS
    */
   @Permissions('PRODUCT_UPDATE')
+  @BackOfficeOnly()
   @Patch(':productId')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Update product' })
@@ -244,6 +251,7 @@ export class ProductController {
    * Used by : ADMIN FLOWS
    */
   @Permissions('PRODUCT_DELETE')
+  @BackOfficeOnly()
   @Delete(':productId')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Delete product' })

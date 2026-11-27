@@ -54,6 +54,7 @@ import { BulkUploadCustomerDto } from './dto/bulk-upload-customer.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
 import { CustomerQueryDto } from './dto/customer-query.dto';
 import { CUSTOMER } from './customer.constants';
+import { BackOfficeOnly } from 'src/core/decorators/back-office-only.decorator';
 
 @ApiTags('Customer')
 @FeatureFlag(API_MODULE_ENABLE_KEYS.CUSTOMER)
@@ -91,6 +92,7 @@ export class CustomerController {
    * Create new outlets only; existing outlets are never updated.
    */
   @Permissions('CUSTOMER_CREATE')
+  @BackOfficeOnly()
   @Post('bulk-upload')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Bulk create outlets' })
@@ -103,6 +105,7 @@ export class CustomerController {
    * Get Customers
    * -------------
    */
+  @BackOfficeOnly()
   @Get()
   @Permissions('CUSTOMER_VIEW')
   async findAll(@Query() query: CustomerQueryDto) {
@@ -146,6 +149,7 @@ export class CustomerController {
    * ----------------
    */
   @Permissions('CUSTOMER_UPDATE')
+  @BackOfficeOnly()
   @Patch(':customerId')
   async update(
     @Param('customerId') customerId: string,
@@ -172,6 +176,7 @@ export class CustomerController {
    * ----------------
    */
   @Permissions('CUSTOMER_DELETE')
+  @BackOfficeOnly()
   @Delete(':customerId')
   async delete(@Param('customerId') customerId: string) {
     return this.service.delete(customerId);

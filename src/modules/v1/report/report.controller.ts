@@ -23,8 +23,10 @@ import {
 import { ProductivityReportExcelQueryDto } from './dto/productivity-report-excel-query.dto';
 
 import { ReportService } from './report.service';
+import { BackOfficeOnly } from 'src/core/decorators/back-office-only.decorator';
 
 @ApiTags('Reports')
+@BackOfficeOnly()
 @Controller({
   path: API_MODULE.REPORTS,
   version: V1,

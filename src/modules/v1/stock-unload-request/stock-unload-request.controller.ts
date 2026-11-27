@@ -12,6 +12,7 @@ import { ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger';
 import { Permissions } from 'src/core/decorators/permission.decorator';
 import { StockUnloadRequestQueryDto } from './dto/stock-unload-request-query.dto';
 import { StockUnloadRequestService } from './stock-unload-request.service';
+import { BackOfficeOnly } from 'src/core/decorators/back-office-only.decorator';
 
 @ApiTags('Stock unload requests')
 @Controller({ path: 'stock-unload-request', version: '1' })
@@ -19,6 +20,7 @@ export class StockUnloadRequestController {
   constructor(private readonly service: StockUnloadRequestService) {}
 
   @Permissions('WORK_SESSION_VIEW')
+  @BackOfficeOnly()
   @Get()
   findAll(@Query() query: StockUnloadRequestQueryDto) {
     return this.service.findAll(query);

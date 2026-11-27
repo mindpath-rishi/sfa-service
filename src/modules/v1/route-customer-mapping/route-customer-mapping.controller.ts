@@ -51,7 +51,7 @@ import { CreateRouteCustomerMappingDto } from './dto/create-route-customer-mappi
 import { UpdateRouteCustomerMappingDto } from './dto/update-route-customer-mapping.dto';
 import { RouteCustomerMappingQueryDto } from './dto/route-customer-mapping-query.dto';
 import { ROUTE_CUSTOMER_MAPPING } from './route-customer-mapping.constants';
-import { Public } from 'src/core/decorators/public.decorator';
+import { BackOfficeOnly } from 'src/core/decorators/back-office-only.decorator';
 
 @ApiTags('Route-customer-mapping')
 @FeatureFlag(API_MODULE_ENABLE_KEYS.ROUTE_CUSTOMER_MAPPING)
@@ -62,7 +62,6 @@ import { Public } from 'src/core/decorators/public.decorator';
   path: API_MODULE.ROUTE_CUSTOMER_MAPPING,
   version: V1,
 })
-@Public()
 export class RouteCustomerMappingController {
   constructor(private readonly service: RouteCustomerMappingService) {}
 
@@ -71,6 +70,7 @@ export class RouteCustomerMappingController {
    * ---------------------------
    */
   @Permissions('ROUTE_CUSTOMER_MAPPING_CREATE')
+  @BackOfficeOnly()
   @Post()
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Create route-customer-mapping' })
@@ -88,6 +88,7 @@ export class RouteCustomerMappingController {
    * Get RouteCustomerMappings
    * -------------------------
    */
+  @BackOfficeOnly()
   @Get()
   @Permissions('ROUTE_CUSTOMER_MAPPING_VIEW')
   async findAll(@Query() query: RouteCustomerMappingQueryDto) {
@@ -99,6 +100,7 @@ export class RouteCustomerMappingController {
    * ------------------------------
    */
   @Permissions('ROUTE_CUSTOMER_MAPPING_VIEW')
+  @BackOfficeOnly()
   @Get(':mappingId')
   @ApiParam({ name: 'mappingId', description: 'RouteCustomerMapping mappingId' })
   async findOne(@Param('mappingId') mappingId: string) {
@@ -110,6 +112,7 @@ export class RouteCustomerMappingController {
    * ----------------------------
    */
   @Permissions('ROUTE_CUSTOMER_MAPPING_UPDATE')
+  @BackOfficeOnly()
   @Patch(':mappingId')
   @ApiParam({ name: 'mappingId', description: 'RouteCustomerMapping mappingId' })
   async update(
@@ -124,6 +127,7 @@ export class RouteCustomerMappingController {
    * ----------------------------
    */
   @Permissions('ROUTE_CUSTOMER_MAPPING_DELETE')
+  @BackOfficeOnly()
   @Delete(':mappingId')
   @ApiParam({ name: 'mappingId', description: 'RouteCustomerMapping mappingId' })
   async delete(@Param('mappingId') mappingId: string) {

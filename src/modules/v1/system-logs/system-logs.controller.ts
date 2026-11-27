@@ -18,6 +18,7 @@ import {
   SystemLogsSummaryDto,
 } from './dto/system-logs-query.dto';
 import { SystemLogsService } from './system-logs.service';
+import { BackOfficeOnly } from 'src/core/decorators/back-office-only.decorator';
 
 /**
  * Application logs for the MIS System Logs page. Live entries are pushed
@@ -27,6 +28,7 @@ import { SystemLogsService } from './system-logs.service';
 @ApiTags('System Logs')
 @UseGuards(SuperAdminGuard)
 @Permissions(PERMISSIONS.SYSTEM_LOG_VIEW)
+@BackOfficeOnly()
 @Controller({ path: API_MODULE.SYSTEM_LOGS, version: V1 })
 export class SystemLogsController {
   constructor(private readonly systemLogsService: SystemLogsService) {}

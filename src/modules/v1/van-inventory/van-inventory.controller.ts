@@ -51,8 +51,8 @@ import { CreateVanInventoryDto } from './dto/create-van-inventory.dto';
 import { UpdateVanInventoryDto } from './dto/update-van-inventory.dto';
 import { VanInventoryQueryDto } from './dto/van-inventory-query.dto';
 import { VAN_INVENTORY } from './van-inventory.constants';
-import { Public } from 'src/core/decorators/public.decorator';
 import { PaginationDto } from 'src/shared/dto/pagination.dto';
+import { BackOfficeOnly } from 'src/core/decorators/back-office-only.decorator';
 
 
 @ApiTags('Van-inventory')
@@ -64,7 +64,6 @@ import { PaginationDto } from 'src/shared/dto/pagination.dto';
   path: API_MODULE.VAN_INVENTORY,
   version: V1,
 })
-@Public()
 export class VanInventoryController {
   constructor(private readonly service: VanInventoryService) {}
 
@@ -73,6 +72,7 @@ export class VanInventoryController {
    * -------------------
    */
   @Permissions('VAN_INVENTORY_CREATE')
+  @BackOfficeOnly()
   @Post()
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Create van-inventory' })
@@ -90,6 +90,7 @@ export class VanInventoryController {
    * Get VanInventorys
    * -----------------
    */
+  @BackOfficeOnly()
   @Get()
   @Permissions('VAN_INVENTORY_VIEW')
   async findAll(@Query() query: VanInventoryQueryDto) {
@@ -101,6 +102,7 @@ export class VanInventoryController {
    * ----------------------
    */
   @Permissions('VAN_INVENTORY_VIEW')
+  @BackOfficeOnly()
   @Get(':inventoryId')
   @ApiParam({ name: 'inventoryId', description: 'VanInventory inventoryId' })
   async findOne(@Param('inventoryId') inventoryId: string) {
@@ -125,6 +127,7 @@ export class VanInventoryController {
    * --------------------
    */
   @Permissions('VAN_INVENTORY_UPDATE')
+  @BackOfficeOnly()
   @Patch(':inventoryId')
   @ApiParam({ name: 'inventoryId', description: 'VanInventory inventoryId' })
   async update(
@@ -139,6 +142,7 @@ export class VanInventoryController {
    * --------------------
    */
   @Permissions('VAN_INVENTORY_DELETE')
+  @BackOfficeOnly()
   @Delete(':inventoryId')
   @ApiParam({ name: 'inventoryId', description: 'VanInventory inventoryId' })
   async delete(@Param('inventoryId') inventoryId: string) {

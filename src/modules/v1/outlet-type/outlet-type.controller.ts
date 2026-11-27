@@ -52,6 +52,7 @@ import { CreateOutletTypeDto } from './dto/create-outlet-type.dto';
 import { UpdateOutletTypeDto } from './dto/update-outlet-type.dto';
 import { OutletTypeQueryDto } from './dto/outlet-type-query.dto';
 import { OUTLET_TYPE } from './outlet-type.constants';
+import { BackOfficeOnly } from 'src/core/decorators/back-office-only.decorator';
 
 @ApiTags('OutletType')
 @FeatureFlag(API_MODULE_ENABLE_KEYS.OUTLET_TYPE)
@@ -70,6 +71,7 @@ export class OutletTypeController {
    * -----------------
    */
   @Permissions('OUTLET_TYPE_CREATE')
+  @BackOfficeOnly()
   @Post()
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Create outlet-type' })
@@ -98,6 +100,7 @@ export class OutletTypeController {
    * --------------------
    */
   @Permissions('OUTLET_TYPE_VIEW')
+  @BackOfficeOnly()
   @Get(':outletTypeId')
   @ApiParam({ name: 'outletTypeId' })
   async findOne(@Param('outletTypeId') outletTypeId: string) {
@@ -109,6 +112,7 @@ export class OutletTypeController {
    * ------------------
    */
   @Permissions('OUTLET_TYPE_UPDATE')
+  @BackOfficeOnly()
   @Patch(':outletTypeId')
   async update(
     @Param('outletTypeId') outletTypeId: string,
@@ -122,6 +126,7 @@ export class OutletTypeController {
    * ------------------
    */
   @Permissions('OUTLET_TYPE_DELETE')
+  @BackOfficeOnly()
   @Delete(':outletTypeId')
   async delete(@Param('outletTypeId') outletTypeId: string) {
     return this.service.delete(outletTypeId);

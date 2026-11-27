@@ -4,10 +4,12 @@ import { SuperAdminGuard } from 'src/core/guards/super-admin.guard';
 import { API_MODULE, V1 } from 'src/shared/constants/api.constants';
 import { AppConfigDto, CreateCommandDto, DebugLoggingDto, DevicesQueryDto } from './dto/diagnostics.dto';
 import { DiagnosticsService } from './diagnostics.service';
+import { BackOfficeOnly } from 'src/core/decorators/back-office-only.decorator';
 
 /** Devices, app versions and remote controls, for Super Admin in MIS. */
 @ApiTags('Diagnostics (admin)')
 @UseGuards(SuperAdminGuard)
+@BackOfficeOnly()
 @Controller({ path: `${API_MODULE.DIAGNOSTICS}/admin`, version: V1 })
 export class DiagnosticsAdminController {
   constructor(private readonly diagnosticsService: DiagnosticsService) {}

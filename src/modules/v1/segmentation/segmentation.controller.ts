@@ -7,6 +7,7 @@ import { CreateSegmentationDto } from './dto/create-segmentation.dto';
 import { UpdateSegmentationDto } from './dto/update-segmentation.dto';
 import { SegmentationQueryDto } from './dto/segmentation-query.dto';
 import { SegmentationService } from './segmentation.service';
+import { BackOfficeOnly } from 'src/core/decorators/back-office-only.decorator';
 
 @ApiTags('Segmentation')
 @FeatureFlag(API_MODULE_ENABLE_KEYS.SEGMENTATION)
@@ -14,6 +15,7 @@ import { SegmentationService } from './segmentation.service';
 export class SegmentationController {
   constructor(private readonly service: SegmentationService) {}
 
+  @BackOfficeOnly()
   @Post()
   @HttpCode(HttpStatus.CREATED)
   @Permissions('SEGMENTATION_CREATE')
@@ -25,15 +27,18 @@ export class SegmentationController {
   @Permissions('SEGMENTATION_VIEW')
   findAll(@Query() query: SegmentationQueryDto) { return this.service.findAll(query); }
 
+  @BackOfficeOnly()
   @Get(':segmentationId')
   @Permissions('SEGMENTATION_VIEW')
   @ApiParam({ name: 'segmentationId' })
   findOne(@Param('segmentationId') id: string) { return this.service.findBySegmentationId(id); }
 
+  @BackOfficeOnly()
   @Patch(':segmentationId')
   @Permissions('SEGMENTATION_UPDATE')
   update(@Param('segmentationId') id: string, @Body() dto: UpdateSegmentationDto) { return this.service.update(id, dto); }
 
+  @BackOfficeOnly()
   @Delete(':segmentationId')
   @Permissions('SEGMENTATION_DELETE')
   delete(@Param('segmentationId') id: string) { return this.service.delete(id); }

@@ -52,12 +52,14 @@ import { CreateProvinceDto } from './dto/create-province.dto';
 import { UpdateProvinceDto } from './dto/update-province.dto';
 import { ProvinceQueryDto } from './dto/province-query.dto';
 import { PROVINCE } from './province.constants';
+import { BackOfficeOnly } from 'src/core/decorators/back-office-only.decorator';
 
 @ApiTags('Province')
 @FeatureFlag(API_MODULE_ENABLE_KEYS.PROVINCE)
 @ApiUnauthorizedResponse()
 @ApiUnprocessableEntityResponse()
 @ApiInternalErrorResponse()
+@BackOfficeOnly()
 @Controller({
   path: API_MODULE.PROVINCE,
   version: V1,

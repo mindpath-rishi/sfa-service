@@ -29,12 +29,14 @@ import { PositionService } from './position.service';
 import { CreatePositionDto } from './dto/create-position.dto';
 import { PositionQueryDto } from './dto/position-query.dto';
 import { UpdatePositionDto } from './dto/update-position.dto';
+import { BackOfficeOnly } from 'src/core/decorators/back-office-only.decorator';
 
 @ApiTags('Position')
 @FeatureFlag(API_MODULE_ENABLE_KEYS.POSITION)
 @ApiUnauthorizedResponse()
 @ApiUnprocessableEntityResponse()
 @ApiInternalErrorResponse()
+@BackOfficeOnly()
 @Controller({
   path: API_MODULE.POSITION,
   version: V1,

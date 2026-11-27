@@ -52,6 +52,7 @@ import { NOTIFICATION } from './notification.constants';
 import { NotificationQueryDto } from './dto/notification.query.dto';
 import { NotificationService } from './notification.service';
 import { Public } from 'src/core/decorators/public.decorator';
+import { BackOfficeOnly } from 'src/core/decorators/back-office-only.decorator';
 
 @ApiTags('Notification')
 @FeatureFlag(API_MODULE_ENABLE_KEYS.NOTIFICATION)
@@ -72,6 +73,7 @@ export class NotificationController {
    * Used by : SYSTEM EVENTS / ADMIN FLOWS
    */
   @Permissions('NOTIFICATION_CREATE')
+  @BackOfficeOnly()
   @Post()
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Create notification' })
@@ -183,6 +185,7 @@ export class NotificationController {
    * Purpose : Soft delete notification
    * Used by : USER / ADMIN FLOWS
    */
+  @BackOfficeOnly()
   @Delete(':notificationId')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Delete notification' })

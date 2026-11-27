@@ -57,12 +57,14 @@ import {
   ApiUnauthorizedResponse,
   ApiUnprocessableEntityResponse,
 } from 'src/core/swagger/api-error.response.swagger';
+import { BackOfficeOnly } from 'src/core/decorators/back-office-only.decorator';
 
 @ApiTags('Roles')
 @FeatureFlag(API_MODULE_ENABLE_KEYS.ROLE)
 @ApiUnauthorizedResponse()
 @ApiUnprocessableEntityResponse()
 @ApiInternalErrorResponse()
+@BackOfficeOnly()
 @Controller({
   path: API_MODULE.ROLE,
   version: V1,

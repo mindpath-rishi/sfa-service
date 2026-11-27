@@ -6,6 +6,7 @@ import { CreateOutletVerificationDto } from './dto/create-outlet-verification.dt
 import { OutletVerificationQueryDto } from './dto/outlet-verification-query.dto';
 import { UpdateOutletVerificationDto } from './dto/update-outlet-verification.dto';
 import { OutletVerificationService } from './outlet-verification.service';
+import { BackOfficeOnly } from 'src/core/decorators/back-office-only.decorator';
 
 @ApiTags('Outlet verification')
 @Controller({ path: API_MODULE.OUTLET_VERIFICATION, version: V1 })
@@ -13,24 +14,28 @@ export class OutletVerificationController {
   constructor(private readonly service: OutletVerificationService) {}
 
   @Permissions('CUSTOMER_CREATE')
+  @BackOfficeOnly()
   @Post()
   create(@Body() dto: CreateOutletVerificationDto) {
     return this.service.create(dto);
   }
 
   @Permissions('CUSTOMER_VIEW')
+  @BackOfficeOnly()
   @Get()
   findAll(@Query() query: OutletVerificationQueryDto) {
     return this.service.findAll(query);
   }
 
   @Permissions('CUSTOMER_VIEW')
+  @BackOfficeOnly()
   @Get(':outletVerificationId')
   findOne(@Param('outletVerificationId') id: string) {
     return this.service.findByOutletId(id);
   }
 
   @Permissions('CUSTOMER_UPDATE')
+  @BackOfficeOnly()
   @Patch(':outletVerificationId')
   update(
     @Param('outletVerificationId') id: string,
@@ -55,6 +60,7 @@ export class OutletVerificationController {
   }
 
   @Permissions('CUSTOMER_DELETE')
+  @BackOfficeOnly()
   @Delete(':outletVerificationId')
   delete(@Param('outletVerificationId') id: string) {
     return this.service.delete(id);

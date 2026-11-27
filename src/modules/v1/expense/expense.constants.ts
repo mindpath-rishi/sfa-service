@@ -1,0 +1,21 @@
+export const EXPENSE = {
+  CREATED: 'Expense request created successfully',
+  PREVIEW: 'Expense request preview fetched successfully',
+  FETCHED: 'Expense fetched successfully',
+  UPDATED: 'Expense updated successfully',
+  DELETED: 'Expense deleted successfully',
+  NOT_FOUND: 'Expense not found',
+  DUPLICATE: 'Expense request already raised for this week',
+  WINDOW_CLOSED:
+    'Expense request window is closed. Requests can be raised Monday to Saturday.',
+  EMPLOYEE_NOT_FOUND: 'Employee not found',
+  RATE_NOT_CONFIGURED: 'Per day value is not configured for employee tag',
+  INVALID_STATUS_CHANGE: 'Invalid status change',
+  DELETE_NOT_ALLOWED: 'Only pending expense requests can be deleted',
+  RATES_FETCHED: 'Expense rates fetched successfully',
+  RATES_UPDATED: 'Expense rates updated successfully',
+  CHARGES_FETCHED: 'Withdrawal charges fetched successfully',
+  CHARGES_UPDATED: 'Withdrawal charges updated successfully',
+  INVALID_SLAB: 'Withdrawal charge slab minAmount must be <= maxAmount',
+  ERP_FETCHED: 'ERP expense export fetched successfully',
+};

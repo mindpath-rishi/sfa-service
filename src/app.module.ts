@@ -63,6 +63,7 @@ import { PaymentModule } from './modules/v1/payment/payment.module';
 import { SaleModule } from './modules/v1/sale/sale.module';
 import { SaleItemModule } from './modules/v1/sale-item/sale-item.module';
 import { LeaveModule } from './modules/v1/leave/leave.module';
+import { ExpenseModule } from './modules/v1/expense/expense.module';
 import { TargetModule } from './modules/v1/target/target.module';
 import { OracleModule } from './core/database/oracle/oracle.module';
 import { PriceModule } from './modules/v1/price/price.module';
@@ -161,6 +162,7 @@ import { ScriptModule } from './modules/v1/script/script.module';
     SaleModule,
     SaleItemModule,
     LeaveModule,
+    ExpenseModule,
     TargetModule,
     OracleModule,
     PriceModule,
@@ -195,10 +197,11 @@ import { ScriptModule } from './modules/v1/script/script.module';
       provide: APP_GUARD,
       useExisting: AppVersionGuard,
     },
-    // {
-    //   provide: APP_GUARD,
-    //   useClass: PermissionsGuard,
-    // },
+    /* ===== ROLE PERMISSIONS (@Permissions); roles seeded by RolePermissionsSeeder ===== */
+    {
+      provide: APP_GUARD,
+      useClass: PermissionsGuard,
+    },
   ],
   exports: [MongoService, RedisRepository],
 })

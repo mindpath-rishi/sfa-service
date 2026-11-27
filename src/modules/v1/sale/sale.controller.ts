@@ -50,6 +50,7 @@ import { CreateSaleDto } from './dto/create-sale.dto';
 import { SALE } from './sale.constants';
 import { SaleQueryDto } from './dto/sale.query.dto';
 import { UpdateSaleDto } from './dto/update-sale.dto';
+import { BackOfficeOnly } from 'src/core/decorators/back-office-only.decorator';
 
 @ApiTags('Sales')
 @FeatureFlag(API_MODULE_ENABLE_KEYS.SALES)
@@ -78,6 +79,7 @@ export class SalesController {
   }
 
   @Permissions('SALES_UPDATE')
+  @BackOfficeOnly()
   @Post('sync-erp')
   @ApiOperation({ summary: 'Retry pending and failed sales to ERP' })
   async syncErp() {
@@ -154,6 +156,7 @@ export class SalesController {
    * -------------
    */
   @Permissions('SALES_UPDATE')
+  @BackOfficeOnly()
   @Patch(':salesId')
   @ApiParam({ name: 'salesId', description: 'Sales salesId' })
   async update(@Param('salesId') salesId: string, @Body() dto: UpdateSaleDto) {
@@ -165,6 +168,7 @@ export class SalesController {
    * -------------
    */
   @Permissions('SALES_DELETE')
+  @BackOfficeOnly()
   @Delete(':salesId')
   @ApiParam({ name: 'salesId', description: 'Sales salesId' })
   async delete(@Param('salesId') salesId: string) {

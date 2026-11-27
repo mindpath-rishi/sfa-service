@@ -51,6 +51,7 @@ import { CreateActivityDto } from './dto/create-activity.dto';
 import { UpdateActivityDto } from './dto/update-activity.dto';
 import { ActivityQueryDto } from './dto/activity-query.dto';
 import { ACTIVITY } from './activity.constants';
+import { BackOfficeOnly } from 'src/core/decorators/back-office-only.decorator';
 
 @ApiTags('Activity')
 @FeatureFlag(API_MODULE_ENABLE_KEYS.ACTIVITY)
@@ -97,6 +98,7 @@ export class ActivityController {
    * ------------------
    */
   @Permissions('ACTIVITY_VIEW')
+  @BackOfficeOnly()
   @Get(':activityId')
   @ApiParam({ name: 'activityId', description: 'Activity activityId' })
   async findOne(@Param('activityId') activityId: string) {
@@ -108,6 +110,7 @@ export class ActivityController {
    * ----------------
    */
   @Permissions('ACTIVITY_UPDATE')
+  @BackOfficeOnly()
   @Patch(':activityId')
   @ApiParam({ name: 'activityId', description: 'Activity activityId' })
   async update(
@@ -122,6 +125,7 @@ export class ActivityController {
    * ----------------
    */
   @Permissions('ACTIVITY_DELETE')
+  @BackOfficeOnly()
   @Delete(':activityId')
   @ApiParam({ name: 'activityId', description: 'Activity activityId' })
   async delete(@Param('activityId') activityId: string) {

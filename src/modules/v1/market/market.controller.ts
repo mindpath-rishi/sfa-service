@@ -52,12 +52,14 @@ import { CreateMarketDto } from './dto/create-market.dto';
 import { UpdateMarketDto } from './dto/update-market.dto';
 import { MarketQueryDto } from './dto/market-query.dto';
 import { MARKET } from './market.constants';
+import { BackOfficeOnly } from 'src/core/decorators/back-office-only.decorator';
 
 @ApiTags('Market')
 @FeatureFlag(API_MODULE_ENABLE_KEYS.MARKET)
 @ApiUnauthorizedResponse()
 @ApiUnprocessableEntityResponse()
 @ApiInternalErrorResponse()
+@BackOfficeOnly()
 @Controller({
   path: API_MODULE.MARKET,
   version: V1,

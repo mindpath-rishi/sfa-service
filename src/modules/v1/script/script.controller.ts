@@ -2,8 +2,10 @@ import { Controller, HttpCode, HttpStatus, Post } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { API_MODULE, V1 } from 'src/shared/constants/api.constants';
 import { ScriptService } from './script.service';
+import { BackOfficeOnly } from 'src/core/decorators/back-office-only.decorator';
 
 @ApiTags('Scripts')
+@BackOfficeOnly()
 @Controller({
   path: API_MODULE.SCRIPTS,
   version: V1,

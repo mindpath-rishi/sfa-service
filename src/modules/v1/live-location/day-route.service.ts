@@ -14,6 +14,7 @@ import { BadRequestException, HttpStatus, Injectable, NotFoundException } from '
 import { MongoService } from 'src/core/database/mongo/mongo.service';
 import { LocationPointsStore } from './location-points.store';
 import { TrackingSettingsService } from './tracking-settings.service';
+import { BACKGROUND_MIN_ACCURACY_LIMIT_M, isAccuracyDrift } from './location-drift';
 import { distanceMeters, RoadSnapService, type TrackPoint } from './road-snap.service';
 
 const MAX_SPEED_KMH = 160;
@@ -349,12 +350,21 @@ export class DayRouteService {
     };
   }
 
-  /** Drop inaccurate fixes, duplicates and physically impossible jumps. */
+  /**
+   * Drop inaccurate fixes, duplicates and physically impossible jumps, and hold
+   * the position through GPS drift while standing still.
+   */
   private clean(points: Point[]): Point[] {
+    // Storage already applied the per-source limit; foreground fixes above
+    // maxAccuracyM never reach here, background ones may (see location-drift).
+    const accuracyLimit = Math.max(
+      this.trackingSettings.current.maxAccuracyM,
+      BACKGROUND_MIN_ACCURACY_LIMIT_M,
+    );
     const result: Point[] = [];
     for (const point of points) {
       if (!Number.isFinite(point.latitude) || !Number.isFinite(point.longitude)) continue;
-      if (point.accuracy != null && point.accuracy > this.trackingSettings.current.maxAccuracyM) continue;
+      if (point.accuracy != null && point.accuracy > accuracyLimit) continue;
       const previous = result[result.length - 1];
       if (previous) {
         const meters = distanceMeters(
@@ -364,6 +374,15 @@ export class DayRouteService {
         const seconds = (point.capturedAt.getTime() - previous.capturedAt.getTime()) / 1000;
         if (seconds <= 0 && meters < 1) continue;
         if (seconds > 0 && (meters / seconds) * 3.6 > MAX_SPEED_KMH && meters > 300) continue;
+        if (isAccuracyDrift(previous.accuracy, point, meters)) {
+          result.push({
+            ...point,
+            latitude: previous.latitude,
+            longitude: previous.longitude,
+            accuracy: previous.accuracy,
+          });
+          continue;
+        }
       }
       result.push(point);
     }

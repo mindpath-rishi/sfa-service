@@ -11,7 +11,7 @@ import {
 export const isSuperAdmin = (role?: unknown, roleId?: unknown) =>
   [role, roleId].some(
     (value) =>
-      String(value ?? '')
+      (typeof value === 'string' ? value : '')
         .trim()
         .toUpperCase()
         .replace(/\s+/g, '_') === 'SUPER_ADMIN',
@@ -21,7 +21,9 @@ export const isSuperAdmin = (role?: unknown, roleId?: unknown) =>
 @Injectable()
 export class SuperAdminGuard implements CanActivate {
   canActivate(context: ExecutionContext): boolean {
-    const user = context.switchToHttp().getRequest().user;
+    const { user } = context
+      .switchToHttp()
+      .getRequest<{ user?: { role?: unknown; roleId?: unknown } }>();
     if (!isSuperAdmin(user?.role, user?.roleId)) {
       throw new ForbiddenException('Only Super Admin can access this');
     }

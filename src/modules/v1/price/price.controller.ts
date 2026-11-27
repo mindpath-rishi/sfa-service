@@ -52,6 +52,7 @@ import { UpdatePriceDto } from './dto/update-price.dto';
 import { PriceQueryDto } from './dto/price-query.dto';
 import { PRICE } from './price.constants';
 import { Public } from 'src/core/decorators/public.decorator';
+import { BackOfficeOnly } from 'src/core/decorators/back-office-only.decorator';
 
 @ApiTags('Price')
 @FeatureFlag(API_MODULE_ENABLE_KEYS.PRICE)
@@ -70,6 +71,7 @@ export class PriceController {
    * ------------
    */
   @Permissions('PRICE_CREATE')
+  @BackOfficeOnly()
   @Post()
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Create price' })
@@ -108,6 +110,7 @@ export class PriceController {
    * Get Prices
    * ----------
    */
+  @BackOfficeOnly()
   @Get()
   @Permissions('PRICE_VIEW')
   async findAll(@Query() query: PriceQueryDto) {
@@ -119,6 +122,7 @@ export class PriceController {
    * ---------------
    */
   @Permissions('PRICE_VIEW')
+  @BackOfficeOnly()
   @Get(':priceId')
   @ApiParam({ name: 'priceId', description: 'Price priceId' })
   async findOne(@Param('priceId') priceId: string) {
@@ -130,6 +134,7 @@ export class PriceController {
    * -------------
    */
   @Permissions('PRICE_UPDATE')
+  @BackOfficeOnly()
   @Patch(':priceId')
   @ApiParam({ name: 'priceId', description: 'Price priceId' })
   async update(@Param('priceId') priceId: string, @Body() dto: UpdatePriceDto) {
@@ -141,6 +146,7 @@ export class PriceController {
    * -------------
    */
   @Permissions('PRICE_DELETE')
+  @BackOfficeOnly()
   @Delete(':priceId')
   @ApiParam({ name: 'priceId', description: 'Price priceId' })
   async delete(@Param('priceId') priceId: string) {

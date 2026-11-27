@@ -51,6 +51,7 @@ import { CreateVanDailyStockDto } from './dto/create-van-daily-stock.dto';
 import { UpdateVanDailyStockDto } from './dto/update-van-daily-stock.dto';
 import { VanDailyStockQueryDto } from './dto/van-daily-stock-query.dto';
 import { VAN_DAILY_STOCK } from './van-daily-stock.constants';
+import { BackOfficeOnly } from 'src/core/decorators/back-office-only.decorator';
 
 @ApiTags('Van-daily-stock')
 @FeatureFlag(API_MODULE_ENABLE_KEYS.VAN_DAILY_STOCK)
@@ -69,6 +70,7 @@ export class VanDailyStockController {
    * --------------------
    */
   @Permissions('VAN_DAILY_STOCK_CREATE')
+  @BackOfficeOnly()
   @Post()
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Create van-daily-stock' })
@@ -86,6 +88,7 @@ export class VanDailyStockController {
    * Get VanDailyStocks
    * ------------------
    */
+  @BackOfficeOnly()
   @Get()
   @Permissions('VAN_DAILY_STOCK_VIEW')
   async findAll(@Query() query: VanDailyStockQueryDto) {
@@ -117,6 +120,7 @@ export class VanDailyStockController {
    * ---------------------
    */
   @Permissions('VAN_DAILY_STOCK_UPDATE')
+  @BackOfficeOnly()
   @Patch(':vanDailyStockId')
   @ApiParam({
     name: 'vanDailyStockId',
@@ -134,6 +138,7 @@ export class VanDailyStockController {
    * ---------------------
    */
   @Permissions('VAN_DAILY_STOCK_DELETE')
+  @BackOfficeOnly()
   @Delete(':vanDailyStockId')
   @ApiParam({
     name: 'vanDailyStockId',

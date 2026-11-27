@@ -51,6 +51,7 @@ import { CreateLeaveDto } from './dto/create-leave.dto';
 import { UpdateLeaveDto } from './dto/update-leave.dto';
 import { LeaveQueryDto } from './dto/leave-query.dto';
 import { LEAVE } from './leave.constants';
+import { BackOfficeOnly } from 'src/core/decorators/back-office-only.decorator';
 
 @ApiTags('Leave')
 @FeatureFlag(API_MODULE_ENABLE_KEYS.LEAVE)
@@ -86,6 +87,7 @@ export class LeaveController {
    * Get Leaves
    * ----------
    */
+  @BackOfficeOnly()
   @Get()
   @Permissions('LEAVE_VIEW')
   async findAll(@Query() query: LeaveQueryDto) {
@@ -97,6 +99,7 @@ export class LeaveController {
    * ---------------
    */
   @Permissions('LEAVE_VIEW')
+  @BackOfficeOnly()
   @Get(':leaveId')
   @ApiParam({ name: 'leaveId', description: 'Leave leaveId' })
   async findOne(@Param('leaveId') leaveId: string) {
@@ -108,6 +111,7 @@ export class LeaveController {
    * -------------
    */
   @Permissions('LEAVE_UPDATE')
+  @BackOfficeOnly()
   @Patch(':leaveId')
   @ApiParam({ name: 'leaveId', description: 'Leave leaveId' })
   async update(@Param('leaveId') leaveId: string, @Body() dto: UpdateLeaveDto) {
@@ -119,6 +123,7 @@ export class LeaveController {
    * -------------
    */
   @Permissions('LEAVE_DELETE')
+  @BackOfficeOnly()
   @Delete(':leaveId')
   @ApiParam({ name: 'leaveId', description: 'Leave leaveId' })
   async delete(@Param('leaveId') leaveId: string) {

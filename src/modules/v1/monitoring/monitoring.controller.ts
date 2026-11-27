@@ -7,6 +7,7 @@ import { API_MODULE, V1 } from 'src/shared/constants/api.constants';
 import { AlertsService } from './alerts.service';
 import { HealthService } from './health.service';
 import { ReconciliationService } from './reconciliation.service';
+import { BackOfficeOnly } from 'src/core/decorators/back-office-only.decorator';
 
 class AlertsQueryDto {
   @IsOptional() @IsIn(['OPEN', 'ACKNOWLEDGED', 'RESOLVED', 'ALL']) status?: string;
@@ -25,6 +26,7 @@ class ReportsQueryDto {
 /** System health, alerts and nightly reconciliation, for Super Admin. */
 @ApiTags('Monitoring')
 @UseGuards(SuperAdminGuard)
+@BackOfficeOnly()
 @Controller({ path: API_MODULE.MONITORING, version: V1 })
 export class MonitoringController {
   constructor(

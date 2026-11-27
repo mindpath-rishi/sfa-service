@@ -25,6 +25,23 @@ export class OfflinePeriodDto {
   to!: string;
 }
 
+export class TrackingHealthDto {
+  @ApiPropertyOptional({ description: 'Location permission is "Allow all the time"' })
+  @IsOptional()
+  @IsBoolean()
+  backgroundLocation?: boolean;
+
+  @ApiPropertyOptional({ description: 'Battery usage Unrestricted (Android only)' })
+  @IsOptional()
+  @IsBoolean()
+  batteryUnrestricted?: boolean;
+
+  @ApiPropertyOptional({ description: 'User confirmed Autostart is on (phones that have it)' })
+  @IsOptional()
+  @IsBoolean()
+  autostartConfirmed?: boolean;
+}
+
 export class DeviceHeartbeatDto {
   @ApiPropertyOptional({ example: 76, description: 'Battery % (0-100)' })
   @IsOptional()
@@ -71,4 +88,10 @@ export class DeviceHeartbeatDto {
   @ValidateNested({ each: true })
   @Type(() => OfflinePeriodDto)
   offlinePeriods?: OfflinePeriodDto[];
+
+  @ApiPropertyOptional({ type: TrackingHealthDto })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => TrackingHealthDto)
+  trackingHealth?: TrackingHealthDto;
 }

@@ -15,10 +15,12 @@ import { API_MODULE, V1 } from 'src/shared/constants/api.constants';
 import { PERMISSIONS } from 'src/shared/constants/permissions.constants';
 import { ResolveSyncIssueDto, SyncIssuesQueryDto } from './dto/sync-issues.dto';
 import { SyncIssuesService } from './sync-issues.service';
+import { BackOfficeOnly } from 'src/core/decorators/back-office-only.decorator';
 
 /** Offline sync conflicts and failures, for Super Admin in MIS. */
 @ApiTags('Offline Sync Issues')
 @UseGuards(SuperAdminGuard)
+@BackOfficeOnly()
 @Controller({ path: API_MODULE.SYNC_ISSUES, version: V1 })
 export class SyncIssuesController {
   constructor(private readonly syncIssuesService: SyncIssuesService) {}

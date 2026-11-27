@@ -57,7 +57,7 @@ export const DEFAULT_TRACKING_SETTINGS: TrackingSettings = {
   backgroundEnabled: true,
   backgroundIntervalSec: 5,
   backgroundDistanceM: 0,
-  maxAccuracyM: 100,
+  maxAccuracyM: 50,
   heartbeatSec: 30,
   storageToleranceM: 5,
   storageKeepAliveSec: 60,

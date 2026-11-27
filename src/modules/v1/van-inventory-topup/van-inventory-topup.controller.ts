@@ -26,7 +26,6 @@ import {
   Patch,
   Post,
   Query,
-  SetMetadata,
 } from '@nestjs/common';
 import { ApiBody, ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger';
 
@@ -54,7 +53,6 @@ import { UpdateVanInventoryTopupItemsDto } from './dto/update-van-inventory-topu
 import { BackOfficeOnly } from 'src/core/decorators/back-office-only.decorator';
 import { VanInventoryTopupQueryDto } from './dto/van-inventory-topup-query.dto';
 import { VAN_INVENTORY_TOPUP } from './van-inventory-topup.constants';
-import { IS_PUBLIC_KEY, Public } from 'src/core/decorators/public.decorator';
 
 @ApiTags('Van-inventory-topup')
 @FeatureFlag(API_MODULE_ENABLE_KEYS.VAN_INVENTORY_TOPUP)
@@ -65,7 +63,6 @@ import { IS_PUBLIC_KEY, Public } from 'src/core/decorators/public.decorator';
   path: API_MODULE.VAN_INVENTORY_TOPUP,
   version: V1,
 })
-@Public()
 export class VanInventoryTopupController {
   constructor(private readonly service: VanInventoryTopupService) {}
 
@@ -88,6 +85,7 @@ export class VanInventoryTopupController {
   }
 
   @Permissions('VAN_INVENTORY_TOPUP_UPDATE')
+  @BackOfficeOnly()
   @Post('sync-erp/requests')
   @ApiOperation({ summary: 'Retry unsynced top-up requests to ERP' })
   async syncErpRequests() {
@@ -95,6 +93,7 @@ export class VanInventoryTopupController {
   }
 
   @Permissions('VAN_INVENTORY_TOPUP_UPDATE')
+  @BackOfficeOnly()
   @Post('sync-erp/stock-take')
   @ApiOperation({ summary: 'Sync top-up approvals from ERP stock take' })
   async syncErpApprovals() {
@@ -116,7 +115,6 @@ export class VanInventoryTopupController {
    * ------------------------------------------------
    */
   @Permissions('VAN_INVENTORY_TOPUP_UPDATE')
-  @SetMetadata(IS_PUBLIC_KEY, false)
   @BackOfficeOnly()
   @Patch(':vanInventoryTopupId/admin/approve')
   @ApiOperation({ summary: 'Approve a submitted top-up request as admin' })
@@ -136,7 +134,6 @@ export class VanInventoryTopupController {
    * Change quantities, add products or remove products before approval.
    */
   @Permissions('VAN_INVENTORY_TOPUP_UPDATE')
-  @SetMetadata(IS_PUBLIC_KEY, false)
   @BackOfficeOnly()
   @Patch(':vanInventoryTopupId/items')
   @ApiOperation({ summary: 'Edit items of a requested top-up' })
@@ -157,7 +154,6 @@ export class VanInventoryTopupController {
    * Same rules as the admin edit, limited to the requester's own top-ups.
    */
   @Permissions('VAN_INVENTORY_TOPUP_CREATE')
-  @SetMetadata(IS_PUBLIC_KEY, false)
   @Patch(':vanInventoryTopupId/my-items')
   @ApiOperation({ summary: 'Edit items of my requested top-up' })
   @ApiParam({
@@ -178,7 +174,6 @@ export class VanInventoryTopupController {
    * -----------------------------------------------
    */
   @Permissions('VAN_INVENTORY_TOPUP_UPDATE')
-  @SetMetadata(IS_PUBLIC_KEY, false)
   @BackOfficeOnly()
   @Patch(':vanInventoryTopupId/admin/reject')
   @ApiOperation({ summary: 'Reject a submitted top-up request as admin' })
@@ -243,6 +238,7 @@ export class VanInventoryTopupController {
    * -------------------------
    */
   @Permissions('VAN_INVENTORY_TOPUP_UPDATE')
+  @BackOfficeOnly()
   @Patch(':vanInventoryTopupId')
   @ApiParam({
     name: 'vanInventoryTopupId',
@@ -260,6 +256,7 @@ export class VanInventoryTopupController {
    * -------------------------
    */
   @Permissions('VAN_INVENTORY_TOPUP_DELETE')
+  @BackOfficeOnly()
   @Delete(':vanInventoryTopupId')
   @ApiParam({
     name: 'vanInventoryTopupId',

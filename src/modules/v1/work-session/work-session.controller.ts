@@ -54,6 +54,7 @@ import { UpdateWorkSessionDto } from './dto/update-work-session.dto';
 import { WorkSessionQueryDto } from './dto/work-session-query.dto';
 import { WORK_SESSION } from './work-session.constants';
 import { CompleteWorkSessionDto } from './dto/complete-work-session.dto';
+import { BackOfficeOnly } from 'src/core/decorators/back-office-only.decorator';
 
 @ApiTags('Work-session')
 @FeatureFlag(API_MODULE_ENABLE_KEYS.WORK_SESSION)
@@ -111,6 +112,7 @@ export class WorkSessionController {
   /**
    * Get WorkSessions
    * ----------------
+  @BackOfficeOnly()
   @Get()
   @Permissions('WORK_SESSION_VIEW')
   async findAll(@Query() query: WorkSessionQueryDto) {
@@ -133,6 +135,7 @@ export class WorkSessionController {
    * -------------------
    */
   @Permissions('WORK_SESSION_END')
+  @BackOfficeOnly()
   @Patch()
   // @ApiParam({ name: 'workSessionId', description: 'WorkSession workSessionId' })
   async update() {
@@ -159,6 +162,7 @@ export class WorkSessionController {
    * -------------------
    */
   @Permissions('WORK_SESSION_DELETE')
+  @BackOfficeOnly()
   @Delete(':workSessionId')
   @ApiParam({ name: 'workSessionId', description: 'WorkSession workSessionId' })
   async delete(@Param('workSessionId') workSessionId: string) {

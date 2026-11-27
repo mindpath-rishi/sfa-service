@@ -74,14 +74,17 @@ export class LiveLocationGateway implements OnGatewayConnection, OnModuleInit {
     if (!auth?.sub) return { success: false, statusCode: 401 };
 
     try {
-      // Real-time delivery must not wait for MongoDB. Every point is broadcast;
-      // storage keeps only points that add information (see LocationPointsStore).
+      // Real-time delivery must not wait for MongoDB. Only points that pass the
+      // live filter (accuracy, order, no GPS spikes) move the marker; storage
+      // keeps only points that add information (see LocationPointsStore).
       const data = this.liveLocationService.createRealtimeUpdate(
         payload,
         auth.sub,
         auth.vanId,
       );
-      this.server.to(MANAGER_ROOM).emit('live-location:update', data);
+      if (this.liveLocationService.shouldBroadcast(data)) {
+        this.server.to(MANAGER_ROOM).emit('live-location:update', data);
+      }
       void this.liveLocationService.storePoint(data).catch((error) => {
         this.logger.error(
           `Failed to persist sampled location (van ${data.vanId})`,

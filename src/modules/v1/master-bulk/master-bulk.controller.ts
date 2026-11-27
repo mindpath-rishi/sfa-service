@@ -6,6 +6,7 @@ import { Type } from 'class-transformer';
 import { ValidateNested } from 'class-validator';
 import { V1 } from 'src/shared/constants/api.constants';
 import { MasterBulkService } from './master-bulk.service';
+import { BackOfficeOnly } from 'src/core/decorators/back-office-only.decorator';
 
 class MasterBulkItemDto {
   @IsObject()
@@ -21,6 +22,7 @@ class MasterBulkUploadDto {
 }
 
 @ApiTags('Master Bulk Upload')
+@BackOfficeOnly()
 @Controller({ path: 'master', version: V1 })
 export class MasterBulkController {
   constructor(private readonly service: MasterBulkService) {}

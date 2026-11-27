@@ -58,12 +58,14 @@ import { CreateFocusedPackTargetDto } from './dto/create-focused-pack-target.dto
 import { UpdateFocusedPackTargetDto } from './dto/update-focused-pack-target.dto';
 import { FocusedPackTargetQueryDto } from './dto/focused-pack-target-query.dto';
 import { BulkUploadFocusedPackTargetsDto } from './dto/bulk-upload-focused-pack-targets.dto';
+import { BackOfficeOnly } from 'src/core/decorators/back-office-only.decorator';
 
 @ApiTags('Target')
 @FeatureFlag(API_MODULE_ENABLE_KEYS.TARGET)
 @ApiUnauthorizedResponse()
 @ApiUnprocessableEntityResponse()
 @ApiInternalErrorResponse()
+@BackOfficeOnly()
 @Controller({
   path: API_MODULE.TARGET,
   version: V1,

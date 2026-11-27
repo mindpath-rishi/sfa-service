@@ -51,6 +51,7 @@ import { CreateNonSaleDto } from './dto/create-non-sale.dto';
 import { UpdateNonSaleDto } from './dto/update-non-sale.dto';
 import { NonSaleQueryDto } from './dto/non-sale-query.dto';
 import { NON_SALE } from './non-sale.constants';
+import { BackOfficeOnly } from 'src/core/decorators/back-office-only.decorator';
 
 @ApiTags('Non-sale')
 @FeatureFlag(API_MODULE_ENABLE_KEYS.NON_SALE)
@@ -86,6 +87,7 @@ export class NonSaleController {
    * Get NonSales
    * ------------
    */
+  @BackOfficeOnly()
   @Get()
   @Permissions('NON_SALE_VIEW')
   async findAll(@Query() query: NonSaleQueryDto) {
@@ -97,6 +99,7 @@ export class NonSaleController {
    * -----------------
    */
   @Permissions('NON_SALE_VIEW')
+  @BackOfficeOnly()
   @Get(':nonSaleId')
   @ApiParam({ name: 'nonSaleId', description: 'NonSale nonSaleId' })
   async findOne(@Param('nonSaleId') nonSaleId: string) {
@@ -108,6 +111,7 @@ export class NonSaleController {
    * ---------------
    */
   @Permissions('NON_SALE_UPDATE')
+  @BackOfficeOnly()
   @Patch(':nonSaleId')
   @ApiParam({ name: 'nonSaleId', description: 'NonSale nonSaleId' })
   async update(
@@ -122,6 +126,7 @@ export class NonSaleController {
    * ---------------
    */
   @Permissions('NON_SALE_DELETE')
+  @BackOfficeOnly()
   @Delete(':nonSaleId')
   @ApiParam({ name: 'nonSaleId', description: 'NonSale nonSaleId' })
   async delete(@Param('nonSaleId') nonSaleId: string) {

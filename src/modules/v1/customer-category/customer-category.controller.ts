@@ -51,6 +51,7 @@ import { UpdateCustomerCategoryDto } from './dto/update-customer-category.dto';
 import { CustomerCategoryQueryDto } from './dto/customer-category-query.dto';
 import { CUSTOMER_CATEGORY } from './customer-category.constants';
 import { Public } from 'src/core/decorators/public.decorator';
+import { BackOfficeOnly } from 'src/core/decorators/back-office-only.decorator';
 
 @ApiTags('CustomerCategory')
 @FeatureFlag(API_MODULE_ENABLE_KEYS.CUSTOMER_CATEGORY)
@@ -69,6 +70,7 @@ export class CustomerCategoryController {
    * -----------------------
    */
   @Permissions('CUSTOMER_CATEGORY_CREATE')
+  @BackOfficeOnly()
   @Post()
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Create customer-category' })
@@ -108,6 +110,7 @@ export class CustomerCategoryController {
    * --------------------------
    */
   @Permissions('CUSTOMER_CATEGORY_VIEW')
+  @BackOfficeOnly()
   @Get(':customerCategoryId')
   @ApiParam({ name: 'customerCategoryId' })
   async findOne(@Param('customerCategoryId') customerCategoryId: string) {
@@ -119,6 +122,7 @@ export class CustomerCategoryController {
    * ------------------------
    */
   @Permissions('CUSTOMER_CATEGORY_UPDATE')
+  @BackOfficeOnly()
   @Patch(':customerCategoryId')
   async update(
     @Param('customerCategoryId') customerCategoryId: string,
@@ -132,6 +136,7 @@ export class CustomerCategoryController {
    * ------------------------
    */
   @Permissions('CUSTOMER_CATEGORY_DELETE')
+  @BackOfficeOnly()
   @Delete(':customerCategoryId')
   async delete(@Param('customerCategoryId') customerCategoryId: string) {
     return this.service.delete(customerCategoryId);

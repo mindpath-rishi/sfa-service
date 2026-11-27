@@ -240,13 +240,17 @@ export class TargetService extends MongoRepository<Target> {
     };
   }
 
-  private toKgWeight(value: any) {
+  private toKgWeight<T extends object>(
+    value: T | null | undefined,
+  ): (T & { targetTonnage: number }) | null | undefined {
     if (!value) return value;
-    const plain =
-      typeof value.toObject === 'function' ? value.toObject() : value;
+    const doc = value as T & { toObject?: () => T };
+    const plain = typeof doc.toObject === 'function' ? doc.toObject() : value;
     return {
       ...plain,
-      targetTonnage: Number(plain.targetTonnage || 0) * 1000,
+      targetTonnage:
+        Number((plain as { targetTonnage?: unknown }).targetTonnage || 0) *
+        1000,
     };
   }
 
@@ -339,9 +343,12 @@ export class TargetService extends MongoRepository<Target> {
         const changed =
           existing.isDeleted ||
           Object.entries(storedItem).some(([key, value]) => {
-            const current = existing.get(key);
+            const current: unknown = existing.get(key);
             if (value instanceof Date)
-              return new Date(current).getTime() !== value.getTime();
+              return (
+                new Date(current as string | number | Date).getTime() !==
+                value.getTime()
+              );
             return current !== value;
           });
 
@@ -449,7 +456,7 @@ export class TargetService extends MongoRepository<Target> {
     const targets = await this.findLean(filter, { sort: { startDate: -1 } });
     const rows = [
       columns.map((column) => column.title),
-      ...targets.map((target: any) => {
+      ...targets.map((target) => {
         const values: Record<string, string> = {
           primary: target.userName || target.userId || '',
           userId: target.userId || '',
@@ -488,7 +495,7 @@ export class TargetService extends MongoRepository<Target> {
     ];
     const uploadRows = [
       uploadHeaders,
-      ...targets.map((target: any) => [
+      ...targets.map((target) => [
         target.userId || '',
         target.userName || '',
         target.parentCategoryId || '',
@@ -513,7 +520,10 @@ export class TargetService extends MongoRepository<Target> {
     worksheet['!cols'] = uploadHeaders.map(() => ({ wch: 18 }));
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Targets');
     return {
-      buffer: XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' }),
+      buffer: XLSX.write(workbook, {
+        type: 'buffer',
+        bookType: 'xlsx',
+      }) as Buffer,
       fileName: 'target-upload-export.xlsx',
       mimeType:
         'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -724,7 +734,7 @@ export class TargetService extends MongoRepository<Target> {
       categoryId: item.categoryId || { $in: [null, ''] },
       startDate: item.startDate,
       endDate: item.endDate,
-    } as FilterQuery<Target>;
+    };
   }
 
   /** Filters shared by the listing and its export, so both show the same rows. */
@@ -769,8 +779,9 @@ export class TargetService extends MongoRepository<Target> {
     }).format(date);
   }
 
-  private handleDuplicateError(error: any): never {
-    if (error?.code === 11000 || error?.code === 11001) {
+  private handleDuplicateError(error: unknown): never {
+    const code = (error as { code?: number } | null)?.code;
+    if (code === 11000 || code === 11001) {
       throw new ConflictException(TARGET.DUPLICATE);
     }
     throw error;

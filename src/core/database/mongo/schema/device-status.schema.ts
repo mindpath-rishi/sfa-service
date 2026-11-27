@@ -47,7 +47,19 @@ export class DeviceStatus {
 
   @Prop({ type: String })
   appVersion?: string;
+
+  /** Phone settings background tracking depends on (reported by the app) */
+  @Prop({ type: Object, default: null })
+  trackingHealth?: TrackingHealth | null;
 }
+
+export type TrackingHealth = {
+  backgroundLocation?: boolean;
+  /** null on phones without battery optimization (iOS) */
+  batteryUnrestricted?: boolean | null;
+  autostartConfirmed?: boolean;
+  reportedAt?: Date;
+};
 
 export const DeviceStatusSchema = SchemaFactory.createForClass(DeviceStatus);
 

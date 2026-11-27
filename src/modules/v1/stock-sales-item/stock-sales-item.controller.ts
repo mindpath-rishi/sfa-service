@@ -51,12 +51,14 @@ import { CreateStockSalesItemDto } from './dto/create-stock-sales-item.dto';
 import { UpdateStockSalesItemDto } from './dto/update-stock-sales-item.dto';
 import { StockSalesItemQueryDto } from './dto/stock-sales-item-query.dto';
 import { STOCK_SALES_ITEM } from './stock-sales-item.constants';
+import { BackOfficeOnly } from 'src/core/decorators/back-office-only.decorator';
 
 @ApiTags('Stock Sales Item')
 @FeatureFlag(API_MODULE_ENABLE_KEYS.STOCK_SALES_ITEM)
 @ApiUnauthorizedResponse()
 @ApiUnprocessableEntityResponse()
 @ApiInternalErrorResponse()
+@BackOfficeOnly()
 @Controller({
   path: API_MODULE.STOCK_SALES_ITEM,
   version: V1,

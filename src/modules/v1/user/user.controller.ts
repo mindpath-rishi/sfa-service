@@ -60,7 +60,6 @@ import {
 } from 'src/shared/constants/api.constants';
 import { Agent } from 'src/modules/v1/user/user.enum';
 
-@Public()
 @ApiTags('User')
 @FeatureFlag(API_MODULE_ENABLE_KEYS.USER)
 @ApiUnprocessableEntityResponse()
@@ -115,6 +114,7 @@ export class UserController {
    * - Valid agent header
    * - Matching device ID
    * ====================================================== */
+  @Public()
   @Post('login')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Login using loginId & password' })
@@ -205,6 +205,7 @@ export class UserController {
    * Notes:
    * - Does not create a new session
    * ====================================================== */
+  @Public()
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Refresh access token' })
@@ -264,6 +265,7 @@ export class UserController {
    * - Terminate active session for a specific device
    * - Clear authentication cookies
    * ====================================================== */
+  @Public()
   @Post('logout')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Logout user' })

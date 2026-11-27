@@ -39,7 +39,6 @@ import {
 } from '@nestjs/swagger';
 import { FileInterceptor } from '@nestjs/platform-express';
 
-import { Public } from 'src/core/decorators/public.decorator';
 import { FeatureFlag } from 'src/core/decorators/feature-flag.decorator';
 
 import {
@@ -52,8 +51,8 @@ import { MediaQueryDto } from './dto/media-query.dto';
 import { UploadMediaDto } from './dto/upload-media.dto';
 import { UpdateMediaDto } from './dto/update-media.dto';
 import { MediaService } from './media.service';
+import { BackOfficeOnly } from 'src/core/decorators/back-office-only.decorator';
 
-@Public()
 @ApiTags('Media')
 @FeatureFlag(API_MODULE_ENABLE_KEYS.MEDIA)
 @Controller({
@@ -125,6 +124,7 @@ export class MediaController {
    * Params:
    * - mediaId : Unique media identifier
    */
+  @BackOfficeOnly()
   @Get(':mediaId')
   @HttpCode(HttpStatus.OK)
   @ApiParam({ name: 'mediaId', example: 'MID-001' })
@@ -147,6 +147,7 @@ export class MediaController {
    * - If file is uploaded, old storage files are deleted
    * - Duplicate checksum is prevented
    */
+  @BackOfficeOnly()
   @Patch(':mediaId')
   @HttpCode(HttpStatus.OK)
   @ApiConsumes('multipart/form-data')
@@ -174,6 +175,7 @@ export class MediaController {
    * Notes:
    * - This is a hard delete (not recoverable)
    */
+  @BackOfficeOnly()
   @Delete(':mediaId')
   @HttpCode(HttpStatus.OK)
   async remove(@Param('mediaId') mediaId: string) {

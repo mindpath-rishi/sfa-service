@@ -58,6 +58,7 @@ import { EmployeeQueryDto } from './dto/employee.query.dto';
 import { Public } from 'src/core/decorators/public.decorator';
 import { UserPrimaryCategoryTargetQueryDto } from './dto/user-primary-category-target-query.dto';
 import { UserStatus } from '../user/user.enum';
+import { BackOfficeOnly } from 'src/core/decorators/back-office-only.decorator';
 
 @ApiTags('Employee')
 @FeatureFlag(API_MODULE_ENABLE_KEYS.EMPLOYEE)
@@ -83,6 +84,7 @@ export class EmployeeController {
    * - Role & permission assignment is handled during creation
    */
   @Permissions('EMPLOYEE_CREATE')
+  @BackOfficeOnly()
   @Post()
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Create employee' })
@@ -105,6 +107,7 @@ export class EmployeeController {
   }
 
   @Permissions('EMPLOYEE_CREATE')
+  @BackOfficeOnly()
   @Post('/bulk-upload')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Bulk upload employees' })
@@ -347,6 +350,7 @@ export class EmployeeController {
     return this.employeeService.getFieldUsersSummary(query?.date);
   }
 
+  @BackOfficeOnly()
   @Get('/manager/live-locations')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
@@ -588,6 +592,7 @@ export class EmployeeController {
   }
 
   @Permissions('EMPLOYEE_CREATE')
+  @BackOfficeOnly()
   @Get('/login-id-suggestion')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Suggest a unique login ID from a name' })
@@ -596,6 +601,7 @@ export class EmployeeController {
   }
 
   @Permissions('EMPLOYEE_CREATE')
+  @BackOfficeOnly()
   @Get('/login-id-check')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Check whether a login ID is free (case-insensitive)' })
@@ -603,6 +609,7 @@ export class EmployeeController {
     return this.employeeService.checkLoginId(loginId);
   }
 
+  @BackOfficeOnly()
   @Get('/export')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Export employees' })
@@ -635,6 +642,7 @@ export class EmployeeController {
    * - Free-text search
    * - Pagination
    */
+  @BackOfficeOnly()
   @Get()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Get all employees' })
@@ -669,6 +677,7 @@ export class EmployeeController {
    * Params:
    * - employeeId : Unique employee identifier
    */
+  @BackOfficeOnly()
   @Get(':employeeId')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Get employee by employeeId' })
@@ -704,6 +713,7 @@ export class EmployeeController {
   }
 
   @Permissions('EMPLOYEE_UPDATE')
+  @BackOfficeOnly()
   @Patch(':employeeId/reset-password')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Reset employee password' })
@@ -724,6 +734,7 @@ export class EmployeeController {
    * - Only editable fields are updated
    * - Employee identity remains unchanged
    */
+  @BackOfficeOnly()
   @Patch(':employeeId')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Update employee' })
@@ -748,6 +759,7 @@ export class EmployeeController {
    * - Employee data is retained for audit purposes
    * - Access is revoked but record remains
    */
+  @BackOfficeOnly()
   @Delete(':employeeId')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Deactivate employee' })

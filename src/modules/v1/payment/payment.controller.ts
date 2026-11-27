@@ -51,6 +51,7 @@ import { CreatePaymentDto } from './dto/create-payment.dto';
 import { UpdatePaymentDto } from './dto/update-payment.dto';
 import { PaymentQueryDto } from './dto/payment-query.dto';
 import { PAYMENT } from './payment.constants';
+import { BackOfficeOnly } from 'src/core/decorators/back-office-only.decorator';
 
 @ApiTags('Payment')
 @FeatureFlag(API_MODULE_ENABLE_KEYS.PAYMENT)
@@ -97,6 +98,7 @@ export class PaymentController {
    * -----------------
    */
   @Permissions('PAYMENT_VIEW')
+  @BackOfficeOnly()
   @Get(':paymentId')
   @ApiParam({ name: 'paymentId', description: 'Payment paymentId' })
   async findOne(@Param('paymentId') paymentId: string) {
@@ -108,6 +110,7 @@ export class PaymentController {
    * ---------------
    */
   @Permissions('PAYMENT_UPDATE')
+  @BackOfficeOnly()
   @Patch(':paymentId')
   @ApiParam({ name: 'paymentId', description: 'Payment paymentId' })
   async update(
@@ -122,6 +125,7 @@ export class PaymentController {
    * ---------------
    */
   @Permissions('PAYMENT_DELETE')
+  @BackOfficeOnly()
   @Delete(':paymentId')
   @ApiParam({ name: 'paymentId', description: 'Payment paymentId' })
   async delete(@Param('paymentId') paymentId: string) {

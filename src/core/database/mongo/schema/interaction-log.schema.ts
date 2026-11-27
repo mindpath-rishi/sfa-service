@@ -11,6 +11,8 @@ export enum InteractionStatus {
 export enum InteractionAbandonReason {
   TIMEOUT = 'TIMEOUT',
   CUSTOMER_CHANGED = 'CUSTOMER_CHANGED',
+  /** Salesman left the outlet without starting a visit. */
+  USER_CANCELLED = 'USER_CANCELLED',
 }
 
 export type InteractionLogDocument = HydratedDocument<InteractionLog>;

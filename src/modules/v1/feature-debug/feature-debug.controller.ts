@@ -6,10 +6,12 @@ import { InspectQueryDto, RepairDto, ScanQueryDto, SyncPreviewQueryDto } from '.
 import { RepairsService } from './repairs.service';
 import { SyncPreviewService } from './sync-preview.service';
 import { FeatureDebugService } from './feature-debug.service';
+import { BackOfficeOnly } from 'src/core/decorators/back-office-only.decorator';
 
 /** Feature-by-feature debugging for Super Admin. Read-only: nothing is changed. */
 @ApiTags('Feature Debugger')
 @UseGuards(SuperAdminGuard)
+@BackOfficeOnly()
 @Controller({ path: API_MODULE.FEATURE_DEBUG, version: V1 })
 export class FeatureDebugController {
   constructor(

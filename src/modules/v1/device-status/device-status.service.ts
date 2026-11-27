@@ -31,6 +31,14 @@ export type DeviceStatusView = {
   networkStatus: 'ONLINE' | 'OFFLINE';
   lastOfflineAt: string | null;
   offlineMinutesToday: number;
+  /** Last heartbeat received (sent every 5 min while the app runs and is online) */
+  lastHeartbeatAt: string | null;
+  trackingHealth: {
+    backgroundLocation: boolean | null;
+    batteryUnrestricted: boolean | null;
+    autostartConfirmed: boolean | null;
+    reportedAt: string | null;
+  } | null;
 };
 
 @Injectable()
@@ -120,6 +128,18 @@ export class DeviceStatusService {
             },
             ...(dto.workSessionId ? { workSessionId: dto.workSessionId } : {}),
             ...(dto.appVersion ? { appVersion: dto.appVersion } : {}),
+            ...(dto.trackingHealth
+              ? {
+                  trackingHealth: {
+                    $literal: {
+                      backgroundLocation: dto.trackingHealth.backgroundLocation ?? null,
+                      batteryUnrestricted: dto.trackingHealth.batteryUnrestricted ?? null,
+                      autostartConfirmed: dto.trackingHealth.autostartConfirmed ?? null,
+                      reportedAt: now,
+                    },
+                  },
+                }
+              : {}),
           },
         },
       ] as any,
@@ -164,6 +184,17 @@ export class DeviceStatusService {
           : null,
         offlineMinutesToday:
           row.offlineDay === today ? Number(row.offlineMinutesToday) || 0 : 0,
+        lastHeartbeatAt: row.lastOnlineAt ? new Date(row.lastOnlineAt).toISOString() : null,
+        trackingHealth: row.trackingHealth
+          ? {
+              backgroundLocation: row.trackingHealth.backgroundLocation ?? null,
+              batteryUnrestricted: row.trackingHealth.batteryUnrestricted ?? null,
+              autostartConfirmed: row.trackingHealth.autostartConfirmed ?? null,
+              reportedAt: row.trackingHealth.reportedAt
+                ? new Date(row.trackingHealth.reportedAt).toISOString()
+                : null,
+            }
+          : null,
       });
     }
     return map;

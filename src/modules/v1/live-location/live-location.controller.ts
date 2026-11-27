@@ -24,6 +24,7 @@ import {
 } from './dto/tracking-settings.dto';
 import { SuperAdminGuard } from 'src/core/guards/super-admin.guard';
 import { TrackLiveLocationDto } from './dto/track-live-location.dto';
+import { BackOfficeOnly } from 'src/core/decorators/back-office-only.decorator';
 
 @ApiTags('Live Location Tracking')
 @Controller({ path: 'live-location-tracking', version: '1' })
@@ -80,6 +81,7 @@ export class LiveLocationController {
     return this.service.track(dto);
   }
 
+  @BackOfficeOnly()
   @Post()
   @Permissions('LIVE_LOCATION_CREATE')
   @HttpCode(HttpStatus.CREATED)
@@ -88,12 +90,14 @@ export class LiveLocationController {
     return this.service.create(dto);
   }
 
+  @BackOfficeOnly()
   @Get()
   @Permissions('LIVE_LOCATION_VIEW')
   findAll(@Query() query: LiveLocationQueryDto) {
     return this.service.findAll(query);
   }
 
+  @BackOfficeOnly()
   @Get('day-route')
   @Permissions('LIVE_LOCATION_VIEW')
   @ApiOperation({ summary: 'Day route of a user: road path, stops, visits, timeline, stats' })

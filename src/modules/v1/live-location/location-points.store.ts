@@ -22,6 +22,7 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { Collection, Db } from 'mongodb';
 import { MongoService } from 'src/core/database/mongo/mongo.service';
+import { accuracyLimitFor, isAccuracyDrift } from './location-drift';
 
 export const POINTS_COLLECTION = 'live_location_points';
 const FLUSH_MS = 2000;
@@ -38,7 +39,7 @@ export type FilterParams = {
   /** Fixes less accurate than this are not stored. */
   maxAccuracyMeters: number;
 };
-let params: FilterParams = { toleranceMeters: 5, keepAliveMs: 60_000, maxAccuracyMeters: 100 };
+let params: FilterParams = { toleranceMeters: 5, keepAliveMs: 60_000, maxAccuracyMeters: 50 };
 export const setFilterParams = (next: FilterParams) => {
   params = { ...next };
 };
@@ -67,6 +68,8 @@ export type RawPoint = {
   speed?: number | null;
   heading?: number | null;
   capturedAt: Date | string;
+  /** FOREGROUND / BACKGROUND; background fixes get a looser accuracy limit. */
+  source?: string | null;
 };
 
 type FilterState = {
@@ -113,7 +116,12 @@ export function toStoredPoint(point: RawPoint): StoredPoint | null {
   if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || Number.isNaN(t.getTime())) {
     return null;
   }
-  if (point.accuracy != null && Number(point.accuracy) > params.maxAccuracyMeters) return null;
+  if (
+    point.accuracy != null &&
+    Number(point.accuracy) > accuracyLimitFor(params.maxAccuracyMeters, point.source)
+  ) {
+    return null;
+  }
   const doc: StoredPoint = {
     t,
     m: {
@@ -142,6 +150,14 @@ function feed(state: FilterState | undefined, point: StoredPoint): { state: Filt
   const seenAt = Date.now();
   if (!state) return { state: { anchor: point, pending: [], seenAt }, store: [point] };
   const last = state.pending[state.pending.length - 1] ?? state.anchor;
+  // GPS drift while standing still: hold the last position (and its accuracy)
+  const meters = distanceMeters(last.lat, last.lng, point.lat, point.lng);
+  if (isAccuracyDrift(last.acc, { accuracy: point.acc, speed: point.spd }, meters)) {
+    point.lat = last.lat;
+    point.lng = last.lng;
+    if (last.acc != null) point.acc = last.acc;
+    else delete point.acc;
+  }
   // Duplicate (same place within a second)
   if (Math.abs(point.t.getTime() - last.t.getTime()) < 1000 && point.lat === last.lat && point.lng === last.lng) {
     state.seenAt = seenAt;

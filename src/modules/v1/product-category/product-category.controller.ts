@@ -51,7 +51,7 @@ import { ProductCategoryQueryDto } from './dto/product-category-query.dto';
 import { ProductCategoryUpdateDto } from './dto/update-product-category.dto';
 import { PRODUCT_CATEGORY } from './product-category.constants';
 import { ProductCategoryCreateDto } from './dto/create-product-category.dto';
-import { Public } from 'src/core/decorators/public.decorator';
+import { BackOfficeOnly } from 'src/core/decorators/back-office-only.decorator';
 
 @ApiTags('Product Category')
 @FeatureFlag(API_MODULE_ENABLE_KEYS.PRODUCT_CATEGORY)
@@ -62,7 +62,6 @@ import { Public } from 'src/core/decorators/public.decorator';
   path: API_MODULE.PRODUCT_CATEGORY,
   version: V1,
 })
-@Public()
 export class ProductCategoryController {
   constructor(private readonly service: ProductCategoryService) {}
 
@@ -73,6 +72,7 @@ export class ProductCategoryController {
    * Used by : ADMIN FLOWS
    */
   @Permissions('PRODUCT_CATEGORY_CREATE')
+  @BackOfficeOnly()
   @Post()
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Create product category' })
@@ -131,6 +131,7 @@ export class ProductCategoryController {
    * Purpose : Retrieve single category
    * Used by : CATEGORY DETAIL VIEW
    */
+  @BackOfficeOnly()
   @Get(':categoryId')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Get product category by id' })
@@ -154,6 +155,7 @@ export class ProductCategoryController {
    * Used by : ADMIN FLOWS
    */
   @Permissions('PRODUCT_CATEGORY_UPDATE')
+  @BackOfficeOnly()
   @Patch(':categoryId')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Update product category' })
@@ -175,6 +177,7 @@ export class ProductCategoryController {
    * Used by : ADMIN FLOWS
    */
   @Permissions('PRODUCT_CATEGORY_DELETE')
+  @BackOfficeOnly()
   @Delete(':categoryId')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Delete product category' })

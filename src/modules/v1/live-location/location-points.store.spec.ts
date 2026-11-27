@@ -108,3 +108,28 @@ describe('location point storage filter', () => {
     expect(doc).toMatchObject({ lat: -15.12346, lng: 28.98765, acc: 8, spd: 9.9, hdg: 0 });
   });
 });
+
+describe('GPS drift and background accuracy', () => {
+  it('stores background fixes up to 150 m, foreground only up to the limit', () => {
+    const point = { ...base, latitude: -15.4, longitude: 28.3, accuracy: 120, capturedAt: new Date(start) };
+    expect(toStoredPoint(point)).toBeNull();
+    expect(toStoredPoint({ ...point, source: 'BACKGROUND' })).not.toBeNull();
+  });
+
+  it('holds the position through 100 m+ drift while standing still', () => {
+    const points: RawPoint[] = [
+      { ...base, latitude: -15.4, longitude: 28.3, accuracy: 12, speed: 0, capturedAt: new Date(start) },
+      ...[0.001, -0.0009, 0.0011].map((offset, i) => ({
+        ...base,
+        latitude: -15.4 + offset,
+        longitude: 28.3,
+        accuracy: 140,
+        speed: 0,
+        source: 'BACKGROUND',
+        capturedAt: new Date(start + (i + 1) * 30_000),
+      })),
+    ];
+    const stored = filterBatch(points);
+    expect(stored.every((doc) => doc.lat === -15.4 && doc.lng === 28.3)).toBe(true);
+  });
+});

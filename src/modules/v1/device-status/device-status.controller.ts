@@ -2,6 +2,7 @@ import { Body, Controller, Get, HttpCode, HttpStatus, Post, Query } from '@nestj
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { DeviceHeartbeatDto } from './dto/device-heartbeat.dto';
 import { DeviceStatusService } from './device-status.service';
+import { BackOfficeOnly } from 'src/core/decorators/back-office-only.decorator';
 
 @ApiTags('Device Status')
 @Controller({ path: 'device-status', version: '1' })
@@ -15,6 +16,7 @@ export class DeviceStatusController {
     return this.service.heartbeat(dto);
   }
 
+  @BackOfficeOnly()
   @Get()
   @ApiOperation({ summary: 'Device status of users (comma separated userIds)' })
   findStatuses(@Query('userIds') userIds?: string) {
@@ -26,6 +28,7 @@ export class DeviceStatusController {
     );
   }
 
+  @BackOfficeOnly()
   @Get('offline-logs')
   @ApiOperation({ summary: 'Captured offline periods' })
   findOfflineLogs(

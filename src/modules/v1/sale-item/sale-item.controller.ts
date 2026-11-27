@@ -50,12 +50,14 @@ import { CreateSaleItemDto } from './dto/create-sale-item.dto';
 import { SALE_ITEM } from './sale-item.constants';
 import { SaleItemQueryDto } from './dto/sale-item-query.dto';
 import { UpdateSaleItemDto } from './dto/update-sale-item.dto';
+import { BackOfficeOnly } from 'src/core/decorators/back-office-only.decorator';
 
 @ApiTags('Sales-item')
 @FeatureFlag(API_MODULE_ENABLE_KEYS.SALES_ITEM)
 @ApiUnauthorizedResponse()
 @ApiUnprocessableEntityResponse()
 @ApiInternalErrorResponse()
+@BackOfficeOnly()
 @Controller({
   path: API_MODULE.SALES_ITEM,
   version: V1,

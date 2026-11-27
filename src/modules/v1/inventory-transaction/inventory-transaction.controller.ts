@@ -51,6 +51,7 @@ import { CreateInventoryTransactionDto } from './dto/create-inventory-transactio
 import { UpdateInventoryTransactionDto } from './dto/update-inventory-transaction.dto';
 import { InventoryTransactionQueryDto } from './dto/inventory-transaction-query.dto';
 import { INVENTORY_TRANSACTION } from './inventory-transaction.constants';
+import { BackOfficeOnly } from 'src/core/decorators/back-office-only.decorator';
 
 @ApiTags('Inventory-transaction')
 @FeatureFlag(API_MODULE_ENABLE_KEYS.INVENTORY_TRANSACTION)
@@ -69,6 +70,7 @@ export class InventoryTransactionController {
    * ---------------------------
    */
   @Permissions('INVENTORY_TRANSACTION_CREATE')
+  @BackOfficeOnly()
   @Post()
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Create inventory-transaction' })
@@ -97,6 +99,7 @@ export class InventoryTransactionController {
    * ------------------------------
    */
   @Permissions('INVENTORY_TRANSACTION_VIEW')
+  @BackOfficeOnly()
   @Get(':transactionId')
   @ApiParam({ name: 'transactionId', description: 'InventoryTransaction transactionId' })
   async findOne(@Param('transactionId') transactionId: string) {
@@ -108,6 +111,7 @@ export class InventoryTransactionController {
    * ----------------------------
    */
   @Permissions('INVENTORY_TRANSACTION_UPDATE')
+  @BackOfficeOnly()
   @Patch(':transactionId')
   @ApiParam({ name: 'transactionId', description: 'InventoryTransaction transactionId' })
   async update(
@@ -122,6 +126,7 @@ export class InventoryTransactionController {
    * ----------------------------
    */
   @Permissions('INVENTORY_TRANSACTION_DELETE')
+  @BackOfficeOnly()
   @Delete(':transactionId')
   @ApiParam({ name: 'transactionId', description: 'InventoryTransaction transactionId' })
   async delete(@Param('transactionId') transactionId: string) {

@@ -52,12 +52,14 @@ import { CreateCountryDto } from './dto/create-country.dto';
 import { UpdateCountryDto } from './dto/update-country.dto';
 import { CountryQueryDto } from './dto/country-query.dto';
 import { COUNTRY } from './country.constants';
+import { BackOfficeOnly } from 'src/core/decorators/back-office-only.decorator';
 
 @ApiTags('Country')
 @FeatureFlag(API_MODULE_ENABLE_KEYS.COUNTRY)
 @ApiUnauthorizedResponse()
 @ApiUnprocessableEntityResponse()
 @ApiInternalErrorResponse()
+@BackOfficeOnly()
 @Controller({
   path: API_MODULE.COUNTRY,
   version: V1,

@@ -52,6 +52,7 @@ import { CreateBeatDto } from './dto/create-beat.dto';
 import { UpdateBeatDto } from './dto/update-beat.dto';
 import { BeatQueryDto } from './dto/beat-query.dto';
 import { BEAT } from './beat.constants';
+import { BackOfficeOnly } from 'src/core/decorators/back-office-only.decorator';
 
 @ApiTags('Beat')
 @FeatureFlag(API_MODULE_ENABLE_KEYS.BEAT)
@@ -70,6 +71,7 @@ export class BeatController {
    * -----------
    */
   @Permissions('BEAT_CREATE')
+  @BackOfficeOnly()
   @Post()
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Create beat' })
@@ -98,6 +100,7 @@ export class BeatController {
    * --------------
    */
   @Permissions('BEAT_VIEW')
+  @BackOfficeOnly()
   @Get(':beatId')
   @ApiParam({ name: 'beatId' })
   async findOne(@Param('beatId') beatId: string) {
@@ -109,6 +112,7 @@ export class BeatController {
    * ------------
    */
   @Permissions('BEAT_UPDATE')
+  @BackOfficeOnly()
   @Patch(':beatId')
   async update(
     @Param('beatId') beatId: string,
@@ -122,6 +126,7 @@ export class BeatController {
    * ------------
    */
   @Permissions('BEAT_DELETE')
+  @BackOfficeOnly()
   @Delete(':beatId')
   async delete(@Param('beatId') beatId: string) {
     return this.service.delete(beatId);

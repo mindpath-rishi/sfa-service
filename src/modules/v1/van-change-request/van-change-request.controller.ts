@@ -22,6 +22,7 @@ import { CreateVanChangeRequestDto } from './dto/create-van-change-request.dto';
 import { UpdateVanChangeRequestDto } from './dto/update-van-change-request.dto';
 import { VanChangeRequestQueryDto } from './dto/van-change-request-query.dto';
 import { VanChangeRequestService } from './van-change-request.service';
+import { BackOfficeOnly } from 'src/core/decorators/back-office-only.decorator';
 
 @ApiTags('Van change request')
 @FeatureFlag(API_MODULE_ENABLE_KEYS.WORK_SESSION)
@@ -38,12 +39,14 @@ export class VanChangeRequestController {
   }
 
   @Permissions('VAN_CHANGE')
+  @BackOfficeOnly()
   @Get()
   findAll(@Query() query: VanChangeRequestQueryDto) {
     return this.service.findAll(query);
   }
 
   @Permissions('VAN_CHANGE')
+  @BackOfficeOnly()
   @Get(':vanChangeRequestId')
   @ApiParam({ name: 'vanChangeRequestId' })
   findOne(@Param('vanChangeRequestId') id: string) {
@@ -51,6 +54,7 @@ export class VanChangeRequestController {
   }
 
   @Permissions('WORK_SESSION_CREATE')
+  @BackOfficeOnly()
   @Patch(':vanChangeRequestId')
   update(
     @Param('vanChangeRequestId') id: string,
@@ -78,6 +82,7 @@ export class VanChangeRequestController {
   }
 
   @Permissions('VAN_CHANGE')
+  @BackOfficeOnly()
   @Delete(':vanChangeRequestId')
   delete(@Param('vanChangeRequestId') id: string) {
     return this.service.delete(id);

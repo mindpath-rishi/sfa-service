@@ -61,6 +61,7 @@ import {
 } from './dto/update-van-breakdown.dto';
 import { VAN } from './van.constants';
 import { Public } from 'src/core/decorators/public.decorator';
+import { BackOfficeOnly } from 'src/core/decorators/back-office-only.decorator';
 
 export class ChangeVanDto {
   @ApiProperty({ example: 'VAN-001', description: 'Current van' })
@@ -99,6 +100,7 @@ export class VanController {
    * Used by : ADMIN FLOWS
    */
   @Permissions('VAN_CREATE')
+  @BackOfficeOnly()
   @Post()
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Create van' })
@@ -115,6 +117,7 @@ export class VanController {
     return this.vanService.create(dto);
   }
 
+  @BackOfficeOnly()
   @Post('change-van')
   @Permissions('VAN_CHANGE')
   @ApiOperation({ summary: 'Assign van to employee' })
@@ -212,6 +215,7 @@ export class VanController {
     return this.vanService.findAll(query);
   }
 
+  @BackOfficeOnly()
   @Get('/export')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Export vans' })
@@ -298,6 +302,7 @@ export class VanController {
    * Used by : ADMIN FLOWS
    */
   @Permissions('VAN_DELETE')
+  @BackOfficeOnly()
   @Delete(':vanId')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Delete van' })

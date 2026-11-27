@@ -51,6 +51,7 @@ import { CreateStockCountItemDto } from './dto/create-stock-count-item.dto';
 import { UpdateStockCountItemDto } from './dto/update-stock-count-item.dto';
 import { StockCountItemQueryDto } from './dto/stock-count-item-query.dto';
 import { STOCK_COUNT_ITEM } from './stock-count-item.constants';
+import { BackOfficeOnly } from 'src/core/decorators/back-office-only.decorator';
 
 @ApiTags('Stock-count-item')
 @FeatureFlag(API_MODULE_ENABLE_KEYS.STOCK_COUNT_ITEM)
@@ -69,6 +70,7 @@ export class StockCountItemController {
    * ---------------------
    */
   @Permissions('STOCK_COUNT_ITEM_CREATE')
+  @BackOfficeOnly()
   @Post()
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Create stock-count-item' })
@@ -97,6 +99,7 @@ export class StockCountItemController {
    * ------------------------
    */
   @Permissions('STOCK_COUNT_ITEM_VIEW')
+  @BackOfficeOnly()
   @Get(':stockCountId')
   @ApiParam({
     name: 'stockCountId',
@@ -111,6 +114,7 @@ export class StockCountItemController {
    * ----------------------
    */
   @Permissions('STOCK_COUNT_ITEM_UPDATE')
+  @BackOfficeOnly()
   @Patch(':stockCountId')
   @ApiParam({
     name: 'stockCountId',
@@ -128,6 +132,7 @@ export class StockCountItemController {
    * ----------------------
    */
   @Permissions('STOCK_COUNT_ITEM_DELETE')
+  @BackOfficeOnly()
   @Delete(':stockCountId')
   @ApiParam({
     name: 'stockCountId',

@@ -142,7 +142,11 @@ export class RoadSnapService {
     );
   }
 
-  /** Thin, split at gaps, snap in chunks of 100. Null when the API fails. */
+  /**
+   * Thin, split at gaps, snap in chunks of 100. Null when the API fails or
+   * nothing matched a road (e.g. points outside the loaded OSRM region), so the
+   * raw path is neither cached nor reported as road matched.
+   */
   private async snapPoints(coords: LatLng[]): Promise<{ path: LatLng[]; calls: number } | null> {
     const thinned: LatLng[] = [];
     for (const point of coords) {
@@ -163,6 +167,7 @@ export class RoadSnapService {
 
     const path: LatLng[] = [];
     let calls = 0;
+    let matchedCalls = 0;
     try {
       for (const segment of segments) {
         if (segment.length < 2) {
@@ -173,8 +178,15 @@ export class RoadSnapService {
           const chunk = segment.slice(start, start + MAX_POINTS_PER_CALL);
           const snapped = await this.callRoads(chunk);
           calls += 1;
-          path.push(...(path.length ? snapped.slice(1) : snapped));
+          if (snapped.matched) matchedCalls += 1;
+          path.push(...(path.length ? snapped.path.slice(1) : snapped.path));
         }
+      }
+      if (calls > 0 && matchedCalls === 0) {
+        this.logger.warn(
+          `Road snapping matched no roads for ${calls} chunk(s); is the OSRM region right for these points?`,
+        );
+        return null;
       }
       return { path, calls };
     } catch (error) {
@@ -184,7 +196,7 @@ export class RoadSnapService {
   }
 
   /** OSRM map matching of one chunk; unmatched stretches keep the raw points. */
-  private async callRoads(chunk: LatLng[]): Promise<LatLng[]> {
+  private async callRoads(chunk: LatLng[]): Promise<{ path: LatLng[]; matched: boolean }> {
     const coordinates = chunk.map(([lat, lng]) => `${lng.toFixed(6)},${lat.toFixed(6)}`).join(';');
     const radiuses = chunk.map(() => MATCH_RADIUS_METERS).join(';');
     const url = `${this.osrmUrl}/match/v1/driving/${coordinates}?overview=full&geometries=geojson&gaps=split&tidy=true&radiuses=${radiuses}`;
@@ -197,12 +209,12 @@ export class RoadSnapService {
         matchings?: { geometry?: { coordinates?: [number, number][] } }[];
       };
       // NoMatch / NoSegment: nothing matched here, keep the raw points
-      if (body.code && body.code !== 'Ok') return chunk;
+      if (body.code && body.code !== 'Ok') return { path: chunk, matched: false };
       if (!response.ok) throw new Error(`OSRM ${response.status}`);
       const matched = (body.matchings ?? []).flatMap(
         (matching) => (matching.geometry?.coordinates ?? []).map(([lng, lat]) => [lat, lng] as LatLng),
       );
-      return matched.length > 1 ? matched : chunk;
+      return matched.length > 1 ? { path: matched, matched: true } : { path: chunk, matched: false };
     } finally {
       clearTimeout(timer);
     }

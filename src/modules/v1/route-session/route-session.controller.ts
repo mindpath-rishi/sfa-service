@@ -51,6 +51,7 @@ import { CreateRouteSessionDto } from './dto/create-route-session.dto';
 import { UpdateRouteSessionDto } from './dto/update-route-session.dto';
 import { RouteSessionQueryDto } from './dto/route-session-query.dto';
 import { ROUTE_SESSION } from './route-session.constants';
+import { BackOfficeOnly } from 'src/core/decorators/back-office-only.decorator';
 
 @ApiTags('Route-session')
 @FeatureFlag(API_MODULE_ENABLE_KEYS.ROUTE_SESSION)
@@ -86,6 +87,7 @@ export class RouteSessionController {
    * Get RouteSessions
    * -----------------
    */
+  @BackOfficeOnly()
   @Get()
   @Permissions('ROUTE_SESSION_VIEW')
   async findAll(@Query() query: RouteSessionQueryDto) {
@@ -97,6 +99,7 @@ export class RouteSessionController {
    * ----------------------
    */
   @Permissions('ROUTE_SESSION_VIEW')
+  @BackOfficeOnly()
   @Get(':routeSessionId')
   @ApiParam({ name: 'routeSessionId', description: 'RouteSession routeSessionId' })
   async findOne(@Param('routeSessionId') routeSessionId: string) {
@@ -108,6 +111,7 @@ export class RouteSessionController {
    * --------------------
    */
   @Permissions('ROUTE_SESSION_UPDATE')
+  @BackOfficeOnly()
   @Patch(':routeSessionId')
   @ApiParam({ name: 'routeSessionId', description: 'RouteSession routeSessionId' })
   async update(
@@ -122,6 +126,7 @@ export class RouteSessionController {
    * --------------------
    */
   @Permissions('ROUTE_SESSION_DELETE')
+  @BackOfficeOnly()
   @Delete(':routeSessionId')
   @ApiParam({ name: 'routeSessionId', description: 'RouteSession routeSessionId' })
   async delete(@Param('routeSessionId') routeSessionId: string) {

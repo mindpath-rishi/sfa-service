@@ -52,6 +52,7 @@ import { UpdateVanErpClosingDto } from './dto/update-van-erp-closing.dto';
 import { VanErpClosingQueryDto } from './dto/van-erp-closing-query.dto';
 import { VAN_ERP_CLOSING } from './van-erp-closing.constants';
 import { Public } from 'src/core/decorators/public.decorator';
+import { BackOfficeOnly } from 'src/core/decorators/back-office-only.decorator';
 
 @ApiTags('Van-erp-closing')
 @FeatureFlag(API_MODULE_ENABLE_KEYS.VAN_ERP_CLOSING)
@@ -70,6 +71,7 @@ export class VanErpClosingController {
    * --------------------
    */
   @Permissions('VAN_ERP_CLOSING_CREATE')
+  @BackOfficeOnly()
   @Post()
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Create van-erp-closing' })
@@ -102,6 +104,7 @@ export class VanErpClosingController {
    * Get VanErpClosings
    * ------------------
    */
+  @BackOfficeOnly()
   @Get()
   @Permissions('VAN_ERP_CLOSING_VIEW')
   async findAll(@Query() query: VanErpClosingQueryDto) {
@@ -113,6 +116,7 @@ export class VanErpClosingController {
    * -----------------------
    */
   @Permissions('VAN_ERP_CLOSING_VIEW')
+  @BackOfficeOnly()
   @Get(':stockId')
   @ApiParam({ name: 'stockId', description: 'VanErpClosing stockId' })
   async findOne(@Param('stockId') stockId: string) {
@@ -124,6 +128,7 @@ export class VanErpClosingController {
    * ---------------------
    */
   @Permissions('VAN_ERP_CLOSING_UPDATE')
+  @BackOfficeOnly()
   @Patch(':stockId')
   @ApiParam({ name: 'stockId', description: 'VanErpClosing stockId' })
   async update(
@@ -138,6 +143,7 @@ export class VanErpClosingController {
    * ---------------------
    */
   @Permissions('VAN_ERP_CLOSING_DELETE')
+  @BackOfficeOnly()
   @Delete(':stockId')
   @ApiParam({ name: 'stockId', description: 'VanErpClosing stockId' })
   async delete(@Param('stockId') stockId: string) {

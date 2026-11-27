@@ -51,6 +51,7 @@ import { CreateChannelDto } from './dto/create-channel.dto';
 import { UpdateChannelDto } from './dto/update-channel.dto';
 import { ChannelQueryDto } from './dto/channel-query.dto';
 import { CHANNEL } from './channel.constants';
+import { BackOfficeOnly } from 'src/core/decorators/back-office-only.decorator';
 
 @ApiTags('Channel')
 @FeatureFlag(API_MODULE_ENABLE_KEYS.CHANNEL)
@@ -69,6 +70,7 @@ export class ChannelController {
    * --------------
    */
   @Permissions('CHANNEL_CREATE')
+  @BackOfficeOnly()
   @Post()
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Create channel' })
@@ -97,6 +99,7 @@ export class ChannelController {
    * -----------------
    */
   @Permissions('CHANNEL_VIEW')
+  @BackOfficeOnly()
   @Get(':channelId')
   @ApiParam({ name: 'channelId', description: 'Channel channelId' })
   async findOne(@Param('channelId') channelId: string) {
@@ -108,6 +111,7 @@ export class ChannelController {
    * ---------------
    */
   @Permissions('CHANNEL_UPDATE')
+  @BackOfficeOnly()
   @Patch(':channelId')
   @ApiParam({ name: 'channelId', description: 'Channel channelId' })
   async update(
@@ -122,6 +126,7 @@ export class ChannelController {
    * ---------------
    */
   @Permissions('CHANNEL_DELETE')
+  @BackOfficeOnly()
   @Delete(':channelId')
   @ApiParam({ name: 'channelId', description: 'Channel channelId' })
   async delete(@Param('channelId') channelId: string) {

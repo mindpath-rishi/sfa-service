@@ -15,7 +15,9 @@ import { CreateLiveLocationDto } from './dto/create-live-location.dto';
 import { LiveLocationQueryDto } from './dto/live-location-query.dto';
 import { TrackLiveLocationDto } from './dto/track-live-location.dto';
 import { LIVE_LOCATION } from './live-location.constants';
+import { LiveBroadcastFilter } from './live-broadcast.filter';
 import { LocationPointsStore, type StoredPoint } from './location-points.store';
+import { TrackingSettingsService } from './tracking-settings.service';
 
 export type LiveLocationUpdate = {
   workSessionId: string;
@@ -40,6 +42,7 @@ export class LiveLocationService {
   private readonly sessionCheck = new Map<string, { ok: boolean; at: number }>();
   /** Set by the gateway: pushes points received over HTTP to live viewers too. */
   private realtimeListener?: (update: LiveLocationUpdate) => void;
+  private readonly broadcastFilter = new LiveBroadcastFilter();
 
   setRealtimeListener(listener: (update: LiveLocationUpdate) => void) {
     this.realtimeListener = listener;
@@ -48,8 +51,35 @@ export class LiveLocationService {
   constructor(
     mongo: MongoService,
     private readonly pointsStore: LocationPointsStore,
+    private readonly trackingSettings: TrackingSettingsService,
   ) {
     this.workSessionModel = mongo.getModel(WorkSession.name, WorkSessionSchema);
+  }
+
+  /**
+   * Whether a point should move the live marker: accurate enough for this user,
+   * newer than the last one shown, and not an impossible GPS jump.
+   */
+  shouldBroadcast(update: LiveLocationUpdate) {
+    const point = {
+      employeeId: update.employeeId,
+      workSessionId: update.workSessionId,
+      latitude: update.location.latitude,
+      longitude: update.location.longitude,
+      accuracy: update.location.accuracy,
+      capturedAt: update.location.capturedAt,
+      speed: update.location.speed,
+      source: update.location.source,
+    };
+    const reason = this.broadcastFilter.check(
+      point,
+      this.trackingSettings.forUser(update.employeeId).maxAccuracyM,
+    );
+    if (reason !== null) return false;
+    // GPS drift: the filter held the marker on its last position
+    update.location.latitude = point.latitude;
+    update.location.longitude = point.longitude;
+    return true;
   }
 
   /** Build the real-time socket payload without waiting for MongoDB. */
@@ -110,6 +140,7 @@ export class LiveLocationService {
       speed: update.location.speed,
       heading: update.location.heading,
       capturedAt: update.location.capturedAt,
+      source: update.location.source,
     });
   }
 
@@ -156,12 +187,15 @@ export class LiveLocationService {
     }
     // Background / offline batches arrive over HTTP; broadcast them so the
     // portal stays real time (in capture order, so trails grow correctly).
+    // Inaccurate, late or jumping points are stored (if storage keeps them) but
+    // never move the live marker.
     if (this.realtimeListener) {
       for (const update of [...updates].sort(
         (a, b) =>
           new Date(a.location.capturedAt).getTime() -
           new Date(b.location.capturedAt).getTime(),
       )) {
+        if (!this.shouldBroadcast(update)) continue;
         try {
           this.realtimeListener(update);
         } catch {

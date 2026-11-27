@@ -49,6 +49,7 @@ import { UpdateSchemeDto } from './dto/update-scheme.dto';
 import { SchemeQueryDto } from './dto/scheme-query.dto';
 import { ApplicableSchemeQueryDto } from './dto/applicable-scheme-query.dto';
 import { SCHEME } from './scheme.constants';
+import { BackOfficeOnly } from 'src/core/decorators/back-office-only.decorator';
 
 @ApiTags('Scheme')
 @FeatureFlag(API_MODULE_ENABLE_KEYS.SCHEME)
@@ -67,6 +68,7 @@ export class SchemeController {
    * -------------
    */
   @Permissions('SCHEME_CREATE')
+  @BackOfficeOnly()
   @Post()
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Create scheme' })
@@ -85,6 +87,7 @@ export class SchemeController {
    * -----------
    */
   @Permissions('SCHEME_VIEW')
+  @BackOfficeOnly()
   @Get()
   @ApiOperation({ summary: 'List schemes' })
   async findAll(@Query() query: SchemeQueryDto) {
@@ -126,6 +129,7 @@ export class SchemeController {
    * -------------
    */
   @Permissions('SCHEME_UPDATE')
+  @BackOfficeOnly()
   @Patch(':schemeId')
   @ApiParam({ name: 'schemeId', description: 'Scheme schemeId' })
   async update(
@@ -140,6 +144,7 @@ export class SchemeController {
    * -------------
    */
   @Permissions('SCHEME_DELETE')
+  @BackOfficeOnly()
   @Delete(':schemeId')
   @ApiParam({ name: 'schemeId', description: 'Scheme schemeId' })
   async delete(@Param('schemeId') schemeId: string) {

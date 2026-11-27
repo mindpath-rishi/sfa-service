@@ -55,6 +55,7 @@ import {
 } from './dto/shop-visit-query.dto';
 import { SHOP_VISIT } from './shop-visit.constants';
 import { CreateInteractionDto } from './dto/create-interaction.dto';
+import { BackOfficeOnly } from 'src/core/decorators/back-office-only.decorator';
 
 @ApiTags('Shop-visit')
 @FeatureFlag(API_MODULE_ENABLE_KEYS.SHOP_VISIT)
@@ -75,10 +76,18 @@ export class ShopVisitController {
     return this.service.createInteraction(dto);
   }
 
+  // Own interaction only (service filters by caller), so not back-office.
   @Permissions('SHOP_VISIT_VIEW')
   @Get('interaction/:interactionId')
   async getInteraction(@Param('interactionId') interactionId: string) {
     return this.service.getInteraction(interactionId);
+  }
+
+  @Permissions('SHOP_VISIT_UPDATE')
+  @Patch('interaction/:interactionId/abandon')
+  @HttpCode(HttpStatus.OK)
+  async abandonInteraction(@Param('interactionId') interactionId: string) {
+    return this.service.abandonInteraction(interactionId);
   }
 
   /**
@@ -149,6 +158,7 @@ export class ShopVisitController {
    * -----------------
    */
   @Permissions('SHOP_VISIT_DELETE')
+  @BackOfficeOnly()
   @Delete(':visitId')
   @ApiParam({ name: 'visitId', description: 'ShopVisit visitId' })
   async delete(@Param('visitId') visitId: string) {

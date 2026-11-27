@@ -54,7 +54,7 @@ import { BulkUploadRouteDto } from './dto/bulk-upload-route.dto';
 import { UpdateRouteDto } from './dto/update-route.dto';
 import { RouteCustomerQueryDto, RouteQueryDto } from './dto/route-query.dto';
 import { ROUTE } from './route.constants';
-import { Public } from 'src/core/decorators/public.decorator';
+import { BackOfficeOnly } from 'src/core/decorators/back-office-only.decorator';
 
 @ApiTags('Route')
 @FeatureFlag(API_MODULE_ENABLE_KEYS.ROUTE)
@@ -65,7 +65,6 @@ import { Public } from 'src/core/decorators/public.decorator';
   path: API_MODULE.ROUTE,
   version: V1,
 })
-@Public()
 export class RouteController {
   constructor(private readonly service: RouteService) {}
 
@@ -74,6 +73,7 @@ export class RouteController {
    * ------------
    */
   @Permissions('ROUTE_CREATE')
+  @BackOfficeOnly()
   @Post()
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Create route' })
@@ -94,6 +94,7 @@ export class RouteController {
    * including their outlet mapping and visit sequence.
    */
   @Permissions('ROUTE_CREATE')
+  @BackOfficeOnly()
   @Post('bulk-upload')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Bulk create or update routes with outlets' })
@@ -112,6 +113,7 @@ export class RouteController {
     return this.service.findAll(query);
   }
 
+  @BackOfficeOnly()
   @Get('/export')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Export routes' })
@@ -149,6 +151,7 @@ export class RouteController {
   }
 
   @Permissions('ROUTE_VIEW')
+  @BackOfficeOnly()
   @Get(':routeId')
   @ApiParam({ name: 'routeId', description: 'Route routeId' })
   async findOne(@Param('routeId') routeId: string) {
@@ -160,6 +163,7 @@ export class RouteController {
    * -------------
    */
   @Permissions('ROUTE_UPDATE')
+  @BackOfficeOnly()
   @Patch(':routeId')
   @ApiParam({ name: 'routeId', description: 'Route routeId' })
   async update(@Param('routeId') routeId: string, @Body() dto: UpdateRouteDto) {
@@ -171,6 +175,7 @@ export class RouteController {
    * -------------
    */
   @Permissions('ROUTE_DELETE')
+  @BackOfficeOnly()
   @Delete(':routeId')
   @ApiParam({ name: 'routeId', description: 'Route routeId' })
   async delete(@Param('routeId') routeId: string) {
