@@ -9,7 +9,15 @@ export const EXPENSE = {
   WINDOW_CLOSED:
     'Expense request window is closed. Requests can be raised Monday to Saturday.',
   EMPLOYEE_NOT_FOUND: 'Employee not found',
-  RATE_NOT_CONFIGURED: 'Per day value is not configured for employee tag',
+  RATE_NOT_CONFIGURED:
+    'Per day value is not mapped to this employee and no default is set',
+  RATE_NOT_FOUND: 'Per day value not found',
+  RATE_DUPLICATE: 'A per day value with this name already exists',
+  RATE_IN_USE: 'Per day value is mapped to employees; reassign them first',
+  RATE_CREATED: 'Per day value created successfully',
+  RATE_DELETED: 'Per day value deleted successfully',
+  EMPLOYEE_RATES_FETCHED: 'Employee per day values fetched successfully',
+  EMPLOYEE_RATES_UPDATED: 'Employee per day values updated successfully',
   INVALID_STATUS_CHANGE: 'Invalid status change',
   DELETE_NOT_ALLOWED: 'Only pending expense requests can be deleted',
   RATES_FETCHED: 'Expense rates fetched successfully',

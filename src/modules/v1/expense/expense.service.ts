@@ -3,10 +3,12 @@ import {
   ConflictException,
   HttpStatus,
   Injectable,
+  Logger,
   NotFoundException,
+  OnModuleInit,
 } from '@nestjs/common';
 
-import { HydratedDocument, Model } from 'mongoose';
+import { HydratedDocument, Model, Types } from 'mongoose';
 
 import { MongoService } from 'src/core/database/mongo/mongo.service';
 import { MongoRepository } from 'src/core/database/mongo/mongo.repository';
@@ -45,10 +47,13 @@ import { IdGenerator } from 'src/shared/utils/id-generator.utils';
 
 import { EXPENSE } from './expense.constants';
 import {
+  AssignEmployeeRateDto,
+  CreateExpenseRateDto,
+  EmployeeRateQueryDto,
   ExpenseQueryDto,
   ReplaceWithdrawalChargesDto,
+  UpdateExpenseRateDto,
   UpdateExpenseStatusDto,
-  UpsertExpenseRatesDto,
 } from './dto/expense.dto';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -92,16 +97,26 @@ const inclusiveDays = (from: Date, to: Date) =>
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
-/** Employee tag is maintained on the employee profile; defaults to LOCAL */
+/** Legacy employees may still carry a UPC / LOCAL tag from the fixed-tag version */
 type EmployeeWithTag = Employee & { expenseTag?: string };
 
-const resolveExpenseTag = (tag?: string): ExpenseTag =>
-  Object.values(ExpenseTag).includes(tag as ExpenseTag)
-    ? (tag as ExpenseTag)
-    : ExpenseTag.LOCAL;
+const LEGACY_RATE_NAME: Record<ExpenseTag, string> = {
+  [ExpenseTag.UPC]: 'UPC',
+  [ExpenseTag.LOCAL]: 'Local',
+};
+
+const escapeRegex = (text: string) =>
+  text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/** "Unmapped" filter value for the employee mapping list */
+const NO_RATE = 'NONE';
 
 @Injectable()
-export class ExpenseService extends MongoRepository<Expense> {
+export class ExpenseService
+  extends MongoRepository<Expense>
+  implements OnModuleInit
+{
+  private readonly logger = new Logger(ExpenseService.name);
   private readonly rateModel: Model<HydratedDocument<ExpenseRate>>;
   private readonly chargeModel: Model<HydratedDocument<WithdrawalCharge>>;
   private readonly employeeModel: Model<HydratedDocument<Employee>>;
@@ -270,29 +285,260 @@ export class ExpenseService extends MongoRepository<Expense> {
    * ====================================================== */
 
   async getRates() {
-    const data = await this.rateModel
-      .find({})
-      .sort({ expenseTag: 1 })
-      .lean<ExpenseRate[]>();
+    const [rates, counts] = await Promise.all([
+      this.rateModel.find({}).sort({ name: 1 }).lean<ExpenseRate[]>(),
+      this.employeeModel.aggregate<{ _id: string; count: number }>([
+        {
+          $match: {
+            isDeleted: { $ne: true },
+            expenseRateId: { $exists: true, $ne: null },
+          },
+        },
+        { $group: { _id: '$expenseRateId', count: { $sum: 1 } } },
+      ]),
+    ]);
+    const byRate = new Map(counts.map((c) => [c._id, c.count]));
+    const data = rates.map((r) => ({
+      ...r,
+      employeeCount: byRate.get(r.rateId) ?? 0,
+    }));
     return { statusCode: HttpStatus.OK, message: EXPENSE.RATES_FETCHED, data };
   }
 
-  async upsertRates(dto: UpsertExpenseRatesDto) {
-    for (const r of dto.rates) {
+  async createRate(dto: CreateExpenseRateDto) {
+    const name = dto.name.trim();
+    await this.assertRateNameFree(name);
+    if (dto.isDefault) await this.clearDefaultRate();
+
+    const doc = await this.rateModel.create({
+      rateId: IdGenerator.generate('Rate', 8),
+      name,
+      expenseOption: dto.expenseOption,
+      perDayValue: dto.perDayValue,
+      isDefault: Boolean(dto.isDefault),
+    });
+    return {
+      statusCode: HttpStatus.CREATED,
+      message: EXPENSE.RATE_CREATED,
+      data: doc.toObject(),
+    };
+  }
+
+  async updateRate(rateId: string, dto: UpdateExpenseRateDto) {
+    const existing = await this.rateModel
+      .findOne({ rateId })
+      .lean<ExpenseRate>();
+    if (!existing) throw new NotFoundException(EXPENSE.RATE_NOT_FOUND);
+
+    const update: Partial<ExpenseRate> = {};
+    if (dto.name !== undefined) {
+      update.name = dto.name.trim();
+      await this.assertRateNameFree(update.name, rateId);
+    }
+    if (dto.expenseOption !== undefined)
+      update.expenseOption = dto.expenseOption;
+    if (dto.perDayValue !== undefined) update.perDayValue = dto.perDayValue;
+    if (dto.isDefault !== undefined) {
+      if (dto.isDefault) await this.clearDefaultRate(rateId);
+      update.isDefault = dto.isDefault;
+    }
+
+    const data = await this.rateModel
+      .findOneAndUpdate({ rateId }, { $set: update }, { new: true })
+      .lean<ExpenseRate>();
+    return { statusCode: HttpStatus.OK, message: EXPENSE.RATES_UPDATED, data };
+  }
+
+  async deleteRate(rateId: string) {
+    const existing = await this.rateModel
+      .findOne({ rateId })
+      .lean<ExpenseRate>();
+    if (!existing) throw new NotFoundException(EXPENSE.RATE_NOT_FOUND);
+
+    const inUse = await this.employeeModel.countDocuments({
+      expenseRateId: rateId,
+      isDeleted: { $ne: true },
+    });
+    if (inUse > 0) {
+      throw new BadRequestException(`${EXPENSE.RATE_IN_USE} (${inUse})`);
+    }
+
+    await this.rateModel.deleteOne({ rateId });
+    return {
+      statusCode: HttpStatus.OK,
+      message: EXPENSE.RATE_DELETED,
+      data: existing,
+    };
+  }
+
+  /** Employees with their mapped per day value (rateId + name) */
+  async getEmployeeRates(query: EmployeeRateQueryDto) {
+    const { page = 1, limit = 20, searchText, expenseRateId } = query;
+    const filter: Record<string, unknown> = { isDeleted: { $ne: true } };
+
+    if (expenseRateId === NO_RATE) {
+      filter.expenseRateId = { $in: [null, ''] };
+    } else if (expenseRateId) {
+      filter.expenseRateId = expenseRateId;
+    }
+
+    if (searchText) {
+      const regex = new RegExp(escapeRegex(searchText), 'i');
+      filter.$or = [
+        { employeeId: regex },
+        { name: regex },
+        { manNumber: regex },
+      ];
+    }
+
+    const skip = (Math.max(1, page) - 1) * limit;
+    const [employees, total, rates] = await Promise.all([
+      this.employeeModel
+        .find(filter, {
+          employeeId: 1,
+          name: 1,
+          manNumber: 1,
+          employeeType: 1,
+          status: 1,
+          expenseRateId: 1,
+        })
+        .sort({ name: 1 })
+        .skip(skip)
+        .limit(limit)
+        .lean<EmployeeWithTag[]>(),
+      this.employeeModel.countDocuments(filter),
+      this.rateModel.find({}).lean<ExpenseRate[]>(),
+    ]);
+
+    const rateById = new Map(rates.map((r) => [r.rateId, r]));
+    const defaultRate = rates.find((r) => r.isDefault);
+
+    const data = employees.map((e) => {
+      const mapped = e.expenseRateId
+        ? rateById.get(e.expenseRateId)
+        : undefined;
+      return {
+        employeeId: e.employeeId,
+        name: e.name,
+        manNumber: e.manNumber,
+        employeeType: e.employeeType,
+        status: e.status,
+        expenseRateId: mapped?.rateId ?? null,
+        expenseRateName: mapped?.name ?? null,
+        // Value used when this employee raises a request
+        effectiveRateName: (mapped ?? defaultRate)?.name ?? null,
+        effectivePerDayValue: (mapped ?? defaultRate)?.perDayValue ?? null,
+      };
+    });
+
+    return {
+      statusCode: HttpStatus.OK,
+      message: EXPENSE.EMPLOYEE_RATES_FETCHED,
+      data,
+      meta: { total, page, limit, totalPages: Math.ceil(total / limit) },
+    };
+  }
+
+  async assignEmployeeRate(dto: AssignEmployeeRateDto) {
+    const rateId = dto.expenseRateId || null;
+    if (rateId) {
+      const rate = await this.rateModel.exists({ rateId });
+      if (!rate) throw new NotFoundException(EXPENSE.RATE_NOT_FOUND);
+    }
+
+    const employeeIds = [...new Set(dto.employeeIds)];
+    const result = await this.employeeModel.updateMany(
+      { employeeId: { $in: employeeIds }, isDeleted: { $ne: true } },
+      rateId
+        ? { $set: { expenseRateId: rateId } }
+        : { $unset: { expenseRateId: 1 } },
+    );
+
+    return {
+      statusCode: HttpStatus.OK,
+      message: EXPENSE.EMPLOYEE_RATES_UPDATED,
+      data: { matched: result.matchedCount, modified: result.modifiedCount },
+    };
+  }
+
+  private async assertRateNameFree(name: string, exceptRateId?: string) {
+    const clash = await this.rateModel.exists({
+      name: new RegExp(`^${escapeRegex(name)}$`, 'i'),
+      ...(exceptRateId ? { rateId: { $ne: exceptRateId } } : {}),
+    });
+    if (clash) throw new ConflictException(EXPENSE.RATE_DUPLICATE);
+  }
+
+  private async clearDefaultRate(exceptRateId?: string) {
+    await this.rateModel.updateMany(
+      {
+        isDefault: true,
+        ...(exceptRateId ? { rateId: { $ne: exceptRateId } } : {}),
+      },
+      { $set: { isDefault: false } },
+    );
+  }
+
+  /**
+   * Employee → rate: explicit mapping, then legacy UPC / LOCAL tag, then default.
+   */
+  private async resolveRate(employee: EmployeeWithTag) {
+    if (employee.expenseRateId) {
+      const mapped = await this.rateModel
+        .findOne({ rateId: employee.expenseRateId })
+        .lean<ExpenseRate>();
+      if (mapped) return mapped;
+    }
+    if (employee.expenseTag) {
+      const legacy = await this.rateModel
+        .findOne({ expenseTag: employee.expenseTag })
+        .lean<ExpenseRate>();
+      if (legacy) return legacy;
+    }
+    return this.rateModel.findOne({ isDefault: true }).lean<ExpenseRate>();
+  }
+
+  /* ======================================================
+   * MIGRATION (fixed UPC / LOCAL tags → named rates)
+   * ====================================================== */
+
+  async onModuleInit() {
+    try {
+      await this.migrateLegacyRates();
+    } catch (err) {
+      this.logger.warn(`Expense rate migration skipped: ${String(err)}`);
+    }
+  }
+
+  private async migrateLegacyRates() {
+    // Old unique index on expenseTag blocks rates without a tag
+    await this.rateModel.collection
+      .dropIndex('expenseTag_1')
+      .catch(() => undefined);
+
+    const legacy = await this.rateModel
+      .find({ rateId: { $exists: false } })
+      .lean<(ExpenseRate & { _id: Types.ObjectId })[]>();
+    if (!legacy.length) return;
+
+    const hasDefault = await this.rateModel.exists({ isDefault: true });
+    for (const r of legacy) {
+      const tag = r.expenseTag as ExpenseTag;
       await this.rateModel.updateOne(
-        { expenseTag: r.expenseTag },
+        { _id: r._id },
         {
           $set: {
-            expenseTag: r.expenseTag,
-            expenseOption: EXPENSE_OPTION_BY_TAG[r.expenseTag],
-            perDayValue: r.perDayValue,
+            rateId: IdGenerator.generate('Rate', 8),
+            name: LEGACY_RATE_NAME[tag] ?? String(r.expenseTag),
+            expenseOption:
+              r.expenseOption ?? EXPENSE_OPTION_BY_TAG[tag] ?? undefined,
+            isDefault: !hasDefault && tag === ExpenseTag.LOCAL,
           },
         },
-        { upsert: true },
       );
     }
-    const { data } = await this.getRates();
-    return { statusCode: HttpStatus.OK, message: EXPENSE.RATES_UPDATED, data };
+    await this.rateModel.syncIndexes();
+    this.logger.log(`Migrated ${legacy.length} legacy expense rate(s)`);
   }
 
   async getWithdrawalCharges() {
@@ -361,17 +607,9 @@ export class ExpenseService extends MongoRepository<Expense> {
     const toBeAdjustedDays = adjustedDates.length;
     const payableDays = Math.max(0, noOfDays - toBeAdjustedDays);
 
-    // Rate by employee tag (tag set on employee profile; defaults to LOCAL)
-    const expenseTag = resolveExpenseTag(employee.expenseTag);
-
-    const rate = await this.rateModel
-      .findOne({ expenseTag })
-      .lean<ExpenseRate>();
-    if (!rate) {
-      throw new BadRequestException(
-        `${EXPENSE.RATE_NOT_CONFIGURED}: ${expenseTag}`,
-      );
-    }
+    // Per Day Value mapped to the employee (falls back to the default rate)
+    const rate = await this.resolveRate(employee);
+    if (!rate) throw new BadRequestException(EXPENSE.RATE_NOT_CONFIGURED);
 
     const perDayValue = Number(rate.perDayValue);
     const baseAmount = round2(payableDays * perDayValue);
@@ -392,8 +630,9 @@ export class ExpenseService extends MongoRepository<Expense> {
       userId,
       manNumber: employee.manNumber,
       employeeName: employee.name,
-      expenseTag,
-      expenseOption: EXPENSE_OPTION_BY_TAG[expenseTag],
+      expenseTag: rate.name,
+      expenseRateId: rate.rateId,
+      expenseOption: rate.expenseOption,
       requestedDate,
       weekStart,
       fromDate,
@@ -516,8 +755,7 @@ export class ExpenseService extends MongoRepository<Expense> {
     }
 
     if (searchText) {
-      const escaped = searchText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const regex = new RegExp(escaped, 'i');
+      const regex = new RegExp(escapeRegex(searchText), 'i');
       filter.$or = [
         { expenseId: regex },
         { employeeName: regex },

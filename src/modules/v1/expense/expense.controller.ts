@@ -36,10 +36,13 @@ import {
 
 import { ExpenseService } from './expense.service';
 import {
+  AssignEmployeeRateDto,
+  CreateExpenseRateDto,
+  EmployeeRateQueryDto,
   ExpenseQueryDto,
   ReplaceWithdrawalChargesDto,
+  UpdateExpenseRateDto,
   UpdateExpenseStatusDto,
-  UpsertExpenseRatesDto,
 } from './dto/expense.dto';
 
 @ApiTags('Expense')
@@ -75,17 +78,55 @@ export class ExpenseController {
   /* ================= REFERENCE TABLES ================= */
 
   @Get('config/rates')
-  @ApiOperation({ summary: 'Per day value by employee tag' })
+  @ApiOperation({ summary: 'Per day values (with mapped employee count)' })
   async getRates() {
     return this.service.getRates();
   }
 
   @BackOfficeOnly()
-  @Put('config/rates')
-  @ApiOperation({ summary: 'Upsert per day value by employee tag' })
-  @ApiBody({ type: UpsertExpenseRatesDto })
-  async upsertRates(@Body() dto: UpsertExpenseRatesDto) {
-    return this.service.upsertRates(dto);
+  @Post('config/rates')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Add a per day value' })
+  @ApiBody({ type: CreateExpenseRateDto })
+  async createRate(@Body() dto: CreateExpenseRateDto) {
+    return this.service.createRate(dto);
+  }
+
+  @BackOfficeOnly()
+  @Patch('config/rates/:rateId')
+  @ApiOperation({ summary: 'Update a per day value' })
+  @ApiNotFoundResponse()
+  @ApiParam({ name: 'rateId' })
+  @ApiBody({ type: UpdateExpenseRateDto })
+  async updateRate(
+    @Param('rateId') rateId: string,
+    @Body() dto: UpdateExpenseRateDto,
+  ) {
+    return this.service.updateRate(rateId, dto);
+  }
+
+  @BackOfficeOnly()
+  @Delete('config/rates/:rateId')
+  @ApiOperation({ summary: 'Delete an unmapped per day value' })
+  @ApiNotFoundResponse()
+  @ApiParam({ name: 'rateId' })
+  async deleteRate(@Param('rateId') rateId: string) {
+    return this.service.deleteRate(rateId);
+  }
+
+  @BackOfficeOnly()
+  @Get('config/employee-rates')
+  @ApiOperation({ summary: 'Employees with their per day value mapping' })
+  async getEmployeeRates(@Query() query: EmployeeRateQueryDto) {
+    return this.service.getEmployeeRates(query);
+  }
+
+  @BackOfficeOnly()
+  @Put('config/employee-rates')
+  @ApiOperation({ summary: 'Map employees to a per day value' })
+  @ApiBody({ type: AssignEmployeeRateDto })
+  async assignEmployeeRate(@Body() dto: AssignEmployeeRateDto) {
+    return this.service.assignEmployeeRate(dto);
   }
 
   @Get('config/withdrawal-charges')

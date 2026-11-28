@@ -7,15 +7,16 @@ import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 
 import { RequestContextStore } from 'src/core/context/request-context';
-import { ExpenseStatus, ExpenseTag } from 'src/shared/enums/expense.enums';
+import { ExpenseOption, ExpenseStatus } from 'src/shared/enums/expense.enums';
 
 import { ExpenseService } from './expense.service';
 import { EXPENSE } from './expense.constants';
 import { MongoService } from 'src/core/database/mongo/mongo.service';
 import {
+  AssignEmployeeRateDto,
+  CreateExpenseRateDto,
   ReplaceWithdrawalChargesDto,
   UpdateExpenseStatusDto,
-  UpsertExpenseRatesDto,
 } from './dto/expense.dto';
 
 /* ======================================================
@@ -80,7 +81,15 @@ describe('ExpenseService', () => {
   let service: ExpenseService;
 
   let employees: Record<string, unknown>[];
-  let rates: { expenseTag: ExpenseTag; perDayValue: number }[];
+  type RateRow = {
+    rateId: string;
+    name: string;
+    expenseOption: ExpenseOption;
+    perDayValue: number;
+    isDefault?: boolean;
+    expenseTag?: string;
+  };
+  let rates: RateRow[];
   let slabs: { minAmount: number; maxAmount: number; chargePercent: number }[];
   let sessions: { userId: string; dayStartTime: Date }[];
   let routeSessions: {
@@ -98,6 +107,7 @@ describe('ExpenseService', () => {
   let repoFindLean: jest.SpyInstance<Promise<unknown>, unknown[]>;
   let chargeModel: Record<string, jest.Mock>;
   let rateModel: Record<string, jest.Mock>;
+  let employeeModel: Record<string, jest.Mock>;
 
   const at = (date: Date) => jest.setSystemTime(date);
 
@@ -113,12 +123,25 @@ describe('ExpenseService', () => {
         employeeId: 'EMP-UPC',
         name: 'Joseph Phiri',
         manNumber: 'MN-200',
-        expenseTag: 'UPC',
+        expenseRateId: 'R-UPC',
       },
     ];
     rates = [
-      { expenseTag: ExpenseTag.LOCAL, perDayValue: 100 },
-      { expenseTag: ExpenseTag.UPC, perDayValue: 250 },
+      {
+        rateId: 'R-LOCAL',
+        name: 'Local',
+        expenseOption: ExpenseOption.DAILY_EXPENSE,
+        perDayValue: 100,
+        isDefault: true,
+        expenseTag: 'LOCAL',
+      },
+      {
+        rateId: 'R-UPC',
+        name: 'UPC',
+        expenseOption: ExpenseOption.FOOD_AND_NIGHT_STAY,
+        perDayValue: 250,
+        expenseTag: 'UPC',
+      },
     ];
     slabs = [
       { minAmount: 1, maxAmount: 500, chargePercent: 2 },
@@ -129,17 +152,42 @@ describe('ExpenseService', () => {
     routeSessions = [];
     expenses = [];
 
-    const employeeModel = {
+    employeeModel = {
       findOne: jest.fn((f: { employeeId: string }) =>
         chain(employees.find((e) => e.employeeId === f.employeeId) ?? null),
       ),
+      aggregate: jest.fn().mockResolvedValue([{ _id: 'R-UPC', count: 1 }]),
+      countDocuments: jest.fn((f: { expenseRateId: string }) =>
+        Promise.resolve(
+          employees.filter((e) => e.expenseRateId === f.expenseRateId).length,
+        ),
+      ),
+      updateMany: jest
+        .fn()
+        .mockResolvedValue({ matchedCount: 1, modifiedCount: 1 }),
     };
+    const matches = (r: RateRow, f: Record<string, unknown>) =>
+      Object.entries(f).every(([k, v]) =>
+        v instanceof RegExp
+          ? v.test(String(r[k as keyof RateRow]))
+          : v && typeof v === 'object' && '$ne' in v
+            ? r[k as keyof RateRow] !== v.$ne
+            : r[k as keyof RateRow] === v,
+      );
     rateModel = {
-      findOne: jest.fn((f: { expenseTag: ExpenseTag }) =>
-        chain(rates.find((r) => r.expenseTag === f.expenseTag) ?? null),
+      findOne: jest.fn((f: Record<string, unknown>) =>
+        chain(rates.find((r) => matches(r, f)) ?? null),
+      ),
+      exists: jest.fn((f: Record<string, unknown>) =>
+        Promise.resolve(rates.some((r) => matches(r, f)) ? { _id: 'x' } : null),
       ),
       find: jest.fn(() => chain(rates)),
-      updateOne: jest.fn().mockResolvedValue({}),
+      create: jest.fn((doc: RateRow) =>
+        Promise.resolve({ toObject: () => doc }),
+      ),
+      updateMany: jest.fn().mockResolvedValue({}),
+      deleteOne: jest.fn().mockResolvedValue({}),
+      findOneAndUpdate: jest.fn(() => chain({})),
     };
     chargeModel = {
       findOne: jest.fn(
@@ -460,15 +508,16 @@ describe('ExpenseService', () => {
   describe('employee tag & rate', () => {
     beforeEach(() => at(d(2026, 11, 23, 8)));
 
-    it('defaults to LOCAL / Daily Expense when no tag is set', async () => {
+    it('uses the default rate when the employee is not mapped', async () => {
       const { data } = await run(() => service.preview());
-      expect(data.expenseTag).toBe(ExpenseTag.LOCAL);
+      expect(data.expenseTag).toBe('Local');
+      expect(data.expenseRateId).toBe('R-LOCAL');
       expect(data.expenseOption).toBe('DAILY_EXPENSE');
     });
 
-    it('uses UPC rate and Food & Night Stay for UPC employees', async () => {
+    it('uses the mapped rate and its option', async () => {
       const { data } = await run(() => service.preview(), 'EMP-UPC');
-      expect(data.expenseTag).toBe(ExpenseTag.UPC);
+      expect(data.expenseTag).toBe('UPC');
       expect(data.expenseOption).toBe('FOOD_AND_NIGHT_STAY');
       expect(data.perDayValue).toBe(250);
       expect(data.totalAmount).toBe(1500 + 45); // 3% of 1500
@@ -476,16 +525,22 @@ describe('ExpenseService', () => {
       expect(data.employeeName).toBe('Joseph Phiri');
     });
 
-    it('falls back to LOCAL for an unknown tag value', async () => {
-      employees[0].expenseTag = 'SOMETHING';
+    it('honours a legacy UPC tag on the employee', async () => {
+      employees[0].expenseTag = 'UPC';
       const { data } = await run(() => service.preview());
-      expect(data.expenseTag).toBe(ExpenseTag.LOCAL);
+      expect(data.expenseRateId).toBe('R-UPC');
     });
 
-    it('fails when the rate is not configured', async () => {
-      rates = [];
+    it('falls back to default when the mapped rate no longer exists', async () => {
+      employees[0].expenseRateId = 'GONE';
+      const { data } = await run(() => service.preview());
+      expect(data.expenseRateId).toBe('R-LOCAL');
+    });
+
+    it('fails when nothing is mapped and no default is set', async () => {
+      rates = rates.filter((r) => !r.isDefault);
       await expect(run(() => service.preview())).rejects.toThrow(
-        `${EXPENSE.RATE_NOT_CONFIGURED}: LOCAL`,
+        EXPENSE.RATE_NOT_CONFIGURED,
       );
     });
 
@@ -787,21 +842,79 @@ describe('ExpenseService', () => {
    * ====================================================== */
 
   describe('reference tables', () => {
-    it('upserts rates with the option derived from the tag', async () => {
-      await service.upsertRates({
-        rates: [{ expenseTag: ExpenseTag.UPC, perDayValue: 300 }],
+    it('lists rates with mapped employee counts', async () => {
+      const { data } = await service.getRates();
+      expect(data.map((r) => [r.name, r.employeeCount])).toEqual([
+        ['Local', 0],
+        ['UPC', 1],
+      ]);
+    });
+
+    it('creates a named rate and moves the default flag', async () => {
+      const { data } = await service.createRate({
+        name: '  Metro ',
+        expenseOption: ExpenseOption.DAILY_EXPENSE,
+        perDayValue: 300,
+        isDefault: true,
       });
-      expect(rateModel.updateOne).toHaveBeenCalledWith(
-        { expenseTag: 'UPC' },
-        {
-          $set: {
-            expenseTag: 'UPC',
-            expenseOption: 'FOOD_AND_NIGHT_STAY',
-            perDayValue: 300,
-          },
-        },
-        { upsert: true },
+      expect(data).toMatchObject({
+        name: 'Metro',
+        perDayValue: 300,
+        isDefault: true,
+      });
+      expect(rateModel.updateMany).toHaveBeenCalledWith(
+        { isDefault: true },
+        { $set: { isDefault: false } },
       );
+    });
+
+    it('rejects a duplicate name (case-insensitive)', async () => {
+      await expect(
+        service.createRate({
+          name: 'local',
+          expenseOption: ExpenseOption.DAILY_EXPENSE,
+          perDayValue: 1,
+        }),
+      ).rejects.toBeInstanceOf(ConflictException);
+    });
+
+    it('404s when updating an unknown rate', async () => {
+      await expect(
+        service.updateRate('NOPE', { perDayValue: 1 }),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('blocks deleting a rate mapped to employees', async () => {
+      await expect(service.deleteRate('R-UPC')).rejects.toThrow(
+        EXPENSE.RATE_IN_USE,
+      );
+      await service.deleteRate('R-LOCAL');
+      expect(rateModel.deleteOne).toHaveBeenCalledWith({ rateId: 'R-LOCAL' });
+    });
+
+    it('maps and unmaps employees', async () => {
+      await service.assignEmployeeRate({
+        employeeIds: [USER, USER],
+        expenseRateId: 'R-UPC',
+      });
+      expect(employeeModel.updateMany).toHaveBeenLastCalledWith(
+        { employeeId: { $in: [USER] }, isDeleted: { $ne: true } },
+        { $set: { expenseRateId: 'R-UPC' } },
+      );
+      await service.assignEmployeeRate({
+        employeeIds: [USER],
+        expenseRateId: null,
+      });
+      expect(employeeModel.updateMany).toHaveBeenLastCalledWith(
+        expect.anything(),
+        { $unset: { expenseRateId: 1 } },
+      );
+      await expect(
+        service.assignEmployeeRate({
+          employeeIds: [USER],
+          expenseRateId: 'NOPE',
+        }),
+      ).rejects.toBeInstanceOf(NotFoundException);
     });
 
     it('replaces withdrawal slabs', async () => {
@@ -849,17 +962,30 @@ describe('Expense DTO validation', () => {
     ).toEqual(['remarks']);
   });
 
-  it('UpsertExpenseRatesDto validates nested rates', async () => {
+  it('CreateExpenseRateDto requires label, option and value', async () => {
     expect(
-      await errors(UpsertExpenseRatesDto, {
-        rates: [{ expenseTag: 'UPC', perDayValue: 10 }],
+      await errors(CreateExpenseRateDto, {
+        name: 'Metro',
+        expenseOption: 'DAILY_EXPENSE',
+        perDayValue: 10,
       }),
     ).toEqual([]);
     expect(
-      await errors(UpsertExpenseRatesDto, {
-        rates: [{ expenseTag: 'X', perDayValue: -1 }],
+      await errors(CreateExpenseRateDto, {
+        name: '',
+        expenseOption: 'X',
+        perDayValue: -1,
       }),
-    ).toEqual(['rates']);
+    ).toEqual(['name', 'expenseOption', 'perDayValue']);
+  });
+
+  it('AssignEmployeeRateDto needs at least one employee', async () => {
+    expect(
+      await errors(AssignEmployeeRateDto, {
+        employeeIds: [],
+        expenseRateId: 'R',
+      }),
+    ).toEqual(['employeeIds']);
   });
 
   it('ReplaceWithdrawalChargesDto rejects negative amounts', async () => {

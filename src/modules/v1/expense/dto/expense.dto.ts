@@ -1,7 +1,9 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
+  ArrayNotEmpty,
   IsArray,
+  IsBoolean,
   IsDateString,
   IsEnum,
   IsNotEmpty,
@@ -14,7 +16,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { PaginationDto } from 'src/shared/dto/pagination.dto';
-import { ExpenseStatus, ExpenseTag } from 'src/shared/enums/expense.enums';
+import { ExpenseOption, ExpenseStatus } from 'src/shared/enums/expense.enums';
 
 export class ExpenseQueryDto extends PaginationDto {
   @ApiPropertyOptional({
@@ -58,23 +60,67 @@ export class UpdateExpenseStatusDto {
   remarks?: string;
 }
 
-export class ExpenseRateItemDto {
-  @ApiProperty({ enum: ExpenseTag, enumName: 'ExpenseTag' })
-  @IsEnum(ExpenseTag)
-  expenseTag!: ExpenseTag;
+export class CreateExpenseRateDto {
+  @ApiProperty({ type: String, example: 'Metro' })
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(60)
+  name!: string;
+
+  @ApiProperty({ enum: ExpenseOption, enumName: 'ExpenseOption' })
+  @IsEnum(ExpenseOption)
+  expenseOption!: ExpenseOption;
 
   @ApiProperty({ type: Number, example: 150 })
-  @IsNumber()
+  @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
   perDayValue!: number;
+
+  @ApiPropertyOptional({
+    type: Boolean,
+    description: 'Use for employees without a mapping',
+  })
+  @IsOptional()
+  @IsBoolean()
+  isDefault?: boolean;
 }
 
-export class UpsertExpenseRatesDto {
-  @ApiProperty({ type: [ExpenseRateItemDto] })
+export class UpdateExpenseRateDto extends PartialType(CreateExpenseRateDto) {}
+
+export class EmployeeRateQueryDto extends PaginationDto {
+  @ApiPropertyOptional({
+    description: 'Search by employeeId / name / man number',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  searchText?: string;
+
+  @ApiPropertyOptional({
+    type: String,
+    description: 'Filter by rateId; "NONE" for unmapped employees',
+  })
+  @IsOptional()
+  @IsString()
+  expenseRateId?: string;
+}
+
+export class AssignEmployeeRateDto {
+  @ApiProperty({ type: [String] })
   @IsArray()
-  @ValidateNested({ each: true })
-  @Type(() => ExpenseRateItemDto)
-  rates!: ExpenseRateItemDto[];
+  @ArrayNotEmpty()
+  @IsString({ each: true })
+  employeeIds!: string[];
+
+  @ApiPropertyOptional({
+    type: String,
+    nullable: true,
+    description:
+      'rateId to map; null clears the mapping (default rate applies)',
+  })
+  @IsOptional()
+  @IsString()
+  expenseRateId?: string | null;
 }
 
 export class WithdrawalChargeItemDto {

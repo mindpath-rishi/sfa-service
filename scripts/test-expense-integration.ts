@@ -9,7 +9,11 @@
  * Needs a replica set: withdrawal-charge replace uses a transaction.
  */
 import assert from 'node:assert/strict';
-import { ConflictException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
 import mongoose, { Connection } from 'mongoose';
 
 import { RequestContextStore } from '../src/core/context/request-context';
@@ -17,7 +21,10 @@ import { MongoService } from '../src/core/database/mongo/mongo.service';
 import { softDeletePlugin } from '../src/core/database/mongo/plugins/soft-delete.plugin';
 import { timestampsPlugin } from '../src/core/database/mongo/plugins/timestamps.plugin';
 import { ExpenseService } from '../src/modules/v1/expense/expense.service';
-import { ExpenseStatus, ExpenseTag } from '../src/shared/enums/expense.enums';
+import {
+  ExpenseOption,
+  ExpenseStatus,
+} from '../src/shared/enums/expense.enums';
 
 const URI = process.env.EXPENSE_IT_MONGO_URI;
 const USER = 'IT-EMP-1';
@@ -108,7 +115,6 @@ async function main() {
       employeeId: OTHER,
       name: 'Joseph Phiri',
       manNumber: 'MN-200',
-      expenseTag: 'UPC',
       isDeleted: false,
     },
   ]);
@@ -149,24 +155,42 @@ async function main() {
     at(d(2026, 11, 16, 8));
     await assert.rejects(
       asUser(USER, () => service.preview()),
-      /Per day value is not configured/,
+      /Per day value is not mapped/,
     );
   });
 
-  test('rates upsert is idempotent; slabs replace in a transaction', async () => {
-    await service.upsertRates({
-      rates: [
-        { expenseTag: ExpenseTag.LOCAL, perDayValue: 90 },
-        { expenseTag: ExpenseTag.UPC, perDayValue: 250 },
-      ],
+  test('per day values: create, update, map; slabs replace in a transaction', async () => {
+    const { data: local } = await service.createRate({
+      name: 'LOCAL',
+      expenseOption: ExpenseOption.DAILY_EXPENSE,
+      perDayValue: 90,
+      isDefault: true,
     });
-    const { data: rates } = await service.upsertRates({
-      rates: [{ expenseTag: ExpenseTag.LOCAL, perDayValue: 100 }],
+    const { data: upc } = await service.createRate({
+      name: 'UPC',
+      expenseOption: ExpenseOption.FOOD_AND_NIGHT_STAY,
+      perDayValue: 250,
     });
+    await assert.rejects(
+      service.createRate({
+        name: 'local',
+        expenseOption: ExpenseOption.DAILY_EXPENSE,
+        perDayValue: 1,
+      }),
+      ConflictException,
+    );
+    await service.updateRate(local.rateId, { perDayValue: 100 });
+    await service.assignEmployeeRate({
+      employeeIds: [OTHER],
+      expenseRateId: upc.rateId,
+    });
+    const { data: rates } = await service.getRates();
     assert.equal(rates.length, 2);
-    const local = rates.find((r) => r.expenseTag === ExpenseTag.LOCAL)!;
-    assert.equal(local.perDayValue, 100);
-    assert.equal(local.expenseOption, 'DAILY_EXPENSE');
+    const l = rates.find((r) => r.name === 'LOCAL')!;
+    assert.equal(l.perDayValue, 100);
+    assert.equal(l.isDefault, true);
+    assert.equal(rates.find((r) => r.name === 'UPC')!.employeeCount, 1);
+    await assert.rejects(service.deleteRate(upc.rateId), BadRequestException);
 
     await service.replaceWithdrawalCharges({
       slabs: [{ minAmount: 0, maxAmount: 1, chargePercent: 99 }],

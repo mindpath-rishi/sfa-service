@@ -38,7 +38,15 @@ type Call = [
 ];
 
 const ADMIN_ROUTES: Call[] = [
-  ['put', '/expense/config/rates', { rates: [] }],
+  [
+    'post',
+    '/expense/config/rates',
+    { name: 'Metro', expenseOption: 'DAILY_EXPENSE', perDayValue: 1 },
+  ],
+  ['patch', '/expense/config/rates/R1', {}],
+  ['delete', '/expense/config/rates/R1'],
+  ['get', '/expense/config/employee-rates'],
+  ['put', '/expense/config/employee-rates', { employeeIds: ['EMP-1'] }],
   ['put', '/expense/config/withdrawal-charges', { slabs: [] }],
   ['get', '/expense/erp-export'],
   ['get', '/expense'],

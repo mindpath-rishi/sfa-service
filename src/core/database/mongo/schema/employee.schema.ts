@@ -91,6 +91,14 @@ export class Employee {
   profileImageUrl?: string;
 
   /* ======================================================
+   * EXPENSE
+   * ====================================================== */
+
+  // Per Day Value mapping (ExpenseRate.rateId); unset → default rate
+  @Prop({ required: false, type: String, index: true })
+  expenseRateId?: string;
+
+  /* ======================================================
    * HIERARCHY
    * ====================================================== */
 
