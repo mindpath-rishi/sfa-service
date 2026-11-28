@@ -25,10 +25,15 @@ import { CreateCustomerDto } from './create-customer.dto';
 export const CUSTOMER_BULK_UPLOAD_LIMIT = 100000;
 
 export class BulkUploadCustomerItemDto extends CreateCustomerDto {
-  @ApiPropertyOptional({ type: String, description: 'Outlet ID; generated when omitted' })
+  @ApiPropertyOptional({
+    type: String,
+    description: 'Outlet ID; generated when omitted',
+  })
   @Transform(({ value }) => {
     if (value === null || value === undefined) return undefined;
-    const normalized = String(value).trim().replace(/^FO_(?:TOKEN|TKON)_/i, '');
+    const normalized = String(value)
+      .trim()
+      .replace(/^FO_(?:TOKEN|TKON)_/i, '');
     return normalized || undefined;
   })
   @IsOptional()
@@ -38,7 +43,9 @@ export class BulkUploadCustomerItemDto extends CreateCustomerDto {
   // Accept customerId for older clients; MIS sends outletId.
   @Transform(({ value }) => {
     if (value === null || value === undefined) return undefined;
-    const normalized = String(value).trim().replace(/^FO_(?:TOKEN|TKON)_/i, '');
+    const normalized = String(value)
+      .trim()
+      .replace(/^FO_(?:TOKEN|TKON)_/i, '');
     return normalized || undefined;
   })
   @IsOptional()

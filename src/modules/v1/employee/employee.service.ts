@@ -638,7 +638,7 @@ export class EmployeeService extends MongoRepository<Employee> {
 
     for (const [index, item] of dto.items.entries()) {
       try {
-        const resolvedItem = await this.resolveBulkUploadReferences(item);
+        const resolvedItem = this.resolveBulkUploadReferences(item);
         const response = await this.create(resolvedItem);
         const employeeId =
           typeof response.data === 'object' && response.data
@@ -673,7 +673,7 @@ export class EmployeeService extends MongoRepository<Employee> {
     };
   }
 
-  private async resolveBulkUploadReferences(item: CreateEmployeeDto) {
+  private resolveBulkUploadReferences(item: CreateEmployeeDto) {
     return item;
   }
 
@@ -9141,8 +9141,6 @@ export class EmployeeService extends MongoRepository<Employee> {
       throw new NotFoundException(EMPLOYEE.NOT_FOUND);
     }
 
-    const now = new Date();
-
     const startDate = new Date(query?.startDate || new Date());
     startDate.setHours(0, 0, 0, 0);
 
@@ -9988,23 +9986,50 @@ export class EmployeeService extends MongoRepository<Employee> {
       return {
         statusCode: HttpStatus.OK,
         message: 'No van assigned',
-        data: { employeeId, name: employee.name, vanId: null, products: [], totals: null },
+        data: {
+          employeeId,
+          name: employee.name,
+          vanId: null,
+          products: [],
+          totals: null,
+        },
       };
     }
 
     const db = this.model.db;
     const products: any[] = await db
       .collection('product_master')
-      .find({}, { projection: { _id: 0, productId: 1, name: 1, productSysCode: 1, unitQtyInCase: 1, piecePrice: 1, casePrice: 1, categoryId: 1, parentCategoryId: 1 } })
+      .find(
+        {},
+        {
+          projection: {
+            _id: 0,
+            productId: 1,
+            name: 1,
+            productSysCode: 1,
+            unitQtyInCase: 1,
+            piecePrice: 1,
+            casePrice: 1,
+            categoryId: 1,
+            parentCategoryId: 1,
+          },
+        },
+      )
       .toArray();
-    const productById = new Map(products.map((product) => [product.productId, product]));
+    const productById = new Map(
+      products.map((product) => [product.productId, product]),
+    );
 
     let rows: any[] = [];
     let source: 'DAILY_STOCK' | 'INVENTORY' = 'INVENTORY';
     if (session?.workSessionId) {
       rows = await db
         .collection('van_daily_stock')
-        .find({ vanId, workSessionId: session.workSessionId, isDeleted: { $ne: true } })
+        .find({
+          vanId,
+          workSessionId: session.workSessionId,
+          isDeleted: { $ne: true },
+        })
         .toArray();
       if (rows.length) source = 'DAILY_STOCK';
     }
@@ -10019,9 +10044,14 @@ export class EmployeeService extends MongoRepository<Employee> {
     const byProduct = new Map<string, any>();
     for (const row of rows) {
       const product = productById.get(row.productId) ?? {};
-      const unitQtyInCase = Math.max(Number(row.unitQtyInCase ?? product.unitQtyInCase) || 1, 1);
+      const unitQtyInCase = Math.max(
+        Number(row.unitQtyInCase ?? product.unitQtyInCase) || 1,
+        1,
+      );
       const quantity =
-        source === 'DAILY_STOCK' ? Number(row.closingQty) || 0 : Number(row.quantity) || 0;
+        source === 'DAILY_STOCK'
+          ? Number(row.closingQty) || 0
+          : Number(row.quantity) || 0;
       const piecePrice = Number(row.piecePrice ?? product.piecePrice) || 0;
       const casePrice = Number(product.casePrice) || piecePrice * unitQtyInCase;
       const existing = byProduct.get(row.productId);
@@ -10037,7 +10067,8 @@ export class EmployeeService extends MongoRepository<Employee> {
         quantity,
         casePrice: round2(casePrice),
         piecePrice: round2(piecePrice),
-        openingQty: source === 'DAILY_STOCK' ? Number(row.openingQty) || 0 : undefined,
+        openingQty:
+          source === 'DAILY_STOCK' ? Number(row.openingQty) || 0 : undefined,
         inQty: source === 'DAILY_STOCK' ? Number(row.inQty) || 0 : undefined,
         outQty: source === 'DAILY_STOCK' ? Number(row.outQty) || 0 : undefined,
       });
@@ -13033,12 +13064,12 @@ export class EmployeeService extends MongoRepository<Employee> {
           Number.isFinite(distanceMeters) &&
           Number.isFinite(configuredRadiusMeters);
         const isOvt =
-          visitType === ShopVisitType.OFF_SITE ||
+          visitType === (ShopVisitType.OFF_SITE as string) ||
           (!visitType &&
             hasDistanceResult &&
             distanceMeters > configuredRadiusMeters);
         const isOvc =
-          visitType === ShopVisitType.ON_SITE ||
+          visitType === (ShopVisitType.ON_SITE as string) ||
           (!visitType &&
             hasDistanceResult &&
             distanceMeters <= configuredRadiusMeters);

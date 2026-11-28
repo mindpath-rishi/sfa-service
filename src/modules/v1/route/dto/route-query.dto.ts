@@ -50,7 +50,10 @@ export class RouteQueryDto extends PaginationDto {
   @IsString()
   marketId?: string;
 
-  @ApiPropertyOptional({ type: String, description: 'Filter by customer category ID' })
+  @ApiPropertyOptional({
+    type: String,
+    description: 'Filter by customer category ID',
+  })
   @IsOptional()
   @IsString()
   customerCategoryId?: string;

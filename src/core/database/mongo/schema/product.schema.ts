@@ -83,7 +83,7 @@ export class Product {
 export const ProductSchema = SchemaFactory.createForClass(Product);
 
 ProductSchema.pre('save', function (next: any) {
-  const doc: any = this;
+  const doc = this as any;
 
   if (doc.casePrice && doc.unitQtyInCase) {
     doc.piecePrice = Number((doc.casePrice / doc.unitQtyInCase).toFixed(4));

@@ -147,7 +147,10 @@ export class CreateCustomerDto {
   @IsEnum(CustomerStatus)
   status?: CustomerStatus;
 
-  @ApiPropertyOptional({ type: String, description: 'Route mapping reference ID' })
+  @ApiPropertyOptional({
+    type: String,
+    description: 'Route mapping reference ID',
+  })
   @IsOptional()
   @IsString()
   routeId?: string;

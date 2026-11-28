@@ -18,7 +18,6 @@ import { VAN_INVENTORY_TOPUP_ITEM } from './van-inventory-topup-item.constants';
 import { CreateVanInventoryTopupItemDto } from './dto/create-van-inventory-topup-item.dto';
 import { UpdateVanInventoryTopupItemDto } from './dto/update-van-inventory-topup-item.dto';
 import { VanInventoryTopupItemQueryDto } from './dto/van-inventory-topup-item-query.dto';
-import { IdGenerator } from 'src/shared/utils/id-generator.utils';
 
 @Injectable()
 export class VanInventoryTopupItemService extends MongoRepository<VanInventoryTopupItem> {
@@ -31,8 +30,6 @@ export class VanInventoryTopupItemService extends MongoRepository<VanInventoryTo
   async create(payload: CreateVanInventoryTopupItemDto) {
     try {
       return await this.withTransaction(async (session) => {
-        const { productId } = payload;
-
         // const filter: FilterQuery<VanInventoryTopupItem> = {
         //   productId,
         // };
@@ -182,7 +179,10 @@ export class VanInventoryTopupItemService extends MongoRepository<VanInventoryTo
     };
   }
 
-  async findAllByVanInventoryTopupId(vanInventoryTopupId: string, session?: any) {
+  async findAllByVanInventoryTopupId(
+    vanInventoryTopupId: string,
+    session?: any,
+  ) {
     return this.model
       .find({ vanInventoryTopupId, isDeleted: { $ne: true } } as any)
       .session(session)

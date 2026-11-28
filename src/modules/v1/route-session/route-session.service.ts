@@ -205,7 +205,7 @@ export class RouteSessionService extends MongoRepository<RouteSession> {
 
             sessionDate: {
               $gte: startOfDay,
-            } as any,
+            },
           };
 
           const existing = await this.findOne(filter, {
@@ -218,7 +218,7 @@ export class RouteSessionService extends MongoRepository<RouteSession> {
            * ====================================================== */
 
           if (existing) {
-            const updatedDoc = await this.updateById(
+            await this.updateById(
               existing._id.toString(),
 
               {

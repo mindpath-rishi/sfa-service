@@ -26,7 +26,6 @@ import {
 import { Status } from 'src/shared/enums/app.enums';
 import { PERMISSION } from './permission.constants';
 import { PermissionsQueryDto } from './dto/permission-query.dto';
-import { HydratedDocument } from 'mongoose';
 
 @Injectable()
 export class PermissionService extends MongoRepository<Permission> {

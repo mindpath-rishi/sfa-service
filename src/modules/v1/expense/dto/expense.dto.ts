@@ -1,7 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
-  ArrayMaxSize,
   IsArray,
   IsDateString,
   IsEnum,
@@ -10,24 +9,12 @@ import {
   IsOptional,
   IsString,
   MaxLength,
+  Max,
   Min,
   ValidateNested,
 } from 'class-validator';
 import { PaginationDto } from 'src/shared/dto/pagination.dto';
 import { ExpenseStatus, ExpenseTag } from 'src/shared/enums/expense.enums';
-
-/** Body for raising an advance expense request (current user, current week) */
-export class CreateExpenseDto {
-  @ApiPropertyOptional({
-    type: [String],
-    description: 'Beat IDs selected for the date range (used for Remarks)',
-  })
-  @IsOptional()
-  @IsArray()
-  @ArrayMaxSize(100)
-  @IsString({ each: true })
-  beatIds?: string[];
-}
 
 export class ExpenseQueryDto extends PaginationDto {
   @ApiPropertyOptional({
@@ -101,10 +88,15 @@ export class WithdrawalChargeItemDto {
   @Min(0)
   maxAmount!: number;
 
-  @ApiProperty({ type: Number, example: 10 })
-  @IsNumber()
+  @ApiProperty({
+    type: Number,
+    example: 2.5,
+    description: 'Charge as a percentage of the base amount (0-100)',
+  })
+  @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
-  charge!: number;
+  @Max(100)
+  chargePercent!: number;
 }
 
 export class ReplaceWithdrawalChargesDto {

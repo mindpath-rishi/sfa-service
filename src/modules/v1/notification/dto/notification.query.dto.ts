@@ -14,12 +14,13 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IsBoolean, IsEnum, IsOptional, IsString } from 'class-validator';
 import { Transform } from 'class-transformer';
-import { NotificationDeliveryStatus, NotificationPlatform } from 'src/shared/enums/notification.enums';
+import {
+  NotificationDeliveryStatus,
+  NotificationPlatform,
+} from 'src/shared/enums/notification.enums';
 import { PaginationDto } from 'src/shared/dto/pagination.dto';
 
-
-export class NotificationQueryDto  extends PaginationDto{
- 
+export class NotificationQueryDto extends PaginationDto {
   /* ======================================================
    * FILTERS
    * ====================================================== */

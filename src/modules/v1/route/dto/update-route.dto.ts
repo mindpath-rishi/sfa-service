@@ -1,9 +1,16 @@
 import { RouteStatus } from 'src/shared/enums/route.enums';
 
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsArray, IsEnum, IsNumber, IsOptional, IsString, Min, ValidateNested } from 'class-validator';
+import {
+  IsArray,
+  IsEnum,
+  IsNumber,
+  IsOptional,
+  IsString,
+  Min,
+  ValidateNested,
+} from 'class-validator';
 import { Type } from 'class-transformer';
-
 
 export class UpdateRouteCustomerDto {
   @ApiPropertyOptional({ type: String })
@@ -17,18 +24,17 @@ export class UpdateRouteCustomerDto {
   @IsNumber()
   @Min(1)
   sequence?: number;
-
 }
 
 export class UpdateRouteDto {
-/**
- * UpdateRouteDto
- * =================
- * Data Transfer Object for updating Route records
- * 
- * All fields are optional for partial updates
- * Supports partial updates - omitted fields will retain their existing values
- */
+  /**
+   * UpdateRouteDto
+   * =================
+   * Data Transfer Object for updating Route records
+   *
+   * All fields are optional for partial updates
+   * Supports partial updates - omitted fields will retain their existing values
+   */
   @ApiPropertyOptional({ type: String })
   @IsOptional()
   @IsString()
@@ -54,7 +60,11 @@ export class UpdateRouteDto {
   @IsString()
   marketId?: string;
 
-  @ApiPropertyOptional({ type: () => [UpdateRouteCustomerDto], description: 'Update mapped outlets array' , default: [] })
+  @ApiPropertyOptional({
+    type: () => [UpdateRouteCustomerDto],
+    description: 'Update mapped outlets array',
+    default: [],
+  })
   @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })
@@ -72,5 +82,4 @@ export class UpdateRouteDto {
   @IsOptional()
   @IsEnum(RouteStatus)
   status?: RouteStatus;
-
 }

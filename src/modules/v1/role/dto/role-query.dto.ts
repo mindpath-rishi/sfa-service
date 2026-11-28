@@ -11,12 +11,7 @@
  */
 
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import {
-  IsEnum,
-  IsOptional,
-  IsString,
-  MaxLength,
-} from 'class-validator';
+import { IsEnum, IsOptional, IsString, MaxLength } from 'class-validator';
 import { Status } from 'src/shared/enums/app.enums';
 import { PaginationDto } from 'src/shared/dto/pagination.dto';
 

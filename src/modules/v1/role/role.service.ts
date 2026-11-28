@@ -105,7 +105,10 @@ export class RoleService extends MongoRepository<Role> {
   }
 
   private escapePdfText(value: string) {
-    return String(value ?? '').replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)');
+    return String(value ?? '')
+      .replace(/\\/g, '\\\\')
+      .replace(/\(/g, '\\(')
+      .replace(/\)/g, '\\)');
   }
 
   private buildPdfBuffer(title: string, rows: string[][]) {
@@ -140,7 +143,9 @@ export class RoleService extends MongoRepository<Role> {
     const textLimit = (width: number, size: number) =>
       Math.max(6, Math.floor(width / (size * 0.52)));
     const truncate = (value: string, limit: number) => {
-      const cleanValue = String(value ?? '').replace(/\s+/g, ' ').trim();
+      const cleanValue = String(value ?? '')
+        .replace(/\s+/g, ' ')
+        .trim();
       return cleanValue.length > limit
         ? `${cleanValue.slice(0, Math.max(0, limit - 3))}...`
         : cleanValue;
@@ -161,7 +166,8 @@ export class RoleService extends MongoRepository<Role> {
     let nextObjectId = 4;
 
     objects[1] = '<< /Type /Catalog /Pages 2 0 R >>';
-    objects[fontObjectId] = '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>';
+    objects[fontObjectId] =
+      '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>';
 
     for (const [pageIndex, rowsForPage] of pageRows.entries()) {
       const pageObjectId = nextObjectId;
@@ -202,10 +208,16 @@ export class RoleService extends MongoRepository<Role> {
         const y = headerY - (rowIndex + 1) * rowHeight;
 
         if (rowIndex % 2 === 0) {
-          commands.push('0.96 0.98 1 rg', rect(margin, y, tableWidth, rowHeight, 'f'));
+          commands.push(
+            '0.96 0.98 1 rg',
+            rect(margin, y, tableWidth, rowHeight, 'f'),
+          );
         }
 
-        commands.push('0.85 0.89 0.94 RG', rect(margin, y, tableWidth, rowHeight));
+        commands.push(
+          '0.85 0.89 0.94 RG',
+          rect(margin, y, tableWidth, rowHeight),
+        );
         commands.push('0.08 0.13 0.2 rg');
 
         row.forEach((value, columnIndex) => {
@@ -232,8 +244,7 @@ export class RoleService extends MongoRepository<Role> {
         `<< /Length ${Buffer.byteLength(content)} >>\nstream\n${content}\nendstream`;
     }
 
-    objects[2] =
-      `<< /Type /Pages /Kids [${pageObjectIds.map((id) => `${id} 0 R`).join(' ')}] /Count ${pageObjectIds.length} >>`;
+    objects[2] = `<< /Type /Pages /Kids [${pageObjectIds.map((id) => `${id} 0 R`).join(' ')}] /Count ${pageObjectIds.length} >>`;
 
     let pdf = '%PDF-1.4\n';
     const offsets = [0];
@@ -271,9 +282,7 @@ export class RoleService extends MongoRepository<Role> {
 
     while (parentId) {
       if (visited.has(parentId)) {
-        throw new BadRequestException(
-          'A cycle exists in the role hierarchy.',
-        );
+        throw new BadRequestException('A cycle exists in the role hierarchy.');
       }
       visited.add(parentId);
 
@@ -285,15 +294,17 @@ export class RoleService extends MongoRepository<Role> {
       const parent = await parentQuery;
 
       if (!parent) {
-        throw new NotFoundException(`Active parent role not found: ${parentId}`);
+        throw new NotFoundException(
+          `Active parent role not found: ${parentId}`,
+        );
       }
-      parentChain.push(parent as any);
+      parentChain.push(parent);
       if (parentChain.length >= 5) {
         throw new BadRequestException(
           'Role hierarchy cannot contain more than five levels.',
         );
       }
-      parentId = (parent as any).parentRoleId;
+      parentId = parent.parentRoleId;
     }
 
     const orderedParents = parentChain.reverse();
@@ -315,9 +326,7 @@ export class RoleService extends MongoRepository<Role> {
     while (queue.length) {
       const parent = queue.shift()!;
       if (visited.has(parent.roleId)) {
-        throw new BadRequestException(
-          'A cycle exists in the role hierarchy.',
-        );
+        throw new BadRequestException('A cycle exists in the role hierarchy.');
       }
       visited.add(parent.roleId);
 
@@ -419,10 +428,7 @@ export class RoleService extends MongoRepository<Role> {
         };
       }
 
-      const hierarchy = await this.getRoleHierarchy(
-        dto.parentRoleId,
-        session,
-      );
+      const hierarchy = await this.getRoleHierarchy(dto.parentRoleId, session);
 
       // Fresh role creation
       const role = await this.save(
@@ -457,13 +463,10 @@ export class RoleService extends MongoRepository<Role> {
    * Supports:
    * - Status filtering
    * - Free-text search
- * - Pagination & sorting
+   * - Pagination & sorting
    */
   async findAll(query: RoleQueryDto) {
-    const {
-      page = 1,
-      limit = 20,
-    } = query;
+    const { page = 1, limit = 20 } = query;
 
     const result = await this.paginate(this.buildRoleFilter(query), {
       page,
@@ -556,7 +559,10 @@ export class RoleService extends MongoRepository<Role> {
   async update(roleId: string, dto: UpdateRoleDto) {
     try {
       return await this.withTransaction(async (session) => {
-        const existing = await this.findOne({ roleId }, { session, lean: true });
+        const existing = await this.findOne(
+          { roleId },
+          { session, lean: true },
+        );
         if (!existing) {
           throw new NotFoundException(ROLE.NOT_FOUND);
         }

@@ -1,4 +1,3 @@
-
 import {
   Injectable,
   NotFoundException,
@@ -10,7 +9,10 @@ import { MongoService } from 'src/core/database/mongo/mongo.service';
 import { MongoRepository } from 'src/core/database/mongo/mongo.repository';
 import { FilterQuery } from 'src/core/database/mongo/mongo.interface';
 
-import { OutletType, OutletTypeSchema } from 'src/core/database/mongo/schema/outlet-type.schema';
+import {
+  OutletType,
+  OutletTypeSchema,
+} from 'src/core/database/mongo/schema/outlet-type.schema';
 
 import { OUTLET_TYPE } from './outlet-type.constants';
 import { CreateOutletTypeDto } from './dto/create-outlet-type.dto';
@@ -30,12 +32,14 @@ export class OutletTypeService extends MongoRepository<OutletType> {
     try {
       return await this.withTransaction(async (session) => {
         if (payload.name) {
-          payload.name = TextNormalizer.normalize(payload.name, NormalizeType.TITLE);
+          payload.name = TextNormalizer.normalize(
+            payload.name,
+            NormalizeType.TITLE,
+          );
         }
 
         const filter: FilterQuery<OutletType> = {};
 
-        
         if (payload.name) filter.name = payload.name;
 
         const existing = await this.findOne(filter, {
@@ -130,11 +134,10 @@ export class OutletTypeService extends MongoRepository<OutletType> {
           dto.name = TextNormalizer.normalize(dto.name, NormalizeType.TITLE);
         }
 
-        const doc = await this.updateOne(
-          { outletTypeId },
-          dto,
-          { session, new: true },
-        );
+        const doc = await this.updateOne({ outletTypeId }, dto, {
+          session,
+          new: true,
+        });
 
         if (!doc) throw new NotFoundException(OUTLET_TYPE.NOT_FOUND);
 

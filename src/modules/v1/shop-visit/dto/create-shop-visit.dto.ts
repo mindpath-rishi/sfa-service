@@ -1,7 +1,4 @@
-import {
-  ShopVisitStatus,
-  ShopVisitType,
-} from 'src/shared/enums/shop-visit.enums';
+import { ShopVisitType } from 'src/shared/enums/shop-visit.enums';
 
 import { ApiProperty } from '@nestjs/swagger';
 

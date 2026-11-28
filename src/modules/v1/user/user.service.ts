@@ -149,7 +149,7 @@ export class UserService extends MongoRepository<User> {
     const taken = await this.model.exists({
       ...this.loginIdQuery(loginId.trim()),
       ...(profileId ? { profileId: { $ne: profileId } } : {}),
-    } as any);
+    });
     return !taken;
   }
 
@@ -203,7 +203,7 @@ export class UserService extends MongoRepository<User> {
         .exists({
           ...this.loginIdQuery(candidate),
           ...(profileId ? { profileId: { $ne: profileId } } : {}),
-        } as any)
+        })
         .session(session ?? null);
       if (!taken) return candidate;
     }
@@ -247,7 +247,7 @@ export class UserService extends MongoRepository<User> {
     /* ---------- USER AUTH ---------- */
     // Case-insensitive, so "ravi_kumar" still signs in as "Ravi_kumar".
     const user: any = await this.findOneWithSelect(
-      this.loginIdQuery(String(loginId ?? '').trim()) as any,
+      this.loginIdQuery(String(loginId ?? '').trim()),
       '+password',
     );
 
@@ -325,7 +325,12 @@ export class UserService extends MongoRepository<User> {
     /* ---------- ONE DEVICE WHILE THE DAY IS ACTIVE ---------- */
     const policyApplies = this.loginPolicy.appliesTo(deviceInfo.deviceType);
     if (policyApplies && this.loginPolicy.current.lockDayToDevice) {
-      await this.assertDeviceAllowedForActiveDay(user.profileId, deviceId, deviceInfo, ipAddress);
+      await this.assertDeviceAllowedForActiveDay(
+        user.profileId,
+        deviceId,
+        deviceInfo,
+        ipAddress,
+      );
     }
 
     /* ---------- DEVICE UPSERT (details refreshed on every login) ---------- */
@@ -350,7 +355,11 @@ export class UserService extends MongoRepository<User> {
 
     /* ---------- SINGLE DEVICE: sign older devices out ---------- */
     if (policyApplies && this.loginPolicy.current.singleDeviceLogin) {
-      await this.signOutOtherDevices(user.profileId, deviceId, deviceInfo.deviceType);
+      await this.signOutOtherDevices(
+        user.profileId,
+        deviceId,
+        deviceInfo.deviceType,
+      );
       await this.loginPolicy.setCurrentSession(user.profileId, sessionId);
     }
 
@@ -536,11 +545,22 @@ export class UserService extends MongoRepository<User> {
    * Single device login: revokes the sessions of the user's other devices
    * (of the same kind: app or web), so they are signed out.
    */
-  private async signOutOtherDevices(userId: string, deviceId: string, deviceType?: string) {
+  private async signOutOtherDevices(
+    userId: string,
+    deviceId: string,
+    deviceType?: string,
+  ) {
     const kind =
-      deviceType === 'web' ? { deviceType: 'web' } : { deviceType: { $ne: 'web' } };
+      deviceType === 'web'
+        ? { deviceType: 'web' }
+        : { deviceType: { $ne: 'web' } };
     const others: any[] = await this.userDeviceModel
-      .find({ userId, deviceId: { $ne: deviceId }, isActive: true, ...kind } as any)
+      .find({
+        userId,
+        deviceId: { $ne: deviceId },
+        isActive: true,
+        ...kind,
+      } as any)
       .select('deviceId sessionId')
       .lean();
     if (!others.length) return;
@@ -553,15 +573,26 @@ export class UserService extends MongoRepository<User> {
         ]),
     ).catch(() => undefined);
     await this.userDeviceModel.updateMany(
-      { userId, deviceId: { $in: others.map((device) => device.deviceId) } } as any,
-      { $set: { isActive: false, signedOutReason: 'SIGNED_IN_ON_ANOTHER_DEVICE', signedOutAt: new Date() } } as any,
+      {
+        userId,
+        deviceId: { $in: others.map((device) => device.deviceId) },
+      },
+      {
+        $set: {
+          isActive: false,
+          signedOutReason: 'SIGNED_IN_ON_ANOTHER_DEVICE',
+          signedOutAt: new Date(),
+        },
+      },
     );
   }
 
   /** Device fields stored on `user_devices` and in login history. */
   private deviceDetails(info: any) {
     const pick = (key: string) =>
-      info?.[key] === undefined || info?.[key] === null || info?.[key] === '' ? {} : { [key]: info[key] };
+      info?.[key] === undefined || info?.[key] === null || info?.[key] === ''
+        ? {}
+        : { [key]: info[key] };
     return {
       deviceType: info?.deviceType,
       os: info?.os,
@@ -604,7 +635,10 @@ export class UserService extends MongoRepository<User> {
       const history = this.userDeviceModel.db.collection('user_login_history');
       await history.insertOne({ ...entry, at: new Date() });
     } catch (error) {
-      Logger.warn(`Login history write failed: ${(error as Error).message}`, 'UserService');
+      Logger.warn(
+        `Login history write failed: ${(error as Error).message}`,
+        'UserService',
+      );
     }
   }
 
@@ -622,7 +656,10 @@ export class UserService extends MongoRepository<User> {
     const workSessions = this.userDeviceModel.db.collection('work_sessions');
     const activeDay: any = await workSessions.findOne(
       { userId, status: 'ACTIVE', isDeleted: { $ne: true } },
-      { sort: { dayStartTime: -1 }, projection: { workSessionId: 1, deviceId: 1, deviceLockReleased: 1 } },
+      {
+        sort: { dayStartTime: -1 },
+        projection: { workSessionId: 1, deviceId: 1, deviceLockReleased: 1 },
+      },
     );
     if (!activeDay) return;
 
@@ -630,7 +667,13 @@ export class UserService extends MongoRepository<User> {
       // Lock released by admin: this device takes the day over
       await workSessions.updateOne(
         { workSessionId: activeDay.workSessionId },
-        { $set: { deviceId, deviceLockReleased: false, deviceTakenOverAt: new Date() } },
+        {
+          $set: {
+            deviceId,
+            deviceLockReleased: false,
+            deviceTakenOverAt: new Date(),
+          },
+        },
       );
       return;
     }
@@ -650,7 +693,9 @@ export class UserService extends MongoRepository<User> {
       .findOne({ userId, deviceId: lockedDeviceId })
       .lean();
     const name =
-      [lockedDevice?.brand, lockedDevice?.modelName].filter(Boolean).join(' ') ||
+      [lockedDevice?.brand, lockedDevice?.modelName]
+        .filter(Boolean)
+        .join(' ') ||
       lockedDevice?.deviceName ||
       'another device';
     const reason = `Your work day is active on ${name}. Complete the day on that device while it is online (so your data syncs), then sign in here. Lost the device? Ask your admin to release it.`;

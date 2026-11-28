@@ -13,7 +13,18 @@ import { MasterBulkService } from './master-bulk.service';
 import { RoleModule } from '../role/role.module';
 
 @Module({
-  imports: [CountryModule, ProvinceModule, PositionModule, CustomerCategoryModule, ChannelModule, OutletTypeModule, MarketModule, ProductCategoryModule, SegmentationModule, RoleModule],
+  imports: [
+    CountryModule,
+    ProvinceModule,
+    PositionModule,
+    CustomerCategoryModule,
+    ChannelModule,
+    OutletTypeModule,
+    MarketModule,
+    ProductCategoryModule,
+    SegmentationModule,
+    RoleModule,
+  ],
   controllers: [MasterBulkController],
   providers: [MasterBulkService],
   exports: [MasterBulkService],

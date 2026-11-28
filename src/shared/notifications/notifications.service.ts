@@ -25,8 +25,7 @@ const toMessagingData = (data?: Record<string, unknown>) => {
     (result, [key, value]) => {
       if (value === undefined || value === null) return result;
 
-      result[key] =
-        typeof value === 'string' ? value : JSON.stringify(value);
+      result[key] = typeof value === 'string' ? value : JSON.stringify(value);
 
       return result;
     },

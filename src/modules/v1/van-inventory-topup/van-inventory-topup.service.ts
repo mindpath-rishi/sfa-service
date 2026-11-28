@@ -358,12 +358,14 @@ export class VanInventoryTopupService extends MongoRepository<VanInventoryTopup>
 
         // Next ERP stock id suffix, never reusing one already sent to ERP
         const allItems = await this.vanInventoryTopupItemService.findLean(
-          { vanInventoryTopupId } as any,
+          { vanInventoryTopupId },
           { session, includeDeleted: true },
         );
         let nextStockSequence = allItems.reduce((max: number, item: any) => {
           const sequence = Number(
-            String(item.erpStockId || '').split('-').pop(),
+            String(item.erpStockId || '')
+              .split('-')
+              .pop(),
           );
           return Number.isFinite(sequence) ? Math.max(max, sequence) : max;
         }, 0);
@@ -391,7 +393,7 @@ export class VanInventoryTopupService extends MongoRepository<VanInventoryTopup>
               erpStockId: previouslyRemoved.erpStockId,
             });
             await this.vanInventoryTopupItemService.updateOne(
-              { vanInventoryTopupId, productId: item.productId } as any,
+              { vanInventoryTopupId, productId: item.productId },
               {
                 $set: {
                   ...item,
@@ -401,7 +403,7 @@ export class VanInventoryTopupService extends MongoRepository<VanInventoryTopup>
                   erpRequestSyncStatus: VanInventoryTopupErpSyncStatus.PENDING,
                   erpTransferSyncStatus: VanInventoryTopupErpSyncStatus.PENDING,
                 },
-              } as any,
+              },
               { session, includeDeleted: true },
             );
             continue;
@@ -429,7 +431,7 @@ export class VanInventoryTopupService extends MongoRepository<VanInventoryTopup>
 
           changedItems.push({ ...item, erpStockId: current.erpStockId });
           await this.vanInventoryTopupItemService.updateOne(
-            { vanInventoryTopupId, productId: item.productId } as any,
+            { vanInventoryTopupId, productId: item.productId },
             {
               $set: {
                 requestedQty: item.requestedQty,
@@ -446,7 +448,7 @@ export class VanInventoryTopupService extends MongoRepository<VanInventoryTopup>
                 erpRequestSyncStatus: VanInventoryTopupErpSyncStatus.PENDING,
                 erpTransferSyncStatus: VanInventoryTopupErpSyncStatus.PENDING,
               },
-            } as any,
+            },
             { session },
           );
         }
@@ -458,10 +460,10 @@ export class VanInventoryTopupService extends MongoRepository<VanInventoryTopup>
               productId: {
                 $in: removedItems.map((item: any) => item.productId),
               },
-            } as any,
+            },
             {
               $set: { isDeleted: true },
-            } as any,
+            },
             // Rows created without an isDeleted field must still be matched
             { session, includeDeleted: true },
           );
@@ -479,7 +481,7 @@ export class VanInventoryTopupService extends MongoRepository<VanInventoryTopup>
             vanInventoryTopupId,
             status: VanInventoryTopupStatus.SUBMITTED,
             isDeleted: { $ne: true },
-          } as any,
+          },
           {
             $set: {
               totalRequestedQty,
@@ -1041,14 +1043,14 @@ export class VanInventoryTopupService extends MongoRepository<VanInventoryTopup>
     const filter: FilterQuery<VanInventoryTopup> = {};
 
     if (status) {
-      filter.status = Array.isArray(status) ? ({ $in: status } as any) : status;
+      filter.status = Array.isArray(status) ? { $in: status } : status;
     }
     if (vanId) filter.vanId = vanId;
     if (employeeId) filter.employeeId = employeeId;
     if (warehouseId) filter.warehouseId = warehouseId;
 
     if (startDate || endDate) {
-      filter.date = {} as any;
+      filter.date = {};
       if (startDate) {
         const from = new Date(startDate);
         from.setHours(0, 0, 0, 0);
@@ -1062,7 +1064,7 @@ export class VanInventoryTopupService extends MongoRepository<VanInventoryTopup>
     }
 
     if (minValue || maxValue) {
-      filter.totalRequestedValue = {} as any;
+      filter.totalRequestedValue = {};
       if (minValue) (filter.totalRequestedValue as any).$gte = Number(minValue);
       if (maxValue) (filter.totalRequestedValue as any).$lte = Number(maxValue);
     }
@@ -1235,7 +1237,7 @@ export class VanInventoryTopupService extends MongoRepository<VanInventoryTopup>
           vanInventoryTopupId,
           status: VanInventoryTopupStatus.SUBMITTED,
           isDeleted: { $ne: true },
-        } as any,
+        },
         {
           $set: {
             status: VanInventoryTopupStatus.APPROVED,
@@ -1300,7 +1302,7 @@ export class VanInventoryTopupService extends MongoRepository<VanInventoryTopup>
           vanInventoryTopupId,
           status: VanInventoryTopupStatus.SUBMITTED,
           isDeleted: { $ne: true },
-        } as any,
+        },
         {
           $set: {
             status: VanInventoryTopupStatus.REJECTED,
@@ -1470,7 +1472,7 @@ export class VanInventoryTopupService extends MongoRepository<VanInventoryTopup>
     try {
       return await this.withTransaction(async (session) => {
         const topup = await this.model
-          .findOne({ vanInventoryTopupId, isDeleted: { $ne: true } } as any)
+          .findOne({ vanInventoryTopupId, isDeleted: { $ne: true } })
           .session(session)
           .exec();
 
@@ -1576,7 +1578,7 @@ export class VanInventoryTopupService extends MongoRepository<VanInventoryTopup>
     try {
       return await this.withTransaction(async (session) => {
         const topup = await this.model
-          .findOne({ vanInventoryTopupId, isDeleted: { $ne: true } } as any)
+          .findOne({ vanInventoryTopupId, isDeleted: { $ne: true } })
           .session(session)
           .exec();
 
@@ -1958,7 +1960,7 @@ export class VanInventoryTopupService extends MongoRepository<VanInventoryTopup>
         category: 'topup',
         'data.vanInventoryTopupId': vanInventoryTopupId,
         'data.action': 'ACCEPTANCE_REQUIRED',
-      } as any,
+      },
       {
         $set: {
           isRead: true,
@@ -1967,7 +1969,7 @@ export class VanInventoryTopupService extends MongoRepository<VanInventoryTopup>
           'data.action': status,
           'data.resolvedAt': new Date(),
         },
-      } as any,
+      },
       { session },
     );
   }

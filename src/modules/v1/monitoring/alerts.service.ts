@@ -1,4 +1,10 @@
-import { HttpStatus, Injectable, Logger, NotFoundException, OnModuleInit } from '@nestjs/common';
+import {
+  HttpStatus,
+  Injectable,
+  Logger,
+  NotFoundException,
+  OnModuleInit,
+} from '@nestjs/common';
 import { InjectConnection } from '@nestjs/mongoose';
 import { Connection } from 'mongoose';
 import { RequestContextStore } from 'src/core/context/request-context';
@@ -46,7 +52,13 @@ export class AlertsService implements OnModuleInit {
       this.alerts.createIndex({ fingerprint: 1, status: 1 }),
       this.alerts.createIndex({ status: 1, lastSeenAt: -1 }),
       // Resolved alerts are history; keep 90 days.
-      this.alerts.createIndex({ resolvedAt: 1 }, { expireAfterSeconds: 90 * 86400, partialFilterExpression: { status: 'RESOLVED' } }),
+      this.alerts.createIndex(
+        { resolvedAt: 1 },
+        {
+          expireAfterSeconds: 90 * 86400,
+          partialFilterExpression: { status: 'RESOLVED' },
+        },
+      ),
     ]).catch((error) => this.logger.warn(`Alert indexes: ${error?.message}`));
   }
 
@@ -62,11 +74,21 @@ export class AlertsService implements OnModuleInit {
       if (seen.has(candidate.fingerprint)) continue;
       seen.add(candidate.fingerprint);
 
-      const existing = await this.alerts.findOne({ fingerprint: candidate.fingerprint, status: { $in: ['OPEN', 'ACKNOWLEDGED'] } });
+      const existing = await this.alerts.findOne({
+        fingerprint: candidate.fingerprint,
+        status: { $in: ['OPEN', 'ACKNOWLEDGED'] },
+      });
       if (existing) {
         await this.alerts.updateOne(
           { _id: existing._id },
-          { $set: { lastSeenAt: now, detail: candidate.detail, severity: candidate.severity }, $inc: { occurrences: 1 } },
+          {
+            $set: {
+              lastSeenAt: now,
+              detail: candidate.detail,
+              severity: candidate.severity,
+            },
+            $inc: { occurrences: 1 },
+          },
         );
         continue;
       }
@@ -83,7 +105,10 @@ export class AlertsService implements OnModuleInit {
     }
 
     const resolved = await this.alerts.updateMany(
-      { status: { $in: ['OPEN', 'ACKNOWLEDGED'] }, fingerprint: { $nin: [...seen] } },
+      {
+        status: { $in: ['OPEN', 'ACKNOWLEDGED'] },
+        fingerprint: { $nin: [...seen] },
+      },
       { $set: { status: 'RESOLVED', resolvedAt: now } },
     );
 
@@ -96,16 +121,35 @@ export class AlertsService implements OnModuleInit {
       resolved: resolved.modifiedCount,
       tookMs: Date.now() - started,
     };
-    this.logger.log(`Alert check: ${summary.opened} new, ${summary.resolved} resolved, ${summary.checked} active (${summary.tookMs} ms)`);
+    this.logger.log(
+      `Alert check: ${summary.opened} new, ${summary.resolved} resolved, ${summary.checked} active (${summary.tookMs} ms)`,
+    );
     return summary;
   }
 
   async list(status?: string, page = 1, limit = 50) {
-    const filter = status && status !== 'ALL' ? { status } : { status: { $in: ['OPEN', 'ACKNOWLEDGED'] } };
+    const filter =
+      status && status !== 'ALL'
+        ? { status }
+        : { status: { $in: ['OPEN', 'ACKNOWLEDGED'] } };
     const [items, total, counts] = await Promise.all([
-      this.alerts.find(filter).sort({ severity: 1, lastSeenAt: -1 }).skip((page - 1) * limit).limit(limit).toArray(),
+      this.alerts
+        .find(filter)
+        .sort({ severity: 1, lastSeenAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .toArray(),
       this.alerts.countDocuments(filter),
-      this.alerts.aggregate([{ $group: { _id: { status: '$status', severity: '$severity' }, count: { $sum: 1 } } }]).toArray(),
+      this.alerts
+        .aggregate([
+          {
+            $group: {
+              _id: { status: '$status', severity: '$severity' },
+              count: { $sum: 1 },
+            },
+          },
+        ])
+        .toArray(),
     ]);
     return {
       statusCode: HttpStatus.OK,
@@ -125,10 +169,22 @@ export class AlertsService implements OnModuleInit {
     const context = RequestContextStore.getStore();
     const result = await this.alerts.updateOne(
       { alertId, status: 'OPEN' },
-      { $set: { status: 'ACKNOWLEDGED', acknowledgedAt: new Date(), acknowledgedBy: { employeeId: context?.userId, name: context?.name }, note } },
+      {
+        $set: {
+          status: 'ACKNOWLEDGED',
+          acknowledgedAt: new Date(),
+          acknowledgedBy: { employeeId: context?.userId, name: context?.name },
+          note,
+        },
+      },
     );
-    if (!result.matchedCount) throw new NotFoundException('No open alert with this ID');
-    return { statusCode: HttpStatus.OK, message: 'Alert acknowledged', data: { alertId } };
+    if (!result.matchedCount)
+      throw new NotFoundException('No open alert with this ID');
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'Alert acknowledged',
+      data: { alertId },
+    };
   }
 
   /* ==================== HELPERS ==================== */
@@ -139,7 +195,13 @@ export class AlertsService implements OnModuleInit {
     const scan = await this.featureDebug.scan(undefined, 1);
     for (const feature of scan.data.features) {
       if (feature.error) {
-        candidates.push({ fingerprint: `scan-error:${feature.feature}`, severity: 'WARN', source: feature.label, problem: 'Scan failed', detail: feature.error });
+        candidates.push({
+          fingerprint: `scan-error:${feature.feature}`,
+          severity: 'WARN',
+          source: feature.label,
+          problem: 'Scan failed',
+          detail: feature.error,
+        });
       }
       for (const finding of feature.findings) {
         candidates.push({
@@ -174,37 +236,70 @@ export class AlertsService implements OnModuleInit {
     const title = failures.length
       ? `${failures.length} new problem(s) in SFA`
       : `${opened.length} new warning(s) in SFA`;
-    const lines = [...failures, ...opened.filter((alert) => alert.severity === 'WARN')]
+    const lines = [
+      ...failures,
+      ...opened.filter((alert) => alert.severity === 'WARN'),
+    ]
       .slice(0, 8)
-      .map((alert) => `• ${alert.source}: ${alert.problem}${alert.target ? ` (${alert.target.id})` : ''}`);
+      .map(
+        (alert) =>
+          `• ${alert.source}: ${alert.problem}${alert.target ? ` (${alert.target.id})` : ''}`,
+      );
     if (opened.length > 8) lines.push(`…and ${opened.length - 8} more`);
     const body = lines.join('\n');
 
     const recipients = await this.superAdminIds();
     for (const recipientId of recipients) {
       await this.notifications
-        .create({ recipientId, title, body, category: 'SYSTEM_ALERT', data: { route: '/monitoring', type: 'SYSTEM_ALERT' } } as any)
-        .catch((error) => this.logger.warn(`Alert notification to ${recipientId} failed: ${error?.message}`));
+        .create({
+          recipientId,
+          title,
+          body,
+          category: 'SYSTEM_ALERT',
+          data: { route: '/monitoring', type: 'SYSTEM_ALERT' },
+        } as any)
+        .catch((error) =>
+          this.logger.warn(
+            `Alert notification to ${recipientId} failed: ${error?.message}`,
+          ),
+        );
     }
 
     const webhook = process.env.ALERT_WEBHOOK_URL;
     if (webhook) {
-      const link = process.env.MIS_PUBLIC_URL ? `\n${process.env.MIS_PUBLIC_URL.replace(/\/$/, '')}/monitoring` : '';
+      const link = process.env.MIS_PUBLIC_URL
+        ? `\n${process.env.MIS_PUBLIC_URL.replace(/\/$/, '')}/monitoring`
+        : '';
       // `text` is understood by Slack, Google Chat and Teams incoming webhooks.
       await fetch(webhook, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text: `*${title}*\n${body}${link}` }),
         signal: AbortSignal.timeout(10_000),
-      }).catch((error) => this.logger.warn(`Alert webhook failed: ${error?.message}`));
+      }).catch((error) =>
+        this.logger.warn(`Alert webhook failed: ${error?.message}`),
+      );
     }
   }
 
   private async superAdminIds(): Promise<string[]> {
     const positions = await this.connection
       .collection('position_master')
-      .find({ employeeId: { $exists: true, $ne: null }, status: 'ACTIVE', isDeleted: { $ne: true } }, { projection: { employeeId: 1, roleId: 1 } })
+      .find(
+        {
+          employeeId: { $exists: true, $ne: null },
+          status: 'ACTIVE',
+          isDeleted: { $ne: true },
+        },
+        { projection: { employeeId: 1, roleId: 1 } },
+      )
       .toArray();
-    return [...new Set(positions.filter((position) => isSuperAdmin(position.roleId)).map((position) => String(position.employeeId)))];
+    return [
+      ...new Set(
+        positions
+          .filter((position) => isSuperAdmin(position.roleId))
+          .map((position) => String(position.employeeId)),
+      ),
+    ];
   }
 }

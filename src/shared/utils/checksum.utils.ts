@@ -7,7 +7,10 @@ export class ChecksumUtil {
    * ✅ Generate checksum for any Buffer
    * Default: sha256 (recommended)
    */
-  static generate(buffer: Buffer, algorithm: ChecksumAlgorithm = 'sha256'): string {
+  static generate(
+    buffer: Buffer,
+    algorithm: ChecksumAlgorithm = 'sha256',
+  ): string {
     return createHash(algorithm).update(buffer).digest('hex');
   }
 

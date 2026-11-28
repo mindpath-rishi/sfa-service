@@ -1,4 +1,3 @@
-
 export enum RouteCustomerMappingStatus {
   ACTIVE = 'ACTIVE',
   INACTIVE = 'INACTIVE',

@@ -1,5 +1,3 @@
-import { WorkSessionStatus } from 'src/shared/enums/work-session.enums';
-
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsNotEmpty,

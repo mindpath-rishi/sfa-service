@@ -8,7 +8,7 @@ import { PaginationDto } from 'src/shared/dto/pagination.dto';
  * Beat Query DTO
  * ===================
  * Data Transfer Object for querying Beat records
- * 
+ *
  * Extends PaginationDto for pagination support
  */
 export class BeatQueryDto extends PaginationDto {
@@ -18,7 +18,7 @@ export class BeatQueryDto extends PaginationDto {
    * Search by name, code, or identifier
    */
 
-  @ApiPropertyOptional({ description: "Search by name, code, or identifier" })
+  @ApiPropertyOptional({ description: 'Search by name, code, or identifier' })
   @IsOptional()
   @IsString()
   searchText?: string;

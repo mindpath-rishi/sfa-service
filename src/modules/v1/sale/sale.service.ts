@@ -14,7 +14,6 @@ import { ClientSession, Model } from 'mongoose';
 
 import { MongoService } from 'src/core/database/mongo/mongo.service';
 import { MongoRepository } from 'src/core/database/mongo/mongo.repository';
-import { FilterQuery } from 'src/core/database/mongo/mongo.interface';
 
 import { Sale, SaleSchema } from 'src/core/database/mongo/schema/sale.schema';
 import {
@@ -25,6 +24,7 @@ import {
 import { IdGenerator } from 'src/shared/utils/id-generator.utils';
 import { ProductService } from '../product/product.service';
 import { SalePaymentStatus, SaleType } from 'src/shared/enums/sale.enums';
+import { PaymentMode } from 'src/shared/enums/payment.enums';
 import { CreateSaleDto } from './dto/create-sale.dto';
 import { SaleItemService } from '../sale-item/sale-item.service';
 import { PaymentService } from '../payment/payment.service';
@@ -449,7 +449,8 @@ export class SaleService extends MongoRepository<Sale> implements OnModuleInit {
               ...lineScheme,
               minimumQuantity: lineScheme.minimumQuantity ?? 0,
               discountAmount: toFixed4(
-                (existingScheme?.discountAmount ?? 0) + lineScheme.discountAmount,
+                (existingScheme?.discountAmount ?? 0) +
+                  lineScheme.discountAmount,
               ),
               freeQty: (existingScheme?.freeQty ?? 0) + lineScheme.freeQty,
               freeProductId:
@@ -776,7 +777,7 @@ export class SaleService extends MongoRepository<Sale> implements OnModuleInit {
          * CREATE PAYMENT
          * ====================================================== */
 
-        if (paidAmount > 0 && payload?.paymentMode !== 'CREDIT') {
+        if (paidAmount > 0 && payload?.paymentMode !== PaymentMode.CREDIT) {
           await this.paymentService.create(
             {
               customerId: doc.customerId,
@@ -1576,211 +1577,207 @@ export class SaleService extends MongoRepository<Sale> implements OnModuleInit {
       match.customerId = outletId;
     }
 
-    try {
-      const rawData = await this.model
-        .aggregate([
-          {
-            $match: match,
-          },
+    const rawData = await this.model
+      .aggregate([
+        {
+          $match: match,
+        },
 
-          /**
-           * Lookup sale_items only.
-           * No product_master lookup needed.
-           */
-          {
-            $lookup: {
-              from: 'sale_items',
-              let: {
-                saleId: '$saleId',
-              },
-              pipeline: [
-                {
-                  $match: {
-                    $expr: {
-                      $eq: ['$saleId', '$$saleId'],
-                    },
+        /**
+         * Lookup sale_items only.
+         * No product_master lookup needed.
+         */
+        {
+          $lookup: {
+            from: 'sale_items',
+            let: {
+              saleId: '$saleId',
+            },
+            pipeline: [
+              {
+                $match: {
+                  $expr: {
+                    $eq: ['$saleId', '$$saleId'],
                   },
                 },
-                {
-                  $project: {
-                    _id: 0,
-                    parentCategoryId: 1,
-                    caseQty: 1,
-                    pieceQty: 1,
-                    unitQtyInCase: 1,
-                    totalValue: 1,
-                    totalNetWeight: 1,
+              },
+              {
+                $project: {
+                  _id: 0,
+                  parentCategoryId: 1,
+                  caseQty: 1,
+                  pieceQty: 1,
+                  unitQtyInCase: 1,
+                  totalValue: 1,
+                  totalNetWeight: 1,
+                },
+              },
+            ],
+            as: 'items',
+          },
+        },
+
+        {
+          $unwind: '$items',
+        },
+
+        /**
+         * Group by month and parentCategoryId.
+         */
+        {
+          $group: {
+            _id: {
+              year: {
+                $year: '$date',
+              },
+              monthNumber: {
+                $month: '$date',
+              },
+              parentCategoryId: '$items.parentCategoryId',
+            },
+
+            totalCases: {
+              $sum: {
+                $ifNull: ['$items.caseQty', 0],
+              },
+            },
+
+            totalPieces: {
+              $sum: {
+                $ifNull: ['$items.pieceQty', 0],
+              },
+            },
+
+            totalQtyInCases: {
+              $sum: {
+                $add: [
+                  {
+                    $ifNull: ['$items.caseQty', 0],
                   },
-                },
-              ],
-              as: 'items',
+                  {
+                    $cond: [
+                      {
+                        $gt: ['$items.unitQtyInCase', 0],
+                      },
+                      {
+                        $divide: [
+                          {
+                            $ifNull: ['$items.pieceQty', 0],
+                          },
+                          '$items.unitQtyInCase',
+                        ],
+                      },
+                      0,
+                    ],
+                  },
+                ],
+              },
             },
-          },
 
-          {
-            $unwind: '$items',
-          },
-
-          /**
-           * Group by month and parentCategoryId.
-           */
-          {
-            $group: {
-              _id: {
-                year: {
-                  $year: '$date',
-                },
-                monthNumber: {
-                  $month: '$date',
-                },
-                parentCategoryId: '$items.parentCategoryId',
+            totalValue: {
+              $sum: {
+                $ifNull: ['$items.totalValue', 0],
               },
+            },
 
-              totalCases: {
-                $sum: {
-                  $ifNull: ['$items.caseQty', 0],
-                },
-              },
-
-              totalPieces: {
-                $sum: {
-                  $ifNull: ['$items.pieceQty', 0],
-                },
-              },
-
-              totalQtyInCases: {
-                $sum: {
-                  $add: [
-                    {
-                      $ifNull: ['$items.caseQty', 0],
-                    },
-                    {
-                      $cond: [
-                        {
-                          $gt: ['$items.unitQtyInCase', 0],
-                        },
-                        {
-                          $divide: [
-                            {
-                              $ifNull: ['$items.pieceQty', 0],
-                            },
-                            '$items.unitQtyInCase',
-                          ],
-                        },
-                        0,
-                      ],
-                    },
-                  ],
-                },
-              },
-
-              totalValue: {
-                $sum: {
-                  $ifNull: ['$items.totalValue', 0],
-                },
-              },
-
-              totalWeight: {
-                $sum: {
-                  $ifNull: ['$items.totalNetWeight', 0],
-                },
+            totalWeight: {
+              $sum: {
+                $ifNull: ['$items.totalNetWeight', 0],
               },
             },
           },
+        },
 
-          {
-            $project: {
-              _id: 0,
+        {
+          $project: {
+            _id: 0,
 
-              year: '$_id.year',
-              monthNumber: '$_id.monthNumber',
-              parentCategoryId: '$_id.parentCategoryId',
+            year: '$_id.year',
+            monthNumber: '$_id.monthNumber',
+            parentCategoryId: '$_id.parentCategoryId',
 
-              totalCases: 1,
-              totalPieces: 1,
+            totalCases: 1,
+            totalPieces: 1,
 
-              totalQtyInCases: {
-                $round: ['$totalQtyInCases', 3],
-              },
+            totalQtyInCases: {
+              $round: ['$totalQtyInCases', 3],
+            },
 
-              totalValue: {
-                $round: ['$totalValue', 3],
-              },
+            totalValue: {
+              $round: ['$totalValue', 3],
+            },
 
-              totalWeight: {
-                $round: ['$totalWeight', 3],
-              },
+            totalWeight: {
+              $round: ['$totalWeight', 3],
             },
           },
+        },
 
-          {
-            $sort: {
-              year: 1,
-              monthNumber: 1,
-              totalValue: -1,
-            },
+        {
+          $sort: {
+            year: 1,
+            monthNumber: 1,
+            totalValue: -1,
           },
-        ])
-        .allowDiskUse(true);
+        },
+      ])
+      .allowDiskUse(true);
 
-      /**
-       * ================= ADD CATEGORY NAME =================
-       */
-      const formattedRawData = rawData.map((item) => ({
-        ...item,
-        categoryName: categoryNameMap.get(item.parentCategoryId) || 'UNKNOWN',
-      }));
+    /**
+     * ================= ADD CATEGORY NAME =================
+     */
+    const formattedRawData = rawData.map((item) => ({
+      ...item,
+      categoryName: categoryNameMap.get(item.parentCategoryId) || 'UNKNOWN',
+    }));
 
-      /**
-       * Get only categories that have sales in last 6 months.
-       */
-      const soldCategoryNames = [
-        ...new Set(formattedRawData.map((item) => item.categoryName)),
-      ];
+    /**
+     * Get only categories that have sales in last 6 months.
+     */
+    const soldCategoryNames = [
+      ...new Set(formattedRawData.map((item) => item.categoryName)),
+    ];
 
-      /**
-       * Fast lookup map instead of rawData.find inside nested loop.
-       */
-      const salesMap = new Map<string, any>();
+    /**
+     * Fast lookup map instead of rawData.find inside nested loop.
+     */
+    const salesMap = new Map<string, any>();
 
-      for (const item of formattedRawData) {
-        const key = `${item.year}-${item.monthNumber}-${item.categoryName}`;
-        salesMap.set(key, item);
-      }
-
-      /**
-       * ================= FINAL DATA =================
-       */
-      const finalData: any[] = [];
-
-      for (const monthData of orderedMonthsData) {
-        for (const categoryName of soldCategoryNames) {
-          const key = `${monthData.year}-${monthData.monthNumber}-${categoryName}`;
-          const existing = salesMap.get(key);
-
-          finalData.push({
-            year: monthData.year,
-            monthNumber: monthData.monthNumber,
-            month: monthData.month,
-            categoryName,
-
-            totalCases: existing?.totalCases ?? 0,
-            totalPieces: existing?.totalPieces ?? 0,
-            totalQtyInCases: existing?.totalQtyInCases ?? 0,
-            totalValue: existing?.totalValue ?? 0,
-            totalWeight: existing?.totalWeight ?? 0,
-          });
-        }
-      }
-
-      return {
-        statusCode: HttpStatus.OK,
-        message: 'Last six month category wise sales fetched successfully',
-        data: finalData,
-      };
-    } catch (error) {
-      throw error;
+    for (const item of formattedRawData) {
+      const key = `${item.year}-${item.monthNumber}-${item.categoryName}`;
+      salesMap.set(key, item);
     }
+
+    /**
+     * ================= FINAL DATA =================
+     */
+    const finalData: any[] = [];
+
+    for (const monthData of orderedMonthsData) {
+      for (const categoryName of soldCategoryNames) {
+        const key = `${monthData.year}-${monthData.monthNumber}-${categoryName}`;
+        const existing = salesMap.get(key);
+
+        finalData.push({
+          year: monthData.year,
+          monthNumber: monthData.monthNumber,
+          month: monthData.month,
+          categoryName,
+
+          totalCases: existing?.totalCases ?? 0,
+          totalPieces: existing?.totalPieces ?? 0,
+          totalQtyInCases: existing?.totalQtyInCases ?? 0,
+          totalValue: existing?.totalValue ?? 0,
+          totalWeight: existing?.totalWeight ?? 0,
+        });
+      }
+    }
+
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'Last six month category wise sales fetched successfully',
+      data: finalData,
+    };
   }
 
   async getCategoryWiseSaleDetail(query: {
@@ -2391,7 +2388,7 @@ export class SaleService extends MongoRepository<Sale> implements OnModuleInit {
 
   /** Retry one sale to ERP (used by the Feature Debugger repair action). */
   async retrySaleToERP(saleId: string) {
-    const sale = await this.findOne({ saleId } as any);
+    const sale = await this.findOne({ saleId });
     if (!sale) throw new NotFoundException(`Sale ${saleId} not found`);
     const items = await this.saleItemService.findLean({ saleId });
     const synced = await this.syncSaleToERP({ sale, items, saleId });

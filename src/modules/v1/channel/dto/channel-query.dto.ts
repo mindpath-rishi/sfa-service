@@ -1,12 +1,7 @@
 import { ChannelStatus } from 'src/shared/enums/channel.enums';
 
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import {
-  IsOptional,
-  IsString,
-  MaxLength,
-  IsEnum,
-} from 'class-validator';
+import { IsOptional, IsString, MaxLength, IsEnum } from 'class-validator';
 import { PaginationDto } from 'src/shared/dto/pagination.dto';
 
 /**

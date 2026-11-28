@@ -8,7 +8,7 @@ import { PaginationDto } from 'src/shared/dto/pagination.dto';
  * Market Query DTO
  * ===================
  * Data Transfer Object for querying Market records
- * 
+ *
  * Extends PaginationDto for pagination support
  */
 export class MarketQueryDto extends PaginationDto {
@@ -22,7 +22,7 @@ export class MarketQueryDto extends PaginationDto {
    * Search by name, code, or identifier
    */
 
-  @ApiPropertyOptional({ description: "Search by name, code, or identifier" })
+  @ApiPropertyOptional({ description: 'Search by name, code, or identifier' })
   @IsOptional()
   @IsString()
   searchText?: string;

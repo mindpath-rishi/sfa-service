@@ -30,10 +30,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
 
       if (typeof response === 'string') {
         message = response;
-      } else if (
-        typeof response === 'object' &&
-        (response as any)?.message
-      ) {
+      } else if (typeof response === 'object' && (response as any)?.message) {
         message = Array.isArray((response as any).message)
           ? (response as any).message[0]
           : (response as any).message;
@@ -45,7 +42,8 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     // A streaming response (e.g. a log download) that fails midway has
     // already sent its headers; it can only be ended, not answered again.
     if (res.headersSent) {
-      (res as any).err = exception instanceof Error ? exception : new Error(String(exception));
+      (res as any).err =
+        exception instanceof Error ? exception : new Error(String(exception));
       if (!res.writableEnded) res.end();
       return;
     }
@@ -56,7 +54,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     // failed request is one log entry with its request id and user.
     res.locals.errorMessage = message;
 
-    if (status >= HttpStatus.INTERNAL_SERVER_ERROR) {
+    if (status >= (HttpStatus.INTERNAL_SERVER_ERROR as number)) {
       // Attaching the error makes pino-http log its stack on the access line.
       (res as any).err =
         exception instanceof Error ? exception : new Error(String(exception));
@@ -80,7 +78,12 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     if (isHttpException) {
       const body = exception.getResponse();
       if (body && typeof body === 'object') {
-        const { message: _m, statusCode: _s, error: _e, ...extra } = body as Record<string, unknown>;
+        const {
+          message: _m,
+          statusCode: _s,
+          error: _e,
+          ...extra
+        } = body as Record<string, unknown>;
         Object.assign(errorResponse, extra);
       }
     }

@@ -18,7 +18,6 @@ import { STOCK_COUNT_ITEM } from './stock-count-item.constants';
 import { CreateStockCountItemDto } from './dto/create-stock-count-item.dto';
 import { UpdateStockCountItemDto } from './dto/update-stock-count-item.dto';
 import { StockCountItemQueryDto } from './dto/stock-count-item-query.dto';
-import { IdGenerator } from 'src/shared/utils/id-generator.utils';
 
 @Injectable()
 export class StockCountItemService extends MongoRepository<StockCountItem> {

@@ -28,8 +28,14 @@ export class MasterBulkController {
   constructor(private readonly service: MasterBulkService) {}
 
   @Post('bulk-upload/:entity')
-  bulkUpload(@Param('entity') entity: string, @Body() dto: MasterBulkUploadDto) {
-    return this.service.upload(entity, dto.items.map((item) => item.value));
+  bulkUpload(
+    @Param('entity') entity: string,
+    @Body() dto: MasterBulkUploadDto,
+  ) {
+    return this.service.upload(
+      entity,
+      dto.items.map((item) => item.value),
+    );
   }
 
   @Get('export/:entity')
@@ -46,22 +52,27 @@ export class MasterBulkController {
       fileType?: 'xlsx' | 'csv' | 'pdf';
       type?: string;
     };
-    const file = await this.service.export(
-      entity,
-      fileType as 'xlsx' | 'csv' | 'pdf',
-      type,
-      filters,
-    );
+    const file = await this.service.export(entity, fileType, type, filters);
     res.setHeader('Content-Type', file.mimeType);
-    res.setHeader('Content-Disposition', `attachment; filename="${file.fileName}"`);
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${file.fileName}"`,
+    );
     res.send(file.buffer);
   }
 
   @Get('bulk-template/:entity')
-  async template(@Param('entity') entity: string, @Query('type') type: string | undefined, @Res() res: Response) {
+  async template(
+    @Param('entity') entity: string,
+    @Query('type') type: string | undefined,
+    @Res() res: Response,
+  ) {
     const file = await this.service.template(entity, type);
     res.setHeader('Content-Type', file.mimeType);
-    res.setHeader('Content-Disposition', `attachment; filename="${file.fileName}"`);
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${file.fileName}"`,
+    );
     res.send(file.buffer);
   }
 }

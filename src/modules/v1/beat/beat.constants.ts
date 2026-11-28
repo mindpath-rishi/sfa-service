@@ -1,4 +1,3 @@
-
 export const BEAT = {
   CREATED: 'Beat created successfully',
   FETCHED: 'Beat fetched successfully',

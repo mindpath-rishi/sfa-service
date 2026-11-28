@@ -1,4 +1,3 @@
-
 export const ROUTE_CUSTOMER_MAPPING = {
   CREATED: 'RouteCustomerMapping created successfully',
   FETCHED: 'RouteCustomerMapping fetched successfully',

@@ -836,458 +836,454 @@ export class VanDailyStockService extends MongoRepository<VanDailyStock> {
   // }
 
   async getDayEndSummary(vanId: string, workSessionId?: string, date?: Date) {
-    try {
+    /**
+     * ======================================================
+     * 1. DATE FILTER
+     * ======================================================
+     */
+    const targetDate = new Date(date || new Date());
+    targetDate.setHours(0, 0, 0, 0);
+
+    const endDate = new Date(targetDate);
+    endDate.setHours(23, 59, 59, 999);
+
+    /**
+     * ======================================================
+     * 2. GET ACTIVE ROUTE SESSION FROM WORK SESSION
+     * ======================================================
+     */
+    let customerCategoryId = '';
+    let customerCategoryCode = '';
+
+    if (workSessionId) {
+      const activeRouteSession = await this.model.db
+        .collection('route_sessions')
+        .findOne({
+          workSessionId,
+          vanId,
+          // status: 'ACTIVE',
+          isDeleted: { $ne: true },
+        });
+
+      const routeId = String(activeRouteSession?.routeId ?? '');
+
+      if (routeId) {
+        const route = await this.model.db.collection('route_master').findOne({
+          routeId,
+          isDeleted: { $ne: true },
+        });
+
+        customerCategoryId = String(
+          route?.customerCategoryId ??
+            activeRouteSession?.customerCategoryId ??
+            '',
+        );
+      } else {
+        customerCategoryId = String(
+          activeRouteSession?.customerCategoryId ?? '',
+        );
+      }
+
       /**
-       * ======================================================
-       * 1. DATE FILTER
-       * ======================================================
+       * price_master has categoryCode, not customerCategoryId.
+       * So convert customerCategoryId to categoryCode.
        */
-      const targetDate = new Date(date || new Date());
-      targetDate.setHours(0, 0, 0, 0);
-
-      const endDate = new Date(targetDate);
-      endDate.setHours(23, 59, 59, 999);
-
-      /**
-       * ======================================================
-       * 2. GET ACTIVE ROUTE SESSION FROM WORK SESSION
-       * ======================================================
-       */
-      let customerCategoryId = '';
-      let customerCategoryCode = '';
-
-      if (workSessionId) {
-        const activeRouteSession = await this.model.db
-          .collection('route_sessions')
+      if (customerCategoryId) {
+        const customerCategory = await this.model.db
+          .collection('customer_category_master')
           .findOne({
-            workSessionId,
-            vanId,
-            // status: 'ACTIVE',
+            customerCategoryId,
             isDeleted: { $ne: true },
           });
 
-        const routeId = String(activeRouteSession?.routeId ?? '');
-
-        if (routeId) {
-          const route = await this.model.db.collection('route_master').findOne({
-            routeId,
-            isDeleted: { $ne: true },
-          });
-
-          customerCategoryId = String(
-            route?.customerCategoryId ??
-              activeRouteSession?.customerCategoryId ??
-              '',
-          );
-        } else {
-          customerCategoryId = String(
-            activeRouteSession?.customerCategoryId ?? '',
-          );
-        }
-
-        /**
-         * price_master has categoryCode, not customerCategoryId.
-         * So convert customerCategoryId to categoryCode.
-         */
-        if (customerCategoryId) {
-          const customerCategory = await this.model.db
-            .collection('customer_category_master')
-            .findOne({
-              customerCategoryId,
-              isDeleted: { $ne: true },
-            });
-
-          customerCategoryCode = String(
-            customerCategory?.categoryCode ??
-              customerCategory?.code ??
-              customerCategory?.customerCategoryCode ??
-              customerCategoryId,
-          );
-        }
+        customerCategoryCode = String(
+          customerCategory?.categoryCode ??
+            customerCategory?.code ??
+            customerCategory?.customerCategoryCode ??
+            customerCategoryId,
+        );
       }
+    }
+
+    /**
+     * ======================================================
+     * 3. MATCH FILTER
+     * ======================================================
+     */
+    const matchFilter: Record<string, unknown> = {
+      vanId,
+      date: {
+        $gte: targetDate,
+        $lte: endDate,
+      },
+      isDeleted: { $ne: true },
+    };
+
+    if (workSessionId) {
+      matchFilter.workSessionId = workSessionId;
+    }
+
+    /**
+     * ======================================================
+     * 4. AGGREGATION
+     * ======================================================
+     */
+    const result = await this.model.aggregate([
+      {
+        $match: matchFilter,
+      },
+      {
+        $lookup: {
+          from: 'product_master',
+          localField: 'productId',
+          foreignField: 'productId',
+          as: 'product',
+        },
+      },
+      {
+        $unwind: {
+          path: '$product',
+          preserveNullAndEmptyArrays: true,
+        },
+      },
 
       /**
        * ======================================================
-       * 3. MATCH FILTER
+       * PRICE MASTER LOOKUP
+       *
+       * Price schema fields:
+       * - productId
+       * - categoryCode
+       * - casePriceExclVat
+       * - casePriceInclVat
+       * - piecePriceExclVat
+       * - piecePriceInclVat
+       * - effectiveDate
+       * - priceFlag
        * ======================================================
        */
-      const matchFilter: Record<string, unknown> = {
-        vanId,
-        date: {
-          $gte: targetDate,
-          $lte: endDate,
-        },
-        isDeleted: { $ne: true },
-      };
-
-      if (workSessionId) {
-        matchFilter.workSessionId = workSessionId;
-      }
-
-      /**
-       * ======================================================
-       * 4. AGGREGATION
-       * ======================================================
-       */
-      const result = await this.model.aggregate([
-        {
-          $match: matchFilter,
-        },
-        {
-          $lookup: {
-            from: 'product_master',
-            localField: 'productId',
-            foreignField: 'productId',
-            as: 'product',
+      {
+        $lookup: {
+          from: 'price_master',
+          let: {
+            productId: '$productId',
+            categoryCode: customerCategoryCode,
           },
-        },
-        {
-          $unwind: {
-            path: '$product',
-            preserveNullAndEmptyArrays: true,
-          },
-        },
-
-        /**
-         * ======================================================
-         * PRICE MASTER LOOKUP
-         *
-         * Price schema fields:
-         * - productId
-         * - categoryCode
-         * - casePriceExclVat
-         * - casePriceInclVat
-         * - piecePriceExclVat
-         * - piecePriceInclVat
-         * - effectiveDate
-         * - priceFlag
-         * ======================================================
-         */
-        {
-          $lookup: {
-            from: 'price_master',
-            let: {
-              productId: '$productId',
-              categoryCode: customerCategoryCode,
-            },
-            pipeline: [
-              {
-                $match: {
-                  $expr: {
-                    $and: [
-                      {
-                        $eq: ['$productId', '$$productId'],
-                      },
-                      {
-                        $eq: ['$categoryCode', '$$categoryCode'],
-                      },
-                    ],
-                  },
-                },
-              },
-              {
-                $addFields: {
-                  effectiveDateForSort: {
-                    $convert: {
-                      input: '$effectiveDate',
-                      to: 'date',
-                      onError: new Date(0),
-                      onNull: new Date(0),
-                    },
-                  },
-                },
-              },
-              {
-                $match: {
-                  effectiveDateForSort: {
-                    $lte: new Date(),
-                  },
-                },
-              },
-              {
-                $sort: {
-                  effectiveDateForSort: -1,
-                  _id: -1,
-                },
-              },
-              {
-                $limit: 1,
-              },
-            ],
-            as: 'priceList',
-          },
-        },
-        {
-          $unwind: {
-            path: '$priceList',
-            preserveNullAndEmptyArrays: true,
-          },
-        },
-
-        /**
-         * ======================================================
-         * RESOLVE PRICE
-         *
-         * Priority:
-         * 1. price_master.piecePriceInclVat
-         * 2. price_master.piecePriceExclVat
-         * 3. van_daily_stock.piecePrice
-         * ======================================================
-         */
-        {
-          $addFields: {
-            productName: '$product.name',
-
-            resolvedPiecePrice: {
-              $ifNull: [
-                '$priceList.piecePriceInclVat',
-                {
-                  $ifNull: ['$priceList.piecePriceExclVat', '$piecePrice'],
-                },
-              ],
-            },
-
-            resolvedCasePrice: {
-              $ifNull: [
-                '$priceList.casePriceInclVat',
-                {
-                  $ifNull: [
-                    '$priceList.casePriceExclVat',
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
                     {
-                      $multiply: ['$piecePrice', '$unitQtyInCase'],
+                      $eq: ['$productId', '$$productId'],
+                    },
+                    {
+                      $eq: ['$categoryCode', '$$categoryCode'],
                     },
                   ],
                 },
-              ],
+              },
             },
-          },
+            {
+              $addFields: {
+                effectiveDateForSort: {
+                  $convert: {
+                    input: '$effectiveDate',
+                    to: 'date',
+                    onError: new Date(0),
+                    onNull: new Date(0),
+                  },
+                },
+              },
+            },
+            {
+              $match: {
+                effectiveDateForSort: {
+                  $lte: new Date(),
+                },
+              },
+            },
+            {
+              $sort: {
+                effectiveDateForSort: -1,
+                _id: -1,
+              },
+            },
+            {
+              $limit: 1,
+            },
+          ],
+          as: 'priceList',
         },
-
-        /**
-         * ======================================================
-         * CALCULATIONS USING RESOLVED PRICE
-         * ======================================================
-         */
-        {
-          $addFields: {
-            openingValue: {
-              $multiply: ['$openingQty', '$resolvedPiecePrice'],
-            },
-            receivedValue: {
-              $multiply: ['$inQty', '$resolvedPiecePrice'],
-            },
-            soldValue: {
-              $multiply: ['$outQty', '$resolvedPiecePrice'],
-            },
-            closingValue: {
-              $multiply: ['$closingQty', '$resolvedPiecePrice'],
-            },
-
-            openingWeight: {
-              $multiply: ['$openingQty', '$pieceNetWeight'],
-            },
-            receivedWeight: {
-              $multiply: ['$inQty', '$pieceNetWeight'],
-            },
-            soldWeight: {
-              $multiply: ['$outQty', '$pieceNetWeight'],
-            },
-            closingWeight: {
-              $multiply: ['$closingQty', '$pieceNetWeight'],
-            },
-
-            openingCases: {
-              $floor: {
-                $divide: ['$openingQty', '$unitQtyInCase'],
-              },
-            },
-            openingPieces: {
-              $mod: ['$openingQty', '$unitQtyInCase'],
-            },
-
-            inCases: {
-              $floor: {
-                $divide: ['$inQty', '$unitQtyInCase'],
-              },
-            },
-            inPieces: {
-              $mod: ['$inQty', '$unitQtyInCase'],
-            },
-
-            outCases: {
-              $floor: {
-                $divide: ['$outQty', '$unitQtyInCase'],
-              },
-            },
-            outPieces: {
-              $mod: ['$outQty', '$unitQtyInCase'],
-            },
-
-            closingCases: {
-              $floor: {
-                $divide: ['$closingQty', '$unitQtyInCase'],
-              },
-            },
-            closingPieces: {
-              $mod: ['$closingQty', '$unitQtyInCase'],
-            },
-          },
+      },
+      {
+        $unwind: {
+          path: '$priceList',
+          preserveNullAndEmptyArrays: true,
         },
-
-        /**
-         * ======================================================
-         * GROUP SUMMARY
-         * ======================================================
-         */
-        {
-          $group: {
-            _id: null,
-
-            openingQty: { $sum: '$openingQty' },
-            inQty: { $sum: '$inQty' },
-            outQty: { $sum: '$outQty' },
-            closingQty: { $sum: '$closingQty' },
-
-            openingValue: { $sum: '$openingValue' },
-            receivedValue: { $sum: '$receivedValue' },
-            soldValue: { $sum: '$soldValue' },
-            closingValue: { $sum: '$closingValue' },
-
-            openingWeight: { $sum: '$openingWeight' },
-            receivedWeight: { $sum: '$receivedWeight' },
-            soldWeight: { $sum: '$soldWeight' },
-            closingWeight: { $sum: '$closingWeight' },
-
-            products: {
-              $push: {
-                productId: '$productId',
-                productName: '$productName',
-
-                customerCategoryId: customerCategoryId,
-                categoryCode: customerCategoryCode,
-
-                unitQtyInCase: '$unitQtyInCase',
-
-                piecePrice: '$resolvedPiecePrice',
-                casePrice: '$resolvedCasePrice',
-
-                openingQty: '$openingQty',
-                openingCases: '$openingCases',
-                openingPieces: '$openingPieces',
-                openingValue: '$openingValue',
-                openingWeight: '$openingWeight',
-
-                inQty: '$inQty',
-                inCases: '$inCases',
-                inPieces: '$inPieces',
-                receivedValue: '$receivedValue',
-                receivedWeight: '$receivedWeight',
-
-                outQty: '$outQty',
-                outCases: '$outCases',
-                outPieces: '$outPieces',
-                soldValue: '$soldValue',
-                soldWeight: '$soldWeight',
-
-                closingQty: '$closingQty',
-                closingCases: '$closingCases',
-                closingPieces: '$closingPieces',
-                closingValue: '$closingValue',
-                closingWeight: '$closingWeight',
-              },
-            },
-          },
-        },
-      ]);
-
-      const data = result[0] || {};
+      },
 
       /**
        * ======================================================
-       * FIXED SUMMARY CASE / PIECE CALC
+       * RESOLVE PRICE
+       *
+       * Priority:
+       * 1. price_master.piecePriceInclVat
+       * 2. price_master.piecePriceExclVat
+       * 3. van_daily_stock.piecePrice
        * ======================================================
        */
-      let openingCases = 0;
-      let openingPieces = 0;
-      let inCases = 0;
-      let inPieces = 0;
-      let outCases = 0;
-      let outPieces = 0;
-      let closingCases = 0;
-      let closingPieces = 0;
+      {
+        $addFields: {
+          productName: '$product.name',
 
-      for (const p of data.products || []) {
-        openingCases += p.openingCases || 0;
-        openingPieces += p.openingPieces || 0;
-
-        inCases += p.inCases || 0;
-        inPieces += p.inPieces || 0;
-
-        outCases += p.outCases || 0;
-        outPieces += p.outPieces || 0;
-
-        closingCases += p.closingCases || 0;
-        closingPieces += p.closingPieces || 0;
-
-        p.openingItems = (p.openingCases || 0) + (p.openingPieces || 0);
-        p.receivedItems = (p.inCases || 0) + (p.inPieces || 0);
-        p.soldItems = (p.outCases || 0) + (p.outPieces || 0);
-        p.closingItems = (p.closingCases || 0) + (p.closingPieces || 0);
-      }
-
-      const openingItems = openingCases + openingPieces;
-      const receivedItems = inCases + inPieces;
-      const soldItems = outCases + outPieces;
-      const closingItems = closingCases + closingPieces;
-
-      return {
-        statusCode: 200,
-        message: 'Day end summary fetched successfully',
-        data: {
-          routePricing: {
-            customerCategoryId,
-            categoryCode: customerCategoryCode,
+          resolvedPiecePrice: {
+            $ifNull: [
+              '$priceList.piecePriceInclVat',
+              {
+                $ifNull: ['$priceList.piecePriceExclVat', '$piecePrice'],
+              },
+            ],
           },
-          summary: {
-            opening: {
-              qty: data.openingQty || 0,
-              cases: openingCases,
-              pieces: openingPieces,
-              items: openingItems,
-              value: data.openingValue || 0,
-              weight: data.openingWeight || 0,
-            },
-            received: {
-              qty: data.inQty || 0,
-              cases: inCases,
-              pieces: inPieces,
-              items: receivedItems,
-              value: data.receivedValue || 0,
-              weight: data.receivedWeight || 0,
-            },
-            sold: {
-              qty: data.outQty || 0,
-              cases: outCases,
-              pieces: outPieces,
-              items: soldItems,
-              value: data.soldValue || 0,
-              weight: data.soldWeight || 0,
-            },
-            closing: {
-              qty: data.closingQty || 0,
-              cases: closingCases,
-              pieces: closingPieces,
-              items: closingItems,
-              value: data.closingValue || 0,
-              weight: data.closingWeight || 0,
-            },
+
+          resolvedCasePrice: {
+            $ifNull: [
+              '$priceList.casePriceInclVat',
+              {
+                $ifNull: [
+                  '$priceList.casePriceExclVat',
+                  {
+                    $multiply: ['$piecePrice', '$unitQtyInCase'],
+                  },
+                ],
+              },
+            ],
           },
-          products: data.products || [],
         },
-      };
-    } catch (error) {
-      throw error;
+      },
+
+      /**
+       * ======================================================
+       * CALCULATIONS USING RESOLVED PRICE
+       * ======================================================
+       */
+      {
+        $addFields: {
+          openingValue: {
+            $multiply: ['$openingQty', '$resolvedPiecePrice'],
+          },
+          receivedValue: {
+            $multiply: ['$inQty', '$resolvedPiecePrice'],
+          },
+          soldValue: {
+            $multiply: ['$outQty', '$resolvedPiecePrice'],
+          },
+          closingValue: {
+            $multiply: ['$closingQty', '$resolvedPiecePrice'],
+          },
+
+          openingWeight: {
+            $multiply: ['$openingQty', '$pieceNetWeight'],
+          },
+          receivedWeight: {
+            $multiply: ['$inQty', '$pieceNetWeight'],
+          },
+          soldWeight: {
+            $multiply: ['$outQty', '$pieceNetWeight'],
+          },
+          closingWeight: {
+            $multiply: ['$closingQty', '$pieceNetWeight'],
+          },
+
+          openingCases: {
+            $floor: {
+              $divide: ['$openingQty', '$unitQtyInCase'],
+            },
+          },
+          openingPieces: {
+            $mod: ['$openingQty', '$unitQtyInCase'],
+          },
+
+          inCases: {
+            $floor: {
+              $divide: ['$inQty', '$unitQtyInCase'],
+            },
+          },
+          inPieces: {
+            $mod: ['$inQty', '$unitQtyInCase'],
+          },
+
+          outCases: {
+            $floor: {
+              $divide: ['$outQty', '$unitQtyInCase'],
+            },
+          },
+          outPieces: {
+            $mod: ['$outQty', '$unitQtyInCase'],
+          },
+
+          closingCases: {
+            $floor: {
+              $divide: ['$closingQty', '$unitQtyInCase'],
+            },
+          },
+          closingPieces: {
+            $mod: ['$closingQty', '$unitQtyInCase'],
+          },
+        },
+      },
+
+      /**
+       * ======================================================
+       * GROUP SUMMARY
+       * ======================================================
+       */
+      {
+        $group: {
+          _id: null,
+
+          openingQty: { $sum: '$openingQty' },
+          inQty: { $sum: '$inQty' },
+          outQty: { $sum: '$outQty' },
+          closingQty: { $sum: '$closingQty' },
+
+          openingValue: { $sum: '$openingValue' },
+          receivedValue: { $sum: '$receivedValue' },
+          soldValue: { $sum: '$soldValue' },
+          closingValue: { $sum: '$closingValue' },
+
+          openingWeight: { $sum: '$openingWeight' },
+          receivedWeight: { $sum: '$receivedWeight' },
+          soldWeight: { $sum: '$soldWeight' },
+          closingWeight: { $sum: '$closingWeight' },
+
+          products: {
+            $push: {
+              productId: '$productId',
+              productName: '$productName',
+
+              customerCategoryId: customerCategoryId,
+              categoryCode: customerCategoryCode,
+
+              unitQtyInCase: '$unitQtyInCase',
+
+              piecePrice: '$resolvedPiecePrice',
+              casePrice: '$resolvedCasePrice',
+
+              openingQty: '$openingQty',
+              openingCases: '$openingCases',
+              openingPieces: '$openingPieces',
+              openingValue: '$openingValue',
+              openingWeight: '$openingWeight',
+
+              inQty: '$inQty',
+              inCases: '$inCases',
+              inPieces: '$inPieces',
+              receivedValue: '$receivedValue',
+              receivedWeight: '$receivedWeight',
+
+              outQty: '$outQty',
+              outCases: '$outCases',
+              outPieces: '$outPieces',
+              soldValue: '$soldValue',
+              soldWeight: '$soldWeight',
+
+              closingQty: '$closingQty',
+              closingCases: '$closingCases',
+              closingPieces: '$closingPieces',
+              closingValue: '$closingValue',
+              closingWeight: '$closingWeight',
+            },
+          },
+        },
+      },
+    ]);
+
+    const data = result[0] || {};
+
+    /**
+     * ======================================================
+     * FIXED SUMMARY CASE / PIECE CALC
+     * ======================================================
+     */
+    let openingCases = 0;
+    let openingPieces = 0;
+    let inCases = 0;
+    let inPieces = 0;
+    let outCases = 0;
+    let outPieces = 0;
+    let closingCases = 0;
+    let closingPieces = 0;
+
+    for (const p of data.products || []) {
+      openingCases += p.openingCases || 0;
+      openingPieces += p.openingPieces || 0;
+
+      inCases += p.inCases || 0;
+      inPieces += p.inPieces || 0;
+
+      outCases += p.outCases || 0;
+      outPieces += p.outPieces || 0;
+
+      closingCases += p.closingCases || 0;
+      closingPieces += p.closingPieces || 0;
+
+      p.openingItems = (p.openingCases || 0) + (p.openingPieces || 0);
+      p.receivedItems = (p.inCases || 0) + (p.inPieces || 0);
+      p.soldItems = (p.outCases || 0) + (p.outPieces || 0);
+      p.closingItems = (p.closingCases || 0) + (p.closingPieces || 0);
     }
+
+    const openingItems = openingCases + openingPieces;
+    const receivedItems = inCases + inPieces;
+    const soldItems = outCases + outPieces;
+    const closingItems = closingCases + closingPieces;
+
+    return {
+      statusCode: 200,
+      message: 'Day end summary fetched successfully',
+      data: {
+        routePricing: {
+          customerCategoryId,
+          categoryCode: customerCategoryCode,
+        },
+        summary: {
+          opening: {
+            qty: data.openingQty || 0,
+            cases: openingCases,
+            pieces: openingPieces,
+            items: openingItems,
+            value: data.openingValue || 0,
+            weight: data.openingWeight || 0,
+          },
+          received: {
+            qty: data.inQty || 0,
+            cases: inCases,
+            pieces: inPieces,
+            items: receivedItems,
+            value: data.receivedValue || 0,
+            weight: data.receivedWeight || 0,
+          },
+          sold: {
+            qty: data.outQty || 0,
+            cases: outCases,
+            pieces: outPieces,
+            items: soldItems,
+            value: data.soldValue || 0,
+            weight: data.soldWeight || 0,
+          },
+          closing: {
+            qty: data.closingQty || 0,
+            cases: closingCases,
+            pieces: closingPieces,
+            items: closingItems,
+            value: data.closingValue || 0,
+            weight: data.closingWeight || 0,
+          },
+        },
+        products: data.products || [],
+      },
+    };
   }
 
   private handleDuplicateError(error: any): never {

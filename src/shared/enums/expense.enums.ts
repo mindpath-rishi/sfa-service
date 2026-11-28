@@ -2,7 +2,7 @@
  * ENUMS
  * ====================================================== */
 
-/** Employee classification for advance expense (UPC / Local) */
+/** Employee classification for expense requests (UPC / Local) */
 export enum ExpenseTag {
   UPC = 'UPC',
   LOCAL = 'LOCAL',

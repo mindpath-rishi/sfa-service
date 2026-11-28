@@ -43,7 +43,10 @@ export class CreateTargetDto {
   @IsString()
   categoryId?: string;
 
-  @ApiPropertyOptional({ type: String, description: 'Legacy child category name' })
+  @ApiPropertyOptional({
+    type: String,
+    description: 'Legacy child category name',
+  })
   @IsOptional()
   @IsString()
   category?: string;

@@ -11,7 +11,15 @@
  * numbered revision (who, when, why, what changed); Super Admin can view the
  * history and restore any revision (a restore is saved as a new revision).
  */
-import { BadRequestException, HttpStatus, Injectable, NotFoundException, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import {
+  BadRequestException,
+  HttpStatus,
+  Injectable,
+  NotFoundException,
+  Logger,
+  OnModuleDestroy,
+  OnModuleInit,
+} from '@nestjs/common';
 import { RequestContextStore } from 'src/core/context/request-context';
 import { MongoService } from 'src/core/database/mongo/mongo.service';
 import { setFilterParams } from './location-points.store';
@@ -111,23 +119,35 @@ function diffSettings(
   const changes: SettingsChange[] = [];
   for (const key of Object.keys(after.settings) as (keyof TrackingSettings)[]) {
     if (before.settings[key] !== after.settings[key]) {
-      changes.push({ field: key, from: before.settings[key], to: after.settings[key] });
+      changes.push({
+        field: key,
+        from: before.settings[key],
+        to: after.settings[key],
+      });
     }
   }
-  const beforeMap = new Map(before.overrides.map((row) => [row.employeeId, row]));
+  const beforeMap = new Map(
+    before.overrides.map((row) => [row.employeeId, row]),
+  );
   const afterMap = new Map(after.overrides.map((row) => [row.employeeId, row]));
   for (const [employeeId, row] of afterMap) {
     const previous = beforeMap.get(employeeId);
     const label = `override:${row.employeeName || employeeId}`;
     if (!previous) {
       changes.push({ field: label, from: null, to: row.settings });
-    } else if (JSON.stringify(previous.settings) !== JSON.stringify(row.settings)) {
+    } else if (
+      JSON.stringify(previous.settings) !== JSON.stringify(row.settings)
+    ) {
       changes.push({ field: label, from: previous.settings, to: row.settings });
     }
   }
   for (const [employeeId, row] of beforeMap) {
     if (!afterMap.has(employeeId)) {
-      changes.push({ field: `override:${row.employeeName || employeeId}`, from: row.settings, to: null });
+      changes.push({
+        field: `override:${row.employeeName || employeeId}`,
+        from: row.settings,
+        to: null,
+      });
     }
   }
   return changes.slice(0, MAX_CHANGES_LISTED);
@@ -164,13 +184,17 @@ export class TrackingSettingsService implements OnModuleInit, OnModuleDestroy {
       const doc = await this.collection.findOne({ key: SETTINGS_KEY });
       this.apply(doc);
     } catch (error) {
-      this.logger.warn(`Tracking settings load failed: ${(error as Error).message}`);
+      this.logger.warn(
+        `Tracking settings load failed: ${(error as Error).message}`,
+      );
     }
   }
 
   private apply(doc: SettingsDoc | null) {
     this.settings = { ...DEFAULT_TRACKING_SETTINGS, ...(doc?.settings ?? {}) };
-    this.overrides = new Map((doc?.overrides ?? []).map((row) => [row.employeeId, row]));
+    this.overrides = new Map(
+      (doc?.overrides ?? []).map((row) => [row.employeeId, row]),
+    );
     this.updatedAt = doc?.updatedAt;
     this.updatedBy = doc?.updatedBy;
     this.revision = doc?.revision ?? 0;
@@ -242,7 +266,9 @@ export class TrackingSettingsService implements OnModuleInit, OnModuleDestroy {
             settings: Object.fromEntries(
               Object.entries(row.settings ?? {}).filter(
                 ([key, value]) =>
-                  DEVICE_SETTING_KEYS.includes(key as keyof DeviceTrackingSettings) &&
+                  DEVICE_SETTING_KEYS.includes(
+                    key as keyof DeviceTrackingSettings,
+                  ) &&
                   value !== undefined &&
                   value !== null,
               ),
@@ -250,7 +276,10 @@ export class TrackingSettingsService implements OnModuleInit, OnModuleDestroy {
           }))
       : [...this.overrides.values()];
     await this.save(settings, overrides, payload.note);
-    return { ...this.getSettings(), message: `Tracking settings saved (version ${this.revision})` };
+    return {
+      ...this.getSettings(),
+      message: `Tracking settings saved (version ${this.revision})`,
+    };
   }
 
   /** Saves a new revision: current doc + history entry with the field changes. */
@@ -281,16 +310,30 @@ export class TrackingSettingsService implements OnModuleInit, OnModuleDestroy {
     };
     // Revision number guards against two admins saving at the same moment
     const result = await this.collection.updateOne(
-      { key: SETTINGS_KEY, ...(latest ? { revision: latest.revision ?? { $exists: false } } : {}) } as any,
+      {
+        key: SETTINGS_KEY,
+        ...(latest ? { revision: latest.revision ?? { $exists: false } } : {}),
+      },
       { $set: doc },
       { upsert: !latest },
     );
     if (latest && !result.matchedCount) {
-      throw new BadRequestException('Settings were changed by someone else. Reload and try again.');
+      throw new BadRequestException(
+        'Settings were changed by someone else. Reload and try again.',
+      );
     }
-    const history = this.mongo.getDb().collection<HistoryDoc>(HISTORY_COLLECTION);
-    await history.createIndex({ key: 1, revision: -1 }, { unique: true }).catch(() => undefined);
-    await history.insertOne({ ...doc, revision, changes, ...(restoredFrom ? { restoredFrom } : {}) });
+    const history = this.mongo
+      .getDb()
+      .collection<HistoryDoc>(HISTORY_COLLECTION);
+    await history
+      .createIndex({ key: 1, revision: -1 }, { unique: true })
+      .catch(() => undefined);
+    await history.insertOne({
+      ...doc,
+      revision,
+      changes,
+      ...(restoredFrom ? { restoredFrom } : {}),
+    });
     this.apply(doc);
     this.logger.log(
       `Tracking settings v${revision} by ${context?.userId}: ${changes.length} change(s)${
@@ -328,6 +371,9 @@ export class TrackingSettingsService implements OnModuleInit, OnModuleDestroy {
       note?.trim() || `Restored version ${revision}`,
       revision,
     );
-    return { ...this.getSettings(), message: `Version ${revision} restored as version ${this.revision}` };
+    return {
+      ...this.getSettings(),
+      message: `Version ${revision} restored as version ${this.revision}`,
+    };
   }
 }

@@ -5,7 +5,16 @@ import { requireHeaders } from '../sheet.utils';
 import { outcomesFrom } from './outcomes';
 
 /** Which reference columns each master entity takes (as in MIS). */
-const ENTITIES: Record<string, { country?: boolean; province?: boolean; market?: boolean; role?: boolean; productCategory?: boolean }> = {
+const ENTITIES: Record<
+  string,
+  {
+    country?: boolean;
+    province?: boolean;
+    market?: boolean;
+    role?: boolean;
+    productCategory?: boolean;
+  }
+> = {
   country: {},
   province: { country: true },
   position: { country: true, province: true, market: true, role: true },
@@ -19,7 +28,10 @@ const ENTITIES: Record<string, { country?: boolean; province?: boolean; market?:
 
 const entityOf = (options: Record<string, string | undefined>) => {
   const entity = options.entity ?? '';
-  if (!ENTITIES[entity]) throw new BadRequestException(`entity must be one of ${Object.keys(ENTITIES).join(', ')}`);
+  if (!ENTITIES[entity])
+    throw new BadRequestException(
+      `entity must be one of ${Object.keys(ENTITIES).join(', ')}`,
+    );
   return entity;
 };
 
@@ -27,25 +39,49 @@ const entityOf = (options: Record<string, string | undefined>) => {
  * Reference masters (countries, provinces, markets, positions, categories…).
  * Validation and reference lookup stay in MasterBulkService.
  */
-export const mastersDefinition = (masters: MasterBulkService): ImportDefinition<Record<string, unknown>> => ({
+export const mastersDefinition = (
+  masters: MasterBulkService,
+): ImportDefinition<Record<string, unknown>> => ({
   type: 'masters',
   label: 'Reference masters',
   description: 'Create reference master records for the chosen entity.',
   requiredHeaders: ['name'],
-  optionalHeaders: ['country', 'province', 'market', 'role', 'categoryId', 'type', 'parentCategory'],
+  optionalHeaders: [
+    'country',
+    'province',
+    'market',
+    'role',
+    'categoryId',
+    'type',
+    'parentCategory',
+  ],
   limit: 10_000,
   batchSize: 200,
   options: [
-    { key: 'entity', label: 'Master', values: Object.keys(ENTITIES), required: true },
-    { key: 'type', label: 'Product category type (template only)', values: ['PARENT', 'CHILD'], required: false },
+    {
+      key: 'entity',
+      label: 'Master',
+      values: Object.keys(ENTITIES),
+      required: true,
+    },
+    {
+      key: 'type',
+      label: 'Product category type (template only)',
+      values: ['PARENT', 'CHILD'],
+      required: false,
+    },
   ],
 
+  // eslint-disable-next-line @typescript-eslint/require-await -- async so header errors reject like other definitions
   async parse(sheet, { options }) {
     const config = ENTITIES[entityOf(options)];
     requireHeaders(sheet, ['name']);
     return sheet.rows.map((row) => {
       const name = row.get('name');
-      const pick = (id: string, label: string) => ({ [id]: row.get(id) || undefined, [label]: row.get(label) || undefined });
+      const pick = (id: string, label: string) => ({
+        [id]: row.get(id) || undefined,
+        [label]: row.get(label) || undefined,
+      });
       const type = row.get('type').toUpperCase();
       const errors = name ? [] : ['name is required'];
       return {
@@ -70,9 +106,15 @@ export const mastersDefinition = (masters: MasterBulkService): ImportDefinition<
   },
 
   async process(payloads, { options }) {
-    const clean = payloads.map((payload) => Object.fromEntries(Object.entries(payload).filter(([, value]) => value !== undefined)));
-    return outcomesFrom(await masters.upload(entityOf(options), clean), payloads.length, (result) =>
-      result.id ? `Created ${result.id}` : 'Created',
+    const clean = payloads.map((payload) =>
+      Object.fromEntries(
+        Object.entries(payload).filter(([, value]) => value !== undefined),
+      ),
+    );
+    return outcomesFrom(
+      await masters.upload(entityOf(options), clean),
+      payloads.length,
+      (result) => (result.id ? `Created ${result.id}` : 'Created'),
     );
   },
 

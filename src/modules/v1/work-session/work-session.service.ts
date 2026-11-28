@@ -17,16 +17,13 @@ import {
 
 import { WORK_SESSION } from './work-session.constants';
 import { CreateWorkSessionDto } from './dto/create-work-session.dto';
-import { UpdateWorkSessionDto } from './dto/update-work-session.dto';
 import { WorkSessionQueryDto } from './dto/work-session-query.dto';
 import { IdGenerator } from 'src/shared/utils/id-generator.utils';
 import { RequestContextStore } from 'src/core/context/request-context';
 import { WorkSessionStatus } from 'src/shared/enums/work-session.enums';
-import { filter } from 'rxjs';
 import { ActivityService } from '../activity/activity.service';
 import { RouteSessionService } from '../route-session/route-session.service';
 import { CreateActivityDto } from '../activity/dto/create-activity.dto';
-import { CreateRouteSessionDto } from '../route-session/dto/create-route-session.dto';
 import { ActivityStatus } from 'src/shared/enums/activity.enums';
 import { RouteSessionStatus } from 'src/shared/enums/route-session.enums';
 import { VanDailyStockService } from '../van-daily-stock/van-daily-stock.service';
@@ -763,7 +760,7 @@ export class WorkSessionService extends MongoRepository<WorkSession> {
             {
               workSessionId,
               vanId,
-              employeeId: ctx?.userId!,
+              employeeId: ctx?.userId as string,
               warehouseId: payload?.warehouseId,
               totalQuantity: summary?.closing?.qty || 0,
               totalCases: summary?.closing?.cases || 0,
@@ -1261,22 +1258,36 @@ export class WorkSessionService extends MongoRepository<WorkSession> {
   async releaseDeviceLock(workSessionId: string) {
     const ctx = RequestContextStore.getStore();
     const day: any = await this.model
-      .findOne({ workSessionId, status: WorkSessionStatus.ACTIVE, isDeleted: false } as any)
+      .findOne({
+        workSessionId,
+        status: WorkSessionStatus.ACTIVE,
+        isDeleted: false,
+      } as any)
       .lean();
     if (!day) throw new NotFoundException('Active work day not found');
     await this.model.updateOne(
-      { workSessionId } as any,
-      { $set: { deviceLockReleased: true, deviceLockReleasedBy: ctx?.userId, deviceLockReleasedAt: new Date() } } as any,
+      { workSessionId },
+      {
+        $set: {
+          deviceLockReleased: true,
+          deviceLockReleasedBy: ctx?.userId,
+          deviceLockReleasedAt: new Date(),
+        },
+      },
     );
     // Sign the old device out (its token refresh fails from now on)
     if (day.deviceId) {
       await this.model.db
         .collection('user_devices')
-        .updateMany({ userId: day.userId, deviceId: day.deviceId }, { $set: { isActive: false, updatedAt: new Date() } });
+        .updateMany(
+          { userId: day.userId, deviceId: day.deviceId },
+          { $set: { isActive: false, updatedAt: new Date() } },
+        );
     }
     return {
       statusCode: HttpStatus.OK,
-      message: 'Device lock released. The user can now sign in on another device.',
+      message:
+        'Device lock released. The user can now sign in on another device.',
       data: { workSessionId },
     };
   }

@@ -51,7 +51,7 @@ const migratePositionMapping = async () => {
         ).trim();
         if (!positionId) {
           throw new Error(
-            `Legacy position record ${legacyPosition._id} has no position ID.`,
+            `Legacy position record ${String(legacyPosition._id)} has no position ID.`,
           );
         }
 

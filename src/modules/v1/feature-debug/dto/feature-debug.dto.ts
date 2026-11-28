@@ -1,6 +1,16 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsIn, IsInt, IsISO8601, IsOptional, IsString, Max, MaxLength, Min, MinLength } from 'class-validator';
+import {
+  IsIn,
+  IsInt,
+  IsISO8601,
+  IsOptional,
+  IsString,
+  Max,
+  MaxLength,
+  Min,
+  MinLength,
+} from 'class-validator';
 import { REPAIR_ACTIONS, type RepairAction } from '../feature-debug.types';
 
 export class InspectQueryDto {
@@ -10,7 +20,9 @@ export class InspectQueryDto {
   @MaxLength(128)
   id!: string;
 
-  @ApiPropertyOptional({ description: 'Day to inspect (features that accept a date)' })
+  @ApiPropertyOptional({
+    description: 'Day to inspect (features that accept a date)',
+  })
   @IsOptional()
   @IsISO8601()
   date?: string;
@@ -31,13 +43,18 @@ export class RepairDto {
   @IsIn(REPAIR_ACTIONS)
   action!: RepairAction;
 
-  @ApiProperty({ description: 'Record the action applies to (sale, work session or employee ID)' })
+  @ApiProperty({
+    description:
+      'Record the action applies to (sale, work session or employee ID)',
+  })
   @IsString()
   @MinLength(1)
   @MaxLength(128)
   id!: string;
 
-  @ApiProperty({ description: 'Why this is being done; kept in the repair history' })
+  @ApiProperty({
+    description: 'Why this is being done; kept in the repair history',
+  })
   @IsString()
   @MinLength(3)
   @MaxLength(500)
@@ -46,6 +63,14 @@ export class RepairDto {
 
 export class SyncPreviewQueryDto {
   @ApiProperty() @IsString() @MinLength(1) @MaxLength(64) employeeId!: string;
-  @ApiPropertyOptional({ example: 'outlets' }) @IsOptional() @IsString() @MaxLength(64) entity?: string;
-  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(100) search?: string;
+  @ApiPropertyOptional({ example: 'outlets' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  entity?: string;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  search?: string;
 }

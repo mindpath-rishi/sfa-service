@@ -1,8 +1,23 @@
-import { Body, Controller, Delete, Get, Param, Post, Put, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Post,
+  Put,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { SuperAdminGuard } from 'src/core/guards/super-admin.guard';
 import { API_MODULE, V1 } from 'src/shared/constants/api.constants';
-import { AppConfigDto, CreateCommandDto, DebugLoggingDto, DevicesQueryDto } from './dto/diagnostics.dto';
+import {
+  AppConfigDto,
+  CreateCommandDto,
+  DebugLoggingDto,
+  DevicesQueryDto,
+} from './dto/diagnostics.dto';
 import { DiagnosticsService } from './diagnostics.service';
 import { BackOfficeOnly } from 'src/core/decorators/back-office-only.decorator';
 
@@ -15,13 +30,17 @@ export class DiagnosticsAdminController {
   constructor(private readonly diagnosticsService: DiagnosticsService) {}
 
   @Get('devices')
-  @ApiOperation({ summary: 'Phones with their latest health, filterable by problem' })
+  @ApiOperation({
+    summary: 'Phones with their latest health, filterable by problem',
+  })
   devices(@Query() query: DevicesQueryDto) {
     return this.diagnosticsService.devices(query);
   }
 
   @Get('devices/:userId')
-  @ApiOperation({ summary: "One user's phones, commands and diagnostic reports" })
+  @ApiOperation({
+    summary: "One user's phones, commands and diagnostic reports",
+  })
   device(@Param('userId') userId: string) {
     return this.diagnosticsService.deviceDetail(userId);
   }
@@ -33,7 +52,9 @@ export class DiagnosticsAdminController {
   }
 
   @Post('commands')
-  @ApiOperation({ summary: 'Ask a phone to send diagnostics, re-download data or log out' })
+  @ApiOperation({
+    summary: 'Ask a phone to send diagnostics, re-download data or log out',
+  })
   command(@Body() dto: CreateCommandDto) {
     return this.diagnosticsService.createCommand(dto);
   }
@@ -51,7 +72,9 @@ export class DiagnosticsAdminController {
   }
 
   @Put('app-config')
-  @ApiOperation({ summary: 'Set minimum / latest app version and the update message' })
+  @ApiOperation({
+    summary: 'Set minimum / latest app version and the update message',
+  })
   updateAppConfig(@Body() dto: AppConfigDto) {
     return this.diagnosticsService.updateAppConfig(dto);
   }

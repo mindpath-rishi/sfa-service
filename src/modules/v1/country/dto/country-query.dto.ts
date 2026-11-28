@@ -8,7 +8,7 @@ import { PaginationDto } from 'src/shared/dto/pagination.dto';
  * Country Query DTO
  * ===================
  * Data Transfer Object for querying Country records
- * 
+ *
  * Extends PaginationDto for pagination support
  */
 export class CountryQueryDto extends PaginationDto {
@@ -18,7 +18,7 @@ export class CountryQueryDto extends PaginationDto {
    * Search by name, code, or identifier
    */
 
-  @ApiPropertyOptional({ description: "Search by name, code, or identifier" })
+  @ApiPropertyOptional({ description: 'Search by name, code, or identifier' })
   @IsOptional()
   @IsString()
   searchText?: string;

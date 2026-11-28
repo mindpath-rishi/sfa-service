@@ -1,4 +1,3 @@
-
 export const COUNTRY = {
   CREATED: 'Country created successfully',
   FETCHED: 'Country fetched successfully',

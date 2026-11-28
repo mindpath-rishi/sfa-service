@@ -10,7 +10,12 @@ import { ReconciliationService } from './reconciliation.service';
 @Module({
   imports: [FeatureDebugModule, NotificationModule],
   controllers: [MonitoringController],
-  providers: [HealthService, AlertsService, ReconciliationService, MonitoringScheduler],
+  providers: [
+    HealthService,
+    AlertsService,
+    ReconciliationService,
+    MonitoringScheduler,
+  ],
   exports: [HealthService],
 })
 export class MonitoringModule {}

@@ -156,7 +156,9 @@ export class OutletVerificationService extends MongoRepository<OutletVerificatio
     const reviewerId = String(RequestContextStore.getStore()?.userId ?? '');
     const record = await this.getPending(outletVerificationId);
     if (!reviewerId || record.assignedReviewerId !== reviewerId) {
-      throw new ForbiddenException('Only the assigned reviewer can verify this outlet');
+      throw new ForbiddenException(
+        'Only the assigned reviewer can verify this outlet',
+      );
     }
 
     const verificationStatus = approve
@@ -170,7 +172,10 @@ export class OutletVerificationService extends MongoRepository<OutletVerificatio
       : reason || 'Rejected by reporting manager';
 
     await this.customerModel.updateOne(
-      { customerId: record.customerId, status: CustomerStatus.VERIFICATION_PENDING },
+      {
+        customerId: record.customerId,
+        status: CustomerStatus.VERIFICATION_PENDING,
+      },
       { $set: { status: customerStatus } },
     );
     const updated = await this.updateOne(
@@ -209,7 +214,11 @@ export class OutletVerificationService extends MongoRepository<OutletVerificatio
     );
   }
 
-  async reviewByCustomerId(customerId: string, approve: boolean, reason?: string) {
+  async reviewByCustomerId(
+    customerId: string,
+    approve: boolean,
+    reason?: string,
+  ) {
     const record = await this.findOne({
       customerId,
       status: OutletVerificationStatus.PENDING,

@@ -5,7 +5,7 @@
  */
 
 import { Injectable, NotFoundException, HttpStatus } from '@nestjs/common';
-import { HydratedDocument, Model, Types } from 'mongoose';
+import { Model, Types } from 'mongoose';
 
 import { MongoService } from 'src/core/database/mongo/mongo.service';
 import { MongoRepository } from 'src/core/database/mongo/mongo.repository';
@@ -201,7 +201,7 @@ export class NotificationService extends MongoRepository<Notification> {
     const notification = await this.findOne({
       _id,
       ...(userId ? { recipientId: userId } : {}),
-    } as any);
+    });
 
     if (!notification) {
       throw new NotFoundException(NOTIFICATION.NOT_FOUND);
@@ -219,7 +219,7 @@ export class NotificationService extends MongoRepository<Notification> {
     const existing = await this.findOne({
       _id: notificationId,
       ...(userId ? { recipientId: userId } : {}),
-    } as any);
+    });
     if (!existing) throw new NotFoundException(NOTIFICATION.NOT_FOUND);
     const updated = await this.updateById(notificationId, {
       isRead: true,
@@ -241,7 +241,7 @@ export class NotificationService extends MongoRepository<Notification> {
     const count = await this.countDocuments({
       isRead: false,
       ...(userId ? { recipientId: userId } : {}),
-    } as any);
+    });
     return {
       statusCode: HttpStatus.OK,
       message: NOTIFICATION.FETCHED,
@@ -274,7 +274,7 @@ export class NotificationService extends MongoRepository<Notification> {
         category: 'van_change',
         'data.workSessionId': workSessionId,
         'data.action': 'APPROVAL_REQUIRED',
-      } as any,
+      },
       {
         $set: {
           isRead: true,
@@ -283,7 +283,7 @@ export class NotificationService extends MongoRepository<Notification> {
           'data.status': status,
           'data.resolvedAt': new Date(),
         },
-      } as any,
+      },
     );
   }
 
@@ -296,7 +296,7 @@ export class NotificationService extends MongoRepository<Notification> {
         category: 'stock_unload',
         'data.unloadRequestId': unloadRequestId,
         'data.action': 'APPROVAL_REQUIRED',
-      } as any,
+      },
       {
         $set: {
           isRead: true,
@@ -305,7 +305,7 @@ export class NotificationService extends MongoRepository<Notification> {
           'data.status': status,
           'data.resolvedAt': new Date(),
         },
-      } as any,
+      },
     );
   }
 
@@ -318,7 +318,7 @@ export class NotificationService extends MongoRepository<Notification> {
         category: 'route_change',
         'data.routeChangeRequestId': routeChangeRequestId,
         'data.action': 'APPROVAL_REQUIRED',
-      } as any,
+      },
       {
         $set: {
           isRead: true,
@@ -327,13 +327,13 @@ export class NotificationService extends MongoRepository<Notification> {
           'data.status': status,
           'data.resolvedAt': new Date(),
         },
-      } as any,
+      },
     );
   }
 
   async markOutletApprovalResolved(customerId: string, status: string) {
     await this.model.updateMany(
-      { category: 'outlet_approval', 'data.customerId': customerId } as any,
+      { category: 'outlet_approval', 'data.customerId': customerId },
       {
         $set: {
           isRead: true,
@@ -342,7 +342,7 @@ export class NotificationService extends MongoRepository<Notification> {
           'data.action': status,
           'data.resolvedAt': new Date(),
         },
-      } as any,
+      },
     );
   }
 

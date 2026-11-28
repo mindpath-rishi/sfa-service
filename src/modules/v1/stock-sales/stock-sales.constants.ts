@@ -1,4 +1,3 @@
-
 export const STOCK_SALES = {
   CREATED: 'StockSales created successfully',
   FETCHED: 'StockSales fetched successfully',

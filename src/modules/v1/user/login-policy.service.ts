@@ -12,7 +12,13 @@
  * per-request "is this still the current session" check is cached for
  * SESSION_CACHE_MS, so it costs at most one Redis GET per user per 30 s.
  */
-import { HttpStatus, Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import {
+  HttpStatus,
+  Injectable,
+  Logger,
+  OnModuleDestroy,
+  OnModuleInit,
+} from '@nestjs/common';
 import { InjectConnection } from '@nestjs/mongoose';
 import { Connection } from 'mongoose';
 import { RequestContextStore } from 'src/core/context/request-context';
@@ -43,7 +49,10 @@ export class LoginPolicyService implements OnModuleInit, OnModuleDestroy {
   private updatedBy?: string;
   private timer?: NodeJS.Timeout;
   /** userId → current session id (cached Redis value) */
-  private readonly currentSessions = new Map<string, { sid: string | null; at: number }>();
+  private readonly currentSessions = new Map<
+    string,
+    { sid: string | null; at: number }
+  >();
 
   constructor(
     @InjectConnection() private readonly connection: Connection,
@@ -99,7 +108,8 @@ export class LoginPolicyService implements OnModuleInit, OnModuleDestroy {
   async updatePolicy(next: Partial<LoginPolicy>) {
     const userId = RequestContextStore.getStore()?.userId;
     const policy: LoginPolicy = {
-      singleDeviceLogin: next.singleDeviceLogin ?? this.policy.singleDeviceLogin,
+      singleDeviceLogin:
+        next.singleDeviceLogin ?? this.policy.singleDeviceLogin,
       lockDayToDevice: next.lockDayToDevice ?? this.policy.lockDayToDevice,
       applyToWeb: next.applyToWeb ?? this.policy.applyToWeb,
     };
@@ -112,14 +122,21 @@ export class LoginPolicyService implements OnModuleInit, OnModuleDestroy {
     this.policy = policy;
     this.updatedAt = updatedAt;
     this.updatedBy = userId;
-    this.logger.log(`Login policy changed by ${userId}: ${JSON.stringify(policy)}`);
+    this.logger.log(
+      `Login policy changed by ${userId}: ${JSON.stringify(policy)}`,
+    );
     return { ...this.getPolicy(), message: 'Login policy saved' };
   }
 
   /* ---------- current session (single device login) ---------- */
 
   async setCurrentSession(userId: string, sessionId: string) {
-    await this.redis.client.set(`current-session:${userId}`, sessionId, 'EX', CURRENT_SESSION_TTL_SECONDS);
+    await this.redis.client.set(
+      `current-session:${userId}`,
+      sessionId,
+      'EX',
+      CURRENT_SESSION_TTL_SECONDS,
+    );
     this.currentSessions.set(userId, { sid: sessionId, at: Date.now() });
   }
 

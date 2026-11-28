@@ -8,11 +8,11 @@ export class CreateMarketDto {
   @IsNotEmpty()
   @IsString()
   provinceId!: string;
-/**
- * Market Create DTO
- * ====================
- * Data Transfer Object for creating new Market records
- */
+  /**
+   * Market Create DTO
+   * ====================
+   * Data Transfer Object for creating new Market records
+   */
   /**
    * Name
    * ----
@@ -33,5 +33,4 @@ export class CreateMarketDto {
   @IsOptional()
   @IsEnum(MarketStatus)
   status?: MarketStatus;
-
 }

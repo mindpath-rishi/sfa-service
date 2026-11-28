@@ -13,7 +13,9 @@ export class MetricsMiddleware implements NestMiddleware {
       const duration = Number(process.hrtime.bigint() - start) / 1e9;
       // Label by route pattern (/api/v1/sale/:id), never the raw URL: IDs in
       // labels create a new time series per record and swamp Prometheus.
-      const route = req.route?.path ? `${req.baseUrl ?? ''}${req.route.path}` : 'unmatched';
+      const route = req.route?.path
+        ? `${req.baseUrl ?? ''}${req.route.path}`
+        : 'unmatched';
       this.metrics.recordRequest(req.method, route, res.statusCode, duration);
     });
 

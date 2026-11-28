@@ -31,7 +31,10 @@ import {
   WorkSession,
   WorkSessionSchema,
 } from 'src/core/database/mongo/schema/work-session.schema';
-import { Beat, BeatSchema } from 'src/core/database/mongo/schema/beat.schema';
+import {
+  RouteSession,
+  RouteSessionSchema,
+} from 'src/core/database/mongo/schema/route-session.schema';
 
 import {
   EXPENSE_OPTION_BY_TAG,
@@ -42,7 +45,6 @@ import { IdGenerator } from 'src/shared/utils/id-generator.utils';
 
 import { EXPENSE } from './expense.constants';
 import {
-  CreateExpenseDto,
   ExpenseQueryDto,
   ReplaceWithdrawalChargesDto,
   UpdateExpenseStatusDto,
@@ -104,7 +106,7 @@ export class ExpenseService extends MongoRepository<Expense> {
   private readonly chargeModel: Model<HydratedDocument<WithdrawalCharge>>;
   private readonly employeeModel: Model<HydratedDocument<Employee>>;
   private readonly workSessionModel: Model<HydratedDocument<WorkSession>>;
-  private readonly beatModel: Model<HydratedDocument<Beat>>;
+  private readonly routeSessionModel: Model<HydratedDocument<RouteSession>>;
 
   constructor(mongo: MongoService) {
     super(mongo.getModel<Expense>(Expense.name, ExpenseSchema));
@@ -124,7 +126,10 @@ export class ExpenseService extends MongoRepository<Expense> {
       WorkSession.name,
       WorkSessionSchema,
     );
-    this.beatModel = mongo.getModel<Beat>(Beat.name, BeatSchema);
+    this.routeSessionModel = mongo.getModel<RouteSession>(
+      RouteSession.name,
+      RouteSessionSchema,
+    );
   }
 
   /* ======================================================
@@ -132,14 +137,14 @@ export class ExpenseService extends MongoRepository<Expense> {
    * ====================================================== */
 
   /** Prefill for the request form — computes everything without saving */
-  async preview(beatIds: string[] = []) {
-    const data = await this.buildRequest(this.currentUserId(), beatIds);
+  async preview() {
+    const data = await this.buildRequest(this.currentUserId());
     return { statusCode: HttpStatus.OK, message: EXPENSE.PREVIEW, data };
   }
 
-  async create(dto: CreateExpenseDto) {
+  async create() {
     const userId = this.currentUserId();
-    const data = await this.buildRequest(userId, dto.beatIds ?? []);
+    const data = await this.buildRequest(userId);
 
     const existing = await this.findOne(
       {
@@ -325,7 +330,7 @@ export class ExpenseService extends MongoRepository<Expense> {
    * CALCULATION ENGINE
    * ====================================================== */
 
-  private async buildRequest(userId: string, beatIds: string[]) {
+  private async buildRequest(userId: string) {
     const requestedDate = new Date();
     const today = startOfDay(requestedDate);
     const dow = today.getDay(); // 0 = Sunday
@@ -370,10 +375,18 @@ export class ExpenseService extends MongoRepository<Expense> {
 
     const perDayValue = Number(rate.perDayValue);
     const baseAmount = round2(payableDays * perDayValue);
-    const withdrawalCharges = await this.lookupWithdrawalCharge(baseAmount);
+    const withdrawalChargePercent =
+      await this.lookupWithdrawalChargePercent(baseAmount);
+    const withdrawalCharges = round2(
+      (baseAmount * withdrawalChargePercent) / 100,
+    );
     const totalAmount = round2(baseAmount + withdrawalCharges);
 
-    const { ids, remarks } = await this.resolveBeatRemarks(beatIds);
+    const { routeIds, remarks } = await this.resolveRouteRemarks(
+      userId,
+      fromDate,
+      requestedDate,
+    );
 
     return {
       userId,
@@ -391,9 +404,10 @@ export class ExpenseService extends MongoRepository<Expense> {
       previousExpenseId,
       payableDays,
       perDayValue,
+      withdrawalChargePercent,
       withdrawalCharges,
       totalAmount,
-      beatIds: ids,
+      routeIds,
       remarks,
     };
   }
@@ -446,7 +460,8 @@ export class ExpenseService extends MongoRepository<Expense> {
     return Boolean(found);
   }
 
-  private async lookupWithdrawalCharge(baseAmount: number) {
+  /** Percentage of the slab whose range contains the base amount (0 if none). */
+  private async lookupWithdrawalChargePercent(baseAmount: number) {
     if (baseAmount <= 0) return 0;
     const slab = await this.chargeModel
       .findOne({
@@ -455,24 +470,32 @@ export class ExpenseService extends MongoRepository<Expense> {
       })
       .sort({ minAmount: -1 })
       .lean<WithdrawalCharge>();
-    return slab ? Number(slab.charge) : 0;
+    return slab ? Number(slab.chargePercent) : 0;
   }
 
-  /** Remarks = selected beat names concatenated (in selection order) */
-  private async resolveBeatRemarks(beatIds: string[]) {
-    const unique = [...new Set(beatIds.filter(Boolean))];
-    if (!unique.length) return { ids: [], remarks: '' };
-
-    const beats = await this.beatModel
+  /** Remarks = routes worked (day-start route sessions) in the range, in order worked */
+  private async resolveRouteRemarks(userId: string, from: Date, to: Date) {
+    const sessions = await this.routeSessionModel
       .find(
-        { beatId: { $in: unique }, isDeleted: { $ne: true } },
-        { beatId: 1, name: 1 },
+        {
+          userId,
+          sessionDate: { $gte: startOfDay(from), $lte: endOfDay(to) },
+        },
+        { routeId: 1, routeName: 1 },
       )
-      .lean<Pick<Beat, 'beatId' | 'name'>[]>();
-    const nameById = new Map(beats.map((b) => [b.beatId, b.name]));
+      .sort({ startTime: 1 })
+      .lean<Pick<RouteSession, 'routeId' | 'routeName'>[]>();
 
-    const ids = unique.filter((id) => nameById.has(id));
-    return { ids, remarks: ids.map((id) => nameById.get(id)).join(', ') };
+    const names = new Map<string, string>();
+    for (const s of sessions) {
+      if (s.routeId && !names.has(s.routeId)) {
+        names.set(s.routeId, s.routeName || s.routeId);
+      }
+    }
+    return {
+      routeIds: [...names.keys()],
+      remarks: [...names.values()].join(', '),
+    };
   }
 
   /* ======================================================

@@ -1,4 +1,4 @@
-import { ClientSession, QueryOptions } from "mongoose";
+import { ClientSession, QueryOptions } from 'mongoose';
 
 export interface PaginationOptions {
   page?: number;

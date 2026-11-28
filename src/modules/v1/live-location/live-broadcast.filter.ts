@@ -45,7 +45,11 @@ type Last = {
 export class LiveBroadcastFilter {
   private readonly last = new Map<string, Last>();
 
-  check(point: LivePoint, maxAccuracyM: number, now = Date.now()): LiveRejectReason | null {
+  check(
+    point: LivePoint,
+    maxAccuracyM: number,
+    now = Date.now(),
+  ): LiveRejectReason | null {
     if (
       point.accuracy != null &&
       Number(point.accuracy) > accuracyLimitFor(maxAccuracyM, point.source)
@@ -84,7 +88,8 @@ export class LiveBroadcastFilter {
       }
     }
 
-    if (this.last.size >= MAX_TRACKED_USERS && !this.last.has(point.employeeId)) this.last.clear();
+    if (this.last.size >= MAX_TRACKED_USERS && !this.last.has(point.employeeId))
+      this.last.clear();
     this.last.set(point.employeeId, {
       workSessionId: point.workSessionId,
       latitude: point.latitude,

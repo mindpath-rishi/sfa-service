@@ -2,7 +2,6 @@ import { Injectable } from '@nestjs/common';
 import { v2 as cloudinary } from 'cloudinary';
 import { StorageProvider, UploadResult } from './storage.interface';
 
-
 @Injectable()
 export class CloudStorageProvider implements StorageProvider {
   constructor() {
@@ -75,6 +74,8 @@ export class CloudStorageProvider implements StorageProvider {
   }
 
   async delete(params: { storageKey: string }): Promise<void> {
-    await cloudinary.uploader.destroy(params.storageKey, { resource_type: 'image' });
+    await cloudinary.uploader.destroy(params.storageKey, {
+      resource_type: 'image',
+    });
   }
 }

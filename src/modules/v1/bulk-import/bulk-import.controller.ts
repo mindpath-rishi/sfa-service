@@ -18,11 +18,17 @@ import { BackOfficeOnly } from 'src/core/decorators/back-office-only.decorator';
 import { API_MODULE, V1 } from 'src/shared/constants/api.constants';
 import { BulkImportService } from './bulk-import.service';
 
-const MAX_FILE_MB = Math.max(1, Number(process.env.BULK_IMPORT_MAX_FILE_MB) || 25);
+const MAX_FILE_MB = Math.max(
+  1,
+  Number(process.env.BULK_IMPORT_MAX_FILE_MB) || 25,
+);
 
 const attachment = (res: Response, fileName: string, mimeType: string) => {
   res.setHeader('Content-Type', mimeType);
-  res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(fileName)}"`);
+  res.setHeader(
+    'Content-Disposition',
+    `attachment; filename="${encodeURIComponent(fileName)}"`,
+  );
   res.setHeader('Access-Control-Expose-Headers', 'Content-Disposition');
 };
 
@@ -51,7 +57,12 @@ export class BulkImportController {
     @Query('page') page?: string,
     @Query('limit') limit?: string,
   ) {
-    return this.bulkImport.list({ type, mine: mine === 'true', page: Number(page) || 1, limit: Number(limit) || 20 });
+    return this.bulkImport.list({
+      type,
+      mine: mine === 'true',
+      page: Number(page) || 1,
+      limit: Number(limit) || 20,
+    });
   }
 
   @Get('jobs/:jobId')
@@ -61,8 +72,13 @@ export class BulkImportController {
   }
 
   @Get('jobs/:jobId/result')
-  @ApiOperation({ summary: 'Download the result file (Status + Remark per row)' })
-  async result(@Param('jobId') jobId: string, @Res({ passthrough: true }) res: Response) {
+  @ApiOperation({
+    summary: 'Download the result file (Status + Remark per row)',
+  })
+  async result(
+    @Param('jobId') jobId: string,
+    @Res({ passthrough: true }) res: Response,
+  ) {
     const file = await this.bulkImport.file(jobId, 'result');
     attachment(res, file.fileName, file.mimeType);
     return new StreamableFile(file.stream);
@@ -70,7 +86,10 @@ export class BulkImportController {
 
   @Get('jobs/:jobId/file')
   @ApiOperation({ summary: 'Download the original uploaded file' })
-  async input(@Param('jobId') jobId: string, @Res({ passthrough: true }) res: Response) {
+  async input(
+    @Param('jobId') jobId: string,
+    @Res({ passthrough: true }) res: Response,
+  ) {
     const file = await this.bulkImport.file(jobId, 'input');
     attachment(res, file.fileName, file.mimeType);
     return new StreamableFile(file.stream);
@@ -78,19 +97,43 @@ export class BulkImportController {
 
   @Get(':type/template')
   @ApiOperation({ summary: 'Download the upload template' })
-  async template(@Param('type') type: string, @Query() options: Record<string, string>, @Res({ passthrough: true }) res: Response) {
+  async template(
+    @Param('type') type: string,
+    @Query() options: Record<string, string>,
+    @Res({ passthrough: true }) res: Response,
+  ) {
     const file = await this.bulkImport.template(type, options);
-    attachment(res, file.fileName, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    attachment(
+      res,
+      file.fileName,
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
     return new StreamableFile(file.buffer);
   }
 
   @Post(':type')
   @HttpCode(HttpStatus.ACCEPTED)
-  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: MAX_FILE_MB * 1024 * 1024 } }))
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: { fileSize: MAX_FILE_MB * 1024 * 1024 },
+    }),
+  )
   @ApiConsumes('multipart/form-data')
-  @ApiBody({ schema: { type: 'object', properties: { file: { type: 'string', format: 'binary' }, entity: { type: 'string' } } } })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        file: { type: 'string', format: 'binary' },
+        entity: { type: 'string' },
+      },
+    },
+  })
   @ApiOperation({ summary: 'Upload a file; returns the job to poll' })
-  start(@Param('type') type: string, @UploadedFile() file: Express.Multer.File, @Query() query: Record<string, string>) {
+  start(
+    @Param('type') type: string,
+    @UploadedFile() file: Express.Multer.File,
+    @Query() query: Record<string, string>,
+  ) {
     return this.bulkImport.start(type, file, query);
   }
 }

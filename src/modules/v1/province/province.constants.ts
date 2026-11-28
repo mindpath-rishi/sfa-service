@@ -1,4 +1,3 @@
-
 export const PROVINCE = {
   CREATED: 'Province created successfully',
   FETCHED: 'Province fetched successfully',

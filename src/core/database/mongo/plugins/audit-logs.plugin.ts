@@ -142,7 +142,7 @@ const updateAction = (before: any, after: any) => {
 
 const auditModel = (model: Model<any>): Model<any> =>
   (model.db.models[AuditLog.name] as Model<any> | undefined) ??
-  (model.db.model(AuditLog.name, AuditLogSchema) as unknown as Model<any>);
+  model.db.model(AuditLog.name, AuditLogSchema);
 
 const writeEntries = async (
   model: Model<any>,
@@ -283,7 +283,11 @@ export const auditPlugin = (
             if (created) {
               await writeEntries(
                 model,
-                [entry(created, AuditAction.CREATE, { after: sanitize(created) })],
+                [
+                  entry(created, AuditAction.CREATE, {
+                    after: sanitize(created),
+                  }),
+                ],
                 session,
               );
             }
@@ -294,7 +298,9 @@ export const auditPlugin = (
             .find({ _id: { $in: befores.map((doc) => doc._id) } })
             .session(session)
             .lean();
-          const afterById = new Map(afters.map((doc) => [String(doc._id), doc]));
+          const afterById = new Map(
+            afters.map((doc) => [String(doc._id), doc]),
+          );
           const metadata =
             hook === 'updateMany' && befores.length >= MAX_DOCS_PER_OPERATION
               ? { truncated: true, auditedDocs: befores.length }
@@ -350,9 +356,14 @@ export const auditPlugin = (
         await writeEntries(
           this.model,
           befores.map((before) =>
-            entry(before, AuditAction.DELETE, { before: sanitize(before) }, {
-              hardDelete: true,
-            }),
+            entry(
+              before,
+              AuditAction.DELETE,
+              { before: sanitize(before) },
+              {
+                hardDelete: true,
+              },
+            ),
           ),
           this._auditSession ?? null,
         );

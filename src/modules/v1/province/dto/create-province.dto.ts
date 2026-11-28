@@ -1,14 +1,20 @@
 import { ProvinceStatus } from 'src/shared/enums/province.enums';
 
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsNotEmpty, IsString, IsOptional, IsEnum, IsBoolean } from 'class-validator';
+import {
+  IsNotEmpty,
+  IsString,
+  IsOptional,
+  IsEnum,
+  IsBoolean,
+} from 'class-validator';
 
 export class CreateProvinceDto {
-/**
- * Province Create DTO
- * ====================
- * Data Transfer Object for creating new Province records
- */
+  /**
+   * Province Create DTO
+   * ====================
+   * Data Transfer Object for creating new Province records
+   */
   /**
    * CountryId
    * ---------
@@ -49,5 +55,4 @@ export class CreateProvinceDto {
   @IsOptional()
   @IsBoolean()
   isDeleted?: boolean;
-
 }

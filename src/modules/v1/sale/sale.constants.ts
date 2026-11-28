@@ -1,4 +1,3 @@
-
 export const SALE = {
   CREATED: 'Sale created successfully',
   FETCHED: 'Sale fetched successfully',

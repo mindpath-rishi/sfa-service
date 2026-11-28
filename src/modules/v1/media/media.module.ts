@@ -11,7 +11,7 @@ import { StorageModule } from 'src/core/storage/storage.module';
 @Module({
   imports: [
     MongooseModule.forFeature([{ name: Media.name, schema: MediaSchema }]),
-    StorageModule
+    StorageModule,
   ],
   controllers: [MediaController],
   providers: [MediaService],

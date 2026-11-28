@@ -13,7 +13,10 @@ import {
 
 export class SyncIssuesQueryDto {
   /** CONFLICT = server changed since the phone's copy (VERSION_CONFLICT). */
-  @ApiPropertyOptional({ enum: ['CONFLICT', 'ERROR', 'ALL'], default: 'CONFLICT' })
+  @ApiPropertyOptional({
+    enum: ['CONFLICT', 'ERROR', 'ALL'],
+    default: 'CONFLICT',
+  })
   @IsOptional()
   @IsIn(['CONFLICT', 'ERROR', 'ALL'])
   type?: 'CONFLICT' | 'ERROR' | 'ALL';

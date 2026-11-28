@@ -94,7 +94,7 @@ export class RouteChangeRequestService extends MongoRepository<RouteChangeReques
     const requestedRoute = await this.routeService.findOne({
       routeId: payload.routeId,
       isDeleted: false,
-    } as any);
+    });
     if (!requestedRoute) {
       throw new BadRequestException('Requested route not found');
     }
@@ -103,7 +103,7 @@ export class RouteChangeRequestService extends MongoRepository<RouteChangeReques
       vanId: workSession.vanId,
       'associatedRoutes.routeId': payload.routeId,
       isDeleted: false,
-    } as any);
+    });
     if (!van) {
       throw new BadRequestException(
         'Requested route is not mapped to your assigned van',

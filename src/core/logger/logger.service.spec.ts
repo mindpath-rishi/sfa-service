@@ -2,11 +2,21 @@ import { PinoLogger } from 'nestjs-pino';
 import { LoggerService } from './logger.service';
 
 describe('LoggerService', () => {
-  let pino: { info: jest.Mock; debug: jest.Mock; warn: jest.Mock; error: jest.Mock };
+  let pino: {
+    info: jest.Mock;
+    debug: jest.Mock;
+    warn: jest.Mock;
+    error: jest.Mock;
+  };
   let logger: LoggerService;
 
   beforeEach(() => {
-    pino = { info: jest.fn(), debug: jest.fn(), warn: jest.fn(), error: jest.fn() };
+    pino = {
+      info: jest.fn(),
+      debug: jest.fn(),
+      warn: jest.fn(),
+      error: jest.fn(),
+    };
     logger = new LoggerService(pino as unknown as PinoLogger);
   });
 

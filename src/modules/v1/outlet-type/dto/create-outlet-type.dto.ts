@@ -4,11 +4,11 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsNotEmpty, IsString, IsOptional, IsEnum } from 'class-validator';
 
 export class CreateOutletTypeDto {
-/**
- * OutletType Create DTO
- * ====================
- * Data Transfer Object for creating new OutletType records
- */
+  /**
+   * OutletType Create DTO
+   * ====================
+   * Data Transfer Object for creating new OutletType records
+   */
   /**
    * Name
    * ----
@@ -25,9 +25,11 @@ export class CreateOutletTypeDto {
    * Outlet type availability status
    */
 
-  @ApiPropertyOptional({ example: OutletTypeStatus.ACTIVE, enum: OutletTypeStatus })
+  @ApiPropertyOptional({
+    example: OutletTypeStatus.ACTIVE,
+    enum: OutletTypeStatus,
+  })
   @IsOptional()
   @IsEnum(OutletTypeStatus)
   status?: OutletTypeStatus;
-
 }

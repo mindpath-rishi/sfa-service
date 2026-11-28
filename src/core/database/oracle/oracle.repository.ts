@@ -69,7 +69,7 @@ export class OracleRepository {
         ...options,
       } as oracledb.ExecuteOptions);
 
-      return (result.rows ?? []) as T[];
+      return result.rows ?? [];
     } catch (error) {
       this.logger.error('Oracle query execution failed', {
         error,
@@ -183,7 +183,9 @@ export class OracleRepository {
   /**
    * Execute many rows insert/update.
    */
-  async executeMany<T = any>(
+  async executeMany<
+    T extends oracledb.BindParameters = oracledb.BindParameters,
+  >(
     sql: string,
     binds: T[],
     options: oracledb.ExecuteManyOptions = {},

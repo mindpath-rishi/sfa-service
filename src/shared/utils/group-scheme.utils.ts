@@ -69,7 +69,8 @@ export function sanitizeGroupSchemes(value: unknown): SaleGroupScheme[] {
         schemeName,
         schemeType,
         groupMinCases: Math.max(toNumber(scheme.groupMinCases), 0),
-        groupMinUnit: toText(scheme.groupMinUnit) === 'PIECE' ? 'PIECE' : 'CASE',
+        groupMinUnit:
+          toText(scheme.groupMinUnit) === 'PIECE' ? 'PIECE' : 'CASE',
         qualifyingCases: Number(
           Math.max(toNumber(scheme.qualifyingCases), 0).toFixed(4),
         ),

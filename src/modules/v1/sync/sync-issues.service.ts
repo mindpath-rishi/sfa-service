@@ -39,7 +39,9 @@ export class SyncIssuesService implements OnModuleInit {
       .collection(SYNC_RESOLUTIONS_COLLECTION)
       .createIndex({ ownerId: 1, queueId: 1, status: 1 })
       .catch((error) =>
-        this.logger.warn(`Could not create resolution index: ${error?.message}`),
+        this.logger.warn(
+          `Could not create resolution index: ${error?.message}`,
+        ),
       );
   }
 
@@ -81,7 +83,11 @@ export class SyncIssuesService implements OnModuleInit {
         { $sort: { createdAt: -1 } },
         {
           $group: {
-            _id: { ownerId: '$ownerId', queueId: '$queueId', localId: '$localId' },
+            _id: {
+              ownerId: '$ownerId',
+              queueId: '$queueId',
+              localId: '$localId',
+            },
             latestAuditId: { $first: '$auditId' },
             lastStatus: { $first: '$status' },
             lastError: { $first: '$error' },
@@ -97,7 +103,11 @@ export class SyncIssuesService implements OnModuleInit {
         {
           $lookup: {
             from: SYNC_RESOLUTIONS_COLLECTION,
-            let: { ownerId: '$_id.ownerId', queueId: '$_id.queueId', localId: '$_id.localId' },
+            let: {
+              ownerId: '$_id.ownerId',
+              queueId: '$_id.queueId',
+              localId: '$_id.localId',
+            },
             pipeline: [
               {
                 $match: {
@@ -113,12 +123,23 @@ export class SyncIssuesService implements OnModuleInit {
               },
               { $sort: { createdAt: -1 } },
               { $limit: 1 },
-              { $project: { _id: 0, resolutionId: 1, action: 1, status: 1, resolvedBy: 1, createdAt: 1 } },
+              {
+                $project: {
+                  _id: 0,
+                  resolutionId: 1,
+                  action: 1,
+                  status: 1,
+                  resolvedBy: 1,
+                  createdAt: 1,
+                },
+              },
             ],
             as: 'resolution',
           },
         },
-        { $set: { resolution: { $ifNull: [{ $first: '$resolution' }, null] } } },
+        {
+          $set: { resolution: { $ifNull: [{ $first: '$resolution' }, null] } },
+        },
         { $match: stateMatch },
         {
           $facet: {
@@ -132,7 +153,9 @@ export class SyncIssuesService implements OnModuleInit {
                   from: 'employees',
                   let: { ownerId: '$_id.ownerId' },
                   pipeline: [
-                    { $match: { $expr: { $eq: ['$employeeId', '$$ownerId'] } } },
+                    {
+                      $match: { $expr: { $eq: ['$employeeId', '$$ownerId'] } },
+                    },
                     { $limit: 1 },
                     { $project: { _id: 0, name: 1, vanId: 1 } },
                   ],
@@ -187,13 +210,24 @@ export class SyncIssuesService implements OnModuleInit {
   /** The salesman's change next to the current server record, plus history. */
   async findOne(auditId: string) {
     const audit = await this.getAudit(auditId);
-    const key = { ownerId: audit.ownerId, queueId: audit.queueId, localId: audit.localId };
+    const key = {
+      ownerId: audit.ownerId,
+      queueId: audit.queueId,
+      localId: audit.localId,
+    };
 
     const [attempts, resolutions, owner, server] = await Promise.all([
       this.connection
         .collection(AUDIT_COLLECTION)
         .find(key, {
-          projection: { _id: 0, auditId: 1, status: 1, error: 1, createdAt: 1, version: 1 },
+          projection: {
+            _id: 0,
+            auditId: 1,
+            status: 1,
+            error: 1,
+            createdAt: 1,
+            version: 1,
+          },
         })
         .sort({ createdAt: -1 })
         .limit(50)
@@ -260,7 +294,11 @@ export class SyncIssuesService implements OnModuleInit {
 
     const context = RequestContextStore.getStore();
     const now = new Date();
-    const key = { ownerId: audit.ownerId, queueId: audit.queueId, localId: audit.localId };
+    const key = {
+      ownerId: audit.ownerId,
+      queueId: audit.queueId,
+      localId: audit.localId,
+    };
     const resolution = {
       resolutionId: IdGenerator.generate('SRES', 10),
       ...key,

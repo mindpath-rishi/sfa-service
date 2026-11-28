@@ -34,7 +34,13 @@ export function collectFreeGoods(
     const key = `${productId}::${resolvedUnit}`;
     const existing = goods.get(key);
     if (existing) existing.qty += amount;
-    else goods.set(key, { productId, productName, qty: amount, unit: resolvedUnit });
+    else
+      goods.set(key, {
+        productId,
+        productName,
+        qty: amount,
+        unit: resolvedUnit,
+      });
   };
 
   for (const raw of items) {
@@ -43,7 +49,8 @@ export function collectFreeGoods(
       // Without a separate free product the scheme gives the same product.
       add(
         scheme.freeProductId || item.productId,
-        scheme.freeProductName || (scheme.freeProductId ? undefined : item.productName),
+        scheme.freeProductName ||
+          (scheme.freeProductId ? undefined : item.productName),
         scheme.freeQty,
         scheme.freeUnit,
       );
@@ -52,7 +59,12 @@ export function collectFreeGoods(
 
   for (const scheme of groupSchemes) {
     if (scheme.freeProductId) {
-      add(scheme.freeProductId, scheme.freeProductName, scheme.freeQty, scheme.freeUnit);
+      add(
+        scheme.freeProductId,
+        scheme.freeProductName,
+        scheme.freeQty,
+        scheme.freeUnit,
+      );
     }
     // Historical group schemes split free goods over the qualifying lines.
     for (const line of scheme.lines ?? []) {

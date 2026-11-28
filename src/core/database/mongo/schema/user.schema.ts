@@ -16,7 +16,7 @@
  */
 
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Agent, UserStatus } from 'src/modules/v1/user/user.enum';
+import { UserStatus } from 'src/modules/v1/user/user.enum';
 
 @Schema({
   collection: 'users',

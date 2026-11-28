@@ -4,11 +4,11 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsNotEmpty, IsString, IsOptional, IsEnum } from 'class-validator';
 
 export class CreateCustomerCategoryDto {
-/**
- * CustomerCategory Create DTO
- * ====================
- * Data Transfer Object for creating new CustomerCategory records
- */
+  /**
+   * CustomerCategory Create DTO
+   * ====================
+   * Data Transfer Object for creating new CustomerCategory records
+   */
   /**
    * Name
    * ----
@@ -25,9 +25,11 @@ export class CreateCustomerCategoryDto {
    * Customer category availability status
    */
 
-  @ApiPropertyOptional({ example: CustomerCategoryStatus.ACTIVE, enum: CustomerCategoryStatus })
+  @ApiPropertyOptional({
+    example: CustomerCategoryStatus.ACTIVE,
+    enum: CustomerCategoryStatus,
+  })
   @IsOptional()
   @IsEnum(CustomerCategoryStatus)
   status?: CustomerCategoryStatus;
-
 }

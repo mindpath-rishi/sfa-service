@@ -1,9 +1,7 @@
 import Redis from 'ioredis';
 import { LoggerService } from 'src/core/logger/logger.service';
 
-export function createRedisClient(
-  logger: LoggerService,
-): Redis {
+export function createRedisClient(logger: LoggerService): Redis {
   const client = new Redis({
     host: process.env.REDIS_HOST || '127.0.0.1',
     port: Number(process.env.REDIS_PORT) || 6379,
@@ -20,21 +18,13 @@ export function createRedisClient(
 
   /* ==================== EVENTS ==================== */
 
-  client.on('ready', () =>
-    logger.info('Redis ready'),
-  );
+  client.on('ready', () => logger.info('Redis ready'));
 
-  client.on('error', (err) =>
-    logger.error('Redis error', err),
-  );
+  client.on('error', (err) => logger.error('Redis error', err));
 
-  client.on('reconnecting', () =>
-    logger.warn('Redis reconnecting'),
-  );
+  client.on('reconnecting', () => logger.warn('Redis reconnecting'));
 
-  client.on('end', () =>
-    logger.warn('Redis connection closed'),
-  );
+  client.on('end', () => logger.warn('Redis connection closed'));
 
   return client;
 }

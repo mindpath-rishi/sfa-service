@@ -1,4 +1,3 @@
-
 export const INVENTORY_TRANSACTION = {
   CREATED: 'InventoryTransaction created successfully',
   FETCHED: 'InventoryTransaction fetched successfully',

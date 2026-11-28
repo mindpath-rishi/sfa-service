@@ -1,4 +1,3 @@
-
 import {
   Injectable,
   NotFoundException,
@@ -10,7 +9,10 @@ import { MongoService } from 'src/core/database/mongo/mongo.service';
 import { MongoRepository } from 'src/core/database/mongo/mongo.repository';
 import { FilterQuery } from 'src/core/database/mongo/mongo.interface';
 
-import { Country, CountrySchema } from 'src/core/database/mongo/schema/country.schema';
+import {
+  Country,
+  CountrySchema,
+} from 'src/core/database/mongo/schema/country.schema';
 
 import { COUNTRY } from './country.constants';
 import { CreateCountryDto } from './dto/create-country.dto';
@@ -30,12 +32,14 @@ export class CountryService extends MongoRepository<Country> {
     try {
       return await this.withTransaction(async (session) => {
         if (payload.name) {
-          payload.name = TextNormalizer.normalize(payload.name, NormalizeType.TITLE);
+          payload.name = TextNormalizer.normalize(
+            payload.name,
+            NormalizeType.TITLE,
+          );
         }
 
         const filter: FilterQuery<Country> = {};
 
-        
         if (payload.name) filter.name = payload.name;
 
         const existing = await this.findOne(filter, {
@@ -130,11 +134,10 @@ export class CountryService extends MongoRepository<Country> {
           dto.name = TextNormalizer.normalize(dto.name, NormalizeType.TITLE);
         }
 
-        const doc = await this.updateOne(
-          { countryId },
-          dto,
-          { session, new: true },
-        );
+        const doc = await this.updateOne({ countryId }, dto, {
+          session,
+          new: true,
+        });
 
         if (!doc) throw new NotFoundException(COUNTRY.NOT_FOUND);
 

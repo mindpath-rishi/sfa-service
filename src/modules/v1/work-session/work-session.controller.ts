@@ -26,7 +26,6 @@ import {
   Patch,
   UseGuards,
   Post,
-  Query,
 } from '@nestjs/common';
 import { ApiBody, ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger';
 
@@ -34,7 +33,6 @@ import { FeatureFlag } from 'src/core/decorators/feature-flag.decorator';
 import { ApiSuccessResponse } from 'src/core/swagger/api.response.swagger';
 import {
   ApiInternalErrorResponse,
-  ApiNotFoundResponse,
   ApiUnauthorizedResponse,
   ApiUnprocessableEntityResponse,
 } from 'src/core/swagger/api-error.response.swagger';
@@ -50,8 +48,6 @@ import { SuperAdminGuard } from 'src/core/guards/super-admin.guard';
 
 import { WorkSessionService } from './work-session.service';
 import { CreateWorkSessionDto } from './dto/create-work-session.dto';
-import { UpdateWorkSessionDto } from './dto/update-work-session.dto';
-import { WorkSessionQueryDto } from './dto/work-session-query.dto';
 import { WORK_SESSION } from './work-session.constants';
 import { CompleteWorkSessionDto } from './dto/complete-work-session.dto';
 import { BackOfficeOnly } from 'src/core/decorators/back-office-only.decorator';
@@ -151,7 +147,9 @@ export class WorkSessionController {
    */
   @UseGuards(SuperAdminGuard)
   @Patch(':workSessionId/release-device')
-  @ApiOperation({ summary: 'Let the user continue an active day on another device' })
+  @ApiOperation({
+    summary: 'Let the user continue an active day on another device',
+  })
   @ApiParam({ name: 'workSessionId', description: 'WorkSession workSessionId' })
   async releaseDevice(@Param('workSessionId') workSessionId: string) {
     return this.service.releaseDeviceLock(workSessionId);

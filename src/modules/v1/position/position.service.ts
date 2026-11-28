@@ -648,9 +648,7 @@ export class PositionService extends MongoRepository<Position> {
           isDeleted: { $ne: true },
         });
         if (session) childVanIdsQuery.session(session);
-        const childVanIds = ((await childVanIdsQuery) as string[])
-          .filter(Boolean)
-          .sort();
+        const childVanIds = (await childVanIdsQuery).filter(Boolean).sort();
         await this.model.updateOne(
           { positionId: currentPositionId },
           { $set: { vanIds: childVanIds } },

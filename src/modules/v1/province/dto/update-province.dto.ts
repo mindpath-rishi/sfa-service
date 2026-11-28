@@ -4,13 +4,13 @@ import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IsOptional, IsString, IsEnum, IsBoolean } from 'class-validator';
 
 export class UpdateProvinceDto {
-/**
- * Province Update DTO
- * ====================
- * Data Transfer Object for updating Province records
- * 
- * All fields are optional for partial updates
- */
+  /**
+   * Province Update DTO
+   * ====================
+   * Data Transfer Object for updating Province records
+   *
+   * All fields are optional for partial updates
+   */
   /**
    * CountryId
    * ---------
@@ -51,5 +51,4 @@ export class UpdateProvinceDto {
   @IsOptional()
   @IsBoolean()
   isDeleted?: boolean;
-
 }

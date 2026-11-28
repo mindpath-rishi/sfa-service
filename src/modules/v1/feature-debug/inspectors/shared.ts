@@ -1,6 +1,11 @@
 import type { Db } from 'mongodb';
 import { APP_LOGS_COLLECTION } from 'src/core/logger/log-sink';
-import type { CheckStatus, DebugCheck, DebugSection, RepairRef } from '../feature-debug.types';
+import type {
+  CheckStatus,
+  DebugCheck,
+  DebugSection,
+  RepairRef,
+} from '../feature-debug.types';
 
 /** Values from different screens are rounded differently; compare to the cent. */
 export const sameAmount = (a: unknown, b: unknown, tolerance = 0.01) =>
@@ -16,9 +21,16 @@ export const check = (
   detail: string,
   hint?: string,
   target?: DebugCheck['target'],
-): DebugCheck => ({ label, status, detail, ...(hint ? { hint } : {}), ...(target ? { target } : {}) });
+): DebugCheck => ({
+  label,
+  status,
+  detail,
+  ...(hint ? { hint } : {}),
+  ...(target ? { target } : {}),
+});
 
-const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const escapeRegex = (value: string) =>
+  value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 export const startOfDay = (value?: string | Date) => {
   const date = value ? new Date(value) : new Date();
@@ -40,10 +52,25 @@ export const clean = (doc: Record<string, any> | null | undefined) => {
 };
 
 /** Record history from the audit plugin (create/update/delete). */
-export async function auditSection(db: Db, entityId: string): Promise<DebugSection> {
+export async function auditSection(
+  db: Db,
+  entityId: string,
+): Promise<DebugSection> {
   const rows = await db
     .collection('audit_logs')
-    .find({ entityId }, { projection: { _id: 0, entity: 1, action: 1, performedBy: 1, createdAt: 1, after: 1 } })
+    .find(
+      { entityId },
+      {
+        projection: {
+          _id: 0,
+          entity: 1,
+          action: 1,
+          performedBy: 1,
+          createdAt: 1,
+          after: 1,
+        },
+      },
+    )
     .sort({ createdAt: -1 })
     .limit(30)
     .toArray();
@@ -61,12 +88,26 @@ export async function auditSection(db: Db, entityId: string): Promise<DebugSecti
 }
 
 /** Offline sync attempts that touched this record. */
-export async function offlineSyncSection(db: Db, ids: string[]): Promise<DebugSection> {
+export async function offlineSyncSection(
+  db: Db,
+  ids: string[],
+): Promise<DebugSection> {
   const rows = await db
     .collection('offline_sync_audit_logs')
     .find(
       { $or: [{ businessId: { $in: ids } }, { localId: { $in: ids } }] },
-      { projection: { _id: 0, auditId: 1, entity: 1, operation: 1, status: 1, error: 1, ownerId: 1, createdAt: 1 } },
+      {
+        projection: {
+          _id: 0,
+          auditId: 1,
+          entity: 1,
+          operation: 1,
+          status: 1,
+          error: 1,
+          ownerId: 1,
+          createdAt: 1,
+        },
+      },
     )
     .sort({ createdAt: -1 })
     .limit(30)
@@ -101,7 +142,16 @@ export async function logsSection(
   const rows = await db
     .collection(APP_LOGS_COLLECTION)
     .find(query, {
-      projection: { _id: 0, time: 1, levelLabel: 1, msg: 1, errorMessage: 1, statusCode: 1, reqId: 1, userId: 1 },
+      projection: {
+        _id: 0,
+        time: 1,
+        levelLabel: 1,
+        msg: 1,
+        errorMessage: 1,
+        statusCode: 1,
+        reqId: 1,
+        userId: 1,
+      },
     })
     .sort({ time: -1 })
     .limit(50)
@@ -112,7 +162,14 @@ export async function logsSection(
     key: 'logs',
     title: 'Server logs',
     kind: 'table',
-    columns: ['time', 'levelLabel', 'statusCode', 'msg', 'errorMessage', 'reqId'],
+    columns: [
+      'time',
+      'levelLabel',
+      'statusCode',
+      'msg',
+      'errorMessage',
+      'reqId',
+    ],
     rows,
   };
 }
@@ -137,12 +194,16 @@ export function erpCheck(
       'Fix the cause shown, then retry from MIS → ERP Schedulers.',
     );
   }
-  const ageHours = lastAttempt ? (Date.now() - new Date(lastAttempt).getTime()) / 36e5 : undefined;
+  const ageHours = lastAttempt
+    ? (Date.now() - new Date(lastAttempt).getTime()) / 36e5
+    : undefined;
   return check(
     label,
     ageHours !== undefined && ageHours > 1 ? 'WARN' : 'INFO',
     `ERP status ${status}${attempts ? `, ${attempts} attempt(s)` : ''}`,
-    ageHours !== undefined && ageHours > 1 ? 'Still not sent after more than an hour; check the ERP scheduler.' : undefined,
+    ageHours !== undefined && ageHours > 1
+      ? 'Still not sent after more than an hour; check the ERP scheduler.'
+      : undefined,
   );
 }
 
@@ -160,7 +221,12 @@ export async function dataSyncCheck(
     ? await db
         .collection('offline_sync_audit_logs')
         .find(
-          { $or: [{ businessId: { $in: lookupIds } }, { localId: { $in: lookupIds } }] },
+          {
+            $or: [
+              { businessId: { $in: lookupIds } },
+              { localId: { $in: lookupIds } },
+            ],
+          },
           { projection: { _id: 0, status: 1, error: 1, createdAt: 1 } },
         )
         .sort({ createdAt: -1 })
@@ -169,9 +235,15 @@ export async function dataSyncCheck(
     : [];
 
   const latest = attempts[0];
-  const failures = attempts.filter((attempt) => attempt.status === 'FAILED').length;
-  const source = doc.createdOffline ? 'created offline' : `created ${String(doc.syncSource ?? 'ONLINE').toLowerCase()}`;
-  const synced = doc.lastSyncedAt ? `, last synced ${new Date(doc.lastSyncedAt).toLocaleString()}` : '';
+  const failures = attempts.filter(
+    (attempt) => attempt.status === 'FAILED',
+  ).length;
+  const source = doc.createdOffline
+    ? 'created offline'
+    : `created ${String(doc.syncSource ?? 'ONLINE').toLowerCase()}`;
+  const synced = doc.lastSyncedAt
+    ? `, last synced ${new Date(doc.lastSyncedAt).toLocaleString()}`
+    : '';
 
   if (latest?.status === 'FAILED') {
     return check(
@@ -182,29 +254,60 @@ export async function dataSyncCheck(
     );
   }
   if (failures) {
-    return check('Data sync', 'PASS', `Synced (${source}${synced}); ${failures} earlier attempt(s) failed before it went through`);
+    return check(
+      'Data sync',
+      'PASS',
+      `Synced (${source}${synced}); ${failures} earlier attempt(s) failed before it went through`,
+    );
   }
   return check('Data sync', 'PASS', `On the server (${source}${synced})`);
 }
 
 /** Offer a repair on the check with this label when it is failing/warning. */
-export function offerRepair(checks: DebugCheck[], label: string, ref: RepairRef, statuses: CheckStatus[] = ['FAIL', 'WARN']) {
-  const entry = checks.find((item) => item.label === label && statuses.includes(item.status));
+export function offerRepair(
+  checks: DebugCheck[],
+  label: string,
+  ref: RepairRef,
+  statuses: CheckStatus[] = ['FAIL', 'WARN'],
+) {
+  const entry = checks.find(
+    (item) => item.label === label && statuses.includes(item.status),
+  );
   if (entry) entry.repair = ref;
 }
 
 /** The phone's own report from its latest check-in (diagnostics heartbeat). */
-export async function phoneCheck(db: Db, userId: string): Promise<{ check: DebugCheck; latest: Record<string, any> | null }> {
-  const latest = await db.collection('device_diagnostics').findOne({ userId }, { sort: { lastHeartbeatAt: -1 } });
+export async function phoneCheck(
+  db: Db,
+  userId: string,
+): Promise<{ check: DebugCheck; latest: Record<string, any> | null }> {
+  const latest = await db
+    .collection('device_diagnostics')
+    .findOne({ userId }, { sort: { lastHeartbeatAt: -1 } });
   if (!latest) {
-    return { latest: null, check: check('Phone check-in', 'INFO', 'No check-in from the phone yet (the app version with diagnostics is not installed, or it never opened)') };
+    return {
+      latest: null,
+      check: check(
+        'Phone check-in',
+        'INFO',
+        'No check-in from the phone yet (the app version with diagnostics is not installed, or it never opened)',
+      ),
+    };
   }
-  const minutes = Math.round((Date.now() - new Date(latest.lastHeartbeatAt).getTime()) / 60000);
+  const minutes = Math.round(
+    (Date.now() - new Date(latest.lastHeartbeatAt).getTime()) / 60000,
+  );
   const problems = [
     latest.queue?.failed ? `${latest.queue.failed} failed in queue` : '',
-    latest.permissions && latest.permissions.backgroundLocation !== 'granted' ? 'background location off' : '',
-    latest.permissions && latest.permissions.notifications !== 'granted' ? 'notifications off' : '',
-    typeof latest.freeStorageMb === 'number' && latest.freeStorageMb < 500 ? `only ${latest.freeStorageMb} MB free` : '',
+    latest.permissions && latest.permissions.backgroundLocation !== 'granted'
+      ? 'background location off'
+      : '',
+    latest.permissions && latest.permissions.notifications !== 'granted'
+      ? 'notifications off'
+      : '',
+    typeof latest.freeStorageMb === 'number' && latest.freeStorageMb < 500
+      ? `only ${latest.freeStorageMb} MB free`
+      : '',
   ].filter(Boolean);
   const detail = `App ${latest.appVersion ?? '?'} on ${latest.platform ?? ''} ${latest.osVersion ?? ''} (${latest.deviceModel ?? 'unknown device'}), last check-in ${minutes} min ago; queue ${latest.queue?.pending ?? 0} pending`;
   return {
@@ -213,7 +316,9 @@ export async function phoneCheck(db: Db, userId: string): Promise<{ check: Debug
       'Phone check-in',
       problems.length ? 'WARN' : minutes > 30 ? 'INFO' : 'PASS',
       problems.length ? `${detail}; ${problems.join(', ')}` : detail,
-      problems.length ? 'Ask the salesman to fix these settings, or request diagnostics for the app logs.' : undefined,
+      problems.length
+        ? 'Ask the salesman to fix these settings, or request diagnostics for the app logs.'
+        : undefined,
     ),
   };
 }

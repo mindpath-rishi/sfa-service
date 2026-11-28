@@ -313,7 +313,7 @@ export abstract class MongoRepository<T> {
       },
     }));
 
-    const res = await this.model.bulkWrite(bulkOps as any, {
+    const res = await this.model.bulkWrite(bulkOps, {
       session: options?.session,
     });
 
@@ -324,9 +324,7 @@ export abstract class MongoRepository<T> {
     return this.model.countDocuments(this.applySoftDelete(filter));
   }
 
-  async deleteDocument(
-    filter: FilterQuery<T> = {} as any,
-  ): Promise<Doc<T> | null> {
+  async deleteDocument(filter: FilterQuery<T> = {}): Promise<Doc<T> | null> {
     return this.model.findOneAndDelete(filter);
   }
 }

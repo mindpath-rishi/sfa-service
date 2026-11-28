@@ -1,4 +1,3 @@
-
 import {
   Injectable,
   NotFoundException,
@@ -10,14 +9,16 @@ import { MongoService } from 'src/core/database/mongo/mongo.service';
 import { MongoRepository } from 'src/core/database/mongo/mongo.repository';
 import { FilterQuery } from 'src/core/database/mongo/mongo.interface';
 
-import { StockSales, StockSalesSchema } from 'src/core/database/mongo/schema/stock-sales.schema';
+import {
+  StockSales,
+  StockSalesSchema,
+} from 'src/core/database/mongo/schema/stock-sales.schema';
 
 import { STOCK_SALES } from './stock-sales.constants';
 import { CreateStockSalesDto } from './dto/create-stock-sales.dto';
 import { UpdateStockSalesDto } from './dto/update-stock-sales.dto';
 import { StockSalesQueryDto } from './dto/stock-sales-query.dto';
 import { IdGenerator } from 'src/shared/utils/id-generator.utils';
-
 
 @Injectable()
 export class StockSalesService extends MongoRepository<StockSales> {
@@ -28,12 +29,10 @@ export class StockSalesService extends MongoRepository<StockSales> {
   async create(payload: CreateStockSalesDto) {
     try {
       return await this.withTransaction(async (session) => {
-        
-
         const filter: FilterQuery<StockSales> = {};
 
-        
-        if (payload.stockSalesNumber) filter.stockSalesNumber = payload.stockSalesNumber;
+        if (payload.stockSalesNumber)
+          filter.stockSalesNumber = payload.stockSalesNumber;
 
         const existing = await this.findOne(filter, {
           session,
@@ -123,13 +122,10 @@ export class StockSalesService extends MongoRepository<StockSales> {
   async update(stockSalesId: string, dto: UpdateStockSalesDto) {
     try {
       return await this.withTransaction(async (session) => {
-        
-
-        const doc = await this.updateOne(
-          { stockSalesId },
-          dto,
-          { session, new: true },
-        );
+        const doc = await this.updateOne({ stockSalesId }, dto, {
+          session,
+          new: true,
+        });
 
         if (!doc) throw new NotFoundException(STOCK_SALES.NOT_FOUND);
 

@@ -1,4 +1,3 @@
-
 export const WORK_SESSION = {
   CREATED: 'WorkSession created successfully',
   FETCHED: 'WorkSession fetched successfully',

@@ -1,6 +1,22 @@
-import { Body, Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
-import { IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
+import {
+  IsIn,
+  IsInt,
+  IsOptional,
+  IsString,
+  Max,
+  MaxLength,
+  Min,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 import { SuperAdminGuard } from 'src/core/guards/super-admin.guard';
 import { API_MODULE, V1 } from 'src/shared/constants/api.constants';
@@ -10,7 +26,9 @@ import { ReconciliationService } from './reconciliation.service';
 import { BackOfficeOnly } from 'src/core/decorators/back-office-only.decorator';
 
 class AlertsQueryDto {
-  @IsOptional() @IsIn(['OPEN', 'ACKNOWLEDGED', 'RESOLVED', 'ALL']) status?: string;
+  @IsOptional()
+  @IsIn(['OPEN', 'ACKNOWLEDGED', 'RESOLVED', 'ALL'])
+  status?: string;
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) page?: number;
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(200) limit?: number;
 }
@@ -36,7 +54,9 @@ export class MonitoringController {
   ) {}
 
   @Get('health')
-  @ApiOperation({ summary: 'Databases, ERP, process, disk, traffic, sync and phones' })
+  @ApiOperation({
+    summary: 'Databases, ERP, process, disk, traffic, sync and phones',
+  })
   getHealth() {
     return this.health.health();
   }
@@ -50,11 +70,17 @@ export class MonitoringController {
   @Post('alerts/run')
   @ApiOperation({ summary: 'Run the alert check now' })
   async runAlerts() {
-    return { statusCode: 200, message: 'Alert check complete', data: await this.alerts.evaluate('manual') };
+    return {
+      statusCode: 200,
+      message: 'Alert check complete',
+      data: await this.alerts.evaluate('manual'),
+    };
   }
 
   @Post('alerts/:alertId/ack')
-  @ApiOperation({ summary: 'Acknowledge an alert (it still resolves on its own)' })
+  @ApiOperation({
+    summary: 'Acknowledge an alert (it still resolves on its own)',
+  })
   ack(@Param('alertId') alertId: string, @Body() dto: AckDto) {
     return this.alerts.acknowledge(alertId, dto.note);
   }
@@ -69,7 +95,11 @@ export class MonitoringController {
   @ApiOperation({ summary: 'Run reconciliation now over the last day' })
   async runReconciliation() {
     const report = await this.reconciliation.run('manual');
-    return { statusCode: 200, message: 'Reconciliation complete', data: { ...report, findings: undefined } };
+    return {
+      statusCode: 200,
+      message: 'Reconciliation complete',
+      data: { ...report, findings: undefined },
+    };
   }
 
   @Get('reconciliation/:reportId')

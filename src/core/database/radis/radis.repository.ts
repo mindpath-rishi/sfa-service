@@ -1,16 +1,10 @@
-import {
-  Injectable,
-  OnModuleInit,
-  OnModuleDestroy,
-} from '@nestjs/common';
+import { Injectable, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import Redis from 'ioredis';
 import { createRedisClient } from 'src/core/config/redis.config';
 import { LoggerService } from 'src/core/logger/logger.service';
 
 @Injectable()
-export class RedisRepository
-  implements OnModuleInit, OnModuleDestroy
-{
+export class RedisRepository implements OnModuleInit, OnModuleDestroy {
   public readonly client: Redis;
 
   /* ======================================================

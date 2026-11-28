@@ -33,7 +33,6 @@ import { FeatureFlag } from 'src/core/decorators/feature-flag.decorator';
 import { ApiSuccessResponse } from 'src/core/swagger/api.response.swagger';
 import {
   ApiInternalErrorResponse,
-  ApiNotFoundResponse,
   ApiUnauthorizedResponse,
   ApiUnprocessableEntityResponse,
 } from 'src/core/swagger/api-error.response.swagger';
@@ -102,7 +101,10 @@ export class RouteCustomerMappingController {
   @Permissions('ROUTE_CUSTOMER_MAPPING_VIEW')
   @BackOfficeOnly()
   @Get(':mappingId')
-  @ApiParam({ name: 'mappingId', description: 'RouteCustomerMapping mappingId' })
+  @ApiParam({
+    name: 'mappingId',
+    description: 'RouteCustomerMapping mappingId',
+  })
   async findOne(@Param('mappingId') mappingId: string) {
     return this.service.findByMappingId(mappingId);
   }
@@ -114,7 +116,10 @@ export class RouteCustomerMappingController {
   @Permissions('ROUTE_CUSTOMER_MAPPING_UPDATE')
   @BackOfficeOnly()
   @Patch(':mappingId')
-  @ApiParam({ name: 'mappingId', description: 'RouteCustomerMapping mappingId' })
+  @ApiParam({
+    name: 'mappingId',
+    description: 'RouteCustomerMapping mappingId',
+  })
   async update(
     @Param('mappingId') mappingId: string,
     @Body() dto: UpdateRouteCustomerMappingDto,
@@ -129,7 +134,10 @@ export class RouteCustomerMappingController {
   @Permissions('ROUTE_CUSTOMER_MAPPING_DELETE')
   @BackOfficeOnly()
   @Delete(':mappingId')
-  @ApiParam({ name: 'mappingId', description: 'RouteCustomerMapping mappingId' })
+  @ApiParam({
+    name: 'mappingId',
+    description: 'RouteCustomerMapping mappingId',
+  })
   async delete(@Param('mappingId') mappingId: string) {
     return this.service.delete(mappingId);
   }

@@ -1,5 +1,5 @@
 import { MongooseModuleOptions } from '@nestjs/mongoose';
-import mongoose, { Connection } from 'mongoose';
+import { Connection } from 'mongoose';
 import { LoggerService } from 'src/core/logger/logger.service';
 import { timestampsPlugin } from '../database/mongo/plugins/timestamps.plugin';
 import { softDeletePlugin } from '../database/mongo/plugins/soft-delete.plugin';

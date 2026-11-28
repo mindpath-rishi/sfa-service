@@ -39,7 +39,10 @@ export type LiveLocationUpdate = {
 export class LiveLocationService {
   private readonly workSessionModel: Model<WorkSession>;
   /** workSessionId:userId → session check result (avoids a DB read per point) */
-  private readonly sessionCheck = new Map<string, { ok: boolean; at: number }>();
+  private readonly sessionCheck = new Map<
+    string,
+    { ok: boolean; at: number }
+  >();
   /** Set by the gateway: pushes points received over HTTP to live viewers too. */
   private realtimeListener?: (update: LiveLocationUpdate) => void;
   private readonly broadcastFilter = new LiveBroadcastFilter();
@@ -151,7 +154,11 @@ export class LiveLocationService {
     const ttl = cached?.ok ? 10 * 60_000 : 60_000;
     if (cached && Date.now() - cached.at < ttl) return cached.ok;
     const ok = Boolean(
-      await this.workSessionModel.exists({ workSessionId, userId, isDeleted: false } as any),
+      await this.workSessionModel.exists({
+        workSessionId,
+        userId,
+        isDeleted: false,
+      } as any),
     );
     if (this.sessionCheck.size > 5000) this.sessionCheck.clear();
     this.sessionCheck.set(key, { ok, at: Date.now() });
@@ -263,8 +270,16 @@ export class LiveLocationService {
     };
   }
 
-  async findForSessions(workSessionIds: string[], startDate: Date, endDate: Date) {
-    const points = await this.pointsStore.findBySessions(workSessionIds, startDate, endDate);
+  async findForSessions(
+    workSessionIds: string[],
+    startDate: Date,
+    endDate: Date,
+  ) {
+    const points = await this.pointsStore.findBySessions(
+      workSessionIds,
+      startDate,
+      endDate,
+    );
     return points.map((point) => this.fromStored(point));
   }
 

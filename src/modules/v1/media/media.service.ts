@@ -342,7 +342,9 @@ export class MediaService extends MongoRepository<Media> {
           await this.storage.delete({ storageKey: key });
         }
       }
-    } catch {}
+    } catch {
+      // Best-effort cleanup; ignore storage delete failures
+    }
   }
 
   /**

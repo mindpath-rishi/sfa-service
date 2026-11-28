@@ -18,7 +18,6 @@ import { STOCK_SALES_ITEM } from './stock-sales-item.constants';
 import { CreateStockSalesItemDto } from './dto/create-stock-sales-item.dto';
 import { UpdateStockSalesItemDto } from './dto/update-stock-sales-item.dto';
 import { StockSalesItemQueryDto } from './dto/stock-sales-item-query.dto';
-import { IdGenerator } from 'src/shared/utils/id-generator.utils';
 
 @Injectable()
 export class StockSalesItemService extends MongoRepository<StockSalesItem> {

@@ -12,16 +12,8 @@
  * - Pagination
  */
 
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import {
-  IsOptional,
-  IsString,
-  IsArray,
-  IsEnum,
-  IsNotEmpty,
-  IsIn,
-} from 'class-validator';
-import { Transform } from 'class-transformer';
+import { ApiPropertyOptional } from '@nestjs/swagger';
+import { IsOptional, IsString, IsEnum, IsIn } from 'class-validator';
 import { ProductStatus } from 'src/shared/enums/product.enums';
 import { PaginationDto } from 'src/shared/dto/pagination.dto';
 

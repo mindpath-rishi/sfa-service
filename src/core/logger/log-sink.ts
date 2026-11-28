@@ -53,8 +53,20 @@ const MAX_META = 4_000;
 
 // Fields mapped onto StoredLog columns; everything else goes into `meta`.
 const KNOWN_FIELDS = new Set([
-  'level', 'time', 'msg', 'pid', 'hostname', 'context', 'req', 'res',
-  'responseTime', 'userId', 'role', 'vanId', 'errorMessage', 'err',
+  'level',
+  'time',
+  'msg',
+  'pid',
+  'hostname',
+  'context',
+  'req',
+  'res',
+  'responseTime',
+  'userId',
+  'role',
+  'vanId',
+  'errorMessage',
+  'err',
 ]);
 
 const truncate = (value: unknown, max: number) => {
@@ -178,12 +190,16 @@ class LogSink extends EventEmitter {
     try {
       await this.collection.insertMany(batch, { ordered: false });
     } catch (error) {
-      this.warn(`could not store ${batch.length} log entries: ${(error as Error)?.message}`);
+      this.warn(
+        `could not store ${batch.length} log entries: ${(error as Error)?.message}`,
+      );
     } finally {
       this.flushing = false;
     }
     if (this.dropped) {
-      this.warn(`dropped ${this.dropped} log entries while storage was unavailable`);
+      this.warn(
+        `dropped ${this.dropped} log entries while storage was unavailable`,
+      );
       this.dropped = 0;
     }
   }

@@ -18,7 +18,6 @@ import { VAN_ERP_CLOSING } from './van-erp-closing.constants';
 import { CreateVanErpClosingDto } from './dto/create-van-erp-closing.dto';
 import { UpdateVanErpClosingDto } from './dto/update-van-erp-closing.dto';
 import { VanErpClosingQueryDto } from './dto/van-erp-closing-query.dto';
-import { IdGenerator } from 'src/shared/utils/id-generator.utils';
 import { OracleRepository } from 'src/core/database/oracle/oracle.repository';
 import { VanErpClosingStatus } from 'src/shared/enums/van-erp-closing.enums';
 

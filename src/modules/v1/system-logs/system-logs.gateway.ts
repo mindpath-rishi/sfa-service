@@ -17,7 +17,12 @@ import { JwtPayload } from 'src/shared/interfaces/jwt-payload.interface';
 
 const EMIT_INTERVAL_MS = 500;
 const MAX_PER_EMIT = 300;
-const LEVELS: Record<string, number> = { debug: 20, info: 30, warn: 40, error: 50 };
+const LEVELS: Record<string, number> = {
+  debug: 20,
+  info: 30,
+  warn: 40,
+  error: 50,
+};
 
 type LiveFilter = {
   level?: string;
@@ -123,7 +128,9 @@ export class SystemLogsGateway
         }
       }
     } catch (error) {
-      this.logger.warn(`Live log broadcast failed: ${(error as Error).message}`);
+      this.logger.warn(
+        `Live log broadcast failed: ${(error as Error).message}`,
+      );
     }
   }
 }

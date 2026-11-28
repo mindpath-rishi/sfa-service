@@ -61,7 +61,7 @@ export class SessionMiddleware implements NestMiddleware {
       (req as any).session = sessionRaw ? JSON.parse(sessionRaw) : null;
 
       next();
-    } catch (err) {
+    } catch {
       next();
     }
   }

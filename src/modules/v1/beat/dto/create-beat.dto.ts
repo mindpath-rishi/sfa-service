@@ -4,11 +4,11 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsNotEmpty, IsString, IsOptional, IsEnum } from 'class-validator';
 
 export class CreateBeatDto {
-/**
- * Beat Create DTO
- * ====================
- * Data Transfer Object for creating new Beat records
- */
+  /**
+   * Beat Create DTO
+   * ====================
+   * Data Transfer Object for creating new Beat records
+   */
   /**
    * Name
    * ----
@@ -29,5 +29,4 @@ export class CreateBeatDto {
   @IsOptional()
   @IsEnum(BeatStatus)
   status?: BeatStatus;
-
 }

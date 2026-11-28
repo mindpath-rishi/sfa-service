@@ -2,7 +2,7 @@
  * Expense Reference Tables
  * ------------------------
  * - ExpenseRate      : Per Day Value by employee tag (UPC / Local)
- * - WithdrawalCharge : Withdrawal charge slabs, looked up by base amount
+ * - WithdrawalCharge : Withdrawal charge slabs (percentage of base amount), looked up by base amount
  *                      (Payable days × Per Day Value)
  */
 
@@ -38,8 +38,9 @@ export class WithdrawalCharge {
   @Prop({ required: true, type: Number, min: 0 })
   maxAmount!: number;
 
-  @Prop({ required: true, type: Number, min: 0 })
-  charge!: number;
+  // Charge as a percentage of the base amount (e.g. 2.5 = 2.5%)
+  @Prop({ required: true, type: Number, min: 0, max: 100 })
+  chargePercent!: number;
 }
 
 export const WithdrawalChargeSchema =

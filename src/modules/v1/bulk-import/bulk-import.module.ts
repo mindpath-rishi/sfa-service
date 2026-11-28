@@ -9,7 +9,14 @@ import { BulkImportController } from './bulk-import.controller';
 import { BulkImportService } from './bulk-import.service';
 
 @Module({
-  imports: [CustomerModule, EmployeeModule, RouteModule, TargetModule, ProductModule, MasterBulkModule],
+  imports: [
+    CustomerModule,
+    EmployeeModule,
+    RouteModule,
+    TargetModule,
+    ProductModule,
+    MasterBulkModule,
+  ],
   controllers: [BulkImportController],
   providers: [BulkImportService],
 })

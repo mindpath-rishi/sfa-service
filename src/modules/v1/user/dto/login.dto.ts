@@ -147,56 +147,85 @@ export class DeviceInfoDto {
 
   /* ---------- Hardware / build details (optional, for support & audit) ---------- */
 
-  @IsOptional() @IsString() @MaxLength(100)
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
   brand?: string;
 
-  @IsOptional() @IsString() @MaxLength(100)
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
   manufacturer?: string;
 
-  @IsOptional() @IsString() @MaxLength(150)
+  @IsOptional()
+  @IsString()
+  @MaxLength(150)
   modelName?: string;
 
-  @IsOptional() @IsString() @MaxLength(100)
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
   modelId?: string;
 
-  @IsOptional() @IsString() @MaxLength(150)
+  @IsOptional()
+  @IsString()
+  @MaxLength(150)
   deviceName?: string;
 
-  @IsOptional() @IsString() @MaxLength(200)
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
   osBuildId?: string;
 
-  @IsOptional() @IsNumber()
+  @IsOptional()
+  @IsNumber()
   totalMemoryMb?: number;
 
   /** false = emulator / simulator */
-  @IsOptional() @IsBoolean()
+  @IsOptional()
+  @IsBoolean()
   isPhysicalDevice?: boolean;
 
-  @IsOptional() @IsBoolean()
+  @IsOptional()
+  @IsBoolean()
   isRooted?: boolean;
 
-  @IsOptional() @IsString() @MaxLength(50)
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
   appBuildVersion?: string;
 
-  @IsOptional() @IsString() @MaxLength(100)
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
   applicationId?: string;
 
-  @IsOptional() @IsString() @MaxLength(50)
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
   locale?: string;
 
-  @IsOptional() @IsString() @MaxLength(80)
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
   timezone?: string;
 
-  @IsOptional() @IsNumber()
+  @IsOptional()
+  @IsNumber()
   screenWidth?: number;
 
-  @IsOptional() @IsNumber()
+  @IsOptional()
+  @IsNumber()
   screenHeight?: number;
 
-  @IsOptional() @IsString() @MaxLength(30)
+  @IsOptional()
+  @IsString()
+  @MaxLength(30)
   networkType?: string;
 
-  @IsOptional() @IsString() @MaxLength(300)
+  @IsOptional()
+  @IsString()
+  @MaxLength(300)
   userAgent?: string;
 }
 

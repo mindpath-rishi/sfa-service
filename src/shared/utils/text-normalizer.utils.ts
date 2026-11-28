@@ -1,7 +1,10 @@
-import { NormalizeType } from "../enums/normalize.enums";
+import { NormalizeType } from '../enums/normalize.enums';
 
 export class TextNormalizer {
-  static normalize(value?: string, type: NormalizeType = NormalizeType.TITLE): string {
+  static normalize(
+    value?: string,
+    type: NormalizeType = NormalizeType.TITLE,
+  ): string {
     if (!value) return '';
 
     // Trim + collapse spaces first (common for all)

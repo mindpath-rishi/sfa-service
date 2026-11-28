@@ -43,5 +43,6 @@ export function syncAuditPlugin(schema: Schema) {
   }
 
   // Stable local identity metadata used for idempotent upload retries.
-  if (!schema.path('uuid')) schema.add({ uuid: { type: String, sparse: true, index: true } });
+  if (!schema.path('uuid'))
+    schema.add({ uuid: { type: String, sparse: true, index: true } });
 }

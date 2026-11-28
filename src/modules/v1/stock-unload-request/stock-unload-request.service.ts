@@ -333,7 +333,6 @@ export class StockUnloadRequestService extends MongoRepository<StockUnloadReques
         },
         { session },
       );
-
     });
 
     const updated = await this.findOne({ unloadRequestId });

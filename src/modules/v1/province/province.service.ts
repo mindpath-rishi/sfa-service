@@ -1,4 +1,3 @@
-
 import {
   Injectable,
   NotFoundException,
@@ -10,7 +9,10 @@ import { MongoService } from 'src/core/database/mongo/mongo.service';
 import { MongoRepository } from 'src/core/database/mongo/mongo.repository';
 import { FilterQuery } from 'src/core/database/mongo/mongo.interface';
 
-import { Province, ProvinceSchema } from 'src/core/database/mongo/schema/province.schema';
+import {
+  Province,
+  ProvinceSchema,
+} from 'src/core/database/mongo/schema/province.schema';
 
 import { PROVINCE } from './province.constants';
 import { CreateProvinceDto } from './dto/create-province.dto';
@@ -20,7 +22,8 @@ import { IdGenerator } from 'src/shared/utils/id-generator.utils';
 import { TextNormalizer } from 'src/shared/utils/text-normalizer.utils';
 import { NormalizeType } from 'src/shared/enums/normalize.enums';
 
-const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const escapeRegex = (value: string) =>
+  value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 @Injectable()
 export class ProvinceService extends MongoRepository<Province> {
@@ -32,7 +35,10 @@ export class ProvinceService extends MongoRepository<Province> {
     try {
       return await this.withTransaction(async (session) => {
         if (payload.name) {
-          payload.name = TextNormalizer.normalize(payload.name, NormalizeType.TITLE);
+          payload.name = TextNormalizer.normalize(
+            payload.name,
+            NormalizeType.TITLE,
+          );
         }
 
         const filter: FilterQuery<Province> = {
@@ -144,17 +150,16 @@ export class ProvinceService extends MongoRepository<Province> {
                 'i',
               ),
               provinceId: { $ne: provinceId },
-            } as FilterQuery<Province>,
+            },
             { session, includeDeleted: true },
           );
           if (duplicate) throw new ConflictException(PROVINCE.DUPLICATE);
         }
 
-        const doc = await this.updateOne(
-          { provinceId },
-          dto,
-          { session, new: true },
-        );
+        const doc = await this.updateOne({ provinceId }, dto, {
+          session,
+          new: true,
+        });
 
         if (!doc) throw new NotFoundException(PROVINCE.NOT_FOUND);
 

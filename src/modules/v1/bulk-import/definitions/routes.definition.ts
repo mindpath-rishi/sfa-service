@@ -2,11 +2,30 @@ import * as ExcelJS from 'exceljs';
 import { CreateRouteDto } from '../../route/dto/create-route.dto';
 import { RouteService } from '../../route/route.service';
 import type { ImportDefinition, ImportUnit } from '../bulk-import.types';
-import { addInstructions, requireHeaders, styleHeader, toBuffer } from '../sheet.utils';
-import { loadReferences, normalizeOutletId, resolveReference, type Reference } from './references';
+import {
+  addInstructions,
+  requireHeaders,
+  styleHeader,
+  toBuffer,
+} from '../sheet.utils';
+import {
+  loadReferences,
+  normalizeOutletId,
+  resolveReference,
+  type Reference,
+} from './references';
 import { outcomesFrom } from './outcomes';
 
-const HEADERS = ['Route Name', 'Country', 'Province', 'Market', 'Customer Category', 'Status', 'Outlet ID', 'Sequence'];
+const HEADERS = [
+  'Route Name',
+  'Country',
+  'Province',
+  'Market',
+  'Customer Category',
+  'Status',
+  'Outlet ID',
+  'Sequence',
+];
 const REQUIRED = ['Route Name', 'Province'];
 const KINDS = ['countries', 'provinces', 'markets', 'categories'] as const;
 
@@ -18,10 +37,13 @@ type Draft = ImportUnit<Record<string, unknown>> & {
  * Bulk routes: one row per route outlet, grouped by Route Name. The route's
  * result is written on every row of that route.
  */
-export const routesDefinition = (routes: RouteService): ImportDefinition<Record<string, unknown>> => ({
+export const routesDefinition = (
+  routes: RouteService,
+): ImportDefinition<Record<string, unknown>> => ({
   type: 'routes',
   label: 'Routes',
-  description: 'Create or update routes with their outlets. Rows with the same Route Name form one route.',
+  description:
+    'Create or update routes with their outlets. Rows with the same Route Name form one route.',
   requiredHeaders: REQUIRED,
   optionalHeaders: HEADERS.filter((header) => !REQUIRED.includes(header)),
   limit: 500,
@@ -39,7 +61,10 @@ export const routesDefinition = (routes: RouteService): ImportDefinition<Record<
       const name = row.get('Route Name');
       const customerId = normalizeOutletId(row.get('Outlet ID'));
       if (!name) {
-        orphans.push({ rows: [row.rowNumber], errors: ['Route Name is required'] });
+        orphans.push({
+          rows: [row.rowNumber],
+          errors: ['Route Name is required'],
+        });
         continue;
       }
       const key = name.toLowerCase();
@@ -54,17 +79,28 @@ export const routesDefinition = (routes: RouteService): ImportDefinition<Record<
         const country = countryText
           ? resolveReference(countryText, masters.countries)
           : masters.countries.find((item) => item.id === province?.countryId);
-        if (countryText && !country) errors.push(`Country not found: ${countryText}`);
-        if (country && province?.countryId && province.countryId !== country.id) errors.push(`Province ${province.name} is not in ${country.name}`);
+        if (countryText && !country)
+          errors.push(`Country not found: ${countryText}`);
+        if (country && province?.countryId && province.countryId !== country.id)
+          errors.push(`Province ${province.name} is not in ${country.name}`);
         const marketText = row.get('Market');
         const market = resolveReference(marketText, masters.markets);
-        if (marketText && !market) errors.push(`Market not found: ${marketText}`);
-        if (market && province && market.provinceId && market.provinceId !== province.id) errors.push(`Market ${market.name} is not in ${province.name}`);
+        if (marketText && !market)
+          errors.push(`Market not found: ${marketText}`);
+        if (
+          market &&
+          province &&
+          market.provinceId &&
+          market.provinceId !== province.id
+        )
+          errors.push(`Market ${market.name} is not in ${province.name}`);
         const categoryText = row.get('Customer Category');
         const category = resolveReference(categoryText, masters.categories);
-        if (categoryText && !category) errors.push(`Customer Category not found: ${categoryText}`);
+        if (categoryText && !category)
+          errors.push(`Customer Category not found: ${categoryText}`);
         const status = (row.get('Status') || 'ACTIVE').toUpperCase();
-        if (!['ACTIVE', 'INACTIVE'].includes(status)) errors.push('Status must be ACTIVE or INACTIVE');
+        if (!['ACTIVE', 'INACTIVE'].includes(status))
+          errors.push('Status must be ACTIVE or INACTIVE');
 
         route = {
           rows: [],
@@ -98,7 +134,9 @@ export const routesDefinition = (routes: RouteService): ImportDefinition<Record<
       const sequenceText = row.get('Sequence');
       const sequence = sequenceText ? Number(sequenceText) : undefined;
       if (sequenceText && (!Number.isInteger(sequence) || sequence! < 1)) {
-        route.errors.push(`Row ${row.rowNumber}: Sequence must be a whole number of 1 or more`);
+        route.errors.push(
+          `Row ${row.rowNumber}: Sequence must be a whole number of 1 or more`,
+        );
         continue;
       }
       route.outlets.push({ customerId, sequence, order: route.outlets.length });
@@ -106,11 +144,22 @@ export const routesDefinition = (routes: RouteService): ImportDefinition<Record<
 
     const units = [...byName.values()].map(({ outlets, ...route }) => {
       const associatedCustomers = outlets
-        .sort((a, b) => (a.sequence ?? Number.MAX_SAFE_INTEGER) - (b.sequence ?? Number.MAX_SAFE_INTEGER) || a.order - b.order)
-        .map((outlet, index) => ({ customerId: outlet.customerId, sequence: index + 1 }));
+        .sort(
+          (a, b) =>
+            (a.sequence ?? Number.MAX_SAFE_INTEGER) -
+              (b.sequence ?? Number.MAX_SAFE_INTEGER) || a.order - b.order,
+        )
+        .map((outlet, index) => ({
+          customerId: outlet.customerId,
+          sequence: index + 1,
+        }));
       return {
         ...route,
-        payload: { ...route.payload, associatedCustomers, outletCount: associatedCustomers.length },
+        payload: {
+          ...route.payload,
+          associatedCustomers,
+          outletCount: associatedCustomers.length,
+        },
       };
     });
     return [...units, ...orphans];
@@ -118,8 +167,11 @@ export const routesDefinition = (routes: RouteService): ImportDefinition<Record<
 
   async process(payloads) {
     const response = await routes.bulkUpload({ routes: payloads } as any);
-    return outcomesFrom(response, payloads.length, (result) =>
-      `${result.action === 'UPDATED' ? 'Updated' : 'Created'} route ${result.routeId ?? ''} with ${result.outletCount ?? 0} outlet(s)`,
+    return outcomesFrom(
+      response,
+      payloads.length,
+      (result) =>
+        `${result.action === 'UPDATED' ? 'Updated' : 'Created'} route ${result.routeId ?? ''} with ${result.outletCount ?? 0} outlet(s)`,
     );
   },
 
@@ -129,9 +181,18 @@ export const routesDefinition = (routes: RouteService): ImportDefinition<Record<
     const sheet = workbook.addWorksheet('Routes');
     sheet.addRow(HEADERS);
     const province = masters.provinces[0];
-    const country = masters.countries.find((item) => item.id === province?.countryId) ?? masters.countries[0];
-    const market = masters.markets.find((item) => item.provinceId === province?.id) ?? masters.markets[0];
-    const geography = [country?.name ?? 'Country name or ID', province?.name ?? 'Province name or ID', market?.name ?? '', masters.categories[0]?.name ?? ''];
+    const country =
+      masters.countries.find((item) => item.id === province?.countryId) ??
+      masters.countries[0];
+    const market =
+      masters.markets.find((item) => item.provinceId === province?.id) ??
+      masters.markets[0];
+    const geography = [
+      country?.name ?? 'Country name or ID',
+      province?.name ?? 'Province name or ID',
+      market?.name ?? '',
+      masters.categories[0]?.name ?? '',
+    ];
     sheet.addRow(['Sample Route 1', ...geography, 'ACTIVE', 'OUTLET-ID-1', 1]);
     sheet.addRow(['Sample Route 1', ...geography, 'ACTIVE', 'OUTLET-ID-2', 2]);
     sheet.addRow(['Sample Route 2', ...geography, 'ACTIVE', 'OUTLET-ID-3', 1]);
@@ -139,8 +200,14 @@ export const routesDefinition = (routes: RouteService): ImportDefinition<Record<
 
     const reference = workbook.addWorksheet('Reference');
     reference.addRow(['Type', 'ID', 'Name', 'Parent ID']);
-    const add = (type: string, items: Reference[], parent?: (item: Reference) => string | undefined) =>
-      items.forEach((item) => reference.addRow([type, item.id, item.name, parent?.(item) ?? '']));
+    const add = (
+      type: string,
+      items: Reference[],
+      parent?: (item: Reference) => string | undefined,
+    ) =>
+      items.forEach((item) =>
+        reference.addRow([type, item.id, item.name, parent?.(item) ?? '']),
+      );
     add('Country', masters.countries);
     add('Province', masters.provinces, (item) => item.countryId);
     add('Market', masters.markets, (item) => item.provinceId);
@@ -157,6 +224,9 @@ export const routesDefinition = (routes: RouteService): ImportDefinition<Record<
       'Status is ACTIVE or INACTIVE (default ACTIVE). Maximum 500 routes per file.',
       "The result file shows each route's result on all of its rows.",
     ]);
-    return { buffer: await toBuffer(workbook), fileName: 'bulk-route-template.xlsx' };
+    return {
+      buffer: await toBuffer(workbook),
+      fileName: 'bulk-route-template.xlsx',
+    };
   },
 });

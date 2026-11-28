@@ -22,7 +22,9 @@ export class UserSkuStockReportQueryDto {
   @IsString()
   vanId?: string;
 
-  @ApiPropertyOptional({ description: 'Product category (parent or child categoryId)' })
+  @ApiPropertyOptional({
+    description: 'Product category (parent or child categoryId)',
+  })
   @IsOptional()
   @IsString()
   categoryId?: string;

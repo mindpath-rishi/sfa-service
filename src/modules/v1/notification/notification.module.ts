@@ -1,7 +1,10 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { UserModule } from '../user/user.module';
-import { NotificationSchema, Notification } from 'src/core/database/mongo/schema/notification.schema';
+import {
+  NotificationSchema,
+  Notification,
+} from 'src/core/database/mongo/schema/notification.schema';
 import { NotificationController } from './notification.controller';
 import { NotificationService } from './notification.service';
 import { NotificationsModule } from 'src/shared/notifications/notifications.module';
@@ -12,7 +15,7 @@ import { NotificationsModule } from 'src/shared/notifications/notifications.modu
       { name: Notification.name, schema: NotificationSchema },
     ]),
     UserModule,
-    NotificationsModule
+    NotificationsModule,
   ],
   controllers: [NotificationController],
   providers: [NotificationService],

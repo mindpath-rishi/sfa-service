@@ -33,7 +33,6 @@ import { FeatureFlag } from 'src/core/decorators/feature-flag.decorator';
 import { ApiSuccessResponse } from 'src/core/swagger/api.response.swagger';
 import {
   ApiInternalErrorResponse,
-  ApiNotFoundResponse,
   ApiUnauthorizedResponse,
   ApiUnprocessableEntityResponse,
 } from 'src/core/swagger/api-error.response.swagger';
@@ -100,7 +99,10 @@ export class VanInventoryTopupItemController {
    */
   @Permissions('VAN_INVENTORY_TOPUP_ITEM_VIEW')
   @Get(':vanInventoryTopupId')
-  @ApiParam({ name: 'vanInventoryTopupId', description: 'VanInventoryTopupItem vanInventoryTopupId' })
+  @ApiParam({
+    name: 'vanInventoryTopupId',
+    description: 'VanInventoryTopupItem vanInventoryTopupId',
+  })
   async findOne(@Param('vanInventoryTopupId') vanInventoryTopupId: string) {
     return this.service.findByVanInventoryTopupId(vanInventoryTopupId);
   }
@@ -111,7 +113,10 @@ export class VanInventoryTopupItemController {
    */
   @Permissions('VAN_INVENTORY_TOPUP_ITEM_UPDATE')
   @Patch(':vanInventoryTopupId')
-  @ApiParam({ name: 'vanInventoryTopupId', description: 'VanInventoryTopupItem vanInventoryTopupId' })
+  @ApiParam({
+    name: 'vanInventoryTopupId',
+    description: 'VanInventoryTopupItem vanInventoryTopupId',
+  })
   async update(
     @Param('vanInventoryTopupId') vanInventoryTopupId: string,
     @Body() dto: UpdateVanInventoryTopupItemDto,
@@ -125,7 +130,10 @@ export class VanInventoryTopupItemController {
    */
   @Permissions('VAN_INVENTORY_TOPUP_ITEM_DELETE')
   @Delete(':vanInventoryTopupId')
-  @ApiParam({ name: 'vanInventoryTopupId', description: 'VanInventoryTopupItem vanInventoryTopupId' })
+  @ApiParam({
+    name: 'vanInventoryTopupId',
+    description: 'VanInventoryTopupItem vanInventoryTopupId',
+  })
   async delete(@Param('vanInventoryTopupId') vanInventoryTopupId: string) {
     return this.service.delete(vanInventoryTopupId);
   }

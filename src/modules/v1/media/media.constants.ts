@@ -5,5 +5,6 @@ export const MEDIA = {
   UPDATED: 'Media updated successfully',
   DELETED: 'Media deactivated successfully',
   FETCHED: 'Media fetched successfully',
-  DUPLICATE_CHECKSUM: 'Duplicate media found with same checksum. Please upload a different file.',
+  DUPLICATE_CHECKSUM:
+    'Duplicate media found with same checksum. Please upload a different file.',
 };

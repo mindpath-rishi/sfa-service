@@ -4,13 +4,13 @@ import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IsOptional, IsString, IsEnum } from 'class-validator';
 
 export class UpdateOutletTypeDto {
-/**
- * OutletType Update DTO
- * ====================
- * Data Transfer Object for updating OutletType records
- * 
- * All fields are optional for partial updates
- */
+  /**
+   * OutletType Update DTO
+   * ====================
+   * Data Transfer Object for updating OutletType records
+   *
+   * All fields are optional for partial updates
+   */
   /**
    * Name
    * ----
@@ -27,9 +27,11 @@ export class UpdateOutletTypeDto {
    * Outlet type availability status
    */
 
-  @ApiPropertyOptional({ example: OutletTypeStatus.ACTIVE, enum: OutletTypeStatus })
+  @ApiPropertyOptional({
+    example: OutletTypeStatus.ACTIVE,
+    enum: OutletTypeStatus,
+  })
   @IsOptional()
   @IsEnum(OutletTypeStatus)
   status?: OutletTypeStatus;
-
 }

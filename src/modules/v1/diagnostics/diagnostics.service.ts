@@ -45,7 +45,8 @@ export type AppConfig = {
   storeUrl?: string;
 };
 
-const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const escapeRegex = (value: string) =>
+  value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 /**
  * Phone health reported by the app (heartbeats, errors, diagnostic reports)
@@ -72,13 +73,21 @@ export class DiagnosticsService implements OnModuleInit, OnModuleDestroy {
 
   async onModuleInit() {
     await Promise.all([
-      this.col(DIAGNOSTICS).createIndex({ userId: 1, deviceId: 1 }, { unique: true }),
+      this.col(DIAGNOSTICS).createIndex(
+        { userId: 1, deviceId: 1 },
+        { unique: true },
+      ),
       this.col(DIAGNOSTICS).createIndex({ lastHeartbeatAt: -1 }),
       this.col(COMMANDS).createIndex({ userId: 1, status: 1 }),
-      this.col(REPORTS).createIndex({ createdAt: 1 }, { expireAfterSeconds: REPORT_TTL_DAYS * 86400 }),
+      this.col(REPORTS).createIndex(
+        { createdAt: 1 },
+        { expireAfterSeconds: REPORT_TTL_DAYS * 86400 },
+      ),
       this.col(REPORTS).createIndex({ userId: 1, createdAt: -1 }),
       this.col(DEBUG_USERS).createIndex({ userId: 1 }, { unique: true }),
-    ]).catch((error) => this.logger.warn(`Diagnostics indexes: ${error?.message}`));
+    ]).catch((error) =>
+      this.logger.warn(`Diagnostics indexes: ${error?.message}`),
+    );
 
     await this.refreshDebugUsers();
     this.debugTimer = setInterval(() => void this.refreshDebugUsers(), 30_000);
@@ -107,18 +116,35 @@ export class DiagnosticsService implements OnModuleInit, OnModuleDestroy {
 
     // Hand over pending commands (for this device, or for any of the user's).
     const commands = await this.col(COMMANDS)
-      .find({ userId, status: 'PENDING', $or: [{ deviceId: null }, { deviceId: { $exists: false } }, { deviceId: dto.deviceId }] })
+      .find({
+        userId,
+        status: 'PENDING',
+        $or: [
+          { deviceId: null },
+          { deviceId: { $exists: false } },
+          { deviceId: dto.deviceId },
+        ],
+      })
       .sort({ createdAt: 1 })
       .toArray();
     if (commands.length) {
       await this.col(COMMANDS).updateMany(
         { _id: { $in: commands.map((command) => command._id) } },
-        { $set: { status: 'DELIVERED', deliveredAt: now, deviceId: dto.deviceId } },
+        {
+          $set: {
+            status: 'DELIVERED',
+            deliveredAt: now,
+            deviceId: dto.deviceId,
+          },
+        },
       );
     }
 
     const config = await this.appConfig();
-    const debug = await this.col(DEBUG_USERS).findOne({ userId, until: { $gt: now } });
+    const debug = await this.col(DEBUG_USERS).findOne({
+      userId,
+      until: { $gt: now },
+    });
 
     return {
       statusCode: HttpStatus.OK,
@@ -132,7 +158,10 @@ export class DiagnosticsService implements OnModuleInit, OnModuleDestroy {
         updateMessage: config.updateMessage || null,
         storeUrl: config.storeUrl || null,
         debugLogging: Boolean(debug),
-        commands: commands.map((command) => ({ commandId: command.commandId, command: command.command })),
+        commands: commands.map((command) => ({
+          commandId: command.commandId,
+          command: command.command,
+        })),
       },
     };
   }
@@ -150,7 +179,15 @@ export class DiagnosticsService implements OnModuleInit, OnModuleDestroy {
         clientTime: error.time,
         clientReqId: error.reqId,
         ...(error.meta ? { mobileMeta: error.meta } : {}),
-        ...(error.stack ? { err: { type: 'MobileError', message: error.message, stack: error.stack } } : {}),
+        ...(error.stack
+          ? {
+              err: {
+                type: 'MobileError',
+                message: error.message,
+                stack: error.stack,
+              },
+            }
+          : {}),
       };
       const message = `[app] ${error.message}`;
       if (error.level === 'fatal') this.pino.fatal(fields, message);
@@ -158,14 +195,20 @@ export class DiagnosticsService implements OnModuleInit, OnModuleDestroy {
       else if (error.level === 'warn') this.pino.warn(fields, message);
       else this.pino.info(fields, message);
     }
-    return { statusCode: HttpStatus.OK, message: 'Errors received', data: { received: dto.errors.length } };
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'Errors received',
+      data: { received: dto.errors.length },
+    };
   }
 
   async saveReport(dto: DiagnosticReportDto) {
     const userId = this.currentUserId();
     const reportId = IdGenerator.generate('DREP', 10);
     // Keep reports bounded: newest 1000 lines, each at most 2 KB.
-    const logs = (dto.logs ?? []).slice(-1000).map((line) => line.slice(0, 2000));
+    const logs = (dto.logs ?? [])
+      .slice(-1000)
+      .map((line) => line.slice(0, 2000));
     await this.col(REPORTS).insertOne({
       reportId,
       userId,
@@ -180,21 +223,43 @@ export class DiagnosticsService implements OnModuleInit, OnModuleDestroy {
     if (dto.commandId) {
       await this.col(COMMANDS).updateOne(
         { commandId: dto.commandId, userId },
-        { $set: { status: 'DONE', completedAt: new Date(), result: { reportId } } },
+        {
+          $set: {
+            status: 'DONE',
+            completedAt: new Date(),
+            result: { reportId },
+          },
+        },
       );
     }
-    this.logger.log(`Diagnostic report ${reportId} received from ${userId} (${logs.length} log lines)`);
-    return { statusCode: HttpStatus.CREATED, message: 'Report received', data: { reportId } };
+    this.logger.log(
+      `Diagnostic report ${reportId} received from ${userId} (${logs.length} log lines)`,
+    );
+    return {
+      statusCode: HttpStatus.CREATED,
+      message: 'Report received',
+      data: { reportId },
+    };
   }
 
   async completeCommand(commandId: string, dto: CompleteCommandDto) {
     const userId = this.currentUserId();
     const result = await this.col(COMMANDS).updateOne(
       { commandId, userId },
-      { $set: { status: dto.success ? 'DONE' : 'FAILED', completedAt: new Date(), result: { message: dto.message } } },
+      {
+        $set: {
+          status: dto.success ? 'DONE' : 'FAILED',
+          completedAt: new Date(),
+          result: { message: dto.message },
+        },
+      },
     );
     if (!result.matchedCount) throw new NotFoundException('Command not found');
-    return { statusCode: HttpStatus.OK, message: 'Command updated', data: { commandId } };
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'Command updated',
+      data: { commandId },
+    };
   }
 
   /* ==================== MIS ==================== */
@@ -208,7 +273,11 @@ export class DiagnosticsService implements OnModuleInit, OnModuleDestroy {
     const match: Record<string, unknown> = {};
     if (query.appVersion) match.appVersion = query.appVersion;
     if (query.issue === 'STALE') match.lastHeartbeatAt = { $lt: staleBefore };
-    if (query.issue === 'QUEUE') match.$or = [{ 'queue.failed': { $gt: 0 } }, { 'queue.pending': { $gt: 20 } }];
+    if (query.issue === 'QUEUE')
+      match.$or = [
+        { 'queue.failed': { $gt: 0 } },
+        { 'queue.pending': { $gt: 20 } },
+      ];
     if (query.issue === 'PERMISSIONS') {
       match.$or = [
         { 'permissions.location': { $ne: 'granted' } },
@@ -216,7 +285,8 @@ export class DiagnosticsService implements OnModuleInit, OnModuleDestroy {
         { 'permissions.notifications': { $ne: 'granted' } },
       ];
     }
-    if (query.issue === 'STORAGE') match.freeStorageMb = { $lt: LOW_STORAGE_MB };
+    if (query.issue === 'STORAGE')
+      match.freeStorageMb = { $lt: LOW_STORAGE_MB };
 
     const pipeline: Record<string, unknown>[] = [
       { $match: match },
@@ -237,16 +307,37 @@ export class DiagnosticsService implements OnModuleInit, OnModuleDestroy {
     ];
     if (query.search?.trim()) {
       const regex = { $regex: escapeRegex(query.search.trim()), $options: 'i' };
-      pipeline.push({ $match: { $or: [{ userId: regex }, { employeeName: regex }, { deviceModel: regex }] } });
+      pipeline.push({
+        $match: {
+          $or: [
+            { userId: regex },
+            { employeeName: regex },
+            { deviceModel: regex },
+          ],
+        },
+      });
     }
 
-    let rows = await this.col(DIAGNOSTICS).aggregate(pipeline).sort({ lastHeartbeatAt: -1 }).toArray();
+    let rows = await this.col(DIAGNOSTICS)
+      .aggregate(pipeline)
+      .sort({ lastHeartbeatAt: -1 })
+      .toArray();
     // Version comparison is numeric, so the OUTDATED filter runs here.
-    if (query.issue === 'OUTDATED') rows = rows.filter((row) => isBelow(row.appVersion, config.latestAppVersion || config.minAppVersion));
+    if (query.issue === 'OUTDATED')
+      rows = rows.filter((row) =>
+        isBelow(
+          row.appVersion,
+          config.latestAppVersion || config.minAppVersion,
+        ),
+      );
 
     const versions = await this.col(DIAGNOSTICS)
       .aggregate([
-        { $match: { lastHeartbeatAt: { $gte: new Date(Date.now() - 7 * 86400_000) } } },
+        {
+          $match: {
+            lastHeartbeatAt: { $gte: new Date(Date.now() - 7 * 86400_000) },
+          },
+        },
         { $group: { _id: '$appVersion', devices: { $sum: 1 } } },
       ])
       .toArray();
@@ -256,7 +347,8 @@ export class DiagnosticsService implements OnModuleInit, OnModuleDestroy {
       message: 'Devices fetched',
       data: rows.slice((page - 1) * limit, page * limit).map((row) => ({
         ...row,
-        stale: !row.lastHeartbeatAt || new Date(row.lastHeartbeatAt) < staleBefore,
+        stale:
+          !row.lastHeartbeatAt || new Date(row.lastHeartbeatAt) < staleBefore,
         updateRequired: isBelow(row.appVersion, config.minAppVersion),
         outdated: isBelow(row.appVersion, config.latestAppVersion),
       })),
@@ -266,7 +358,10 @@ export class DiagnosticsService implements OnModuleInit, OnModuleDestroy {
         limit,
         totalPages: Math.ceil(rows.length / limit),
         versions: versions
-          .map((row) => ({ version: row._id ?? 'unknown', devices: row.devices }))
+          .map((row) => ({
+            version: row._id ?? 'unknown',
+            devices: row.devices,
+          }))
           .sort((a, b) => compareVersions(b.version, a.version)),
         config,
       },
@@ -274,12 +369,35 @@ export class DiagnosticsService implements OnModuleInit, OnModuleDestroy {
   }
 
   async deviceDetail(userId: string) {
-    const [devices, commands, reports, debug, employee, loginDevices, logins, activeDay] = await Promise.all([
-      this.col(DIAGNOSTICS).find({ userId }).sort({ lastHeartbeatAt: -1 }).toArray(),
-      this.col(COMMANDS).find({ userId }).sort({ createdAt: -1 }).limit(20).toArray(),
-      this.col(REPORTS).find({ userId }, { projection: { logs: 0, queue: 0 } }).sort({ createdAt: -1 }).limit(10).toArray(),
+    const [
+      devices,
+      commands,
+      reports,
+      debug,
+      employee,
+      loginDevices,
+      logins,
+      activeDay,
+    ] = await Promise.all([
+      this.col(DIAGNOSTICS)
+        .find({ userId })
+        .sort({ lastHeartbeatAt: -1 })
+        .toArray(),
+      this.col(COMMANDS)
+        .find({ userId })
+        .sort({ createdAt: -1 })
+        .limit(20)
+        .toArray(),
+      this.col(REPORTS)
+        .find({ userId }, { projection: { logs: 0, queue: 0 } })
+        .sort({ createdAt: -1 })
+        .limit(10)
+        .toArray(),
       this.col(DEBUG_USERS).findOne({ userId, until: { $gt: new Date() } }),
-      this.col('employees').findOne({ employeeId: userId }, { projection: { _id: 0, name: 1, mobile: 1, status: 1 } }),
+      this.col('employees').findOne(
+        { employeeId: userId },
+        { projection: { _id: 0, name: 1, mobile: 1, status: 1 } },
+      ),
       // Devices stored at login (hardware / build details) and the login history
       this.col('user_devices')
         .find({ userId }, { projection: { _id: 0, fcmToken: 0, sessionId: 0 } })
@@ -293,7 +411,16 @@ export class DiagnosticsService implements OnModuleInit, OnModuleDestroy {
         .toArray(),
       this.col('work_sessions').findOne(
         { userId, status: 'ACTIVE', isDeleted: { $ne: true } },
-        { sort: { dayStartTime: -1 }, projection: { _id: 0, workSessionId: 1, deviceId: 1, deviceLockReleased: 1, dayStartTime: 1 } },
+        {
+          sort: { dayStartTime: -1 },
+          projection: {
+            _id: 0,
+            workSessionId: 1,
+            deviceId: 1,
+            deviceLockReleased: 1,
+            dayStartTime: 1,
+          },
+        },
       ),
     ]);
     return {
@@ -316,7 +443,11 @@ export class DiagnosticsService implements OnModuleInit, OnModuleDestroy {
   async report(reportId: string) {
     const report = await this.col(REPORTS).findOne({ reportId });
     if (!report) throw new NotFoundException('Report not found');
-    return { statusCode: HttpStatus.OK, message: 'Report fetched', data: report };
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'Report fetched',
+      data: report,
+    };
   }
 
   async createCommand(dto: CreateCommandDto) {
@@ -338,10 +469,17 @@ export class DiagnosticsService implements OnModuleInit, OnModuleDestroy {
     };
     await this.col(COMMANDS).insertOne(command);
 
-    if (dto.command === 'LOGOUT') await this.revokeSessions(dto.userId, dto.deviceId);
+    if (dto.command === 'LOGOUT')
+      await this.revokeSessions(dto.userId, dto.deviceId);
 
-    this.logger.log(`Device command ${dto.command} queued for ${dto.userId} by ${context?.userId}`);
-    return { statusCode: HttpStatus.CREATED, message: 'Command queued; the phone runs it on its next check-in', data: command };
+    this.logger.log(
+      `Device command ${dto.command} queued for ${dto.userId} by ${context?.userId}`,
+    );
+    return {
+      statusCode: HttpStatus.CREATED,
+      message: 'Command queued; the phone runs it on its next check-in',
+      data: command,
+    };
   }
 
   async cancelCommand(commandId: string) {
@@ -349,7 +487,13 @@ export class DiagnosticsService implements OnModuleInit, OnModuleDestroy {
       { commandId, status: 'PENDING' },
       { $set: { status: 'CANCELLED', updatedAt: new Date() } },
     );
-    return { statusCode: HttpStatus.OK, message: result.modifiedCount ? 'Command cancelled' : 'Nothing pending to cancel', data: { cancelled: result.modifiedCount } };
+    return {
+      statusCode: HttpStatus.OK,
+      message: result.modifiedCount
+        ? 'Command cancelled'
+        : 'Nothing pending to cancel',
+      data: { cancelled: result.modifiedCount },
+    };
   }
 
   /**
@@ -359,7 +503,10 @@ export class DiagnosticsService implements OnModuleInit, OnModuleDestroy {
    */
   async revokeSessions(userId: string, deviceId?: string) {
     const devices = await this.col('user_devices')
-      .find({ userId, ...(deviceId ? { deviceId } : {}), isActive: true }, { projection: { sessionId: 1 } })
+      .find(
+        { userId, ...(deviceId ? { deviceId } : {}), isActive: true },
+        { projection: { sessionId: 1 } },
+      )
       .toArray();
     for (const device of devices) {
       if (!device.sessionId) continue;
@@ -376,10 +523,16 @@ export class DiagnosticsService implements OnModuleInit, OnModuleDestroy {
   }
 
   async appConfig(fresh = false): Promise<AppConfig> {
-    if (!fresh && this.configCache && Date.now() - this.configCache.at < CONFIG_CACHE_MS) {
+    if (
+      !fresh &&
+      this.configCache &&
+      Date.now() - this.configCache.at < CONFIG_CACHE_MS
+    ) {
       return this.configCache.value;
     }
-    const doc = await this.col(APP_CONFIG).findOne({ key: 'mobile' }).catch(() => null);
+    const doc = await this.col(APP_CONFIG)
+      .findOne({ key: 'mobile' })
+      .catch(() => null);
     const value: AppConfig = {
       minAppVersion: doc?.minAppVersion || undefined,
       latestAppVersion: doc?.latestAppVersion || undefined,
@@ -391,19 +544,36 @@ export class DiagnosticsService implements OnModuleInit, OnModuleDestroy {
   }
 
   async getAppConfig() {
-    return { statusCode: HttpStatus.OK, message: 'App config fetched', data: await this.appConfig(true) };
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'App config fetched',
+      data: await this.appConfig(true),
+    };
   }
 
   async updateAppConfig(dto: AppConfigDto) {
     const context = RequestContextStore.getStore();
     await this.col(APP_CONFIG).updateOne(
       { key: 'mobile' },
-      { $set: { ...dto, key: 'mobile', updatedBy: context?.userId, updatedAt: new Date() } },
+      {
+        $set: {
+          ...dto,
+          key: 'mobile',
+          updatedBy: context?.userId,
+          updatedAt: new Date(),
+        },
+      },
       { upsert: true },
     );
     this.configCache = undefined;
-    this.logger.log(`Mobile app config changed by ${context?.userId}: ${JSON.stringify(dto)}`);
-    return { statusCode: HttpStatus.OK, message: 'App config saved', data: await this.appConfig(true) };
+    this.logger.log(
+      `Mobile app config changed by ${context?.userId}: ${JSON.stringify(dto)}`,
+    );
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'App config saved',
+      data: await this.appConfig(true),
+    };
   }
 
   /* ==================== PER-USER DEBUG LOGGING ==================== */
@@ -414,31 +584,58 @@ export class DiagnosticsService implements OnModuleInit, OnModuleDestroy {
     const context = RequestContextStore.getStore();
     await this.col(DEBUG_USERS).updateOne(
       { userId: dto.userId },
-      { $set: { userId: dto.userId, until, enabledBy: context?.userId, updatedAt: new Date() } },
+      {
+        $set: {
+          userId: dto.userId,
+          until,
+          enabledBy: context?.userId,
+          updatedAt: new Date(),
+        },
+      },
       { upsert: true },
     );
     await this.refreshDebugUsers();
-    this.logger.log(`Debug logging on for ${dto.userId} for ${minutes} min (by ${context?.userId})`);
-    return { statusCode: HttpStatus.OK, message: `Debug logging on until ${until.toLocaleTimeString()}`, data: { userId: dto.userId, until } };
+    this.logger.log(
+      `Debug logging on for ${dto.userId} for ${minutes} min (by ${context?.userId})`,
+    );
+    return {
+      statusCode: HttpStatus.OK,
+      message: `Debug logging on until ${until.toLocaleTimeString()}`,
+      data: { userId: dto.userId, until },
+    };
   }
 
   async disableDebugLogging(userId: string) {
     await this.col(DEBUG_USERS).deleteOne({ userId });
     await this.refreshDebugUsers();
-    return { statusCode: HttpStatus.OK, message: 'Debug logging off', data: { userId } };
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'Debug logging off',
+      data: { userId },
+    };
   }
 
   async debugLoggingUsers() {
-    const rows = await this.col(DEBUG_USERS).find({ until: { $gt: new Date() } }).toArray();
-    return { statusCode: HttpStatus.OK, message: 'Debug logging users', data: rows };
+    const rows = await this.col(DEBUG_USERS)
+      .find({ until: { $gt: new Date() } })
+      .toArray();
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'Debug logging users',
+      data: rows,
+    };
   }
 
   private async refreshDebugUsers() {
     try {
-      const rows = await this.col(DEBUG_USERS).find({ until: { $gt: new Date() } }, { projection: { userId: 1 } }).toArray();
+      const rows = await this.col(DEBUG_USERS)
+        .find({ until: { $gt: new Date() } }, { projection: { userId: 1 } })
+        .toArray();
       logSink.setDebugUsers(rows.map((row) => String(row.userId)));
     } catch (error) {
-      this.logger.warn(`Could not refresh debug logging users: ${(error as Error).message}`);
+      this.logger.warn(
+        `Could not refresh debug logging users: ${(error as Error).message}`,
+      );
     }
   }
 

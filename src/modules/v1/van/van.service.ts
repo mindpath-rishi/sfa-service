@@ -782,10 +782,7 @@ export class VanService extends MongoRepository<Van> {
       }
 
       await this.validateProductCategories(payload.categoryIds, session);
-      const province = await this.validateProvince(
-        payload.provinceId,
-        session,
-      );
+      const province = await this.validateProvince(payload.provinceId, session);
       if (!province) {
         throw new BadRequestException('Province is required');
       }
@@ -818,7 +815,7 @@ export class VanService extends MongoRepository<Van> {
             ...(driver
               ? {}
               : { $unset: { driverEmployeeId: 1, driverName: 1 } }),
-          } as any,
+          },
           { session },
         );
         await this.createVanPosition(normalizedPayload, province, session);
@@ -1001,7 +998,7 @@ export class VanService extends MongoRepository<Van> {
           toStringSafe(row.masterCode) ||
           warehouseCode;
         await this.createVanPosition(
-          { vanId: warehouseCode, name, categoryIds: [] } as any,
+          { vanId: warehouseCode, name, categoryIds: [] },
           province,
           session,
         );
@@ -1341,14 +1338,14 @@ export class VanService extends MongoRepository<Van> {
       const vanUpdate = this.normalizeVanPayload({
         ...vanDto,
         ...(driver ? { driverEmployeeId, driverName: driver.name } : {}),
-      } as UpdateVanDto);
+      });
       await this.updateOne(
         { vanId },
         clearDriver
-          ? ({
+          ? {
               $set: vanUpdate,
               $unset: { driverEmployeeId: 1, driverName: 1 },
-            } as any)
+            }
           : vanUpdate,
         {
           session,

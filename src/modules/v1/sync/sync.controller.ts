@@ -48,7 +48,11 @@ export class SyncController {
         .trim()
         .toUpperCase(),
     );
-    if (!roles.some((role) => ['SALESMAN', 'SALES', 'SALES_EXECUTIVE'].includes(role))) {
+    if (
+      !roles.some((role) =>
+        ['SALESMAN', 'SALES', 'SALES_EXECUTIVE'].includes(role),
+      )
+    ) {
       throw new ForbiddenException(
         'Offline synchronization is available only to SALESMAN',
       );

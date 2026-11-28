@@ -1,4 +1,3 @@
-
 export const CUSTOMER_CATEGORY = {
   CREATED: 'CustomerCategory created successfully',
   FETCHED: 'CustomerCategory fetched successfully',

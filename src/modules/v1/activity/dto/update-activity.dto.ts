@@ -3,16 +3,15 @@ import { ActivityStatus } from 'src/shared/enums/activity.enums';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IsDate, IsEnum, IsOptional, IsString } from 'class-validator';
 
-
 export class UpdateActivityDto {
-/**
- * UpdateActivityDto
- * =================
- * Data Transfer Object for updating Activity records
- * 
- * All fields are optional for partial updates
- * Supports partial updates - omitted fields will retain their existing values
- */
+  /**
+   * UpdateActivityDto
+   * =================
+   * Data Transfer Object for updating Activity records
+   *
+   * All fields are optional for partial updates
+   * Supports partial updates - omitted fields will retain their existing values
+   */
   @ApiPropertyOptional({ type: String })
   @IsOptional()
   @IsString()
@@ -57,5 +56,4 @@ export class UpdateActivityDto {
   @IsOptional()
   @IsDate()
   endTime?: Date;
-
 }

@@ -36,9 +36,7 @@ export class SystemLogsService implements OnModuleInit {
   private readonly collection: Collection<StoredLog>;
 
   constructor(@InjectConnection() connection: Connection) {
-    this.collection = connection.collection<StoredLog>(
-      APP_LOGS_COLLECTION,
-    ) as unknown as Collection<StoredLog>;
+    this.collection = connection.collection<StoredLog>(APP_LOGS_COLLECTION);
   }
 
   async onModuleInit() {
@@ -152,7 +150,10 @@ export class SystemLogsService implements OnModuleInit {
               {
                 $group: {
                   _id: {
-                    $ifNull: ['$errorMessage', { $ifNull: ['$err.message', '$msg'] }],
+                    $ifNull: [
+                      '$errorMessage',
+                      { $ifNull: ['$err.message', '$msg'] },
+                    ],
                   },
                   count: { $sum: 1 },
                   lastSeen: { $first: '$time' },
@@ -166,12 +167,19 @@ export class SystemLogsService implements OnModuleInit {
               { $limit: 15 },
             ],
             byFlow: [
-              { $match: { flow: { $exists: true, $ne: null }, statusCode: { $exists: true } } },
+              {
+                $match: {
+                  flow: { $exists: true, $ne: null },
+                  statusCode: { $exists: true },
+                },
+              },
               {
                 $group: {
                   _id: '$flow',
                   requests: { $sum: 1 },
-                  errors: { $sum: { $cond: [{ $gte: ['$statusCode', 500] }, 1, 0] } },
+                  errors: {
+                    $sum: { $cond: [{ $gte: ['$statusCode', 500] }, 1, 0] },
+                  },
                   warnings: {
                     $sum: {
                       $cond: [
@@ -197,10 +205,15 @@ export class SystemLogsService implements OnModuleInit {
               {
                 $group: {
                   _id: {
-                    $dateToString: { format: '%Y-%m-%dT%H:00:00Z', date: '$time' },
+                    $dateToString: {
+                      format: '%Y-%m-%dT%H:00:00Z',
+                      date: '$time',
+                    },
                   },
                   errors: { $sum: { $cond: [{ $gte: ['$level', 50] }, 1, 0] } },
-                  warnings: { $sum: { $cond: [{ $lt: ['$level', 50] }, 1, 0] } },
+                  warnings: {
+                    $sum: { $cond: [{ $lt: ['$level', 50] }, 1, 0] },
+                  },
                 },
               },
               { $sort: { _id: 1 } },

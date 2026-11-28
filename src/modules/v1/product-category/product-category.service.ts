@@ -43,7 +43,10 @@ import { ProductCategoryUpdateDto } from './dto/update-product-category.dto';
 import { StringCaseUtils } from 'src/shared/utils/string-case.units';
 
 @Injectable()
-export class ProductCategoryService extends MongoRepository<ProductCategory> implements OnModuleInit {
+export class ProductCategoryService
+  extends MongoRepository<ProductCategory>
+  implements OnModuleInit
+{
   constructor(mongo: MongoService) {
     super(mongo.getModel(ProductCategory.name, ProductCategorySchema));
   }
@@ -51,13 +54,19 @@ export class ProductCategoryService extends MongoRepository<ProductCategory> imp
   async onModuleInit() {
     // On a fresh database the collection does not exist yet (NamespaceNotFound)
     // Typed explicitly: `.catch(() => [])` otherwise makes this never[].
-    const indexes: { name?: string; unique?: boolean; key: Record<string, unknown> }[] =
-      await this.model.collection.indexes().catch((error) => {
+    const indexes: {
+      name?: string;
+      unique?: boolean;
+      key: Record<string, unknown>;
+    }[] = await this.model.collection.indexes().catch((error) => {
       if (error?.code === 26) return [];
       throw error;
     });
     const obsoleteNameIndex = indexes.find(
-      (index) => index.unique && Object.keys(index.key).length === 1 && index.key.name === 1,
+      (index) =>
+        index.unique &&
+        Object.keys(index.key).length === 1 &&
+        index.key.name === 1,
     );
     if (obsoleteNameIndex?.name) {
       await this.model.collection.dropIndex(obsoleteNameIndex.name);
@@ -75,7 +84,9 @@ export class ProductCategoryService extends MongoRepository<ProductCategory> imp
   ) {
     if (type === ProductCategoryType.PARENT) return undefined;
     if (!parentId) {
-      throw new BadRequestException('Parent category is required for a child category.');
+      throw new BadRequestException(
+        'Parent category is required for a child category.',
+      );
     }
     if (parentId === currentCategoryId) {
       throw new BadRequestException('A category cannot be its own parent.');
@@ -106,13 +117,21 @@ export class ProductCategoryService extends MongoRepository<ProductCategory> imp
    * - Prevents duplicate active categories
    */
   async create(payload: ProductCategoryCreateDto) {
-    const parentId = await this.validateHierarchy(payload.type, payload.parentId);
+    const parentId = await this.validateHierarchy(
+      payload.type,
+      payload.parentId,
+    );
     return this.withTransaction(async (session) => {
       const categoryId = payload.categoryId.trim();
       const titleCaseName = StringCaseUtils.titleCase(payload.name);
-      const nameScope = payload.type === ProductCategoryType.CHILD
-        ? { type: payload.type, parentId, name: titleCaseName }
-        : { type: payload.type, name: titleCaseName, parentId: { $exists: false } };
+      const nameScope =
+        payload.type === ProductCategoryType.CHILD
+          ? { type: payload.type, parentId, name: titleCaseName }
+          : {
+              type: payload.type,
+              name: titleCaseName,
+              parentId: { $exists: false },
+            };
       const [existingById, existingByName] = await Promise.all([
         this.findOne({ categoryId }, { session, includeDeleted: true }),
         this.findOne(nameScope as any, { session, includeDeleted: true }),
@@ -121,7 +140,9 @@ export class ProductCategoryService extends MongoRepository<ProductCategory> imp
       if (
         (existingById && !existingById.isDeleted) ||
         (existingByName && !existingByName.isDeleted) ||
-        (existingById && existingByName && String(existingById._id) !== String(existingByName._id))
+        (existingById &&
+          existingByName &&
+          String(existingById._id) !== String(existingByName._id))
       ) {
         throw new ConflictException(PRODUCT_CATEGORY.DUPLICATE);
       }
@@ -241,7 +262,10 @@ export class ProductCategoryService extends MongoRepository<ProductCategory> imp
     if (
       current.type === ProductCategoryType.PARENT &&
       nextType === ProductCategoryType.CHILD &&
-      await this.exists({ parentId: categoryId, type: ProductCategoryType.CHILD })
+      (await this.exists({
+        parentId: categoryId,
+        type: ProductCategoryType.CHILD,
+      }))
     ) {
       throw new BadRequestException(
         'Cannot convert a parent category that has child categories.',
@@ -261,8 +285,8 @@ export class ProductCategoryService extends MongoRepository<ProductCategory> imp
       ...(nextType === ProductCategoryType.CHILD
         ? { parentId }
         : { parentId: { $exists: false } }),
-      categoryId: { $ne: categoryId } as any,
-    } as any);
+      categoryId: { $ne: categoryId },
+    });
     if (existing) {
       throw new BadRequestException(PRODUCT_CATEGORY.DUPLICATE);
     }
@@ -312,7 +336,9 @@ export class ProductCategoryService extends MongoRepository<ProductCategory> imp
           type: ProductCategoryType.CHILD,
         });
         if (childExists) {
-          throw new BadRequestException('Cannot delete a parent category that has child categories.');
+          throw new BadRequestException(
+            'Cannot delete a parent category that has child categories.',
+          );
         }
       }
 

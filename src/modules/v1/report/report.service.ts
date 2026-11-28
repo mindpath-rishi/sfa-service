@@ -96,7 +96,11 @@ export class ReportService {
     const to = new Date(query.toDate || query.fromDate || today);
     from.setHours(0, 0, 0, 0);
     to.setHours(23, 59, 59, 999);
-    if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime()) || to < from) {
+    if (
+      Number.isNaN(from.getTime()) ||
+      Number.isNaN(to.getTime()) ||
+      to < from
+    ) {
       throw new BadRequestException('Invalid date range');
     }
 
@@ -135,7 +139,11 @@ export class ReportService {
           { $sort: { date: 1, createdAt: 1 } },
           {
             $group: {
-              _id: { employeeId: '$employeeId', vanId: '$vanId', productId: '$productId' },
+              _id: {
+                employeeId: '$employeeId',
+                vanId: '$vanId',
+                productId: '$productId',
+              },
               openingQty: { $first: { $ifNull: ['$openingQty', 0] } },
               topupQty: { $sum: { $ifNull: ['$inQty', 0] } },
               salesQty: { $sum: { $ifNull: ['$outQty', 0] } },
@@ -151,18 +159,36 @@ export class ReportService {
       )
       .toArray();
 
-    const employeeIds = [...new Set(grouped.map((row) => row._id.employeeId).filter(Boolean))];
-    const productIds = [...new Set(grouped.map((row) => row._id.productId).filter(Boolean))];
+    const employeeIds = [
+      ...new Set(grouped.map((row) => row._id.employeeId).filter(Boolean)),
+    ];
+    const productIds = [
+      ...new Set(grouped.map((row) => row._id.productId).filter(Boolean)),
+    ];
     const [employees, products, categories] = await Promise.all([
       db
         .collection('employees')
-        .find({ employeeId: { $in: employeeIds } }, { projection: { _id: 0, employeeId: 1, name: 1 } })
+        .find(
+          { employeeId: { $in: employeeIds } },
+          { projection: { _id: 0, employeeId: 1, name: 1 } },
+        )
         .toArray(),
       db
         .collection('product_master')
         .find(
           { productId: { $in: productIds } },
-          { projection: { _id: 0, productId: 1, name: 1, productSysCode: 1, categoryId: 1, parentCategoryId: 1, unitQtyInCase: 1, piecePrice: 1 } },
+          {
+            projection: {
+              _id: 0,
+              productId: 1,
+              name: 1,
+              productSysCode: 1,
+              categoryId: 1,
+              parentCategoryId: 1,
+              unitQtyInCase: 1,
+              piecePrice: 1,
+            },
+          },
         )
         .toArray(),
       db
@@ -170,15 +196,22 @@ export class ReportService {
         .find({}, { projection: { _id: 0, categoryId: 1, name: 1 } })
         .toArray(),
     ]);
-    const employeeName = new Map(employees.map((row) => [row.employeeId, row.name]));
+    const employeeName = new Map(
+      employees.map((row) => [row.employeeId, row.name]),
+    );
     const productById = new Map(products.map((row) => [row.productId, row]));
-    const categoryName = new Map(categories.map((row) => [row.categoryId, row.name]));
+    const categoryName = new Map(
+      categories.map((row) => [row.categoryId, row.name]),
+    );
 
     const round = (value: number) => Math.round(value * 1000) / 1000;
     const rows = grouped
       .map((row) => {
         const product: any = productById.get(row._id.productId) ?? {};
-        const unitQtyInCase = Math.max(Number(row.unitQtyInCase ?? product.unitQtyInCase) || 1, 1);
+        const unitQtyInCase = Math.max(
+          Number(row.unitQtyInCase ?? product.unitQtyInCase) || 1,
+          1,
+        );
         const piecePrice = Number(row.piecePrice ?? product.piecePrice) || 0;
         const opening = Number(row.openingQty) || 0;
         const topup = Number(row.topupQty) || 0;
@@ -189,7 +222,8 @@ export class ReportService {
         return {
           id: `${row._id.employeeId}-${row._id.vanId}-${row._id.productId}`,
           employeeId: row._id.employeeId,
-          employeeName: employeeName.get(row._id.employeeId) || row._id.employeeId,
+          employeeName:
+            employeeName.get(row._id.employeeId) || row._id.employeeId,
           vanId: row._id.vanId,
           productId: row._id.productId,
           productName: product.name || row._id.productId,

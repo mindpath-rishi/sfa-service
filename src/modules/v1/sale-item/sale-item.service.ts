@@ -9,7 +9,6 @@ import { MongoService } from 'src/core/database/mongo/mongo.service';
 import { MongoRepository } from 'src/core/database/mongo/mongo.repository';
 import { FilterQuery } from 'src/core/database/mongo/mongo.interface';
 
-import { IdGenerator } from 'src/shared/utils/id-generator.utils';
 import { CreateSaleItemDto } from './dto/create-sale-item.dto';
 import { SaleItemQueryDto } from './dto/sale-item-query.dto';
 import { UpdateSaleItemDto } from './dto/update-sale-item.dto';

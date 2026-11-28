@@ -6,11 +6,7 @@ import {
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
-import {
-  ApiTags,
-  ApiOperation,
-  ApiParam,
-} from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiParam } from '@nestjs/swagger';
 
 import { ApiSuccessResponse } from 'src/core/swagger/api.response.swagger';
 import { FeatureFlag } from 'src/core/decorators/feature-flag.decorator';
@@ -88,7 +84,7 @@ export class AuditLogsController {
   @ApiOperation({ summary: 'Get audit log by id' })
   @ApiParam({ name: 'id', description: 'Audit log document ID' })
   @ApiSuccessResponse({}, AUDIT_LOGS.FETCH_ONE)
-  async findOne(@Param('id') id: string) {
+  findOne(@Param('id') id: string) {
     return this.auditLogsService.findById(id);
   }
 }

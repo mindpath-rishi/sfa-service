@@ -1,4 +1,3 @@
-
 import {
   Injectable,
   NotFoundException,
@@ -11,7 +10,10 @@ import { MongoService } from 'src/core/database/mongo/mongo.service';
 import { MongoRepository } from 'src/core/database/mongo/mongo.repository';
 import { FilterQuery } from 'src/core/database/mongo/mongo.interface';
 
-import { Market, MarketSchema } from 'src/core/database/mongo/schema/market.schema';
+import {
+  Market,
+  MarketSchema,
+} from 'src/core/database/mongo/schema/market.schema';
 
 import { MARKET } from './market.constants';
 import { CreateMarketDto } from './dto/create-market.dto';
@@ -21,7 +23,8 @@ import { IdGenerator } from 'src/shared/utils/id-generator.utils';
 import { TextNormalizer } from 'src/shared/utils/text-normalizer.utils';
 import { NormalizeType } from 'src/shared/enums/normalize.enums';
 
-const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const escapeRegex = (value: string) =>
+  value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 @Injectable()
 export class MarketService
@@ -34,8 +37,11 @@ export class MarketService
 
   async onModuleInit() {
     // Typed explicitly: `.catch(() => [])` otherwise makes this never[].
-    const indexes: { name?: string; unique?: boolean; key: Record<string, unknown> }[] =
-      await this.model.collection.indexes().catch((error) => {
+    const indexes: {
+      name?: string;
+      unique?: boolean;
+      key: Record<string, unknown>;
+    }[] = await this.model.collection.indexes().catch((error) => {
       if (error?.code === 26) return [];
       throw error;
     });
@@ -69,7 +75,10 @@ export class MarketService
     try {
       return await this.withTransaction(async (session) => {
         if (payload.name) {
-          payload.name = TextNormalizer.normalize(payload.name, NormalizeType.TITLE);
+          payload.name = TextNormalizer.normalize(
+            payload.name,
+            NormalizeType.TITLE,
+          );
         }
 
         const filter: FilterQuery<Market> = {
@@ -170,7 +179,10 @@ export class MarketService
           dto.name = TextNormalizer.normalize(dto.name, NormalizeType.TITLE);
         }
 
-        const current = await this.findOne({ marketId }, { session, includeDeleted: true });
+        const current = await this.findOne(
+          { marketId },
+          { session, includeDeleted: true },
+        );
         if (!current) throw new NotFoundException(MARKET.NOT_FOUND);
 
         if (dto.name || dto.provinceId) {
@@ -182,17 +194,16 @@ export class MarketService
               ),
               provinceId: dto.provinceId ?? current.provinceId,
               marketId: { $ne: marketId },
-            } as FilterQuery<Market>,
+            },
             { session, includeDeleted: true },
           );
           if (duplicate) throw new ConflictException(MARKET.DUPLICATE);
         }
 
-        const doc = await this.updateOne(
-          { marketId },
-          dto,
-          { session, new: true },
-        );
+        const doc = await this.updateOne({ marketId }, dto, {
+          session,
+          new: true,
+        });
 
         if (!doc) throw new NotFoundException(MARKET.NOT_FOUND);
 

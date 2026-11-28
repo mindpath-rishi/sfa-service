@@ -1,4 +1,12 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Post, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Post,
+  Query,
+} from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { DeviceHeartbeatDto } from './dto/device-heartbeat.dto';
 import { DeviceStatusService } from './device-status.service';
@@ -11,7 +19,9 @@ export class DeviceStatusController {
 
   @Post('heartbeat')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Battery %, last active time and offline periods from the app' })
+  @ApiOperation({
+    summary: 'Battery %, last active time and offline periods from the app',
+  })
   heartbeat(@Body() dto: DeviceHeartbeatDto) {
     return this.service.heartbeat(dto);
   }

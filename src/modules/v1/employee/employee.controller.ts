@@ -55,7 +55,6 @@ import {
 import { EMPLOYEE } from './employee.constants';
 import { Permissions } from 'src/core/decorators/permission.decorator';
 import { EmployeeQueryDto } from './dto/employee.query.dto';
-import { Public } from 'src/core/decorators/public.decorator';
 import { UserPrimaryCategoryTargetQueryDto } from './dto/user-primary-category-target-query.dto';
 import { UserStatus } from '../user/user.enum';
 import { BackOfficeOnly } from 'src/core/decorators/back-office-only.decorator';
@@ -604,7 +603,9 @@ export class EmployeeController {
   @BackOfficeOnly()
   @Get('/login-id-check')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Check whether a login ID is free (case-insensitive)' })
+  @ApiOperation({
+    summary: 'Check whether a login ID is free (case-insensitive)',
+  })
   async checkLoginId(@Query('loginId') loginId?: string) {
     return this.employeeService.checkLoginId(loginId);
   }

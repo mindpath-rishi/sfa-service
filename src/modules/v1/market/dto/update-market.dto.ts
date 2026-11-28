@@ -8,13 +8,13 @@ export class UpdateMarketDto {
   @IsOptional()
   @IsString()
   provinceId?: string;
-/**
- * Market Update DTO
- * ====================
- * Data Transfer Object for updating Market records
- * 
- * All fields are optional for partial updates
- */
+  /**
+   * Market Update DTO
+   * ====================
+   * Data Transfer Object for updating Market records
+   *
+   * All fields are optional for partial updates
+   */
   /**
    * Name
    * ----
@@ -35,5 +35,4 @@ export class UpdateMarketDto {
   @IsOptional()
   @IsEnum(MarketStatus)
   status?: MarketStatus;
-
 }

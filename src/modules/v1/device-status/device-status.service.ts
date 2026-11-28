@@ -57,7 +57,8 @@ export class DeviceStatusService {
   async heartbeat(dto: DeviceHeartbeatDto) {
     const ctx: any = RequestContextStore.getStore();
     const userId = ctx?.userId;
-    if (!userId) throw new BadRequestException('Authenticated user is required');
+    if (!userId)
+      throw new BadRequestException('Authenticated user is required');
 
     const now = new Date();
     const today = dayKey(now);
@@ -69,7 +70,8 @@ export class DeviceStatusService {
       const from = new Date(period.from);
       const to = new Date(period.to);
       if (!(to > from) || to > new Date(now.getTime() + 60_000)) continue;
-      const durationMinutes = Math.round(((to.getTime() - from.getTime()) / 60_000) * 10) / 10;
+      const durationMinutes =
+        Math.round(((to.getTime() - from.getTime()) / 60_000) * 10) / 10;
       const result = await this.offlineModel.updateOne(
         { userId, offlineFrom: from },
         {
@@ -103,7 +105,9 @@ export class DeviceStatusService {
             ...(dto.batteryLevel !== undefined
               ? { batteryLevel: Math.round(dto.batteryLevel) }
               : {}),
-            ...(dto.isCharging !== undefined ? { isCharging: dto.isCharging } : {}),
+            ...(dto.isCharging !== undefined
+              ? { isCharging: dto.isCharging }
+              : {}),
             lastActiveAt: lastActiveAt > now ? now : lastActiveAt,
             networkStatus: 'ONLINE',
             lastOnlineAt: now,
@@ -132,9 +136,12 @@ export class DeviceStatusService {
               ? {
                   trackingHealth: {
                     $literal: {
-                      backgroundLocation: dto.trackingHealth.backgroundLocation ?? null,
-                      batteryUnrestricted: dto.trackingHealth.batteryUnrestricted ?? null,
-                      autostartConfirmed: dto.trackingHealth.autostartConfirmed ?? null,
+                      backgroundLocation:
+                        dto.trackingHealth.backgroundLocation ?? null,
+                      batteryUnrestricted:
+                        dto.trackingHealth.batteryUnrestricted ?? null,
+                      autostartConfirmed:
+                        dto.trackingHealth.autostartConfirmed ?? null,
                       reportedAt: now,
                     },
                   },
@@ -158,7 +165,9 @@ export class DeviceStatusService {
   }
 
   /** Latest device status per user, for manager / TL / admin views. */
-  async getByUserIds(userIds: string[]): Promise<Map<string, DeviceStatusView>> {
+  async getByUserIds(
+    userIds: string[],
+  ): Promise<Map<string, DeviceStatusView>> {
     const ids = [...new Set(userIds.filter(Boolean))];
     const map = new Map<string, DeviceStatusView>();
     if (!ids.length) return map;
@@ -170,7 +179,8 @@ export class DeviceStatusService {
     for (const row of rows) {
       const lastActive = row.lastActiveAt ? new Date(row.lastActiveAt) : null;
       const stale =
-        !lastActive || now - lastActive.getTime() > DEVICE_STALE_MINUTES * 60_000;
+        !lastActive ||
+        now - lastActive.getTime() > DEVICE_STALE_MINUTES * 60_000;
       map.set(row.userId, {
         batteryLevel:
           row.batteryLevel === null || row.batteryLevel === undefined
@@ -184,11 +194,14 @@ export class DeviceStatusService {
           : null,
         offlineMinutesToday:
           row.offlineDay === today ? Number(row.offlineMinutesToday) || 0 : 0,
-        lastHeartbeatAt: row.lastOnlineAt ? new Date(row.lastOnlineAt).toISOString() : null,
+        lastHeartbeatAt: row.lastOnlineAt
+          ? new Date(row.lastOnlineAt).toISOString()
+          : null,
         trackingHealth: row.trackingHealth
           ? {
               backgroundLocation: row.trackingHealth.backgroundLocation ?? null,
-              batteryUnrestricted: row.trackingHealth.batteryUnrestricted ?? null,
+              batteryUnrestricted:
+                row.trackingHealth.batteryUnrestricted ?? null,
               autostartConfirmed: row.trackingHealth.autostartConfirmed ?? null,
               reportedAt: row.trackingHealth.reportedAt
                 ? new Date(row.trackingHealth.reportedAt).toISOString()
@@ -208,7 +221,11 @@ export class DeviceStatusService {
     };
   }
 
-  async findOfflineLogs(query: { userId?: string; from?: string; to?: string }) {
+  async findOfflineLogs(query: {
+    userId?: string;
+    from?: string;
+    to?: string;
+  }) {
     const filter: Record<string, any> = {};
     if (query.userId) filter.userId = query.userId;
     if (query.from || query.to) {

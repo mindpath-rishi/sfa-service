@@ -42,7 +42,11 @@ describe('LeaveService', () => {
 
     service = new LeaveService(mongo as any);
 
-    jest.spyOn(service as any, 'withTransaction').mockImplementation(async (callback: any) => callback({}));
+    jest
+      .spyOn(service as any, 'withTransaction')
+      .mockImplementation((callback: any) =>
+        Promise.resolve().then(() => callback({})),
+      );
     jest.spyOn(service as any, 'findOne').mockResolvedValue(null);
   });
 

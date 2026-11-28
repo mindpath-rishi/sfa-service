@@ -12,5 +12,4 @@ export interface RequestContext {
   offlineAccessAllowed?: boolean;
 }
 
-export const RequestContextStore =
-  new AsyncLocalStorage<RequestContext>();
+export const RequestContextStore = new AsyncLocalStorage<RequestContext>();

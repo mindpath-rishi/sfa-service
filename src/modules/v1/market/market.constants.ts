@@ -1,4 +1,3 @@
-
 export const MARKET = {
   CREATED: 'Market created successfully',
   FETCHED: 'Market fetched successfully',

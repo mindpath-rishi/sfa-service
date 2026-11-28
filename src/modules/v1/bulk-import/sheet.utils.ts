@@ -6,7 +6,10 @@ import { Readable } from 'stream';
 
 /** "Outlet ID", "outlet_id", "OutletId" → "outletid" */
 export const normalizeHeader = (value: string) =>
-  value.trim().toLowerCase().replace(/[\s_\-.]+/g, '');
+  value
+    .trim()
+    .toLowerCase()
+    .replace(/[\s_\-.]+/g, '');
 
 export type SheetRow = {
   rowNumber: number;
@@ -28,9 +31,13 @@ export function cellText(value: ExcelJS.CellValue): string {
   if (value === null || value === undefined) return '';
   if (value instanceof Date) return value.toISOString().slice(0, 10);
   if (typeof value === 'object') {
-    if ('richText' in value) return value.richText.map((part) => part.text).join('').trim();
+    if ('richText' in value)
+      return value.richText
+        .map((part) => part.text)
+        .join('')
+        .trim();
     if ('text' in value) return String(value.text ?? '').trim();
-    if ('result' in value) return cellText(value.result as ExcelJS.CellValue);
+    if ('result' in value) return cellText(value.result);
     if ('error' in value) return '';
   }
   return String(value).trim();
@@ -40,12 +47,17 @@ export function cellText(value: ExcelJS.CellValue): string {
  * Reads the first worksheet of an .xlsx or .csv upload. Hidden columns (the
  * dropdown option lists in the master templates) and empty rows are ignored.
  */
-export async function readSheet(buffer: Buffer, fileName: string): Promise<SheetData> {
+export async function readSheet(
+  buffer: Buffer,
+  fileName: string,
+): Promise<SheetData> {
   const workbook = new ExcelJS.Workbook();
   const lower = fileName.toLowerCase();
   try {
     if (lower.endsWith('.csv')) {
-      await workbook.csv.read(Readable.from(buffer.toString('utf8').replace(/^﻿/, '')));
+      await workbook.csv.read(
+        Readable.from(buffer.toString('utf8').replace(/^\uFEFF/, '')),
+      );
     } else if (lower.endsWith('.xlsx')) {
       await workbook.xlsx.load(buffer as any);
     } else {
@@ -53,7 +65,9 @@ export async function readSheet(buffer: Buffer, fileName: string): Promise<Sheet
     }
   } catch (error) {
     if (error instanceof BadRequestException) throw error;
-    throw new BadRequestException('The file could not be read. Save it as .xlsx (or .csv) and try again.');
+    throw new BadRequestException(
+      'The file could not be read. Save it as .xlsx (or .csv) and try again.',
+    );
   }
 
   const sheet = workbook.worksheets[0];
@@ -67,15 +81,21 @@ export async function readSheet(buffer: Buffer, fileName: string): Promise<Sheet
     if (!header) continue;
     columns.push({ index, header, key: normalizeHeader(header) });
   }
-  if (!columns.length) throw new BadRequestException('The first row must contain the column headers');
+  if (!columns.length)
+    throw new BadRequestException(
+      'The first row must contain the column headers',
+    );
 
   const byKey = new Map<string, number>();
-  for (const column of columns) if (!byKey.has(column.key)) byKey.set(column.key, column.index);
+  for (const column of columns)
+    if (!byKey.has(column.key)) byKey.set(column.key, column.index);
 
   const rows: SheetRow[] = [];
   sheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
     if (rowNumber === 1) return;
-    const values = columns.map((column) => cellText(row.getCell(column.index).value));
+    const values = columns.map((column) =>
+      cellText(row.getCell(column.index).value),
+    );
     if (values.every((value) => !value)) return;
     rows.push({
       rowNumber,
@@ -96,24 +116,38 @@ export async function readSheet(buffer: Buffer, fileName: string): Promise<Sheet
 
 export function requireHeaders(sheet: SheetData, headers: string[]) {
   const missing = headers.filter((header) => !sheet.has(header));
-  if (missing.length) throw new BadRequestException(`Missing required columns: ${missing.join(', ')}`);
+  if (missing.length)
+    throw new BadRequestException(
+      `Missing required columns: ${missing.join(', ')}`,
+    );
 }
 
 /* ==================== DTO VALIDATION ==================== */
 
 const flatten = (errors: ValidationError[], prefix = ''): string[] =>
   errors.flatMap((error) => [
-    ...Object.values(error.constraints ?? {}).map((message) => (prefix ? `${prefix}.${message}` : message)),
-    ...flatten(error.children ?? [], prefix ? `${prefix}.${error.property}` : error.property),
+    ...Object.values(error.constraints ?? {}).map((message) =>
+      prefix ? `${prefix}.${message}` : message,
+    ),
+    ...flatten(
+      error.children ?? [],
+      prefix ? `${prefix}.${error.property}` : error.property,
+    ),
   ]);
 
 /**
  * Same checks the module's own endpoint applies through the global
  * ValidationPipe (transform + whitelist + forbidNonWhitelisted), per row.
  */
-export async function validateItem<T extends object>(dtoClass: new () => T, value: unknown) {
-  const instance = plainToInstance(dtoClass, value) as T;
-  const errors = await validate(instance, { whitelist: true, forbidNonWhitelisted: true });
+export async function validateItem<T extends object>(
+  dtoClass: new () => T,
+  value: unknown,
+) {
+  const instance = plainToInstance<T, unknown>(dtoClass, value);
+  const errors = await validate(instance, {
+    whitelist: true,
+    forbidNonWhitelisted: true,
+  });
   return { instance, errors: flatten(errors) };
 }
 
@@ -122,7 +156,11 @@ export async function validateItem<T extends object>(dtoClass: new () => T, valu
 export function styleHeader(sheet: ExcelJS.Worksheet, widths: number[]) {
   const header = sheet.getRow(1);
   header.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-  header.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2563EB' } };
+  header.fill = {
+    type: 'pattern',
+    pattern: 'solid',
+    fgColor: { argb: 'FF2563EB' },
+  };
   sheet.views = [{ state: 'frozen', ySplit: 1 }];
   widths.forEach((width, index) => {
     sheet.getColumn(index + 1).width = width;

@@ -112,10 +112,36 @@ async function main() {
       isDeleted: false,
     },
   ]);
-  await col('beat_master').insertMany([
-    { beatId: 'B1', name: 'Kabwata', isDeleted: false },
-    { beatId: 'B2', name: 'Matero', isDeleted: false },
-    { beatId: 'B9', name: 'Old Beat', isDeleted: true },
+  // Day-start route sessions (Remarks source)
+  await col('route_sessions').insertMany([
+    {
+      userId: USER,
+      routeId: 'R2',
+      routeName: 'Matero',
+      sessionDate: d(2026, 11, 16),
+      startTime: d(2026, 11, 16, 7),
+    },
+    {
+      userId: USER,
+      routeId: 'R1',
+      routeName: 'Kabwata',
+      sessionDate: d(2026, 11, 16),
+      startTime: new Date(2026, 10, 16, 7, 30),
+    },
+    {
+      userId: USER,
+      routeId: 'R9',
+      routeName: 'Last Week',
+      sessionDate: d(2026, 11, 14),
+      startTime: d(2026, 11, 14, 7),
+    },
+    {
+      userId: OTHER,
+      routeId: 'R5',
+      routeName: 'Other Route',
+      sessionDate: d(2026, 11, 16),
+      startTime: d(2026, 11, 16, 7),
+    },
   ]);
 
   /* ---------------- scenarios (run in order) ---------------- */
@@ -143,26 +169,24 @@ async function main() {
     assert.equal(local.expenseOption, 'DAILY_EXPENSE');
 
     await service.replaceWithdrawalCharges({
-      slabs: [{ minAmount: 0, maxAmount: 1, charge: 99 }],
+      slabs: [{ minAmount: 0, maxAmount: 1, chargePercent: 99 }],
     });
     const { data: slabs } = await service.replaceWithdrawalCharges({
       slabs: [
-        { minAmount: 501, maxAmount: 1000, charge: 15 },
-        { minAmount: 1, maxAmount: 500, charge: 10 },
-        { minAmount: 1001, maxAmount: 5000, charge: 25 },
+        { minAmount: 501, maxAmount: 1000, chargePercent: 2.5 },
+        { minAmount: 1, maxAmount: 500, chargePercent: 2 },
+        { minAmount: 1001, maxAmount: 5000, chargePercent: 3 },
       ],
     });
     assert.deepEqual(
-      slabs.map((s) => s.charge),
-      [10, 15, 25],
+      slabs.map((s) => s.chargePercent),
+      [2, 2.5, 3],
     );
   });
 
   test('week 1 Monday request stores all ERP fields + remarks', async () => {
     at(d(2026, 11, 16, 8));
-    const { data } = await asUser(USER, () =>
-      service.create({ beatIds: ['B2', 'B1', 'B9'] }),
-    );
+    const { data } = await asUser(USER, () => service.create());
     const s = await col('expenses').findOne({ expenseId: data.expenseId });
     assert.ok(s);
     assert.equal(s.userId, USER);
@@ -176,7 +200,8 @@ async function main() {
     assert.equal(s.perDayValue, 100);
     assert.equal(s.withdrawalCharges, 15);
     assert.equal(s.totalAmount, 615);
-    assert.equal(s.remarks, 'Matero, Kabwata'); // deleted beat excluded
+    assert.equal(s.remarks, 'Matero, Kabwata'); // order worked; other weeks/users excluded
+    assert.deepEqual(s.routeIds, ['R2', 'R1']);
     assert.equal(s.isDeleted, false);
     assert.equal(+s.fromDate, +d(2026, 11, 16));
     assert.equal(+s.toDate, +d(2026, 11, 21));
@@ -187,19 +212,19 @@ async function main() {
   test('duplicate in the same week → 409', async () => {
     at(d(2026, 11, 19, 10));
     await rejectsWith(
-      asUser(USER, () => service.create({})),
+      asUser(USER, () => service.create()),
       ConflictException,
     );
   });
 
   test('UPC employee, absent Monday, requests Thursday', async () => {
     at(d(2026, 11, 19, 10));
-    const { data } = await asUser(OTHER, () => service.create({}));
+    const { data } = await asUser(OTHER, () => service.create());
     assert.equal(data.expenseTag, 'UPC');
     assert.equal(data.expenseOption, 'FOOD_AND_NIGHT_STAY');
     assert.equal(+data.fromDate, +d(2026, 11, 19));
     assert.equal(data.noOfDays, 3);
-    assert.equal(data.totalAmount, 750 + 15);
+    assert.equal(data.totalAmount, 750 + 18.75); // 2.5% of 750
   });
 
   test('Sunday → window closed', async () => {
@@ -227,12 +252,12 @@ async function main() {
     await present(USER, d(2026, 11, 23)); // present Monday week 2
 
     at(d(2026, 11, 25, 9));
-    const { data } = await asUser(USER, () => service.create({}));
+    const { data } = await asUser(USER, () => service.create());
     assert.equal(data.noOfDays, 6);
     assert.equal(data.toBeAdjustedDays, 3);
     assert.equal(data.payableDays, 3);
     assert.equal(data.previousExpenseId, week1[0].expenseId);
-    assert.equal(data.totalAmount, 310);
+    assert.equal(data.totalAmount, 306); // 300 + 2%
     assert.deepEqual(
       data.adjustedDates.map((x) => +x),
       [d(2026, 11, 19), d(2026, 11, 20), d(2026, 11, 21)].map((x) => +x),
@@ -282,7 +307,7 @@ async function main() {
       remarks: 'Wrong week',
     });
     at(d(2026, 11, 20, 9));
-    const { data } = await asUser(OTHER, () => service.create({}));
+    const { data } = await asUser(OTHER, () => service.create());
     assert.equal(data.noOfDays, 2);
   });
 

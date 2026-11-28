@@ -1,13 +1,5 @@
-import { NonSaleStatus } from 'src/shared/enums/non-sale.enums';
-
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import {
-  IsEnum,
-  IsNotEmpty,
-  IsOptional,
-  IsString,
-  MaxLength,
-} from 'class-validator';
+import { IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
 
 export class CreateNonSaleDto {
   /**

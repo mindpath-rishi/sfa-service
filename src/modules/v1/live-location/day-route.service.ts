@@ -10,12 +10,24 @@
  *  - day stats (distance, driving / visit / idle time, sales).
  * Points come from the time-series store (live_location_points).
  */
-import { BadRequestException, HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  HttpStatus,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { MongoService } from 'src/core/database/mongo/mongo.service';
 import { LocationPointsStore } from './location-points.store';
 import { TrackingSettingsService } from './tracking-settings.service';
-import { BACKGROUND_MIN_ACCURACY_LIMIT_M, isAccuracyDrift } from './location-drift';
-import { distanceMeters, RoadSnapService, type TrackPoint } from './road-snap.service';
+import {
+  BACKGROUND_MIN_ACCURACY_LIMIT_M,
+  isAccuracyDrift,
+} from './location-drift';
+import {
+  distanceMeters,
+  RoadSnapService,
+  type TrackPoint,
+} from './road-snap.service';
 
 const MAX_SPEED_KMH = 160;
 const VISIT_MATCH_METERS = 150;
@@ -65,8 +77,16 @@ const zoneOffsetMs = (instant: Date) => {
     minute: '2-digit',
     second: '2-digit',
   }).formatToParts(instant);
-  const get = (type: string) => Number(parts.find((part) => part.type === type)?.value);
-  const asUtc = Date.UTC(get('year'), get('month') - 1, get('day'), get('hour'), get('minute'), get('second'));
+  const get = (type: string) =>
+    Number(parts.find((part) => part.type === type)?.value);
+  const asUtc = Date.UTC(
+    get('year'),
+    get('month') - 1,
+    get('day'),
+    get('hour'),
+    get('minute'),
+    get('second'),
+  );
   return asUtc - Math.floor(instant.getTime() / 1000) * 1000;
 };
 
@@ -79,7 +99,8 @@ const dayBounds = (date: string) => {
 };
 
 const round = (value: number, digits = 2) => Number(value.toFixed(digits));
-const minutesBetween = (a: Date, b: Date) => (b.getTime() - a.getTime()) / 60000;
+const minutesBetween = (a: Date, b: Date) =>
+  (b.getTime() - a.getTime()) / 60000;
 
 @Injectable()
 export class DayRouteService {
@@ -93,14 +114,18 @@ export class DayRouteService {
   async getDayRoute(employeeId: string, date?: string) {
     if (!employeeId) throw new BadRequestException('employeeId is required');
     const dayString = date || dayKey(new Date());
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(dayString)) throw new BadRequestException('Invalid date');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dayString))
+      throw new BadRequestException('Invalid date');
     const { from, to } = dayBounds(dayString);
 
     const db = this.mongo.getDb();
     const [employee, sessions] = await Promise.all([
       db
         .collection('employees')
-        .findOne({ employeeId }, { projection: { _id: 0, employeeId: 1, name: 1, mobile: 1 } }),
+        .findOne(
+          { employeeId },
+          { projection: { _id: 0, employeeId: 1, name: 1, mobile: 1 } },
+        ),
       db
         .collection('work_sessions')
         .find({
@@ -121,7 +146,9 @@ export class DayRouteService {
           : latest,
       null,
     );
-    const active = sessions.some((session) => String(session.status).toUpperCase() === 'ACTIVE');
+    const active = sessions.some(
+      (session) => String(session.status).toUpperCase() === 'ACTIVE',
+    );
     const until = active ? new Date() : (dayEnd ?? to);
 
     /* ---------------- GPS points ---------------- */
@@ -143,7 +170,8 @@ export class DayRouteService {
         const sessionPoints = points.filter(
           (point) =>
             point.capturedAt >= new Date(session.dayStartTime) &&
-            (!session.dayEndTime || point.capturedAt <= new Date(session.dayEndTime)),
+            (!session.dayEndTime ||
+              point.capturedAt <= new Date(session.dayEndTime)),
         );
         return this.roadSnap.snap(
           `ws:${session.workSessionId}`,
@@ -157,7 +185,10 @@ export class DayRouteService {
     const visits = sessionIds.length
       ? await db
           .collection('shop_visits')
-          .find({ workSessionId: { $in: sessionIds }, isDeleted: { $ne: true } })
+          .find({
+            workSessionId: { $in: sessionIds },
+            isDeleted: { $ne: true },
+          })
           .sort({ checkInTime: 1 })
           .toArray()
       : [];
@@ -190,7 +221,10 @@ export class DayRouteService {
     const nonSaleByVisit = new Map(nonSales.map((row) => [row.visitId, row]));
 
     const visitEvents: TimelineEvent[] = visits.map((visit, index) => {
-      const location = visit.customerLocation || visit.checkInLocation || visit.checkOutLocation;
+      const location =
+        visit.customerLocation ||
+        visit.checkInLocation ||
+        visit.checkOutLocation;
       const start = new Date(visit.checkInTime);
       const end = visit.checkOutTime ? new Date(visit.checkOutTime) : undefined;
       const order = salesByVisit.get(String(visit.visitId));
@@ -224,8 +258,10 @@ export class DayRouteService {
         !visitEvents.some((visit) => {
           if (visit.latitude == null || visit.longitude == null) return false;
           const near =
-            distanceMeters([stop.latitude, stop.longitude], [visit.latitude, visit.longitude]) <=
-            VISIT_MATCH_METERS;
+            distanceMeters(
+              [stop.latitude, stop.longitude],
+              [visit.latitude, visit.longitude],
+            ) <= VISIT_MATCH_METERS;
           const overlaps =
             new Date(stop.start) <= new Date(visit.end ?? visit.start) &&
             new Date(stop.end) >= new Date(visit.start);
@@ -259,7 +295,9 @@ export class DayRouteService {
       });
       if (session.dayEndTime) {
         const endLocation = session.dayEndLocation;
-        const lastPoint = points.filter((p) => p.capturedAt <= new Date(session.dayEndTime)).at(-1);
+        const lastPoint = points
+          .filter((p) => p.capturedAt <= new Date(session.dayEndTime))
+          .at(-1);
         edgeEvents.push({
           id: `end-${session.workSessionId}`,
           type: 'DAY_END',
@@ -284,7 +322,9 @@ export class DayRouteService {
       const legStart = new Date(event.end ?? event.start);
       const legEnd = new Date(next.start);
       if (legEnd <= legStart) return;
-      const legPoints = points.filter((p) => p.capturedAt >= legStart && p.capturedAt <= legEnd);
+      const legPoints = points.filter(
+        (p) => p.capturedAt >= legStart && p.capturedAt <= legEnd,
+      );
       const km = this.pathKm(legPoints);
       if (km < 0.05) return;
       timeline.push({
@@ -300,9 +340,17 @@ export class DayRouteService {
 
     /* ---------------- stats ---------------- */
     const firstStart = sessions[0] ? new Date(sessions[0].dayStartTime) : null;
-    const workingMinutes = firstStart ? Math.max(0, minutesBetween(firstStart, until)) : 0;
-    const visitMinutes = visitEvents.reduce((sum, v) => sum + (v.durationMinutes ?? 0), 0);
-    const idleMinutes = stopEvents.reduce((sum, s) => sum + (s.durationMinutes ?? 0), 0);
+    const workingMinutes = firstStart
+      ? Math.max(0, minutesBetween(firstStart, until))
+      : 0;
+    const visitMinutes = visitEvents.reduce(
+      (sum, v) => sum + (v.durationMinutes ?? 0),
+      0,
+    );
+    const idleMinutes = stopEvents.reduce(
+      (sum, s) => sum + (s.durationMinutes ?? 0),
+      0,
+    );
     const travelMinutes = timeline
       .filter((event) => event.type === 'TRAVEL')
       .reduce((sum, t) => sum + (t.durationMinutes ?? 0), 0);
@@ -325,7 +373,11 @@ export class DayRouteService {
           dayEndTime: session.dayEndTime ?? null,
         })),
         // [lat, lng, epochMs] for playback; snapped path for drawing
-        trail: points.map((p) => [round(p.latitude, 6), round(p.longitude, 6), p.capturedAt.getTime()]),
+        trail: points.map((p) => [
+          round(p.latitude, 6),
+          round(p.longitude, 6),
+          p.capturedAt.getTime(),
+        ]),
         snappedPath: snappedSegments.map((segment) => segment.path),
         roadSnapped: snappedSegments.some((segment) => segment.snapped),
         timeline,
@@ -336,13 +388,25 @@ export class DayRouteService {
           visitMinutes: Math.round(visitMinutes),
           idleMinutes: Math.round(idleMinutes),
           visits: visitEvents.length,
-          productiveVisits: visitEvents.filter((v) => v.outcome === 'ORDER').length,
-          noSaleVisits: visitEvents.filter((v) => v.outcome === 'NO_SALE').length,
-          orderValue: round(visitEvents.reduce((sum, v) => sum + (v.orderValue ?? 0), 0)),
+          productiveVisits: visitEvents.filter((v) => v.outcome === 'ORDER')
+            .length,
+          noSaleVisits: visitEvents.filter((v) => v.outcome === 'NO_SALE')
+            .length,
+          orderValue: round(
+            visitEvents.reduce((sum, v) => sum + (v.orderValue ?? 0), 0),
+          ),
           stops: stopEvents.length,
-          maxSpeedKmh: round(Math.max(0, ...points.map((p) => (p.speed ?? 0) * 3.6)), 0),
+          maxSpeedKmh: round(
+            Math.max(0, ...points.map((p) => (p.speed ?? 0) * 3.6)),
+            0,
+          ),
           avgMovingSpeedKmh: moving.length
-            ? round((moving.reduce((sum, p) => sum + (p.speed ?? 0), 0) / moving.length) * 3.6, 0)
+            ? round(
+                (moving.reduce((sum, p) => sum + (p.speed ?? 0), 0) /
+                  moving.length) *
+                  3.6,
+                0,
+              )
             : 0,
           points: points.length,
         },
@@ -363,7 +427,8 @@ export class DayRouteService {
     );
     const result: Point[] = [];
     for (const point of points) {
-      if (!Number.isFinite(point.latitude) || !Number.isFinite(point.longitude)) continue;
+      if (!Number.isFinite(point.latitude) || !Number.isFinite(point.longitude))
+        continue;
       if (point.accuracy != null && point.accuracy > accuracyLimit) continue;
       const previous = result[result.length - 1];
       if (previous) {
@@ -371,9 +436,15 @@ export class DayRouteService {
           [previous.latitude, previous.longitude],
           [point.latitude, point.longitude],
         );
-        const seconds = (point.capturedAt.getTime() - previous.capturedAt.getTime()) / 1000;
+        const seconds =
+          (point.capturedAt.getTime() - previous.capturedAt.getTime()) / 1000;
         if (seconds <= 0 && meters < 1) continue;
-        if (seconds > 0 && (meters / seconds) * 3.6 > MAX_SPEED_KMH && meters > 300) continue;
+        if (
+          seconds > 0 &&
+          (meters / seconds) * 3.6 > MAX_SPEED_KMH &&
+          meters > 300
+        )
+          continue;
         if (isAccuracyDrift(previous.accuracy, point, meters)) {
           result.push({
             ...point,
@@ -402,9 +473,17 @@ export class DayRouteService {
 
   /** Places the user stayed within STOP_RADIUS_METERS for ≥ STOP_MIN_MINUTES. */
   private detectStops(points: Point[]) {
-    const { stopRadiusM: STOP_RADIUS_METERS, stopMinMinutes: STOP_MIN_MINUTES } =
-      this.trackingSettings.current;
-    const stops: { latitude: number; longitude: number; start: string; end: string; durationMinutes: number }[] = [];
+    const {
+      stopRadiusM: STOP_RADIUS_METERS,
+      stopMinMinutes: STOP_MIN_MINUTES,
+    } = this.trackingSettings.current;
+    const stops: {
+      latitude: number;
+      longitude: number;
+      start: string;
+      end: string;
+      durationMinutes: number;
+    }[] = [];
     let i = 0;
     while (i < points.length) {
       const anchor = points[i];
@@ -413,8 +492,10 @@ export class DayRouteService {
       let sumLng = anchor.longitude;
       while (
         j < points.length &&
-        distanceMeters([anchor.latitude, anchor.longitude], [points[j].latitude, points[j].longitude]) <=
-          STOP_RADIUS_METERS
+        distanceMeters(
+          [anchor.latitude, anchor.longitude],
+          [points[j].latitude, points[j].longitude],
+        ) <= STOP_RADIUS_METERS
       ) {
         sumLat += points[j].latitude;
         sumLng += points[j].longitude;

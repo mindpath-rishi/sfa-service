@@ -70,7 +70,14 @@ export class RouteCustomerMappingService extends MongoRepository<RouteCustomerMa
   }
 
   async findAll(query: RouteCustomerMappingQueryDto) {
-    const { searchText, status, page = 1, limit = 20, routeId, customerId } = query;
+    const {
+      searchText,
+      status,
+      page = 1,
+      limit = 20,
+      routeId,
+      customerId,
+    } = query;
 
     const filter: FilterQuery<RouteCustomerMapping> = {};
 

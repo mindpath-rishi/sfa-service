@@ -7,16 +7,20 @@ import { outcomesFrom } from './outcomes';
 const HEADERS = ['Name', 'Product Code', 'isFocusedPack'];
 
 /** Mark products as focused pack (Y) or not (N). */
-export const focusedPacksDefinition = (products: ProductService): ImportDefinition<Record<string, unknown>> => ({
+export const focusedPacksDefinition = (
+  products: ProductService,
+): ImportDefinition<Record<string, unknown>> => ({
   type: 'focused-packs',
   label: 'Focused packs',
-  description: 'Set isFocusedPack to Y or N for products, matched by Product Code.',
+  description:
+    'Set isFocusedPack to Y or N for products, matched by Product Code.',
   requiredHeaders: HEADERS,
   optionalHeaders: [],
   limit: 50_000,
   batchSize: 500,
   itemDto: FocusedPackBulkItemDto,
 
+  // eslint-disable-next-line @typescript-eslint/require-await -- async so header errors reject like other definitions
   async parse(sheet) {
     requireHeaders(sheet, HEADERS);
     const seen = new Map<string, number>();
@@ -27,19 +31,27 @@ export const focusedPacksDefinition = (products: ProductService): ImportDefiniti
       const isFocusedPack = row.get('isFocusedPack').toUpperCase();
       if (!name) errors.push('Name is required');
       if (!productCode) errors.push('Product Code is required');
-      if (isFocusedPack !== 'Y' && isFocusedPack !== 'N') errors.push('isFocusedPack must be Y or N');
+      if (isFocusedPack !== 'Y' && isFocusedPack !== 'N')
+        errors.push('isFocusedPack must be Y or N');
       if (productCode) {
         const first = seen.get(productCode);
-        if (first) errors.push(`Product Code is duplicated (also in row ${first})`);
+        if (first)
+          errors.push(`Product Code is duplicated (also in row ${first})`);
         else seen.set(productCode, row.rowNumber);
       }
-      return { rows: [row.rowNumber], errors, payload: { name, productCode, isFocusedPack } };
+      return {
+        rows: [row.rowNumber],
+        errors,
+        payload: { name, productCode, isFocusedPack },
+      };
     });
   },
 
   async process(payloads) {
-    return outcomesFrom(await products.bulkUpdateFocusedPacks({ items: payloads } as any), payloads.length, (result) =>
-      `Focused pack updated (${result.productCode ?? ''})`,
+    return outcomesFrom(
+      await products.bulkUpdateFocusedPacks({ items: payloads } as any),
+      payloads.length,
+      (result) => `Focused pack updated (${result.productCode ?? ''})`,
     );
   },
 

@@ -21,8 +21,17 @@ export class SyncPreviewService {
   async preview(employeeId: string, entity?: string, search?: string) {
     const position = await this.connection
       .collection('position_master')
-      .findOne({ employeeId, isDeleted: { $ne: true } }, { sort: { updatedAt: -1 }, projection: { vanIds: 1, roleId: 1, offlineAccessAllowed: 1 } });
-    if (!position) throw new BadRequestException(`${employeeId} has no position, so the phone gets no data`);
+      .findOne(
+        { employeeId, isDeleted: { $ne: true } },
+        {
+          sort: { updatedAt: -1 },
+          projection: { vanIds: 1, roleId: 1, offlineAccessAllowed: 1 },
+        },
+      );
+    if (!position)
+      throw new BadRequestException(
+        `${employeeId} has no position, so the phone gets no data`,
+      );
     const vanId = (position.vanIds ?? [])[0];
 
     const counts: Record<string, { total: number; deleted: number }> = {};
@@ -33,15 +42,28 @@ export class SyncPreviewService {
     let truncated = false;
 
     do {
-      const page = await this.syncService.download(employeeId, undefined, cursor, vanId);
+      const page = await this.syncService.download(
+        employeeId,
+        undefined,
+        cursor,
+        vanId,
+      );
       for (const record of page.records) {
         const entry = (counts[record.entity] ??= { total: 0, deleted: 0 });
         entry.total += 1;
         if (record.deletedAt) entry.deleted += 1;
 
         if (entity && record.entity === entity && rows.length < MAX_ROWS) {
-          if (!needle || JSON.stringify(record.payload).toLowerCase().includes(needle)) {
-            rows.push({ uuid: record.uuid, updatedAt: record.updatedAt, deletedAt: record.deletedAt, ...record.payload });
+          if (
+            !needle ||
+            JSON.stringify(record.payload).toLowerCase().includes(needle)
+          ) {
+            rows.push({
+              uuid: record.uuid,
+              updatedAt: record.updatedAt,
+              deletedAt: record.deletedAt,
+              ...record.payload,
+            });
           }
         }
       }

@@ -9,6 +9,6 @@ export class AppControlService {
 
   isRouteEnabled(featureKey: string): boolean {
     const envValue: any = process.env[featureKey];
-    return envValue === "true"
+    return envValue === 'true';
   }
 }

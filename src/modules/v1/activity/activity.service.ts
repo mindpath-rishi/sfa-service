@@ -112,7 +112,7 @@ export class ActivityService extends MongoRepository<Activity> {
           },
           { session },
         );
-      } catch (error) {
+      } catch {
         // Do not block activity creation if route session completion fails
       }
 
@@ -192,136 +192,132 @@ export class ActivityService extends MongoRepository<Activity> {
          * ====================================================== */
         const vanId: any = payload.vanId || ctx?.vanId;
 
-        try {
-          const existingDailyStock = await this.vanDailyStockService.findOne(
-            {
-              workSessionId: payload.workSessionId,
-            },
-            {
-              session,
-            },
-          );
+        const existingDailyStock = await this.vanDailyStockService.findOne(
+          {
+            workSessionId: payload.workSessionId,
+          },
+          {
+            session,
+          },
+        );
 
-          if (!existingDailyStock) {
-            const erpClosing =
-              await this.vanErpClosingService.getLatestOpeningStock(vanId);
+        if (!existingDailyStock) {
+          const erpClosing =
+            await this.vanErpClosingService.getLatestOpeningStock(vanId);
 
-            const response = erpClosing.length
-              ? null
-              : await this.inventoryService.findByVanId(vanId, {
-                  page: 1,
-                  limit: 10000,
-                });
+          const response = erpClosing.length
+            ? null
+            : await this.inventoryService.findByVanId(vanId, {
+                page: 1,
+                limit: 10000,
+              });
 
-            const inventories = erpClosing.length
-              ? erpClosing.map((item: any) => ({
-                  ...item,
-                  quantity:
-                    Number(item.closingCases || 0) *
-                    Number(item.unitQtyInCase || 1),
-                }))
-              : response?.data?.products?.filter(
-                  (item: any) => Number(item.quantity || 0) > 0,
-                ) || [];
+          const inventories = erpClosing.length
+            ? erpClosing.map((item: any) => ({
+                ...item,
+                quantity:
+                  Number(item.closingCases || 0) *
+                  Number(item.unitQtyInCase || 1),
+              }))
+            : response?.data?.products?.filter(
+                (item: any) => Number(item.quantity || 0) > 0,
+              ) || [];
 
-            /* ======================================================
-             * IF ERP CLOSING EXISTS, RESET VAN INVENTORY FROM ERP
-             * ====================================================== */
-            if (erpClosing.length) {
-              await this.inventoryService.updateMany(
-                {
+          /* ======================================================
+           * IF ERP CLOSING EXISTS, RESET VAN INVENTORY FROM ERP
+           * ====================================================== */
+          if (erpClosing.length) {
+            await this.inventoryService.updateMany(
+              {
+                vanId,
+              },
+              {
+                $set: {
+                  quantity: 0,
+                  reservedQuantity: 0,
+                },
+              },
+              {
+                session,
+              },
+            );
+
+            await this.inventoryService.bulkUpdate(
+              inventories.map((item: any) => ({
+                filter: {
                   vanId,
+                  productId: item.productId,
                 },
-                {
+                update: {
                   $set: {
-                    quantity: 0,
+                    quantity: item.quantity,
                     reservedQuantity: 0,
+                    status: VanInventoryStatus.ACTIVE,
+                    isDeleted: false,
                   },
-                },
-                {
-                  session,
-                },
-              );
-
-              await this.inventoryService.bulkUpdate(
-                inventories.map((item: any) => ({
-                  filter: {
+                  $setOnInsert: {
+                    inventoryId: IdGenerator.generate('VAN_', 8),
                     vanId,
                     productId: item.productId,
                   },
-                  update: {
-                    $set: {
-                      quantity: item.quantity,
-                      reservedQuantity: 0,
-                      status: VanInventoryStatus.ACTIVE,
-                      isDeleted: false,
-                    },
-                    $setOnInsert: {
-                      inventoryId: IdGenerator.generate('VAN_', 8),
-                      vanId,
-                      productId: item.productId,
-                    },
-                  },
-                })),
-                {
-                  session,
-                  upsert: true,
-                  includeDeleted: true,
                 },
-              );
-            }
-
-            /* ======================================================
-             * CREATE VAN DAILY STOCK SNAPSHOT
-             * ====================================================== */
-            if (inventories.length) {
-              const today = new Date();
-              today.setHours(0, 0, 0, 0);
-
-              const dailyStocks = inventories.map((inv: any) => ({
-                vanDailyStockId: IdGenerator.generate('VDS', 8),
-
-                date: today,
-                vanId,
-                employeeId: ctx?.userId,
-
-                productId: inv.productId,
-                unitQtyInCase: inv.unitQtyInCase || 1,
-
-                openingQty: inv.quantity || 0,
-                inQty: 0,
-                outQty: 0,
-                adjustmentQty: 0,
-                closingQty: inv.quantity || 0,
-
-                pieceNetWeight: inv.pieceNetWeight,
-                piecePrice: inv.piecePrice,
-
-                workSessionId: payload.workSessionId,
-                status: VanDailyStockStatus.DRAFT,
-              }));
-
-              await this.vanDailyStockService.bulkUpdate(
-                dailyStocks.map((stock) => ({
-                  filter: {
-                    date: stock.date,
-                    vanId: stock.vanId,
-                    productId: stock.productId,
-                    workSessionId: stock.workSessionId,
-                  },
-                  update: {
-                    $setOnInsert: stock,
-                  },
-                })),
-                {
-                  session,
-                  upsert: true,
-                },
-              );
-            }
+              })),
+              {
+                session,
+                upsert: true,
+                includeDeleted: true,
+              },
+            );
           }
-        } catch (error) {
-          throw error;
+
+          /* ======================================================
+           * CREATE VAN DAILY STOCK SNAPSHOT
+           * ====================================================== */
+          if (inventories.length) {
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+
+            const dailyStocks = inventories.map((inv: any) => ({
+              vanDailyStockId: IdGenerator.generate('VDS', 8),
+
+              date: today,
+              vanId,
+              employeeId: ctx?.userId,
+
+              productId: inv.productId,
+              unitQtyInCase: inv.unitQtyInCase || 1,
+
+              openingQty: inv.quantity || 0,
+              inQty: 0,
+              outQty: 0,
+              adjustmentQty: 0,
+              closingQty: inv.quantity || 0,
+
+              pieceNetWeight: inv.pieceNetWeight,
+              piecePrice: inv.piecePrice,
+
+              workSessionId: payload.workSessionId,
+              status: VanDailyStockStatus.DRAFT,
+            }));
+
+            await this.vanDailyStockService.bulkUpdate(
+              dailyStocks.map((stock) => ({
+                filter: {
+                  date: stock.date,
+                  vanId: stock.vanId,
+                  productId: stock.productId,
+                  workSessionId: stock.workSessionId,
+                },
+                update: {
+                  $setOnInsert: stock,
+                },
+              })),
+              {
+                session,
+                upsert: true,
+              },
+            );
+          }
         }
       }
 

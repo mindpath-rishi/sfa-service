@@ -11,9 +11,10 @@ import { Request, Response } from 'express';
 import { ApiResponse } from '../../shared/interfaces/api-response.interface';
 
 @Injectable()
-export class ResponseInterceptor<T>
-  implements NestInterceptor<T, ApiResponse<T>>
-{
+export class ResponseInterceptor<T> implements NestInterceptor<
+  T,
+  ApiResponse<T>
+> {
   intercept(
     context: ExecutionContext,
     next: CallHandler<T>,
@@ -57,8 +58,7 @@ export class ResponseInterceptor<T>
         }
 
         const durationMs =
-          Number(process.hrtime.bigint() - startTime) /
-          1_000_000;
+          Number(process.hrtime.bigint() - startTime) / 1_000_000;
 
         /**
          * 3️⃣ Extract message + data
@@ -67,12 +67,9 @@ export class ResponseInterceptor<T>
          * return data
          */
         const message =
-          result?.message ??
-          response.statusMessage ??
-          'Request successful';
+          result?.message ?? response.statusMessage ?? 'Request successful';
 
-        const data =
-          result?.data !== undefined ? result.data : result;
+        const data = result?.data !== undefined ? result.data : result;
         const meta = result.meta;
 
         return {
@@ -85,7 +82,7 @@ export class ResponseInterceptor<T>
           method: request.method,
           durationMs: Math.round(durationMs),
           data,
-          meta
+          meta,
         };
       }),
     );

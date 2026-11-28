@@ -11,7 +11,7 @@ export class StringCaseUtils {
     return str
       .toLowerCase()
       .split(' ')
-      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
       .join(' ');
   }
 
@@ -19,9 +19,7 @@ export class StringCaseUtils {
     const words = str.toLowerCase().split(' ');
     return words
       .map((word, index) =>
-        index === 0
-          ? word
-          : word.charAt(0).toUpperCase() + word.slice(1),
+        index === 0 ? word : word.charAt(0).toUpperCase() + word.slice(1),
       )
       .join('');
   }
@@ -30,21 +28,15 @@ export class StringCaseUtils {
     return str
       .toLowerCase()
       .split(' ')
-      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
       .join('');
   }
 
   static snake(str: string): string {
-    return str
-      .trim()
-      .toLowerCase()
-      .replace(/\s+/g, '_');
+    return str.trim().toLowerCase().replace(/\s+/g, '_');
   }
 
   static kebab(str: string): string {
-    return str
-      .trim()
-      .toLowerCase()
-      .replace(/\s+/g, '-');
+    return str.trim().toLowerCase().replace(/\s+/g, '-');
   }
 }

@@ -1,4 +1,9 @@
-import { CanActivate, ExecutionContext, HttpException, Injectable } from '@nestjs/common';
+import {
+  CanActivate,
+  ExecutionContext,
+  HttpException,
+  Injectable,
+} from '@nestjs/common';
 import { DiagnosticsService } from './diagnostics.service';
 import { isBelow } from './version.utils';
 
@@ -41,7 +46,9 @@ export class AppVersionGuard implements CanActivate {
     throw new HttpException(
       {
         statusCode: UPGRADE_REQUIRED,
-        message: config.updateMessage || `Please update the app to version ${config.minAppVersion} or newer to continue.`,
+        message:
+          config.updateMessage ||
+          `Please update the app to version ${config.minAppVersion} or newer to continue.`,
         minAppVersion: config.minAppVersion,
         storeUrl: config.storeUrl,
         updateRequired: true,

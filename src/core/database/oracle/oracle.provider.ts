@@ -1,5 +1,8 @@
 import * as oracledb from 'oracledb';
-import { oracleConfig, OracleConfigOptions } from 'src/core/config/oracle.config';
+import {
+  oracleConfig,
+  OracleConfigOptions,
+} from 'src/core/config/oracle.config';
 import { LoggerService } from 'src/core/logger/logger.service';
 
 export const ORACLE_POOL = 'ORACLE_POOL';
@@ -9,9 +12,7 @@ let oracleClientInitialized = false;
 export const OracleProvider = {
   provide: ORACLE_POOL,
   inject: [LoggerService],
-  useFactory: async (
-    logger: LoggerService,
-  ): Promise<oracledb.Pool | null> => {
+  useFactory: async (logger: LoggerService): Promise<oracledb.Pool | null> => {
     logger.setContext('OracleDB');
 
     if (process.env.ORACLE_ENABLED !== 'true') {
@@ -64,7 +65,9 @@ export const OracleProvider = {
     };
 
     if (!config.user || !config.password || !config.connectString) {
-      logger.warn('OracleDB credentials missing. Skipping Oracle pool creation.');
+      logger.warn(
+        'OracleDB credentials missing. Skipping Oracle pool creation.',
+      );
       return null;
     }
 

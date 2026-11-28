@@ -3,23 +3,19 @@ import { ExpenseService } from './expense.service';
 
 describe('ExpenseController', () => {
   const preview = jest.fn().mockResolvedValue({});
+  const create = jest.fn().mockResolvedValue({});
   const controller = new ExpenseController({
     preview,
+    create,
   } as unknown as ExpenseService);
 
-  beforeEach(() => preview.mockClear());
+  it('preview takes no input', async () => {
+    await controller.preview();
+    expect(preview).toHaveBeenCalledWith();
+  });
 
-  it.each([
-    [undefined, []],
-    ['', []],
-    ['B1', ['B1']],
-    ['B1,B2,,B3', ['B1', 'B2', 'B3']],
-    [
-      ['B1', 'B2'],
-      ['B1', 'B2'],
-    ],
-  ])('preview parses beatIds %p', async (input, expected) => {
-    await controller.preview(input);
-    expect(preview).toHaveBeenCalledWith(expected);
+  it('create takes no body', async () => {
+    await controller.create();
+    expect(create).toHaveBeenCalledWith();
   });
 });

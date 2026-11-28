@@ -48,7 +48,7 @@ const ADMIN_ROUTES: Call[] = [
 
 const FIELD_ROUTES: Call[] = [
   ['get', '/expense/preview'],
-  ['post', '/expense', { beatIds: [] }],
+  ['post', '/expense', {}],
   ['get', '/expense/me'],
   ['get', '/expense/config/rates'],
   ['get', '/expense/config/withdrawal-charges'],

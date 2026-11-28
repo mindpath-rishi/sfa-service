@@ -8,7 +8,7 @@ import { PaginationDto } from 'src/shared/dto/pagination.dto';
  * OutletType Query DTO
  * ===================
  * Data Transfer Object for querying OutletType records
- * 
+ *
  * Extends PaginationDto for pagination support
  */
 export class OutletTypeQueryDto extends PaginationDto {
@@ -18,7 +18,7 @@ export class OutletTypeQueryDto extends PaginationDto {
    * Search by name, code, or identifier
    */
 
-  @ApiPropertyOptional({ description: "Search by name, code, or identifier" })
+  @ApiPropertyOptional({ description: 'Search by name, code, or identifier' })
   @IsOptional()
   @IsString()
   searchText?: string;
@@ -38,7 +38,10 @@ export class OutletTypeQueryDto extends PaginationDto {
    * Outlet type availability status
    */
 
-  @ApiPropertyOptional({ example: OutletTypeStatus.ACTIVE, enum: OutletTypeStatus })
+  @ApiPropertyOptional({
+    example: OutletTypeStatus.ACTIVE,
+    enum: OutletTypeStatus,
+  })
   @IsOptional()
   @IsEnum(OutletTypeStatus)
   status?: OutletTypeStatus;

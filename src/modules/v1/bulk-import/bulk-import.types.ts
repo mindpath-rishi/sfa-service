@@ -39,7 +39,12 @@ export interface ImportDefinition<TPayload = unknown> {
    */
   itemDto?: new () => object;
   /** Options the upload must carry (e.g. masters need `entity`). */
-  options?: { key: string; label: string; values?: string[]; required: boolean }[];
+  options?: {
+    key: string;
+    label: string;
+    values?: string[];
+    required: boolean;
+  }[];
   parse(sheet: SheetData, ctx: ImportContext): Promise<ImportUnit<TPayload>[]>;
   /** Results must be in the same order as `payloads`. */
   process(payloads: TPayload[], ctx: ImportContext): Promise<RowOutcome[]>;

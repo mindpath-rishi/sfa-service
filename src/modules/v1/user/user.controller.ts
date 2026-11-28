@@ -42,7 +42,12 @@ import { UserService } from './user.service';
 import { LoginPolicyService } from './login-policy.service';
 import { UpdateLoginPolicyDto } from './dto/login-policy.dto';
 import { SuperAdminGuard } from 'src/core/guards/super-admin.guard';
-import { ChangePasswordDto, LoginDto, UpdateOwnProfileDto, UpdatePushTokenDto } from './dto/login.dto';
+import {
+  ChangePasswordDto,
+  LoginDto,
+  UpdateOwnProfileDto,
+  UpdatePushTokenDto,
+} from './dto/login.dto';
 
 import { ApiSuccessResponse } from 'src/core/swagger/api.response.swagger';
 import {
@@ -81,7 +86,9 @@ export class UserController {
 
   @Get('login-policy')
   @UseGuards(SuperAdminGuard)
-  @ApiOperation({ summary: 'Login policy: single device login, day locked to device' })
+  @ApiOperation({
+    summary: 'Login policy: single device login, day locked to device',
+  })
   getLoginPolicy() {
     return this.loginPolicy.getPolicy();
   }
@@ -158,7 +165,8 @@ export class UserController {
     // }
 
     // Device ID is mandatory for device-scoped authentication
-    const deviceId = (req.headers['x-device-id'] as string) || dto.deviceInfo.deviceId;
+    const deviceId =
+      (req.headers['x-device-id'] as string) || dto.deviceInfo.deviceId;
     // if (!deviceId) {
     //   throw new BadRequestException('Device ID missing');
     // }

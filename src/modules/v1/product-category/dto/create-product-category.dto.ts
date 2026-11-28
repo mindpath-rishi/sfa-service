@@ -6,11 +6,19 @@
  */
 
 import { ApiProperty } from '@nestjs/swagger';
-import { IsEnum, IsNotEmpty, IsOptional, IsString, ValidateIf } from 'class-validator';
-import { ProductCategoryStatus, ProductCategoryType } from 'src/core/database/mongo/schema/product-category';
+import {
+  IsEnum,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  ValidateIf,
+} from 'class-validator';
+import {
+  ProductCategoryStatus,
+  ProductCategoryType,
+} from 'src/core/database/mongo/schema/product-category';
 
 export class ProductCategoryCreateDto {
-
   @ApiProperty({ example: 'CAT-001' })
   @IsNotEmpty()
   @IsString()
@@ -20,12 +28,17 @@ export class ProductCategoryCreateDto {
   @IsString()
   name!: string;
 
-  @ApiProperty({ enum: ProductCategoryType, example: ProductCategoryType.PARENT })
+  @ApiProperty({
+    enum: ProductCategoryType,
+    example: ProductCategoryType.PARENT,
+  })
   @IsEnum(ProductCategoryType)
   type!: ProductCategoryType;
 
   @ApiProperty({ required: false, example: 'CAT-12345678' })
-  @ValidateIf((dto: ProductCategoryCreateDto) => dto.type === ProductCategoryType.CHILD)
+  @ValidateIf(
+    (dto: ProductCategoryCreateDto) => dto.type === ProductCategoryType.CHILD,
+  )
   @IsNotEmpty()
   @IsString()
   parentId?: string;

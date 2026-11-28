@@ -79,7 +79,8 @@ export class UpdateVanDto {
 
   @ApiPropertyOptional({
     example: 'EID-DRIVER-001',
-    description: 'Supporting staff driver; send an empty string or null to remove',
+    description:
+      'Supporting staff driver; send an empty string or null to remove',
     nullable: true,
   })
   @IsOptional()

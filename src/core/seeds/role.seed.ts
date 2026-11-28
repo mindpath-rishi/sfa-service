@@ -1,5 +1,5 @@
-import { Injectable } from "@nestjs/common";
-import { RoleService } from "src/modules/v1/role/role.service";
+import { Injectable } from '@nestjs/common';
+import { RoleService } from 'src/modules/v1/role/role.service';
 
 const SUPER_ADMIN_ROLE_NAME = 'Super Admin';
 
@@ -37,9 +37,9 @@ export class RoleSeeder {
   }
 
   private async findSuperAdminRole(): Promise<{ roleId?: string } | null> {
-    return (await this.roleService.findOne(
-      { $or: [{ isSystemAdmin: true }, { name: 'SUPER_ADMIN' }] } as any,
+    return await this.roleService.findOne(
+      { $or: [{ isSystemAdmin: true }, { name: 'SUPER_ADMIN' }] },
       { lean: true },
-    )) as { roleId?: string } | null;
+    );
   }
 }

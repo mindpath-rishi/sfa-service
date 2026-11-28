@@ -42,7 +42,7 @@ import { ProductUpdateDto } from './dto/update-product.dto';
 import { BulkUpdateFocusedPackDto } from './dto/bulk-update-focused-pack.dto';
 import { RequestContextStore } from 'src/core/context/request-context';
 import { OracleRepository } from 'src/core/database/oracle/oracle.repository';
-import { PriceType, ProductStatus } from 'src/shared/enums/product.enums';
+import { PriceType } from 'src/shared/enums/product.enums';
 import * as XLSX from 'xlsx';
 import {
   ProductCategory,

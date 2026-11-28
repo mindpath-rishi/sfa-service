@@ -1161,7 +1161,7 @@ export class SyncService {
     const resolutions = await this.loadWaitingResolutions(operations, ownerId);
 
     for (const operation of operations) {
-      let auditObjectId: unknown | null = null;
+      let auditObjectId: unknown = null;
       const resolution = resolutions.get(
         resolutionKey(operation.queueId, operation.localId),
       );
@@ -1249,7 +1249,9 @@ export class SyncService {
               accuracy: location.accuracy as number | null | undefined,
               speed: location.speed as number | null | undefined,
               heading: location.heading as number | null | undefined,
-              capturedAt: location.capturedAt ? new Date(String(location.capturedAt)) : now,
+              capturedAt: location.capturedAt
+                ? new Date(String(location.capturedAt))
+                : now,
             })),
           );
           if (!points.length) return;
@@ -1277,8 +1279,6 @@ export class SyncService {
           cleanedPayload: payload,
           before: existing ?? null,
         });
-
-        const clientVersion = Number(operation.payload.version ?? 0);
 
         if (operation.operation === 'CREATE') {
           if (existing) {
@@ -1616,7 +1616,7 @@ export class SyncService {
             const collection = this.connection.collection(collectionName);
 
             const payload = normalizeOfflinePayload(
-              operation.entity as keyof typeof COLLECTIONS,
+              operation.entity,
               cleanPayload(operation.payload),
             );
 
@@ -1897,8 +1897,15 @@ export class SyncService {
   ) {
     const failed = results.filter((result) => !result.success);
     for (const result of results) {
-      const entity = operations.find((entry) => entry.queueId === result.queueId)?.entity ?? 'unknown';
-      syncOperationsTotal.labels(entity, result.success ? 'success' : result.conflict ? 'conflict' : 'failed').inc();
+      const entity =
+        operations.find((entry) => entry.queueId === result.queueId)?.entity ??
+        'unknown';
+      syncOperationsTotal
+        .labels(
+          entity,
+          result.success ? 'success' : result.conflict ? 'conflict' : 'failed',
+        )
+        .inc();
     }
     const message = `Offline sync upload: ${operations.length} operations, ${failed.length} failed`;
     if (failed.length) this.logger.warn(message);

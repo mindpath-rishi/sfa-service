@@ -15,8 +15,6 @@ import {
 } from '../database/mongo/schema/employee.schema';
 import { SeederRunner } from './seed.runner';
 import { RolePermissionsSeeder } from './role-permissions.seed';
-import { EmployeeService } from 'src/modules/v1/employee/employee.service';
-import { RoleService } from 'src/modules/v1/role/role.service';
 import { RoleModule } from 'src/modules/v1/role/role.module';
 import { EmployeeModule } from 'src/modules/v1/employee/employee.module';
 import { PositionModule } from 'src/modules/v1/position/position.module';

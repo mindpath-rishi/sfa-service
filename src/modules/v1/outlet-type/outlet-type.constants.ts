@@ -1,4 +1,3 @@
-
 export const OUTLET_TYPE = {
   CREATED: 'OutletType created successfully',
   FETCHED: 'OutletType fetched successfully',

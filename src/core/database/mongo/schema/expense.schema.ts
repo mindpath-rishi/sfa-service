@@ -1,7 +1,7 @@
 /**
- * Advance Expense Collection
+ * Expense Request Collection
  * --------------------------
- * Purpose : Weekly advance expense requests (Mon–Sat cycle)
+ * Purpose : Weekly expense requests (Mon–Sat cycle)
  * Used by : APP (request) / ADMIN (approval) / ERP (export)
  *
  * Contains:
@@ -9,7 +9,7 @@
  * - Date range (from date → Saturday)
  * - Cycle calculation (days, adjusted days, payable days)
  * - Amounts (per day value, withdrawal charges, total)
- * - Remarks (selected beat names)
+ * - Remarks (routes worked in the range, from route sessions)
  */
 
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
@@ -103,7 +103,11 @@ export class Expense {
   @Prop({ required: true, type: Number, min: 0 })
   perDayValue!: number;
 
-  // ERP: Withdrawal Charges
+  // Slab percentage applied to the base amount (audit trail)
+  @Prop({ type: Number, min: 0, max: 100, default: 0 })
+  withdrawalChargePercent!: number;
+
+  // ERP: Withdrawal Charges = base amount × withdrawalChargePercent / 100
   @Prop({ required: true, type: Number, min: 0, default: 0 })
   withdrawalCharges!: number;
 
@@ -116,9 +120,9 @@ export class Expense {
    * ====================================================== */
 
   @Prop({ type: [String], default: [] })
-  beatIds!: string[];
+  routeIds!: string[];
 
-  // ERP: Remarks (concatenated beat names)
+  // ERP: Remarks (concatenated route names)
   @Prop({ type: String, default: '' })
   remarks!: string;
 

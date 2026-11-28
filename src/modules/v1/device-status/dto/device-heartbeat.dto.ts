@@ -26,17 +26,23 @@ export class OfflinePeriodDto {
 }
 
 export class TrackingHealthDto {
-  @ApiPropertyOptional({ description: 'Location permission is "Allow all the time"' })
+  @ApiPropertyOptional({
+    description: 'Location permission is "Allow all the time"',
+  })
   @IsOptional()
   @IsBoolean()
   backgroundLocation?: boolean;
 
-  @ApiPropertyOptional({ description: 'Battery usage Unrestricted (Android only)' })
+  @ApiPropertyOptional({
+    description: 'Battery usage Unrestricted (Android only)',
+  })
   @IsOptional()
   @IsBoolean()
   batteryUnrestricted?: boolean;
 
-  @ApiPropertyOptional({ description: 'User confirmed Autostart is on (phones that have it)' })
+  @ApiPropertyOptional({
+    description: 'User confirmed Autostart is on (phones that have it)',
+  })
   @IsOptional()
   @IsBoolean()
   autostartConfirmed?: boolean;
@@ -60,7 +66,9 @@ export class DeviceHeartbeatDto {
   @IsIn(['ONLINE', 'OFFLINE'])
   networkStatus?: 'ONLINE' | 'OFFLINE';
 
-  @ApiPropertyOptional({ description: 'When the app was last used on the device' })
+  @ApiPropertyOptional({
+    description: 'When the app was last used on the device',
+  })
   @IsOptional()
   @IsDateString()
   lastActiveAt?: string;
@@ -70,7 +78,9 @@ export class DeviceHeartbeatDto {
   @IsString()
   workSessionId?: string;
 
-  @ApiPropertyOptional({ description: 'Version of the tracking settings the phone has' })
+  @ApiPropertyOptional({
+    description: 'Version of the tracking settings the phone has',
+  })
   @IsOptional()
   @IsString()
   @MaxLength(64)
@@ -81,7 +91,11 @@ export class DeviceHeartbeatDto {
   @IsString()
   appVersion?: string;
 
-  @ApiPropertyOptional({ type: [OfflinePeriodDto], description: 'Offline periods captured on the device since the last heartbeat' })
+  @ApiPropertyOptional({
+    type: [OfflinePeriodDto],
+    description:
+      'Offline periods captured on the device since the last heartbeat',
+  })
   @IsOptional()
   @IsArray()
   @ArrayMaxSize(200)

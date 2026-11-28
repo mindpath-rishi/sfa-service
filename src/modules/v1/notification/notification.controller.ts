@@ -51,7 +51,6 @@ import { Permissions } from 'src/core/decorators/permission.decorator';
 import { NOTIFICATION } from './notification.constants';
 import { NotificationQueryDto } from './dto/notification.query.dto';
 import { NotificationService } from './notification.service';
-import { Public } from 'src/core/decorators/public.decorator';
 import { BackOfficeOnly } from 'src/core/decorators/back-office-only.decorator';
 
 @ApiTags('Notification')

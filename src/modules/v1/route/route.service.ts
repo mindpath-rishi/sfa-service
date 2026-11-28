@@ -26,8 +26,6 @@ import { NormalizeType } from 'src/shared/enums/normalize.enums';
 import { RouteCustomerMappingService } from '../route-customer-mapping/route-customer-mapping.service';
 import { RouteCustomerMappingStatus } from 'src/shared/enums/route-customer-mapping.enums';
 import { CustomerService } from '../customer/customer.service';
-import { CustomerQueryDto } from '../customer/dto/customer-query.dto';
-import { CustomerStatus } from 'src/shared/enums/customer.enums';
 import { ShopVisitService } from '../shop-visit/shop-visit.service';
 import { ShopVisitStatus } from 'src/shared/enums/shop-visit.enums';
 import { SaleStatus } from 'src/shared/enums/sale.enums';
@@ -52,7 +50,7 @@ export class RouteService extends MongoRepository<Route> {
     const filter: FilterQuery<Route> = {};
 
     if (query.routeId) filter.routeId = query.routeId;
-    if (query.name) filter.name = new RegExp(query.name, 'i') as any;
+    if (query.name) filter.name = new RegExp(query.name, 'i');
     if (query.countryId) filter.countryId = query.countryId;
     if (query.provinceId) filter.provinceId = query.provinceId;
     if (query.marketId) filter.marketId = query.marketId;
@@ -152,7 +150,7 @@ export class RouteService extends MongoRepository<Route> {
     }
 
     const outlets = await this.customerService.find(
-      { customerId: { $in: customerIds } } as any,
+      { customerId: { $in: customerIds } },
       { session },
     );
     const provinceByCustomerId = new Map(
@@ -188,7 +186,7 @@ export class RouteService extends MongoRepository<Route> {
       {
         status: RouteCustomerMappingStatus.ACTIVE,
         ...(nextIds.length ? { customerId: { $in: nextIds } } : { routeId }),
-      } as any,
+      },
       { session },
     );
 
@@ -221,7 +219,7 @@ export class RouteService extends MongoRepository<Route> {
     }
 
     const currentRouteMappings = await this.routeCustomerMappingService.find(
-      { routeId, status: RouteCustomerMappingStatus.ACTIVE } as any,
+      { routeId, status: RouteCustomerMappingStatus.ACTIVE },
       { session },
     );
     const currentByCustomerId = new Map(
@@ -230,7 +228,7 @@ export class RouteService extends MongoRepository<Route> {
 
     await Promise.all(
       nextIds.map(async (customerId) => {
-        const existing = currentByCustomerId.get(customerId) as any;
+        const existing = currentByCustomerId.get(customerId);
         const sequence = nextByCustomerId.get(customerId) ?? 1;
 
         if (existing) {
@@ -295,7 +293,7 @@ export class RouteService extends MongoRepository<Route> {
       {
         routeId: { $in: routeIds },
         status: RouteCustomerMappingStatus.ACTIVE,
-      } as any,
+      },
       { session, sort: { sequence: 1 } as any },
     );
   }
@@ -316,7 +314,7 @@ export class RouteService extends MongoRepository<Route> {
           customerIds,
           page: 1,
           limit: customerIds.length,
-        } as CustomerQueryDto)
+        })
       : { data: [] };
     const customerById = new Map(
       (customersResult?.data ?? []).map((customer: any) => [
@@ -562,7 +560,7 @@ export class RouteService extends MongoRepository<Route> {
           outletCount,
         });
       } catch (error) {
-        const response: any = (error as any)?.getResponse?.();
+        const response: any = error?.getResponse?.();
         const errorMessage = Array.isArray(response?.message)
           ? response.message.join(', ')
           : response?.message ||

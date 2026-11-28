@@ -39,7 +39,10 @@ import { Market } from 'src/core/database/mongo/schema/market.schema';
 import { Route } from 'src/core/database/mongo/schema/route.schema';
 import { RouteCustomerMapping } from 'src/core/database/mongo/schema/route-customer-mapping.schema';
 import { Van } from 'src/core/database/mongo/schema/van.schema';
-import { Position, PositionSchema } from 'src/core/database/mongo/schema/position.schema';
+import {
+  Position,
+  PositionSchema,
+} from 'src/core/database/mongo/schema/position.schema';
 import { Role, RoleSchema } from 'src/core/database/mongo/schema/role.schema';
 import { generatePositionId } from '../position/position-id.util';
 import { TextNormalizer } from 'src/shared/utils/text-normalizer.utils';
@@ -48,7 +51,7 @@ import { CustomerStatus } from 'src/shared/enums/customer.enums';
 import { Employee } from 'src/core/database/mongo/schema/employee.schema';
 import { NotificationService } from '../notification/notification.service';
 import { RequestContextStore } from 'src/core/context/request-context';
-import { ForbiddenException, BadRequestException } from '@nestjs/common';
+import { BadRequestException } from '@nestjs/common';
 import { OutletVerificationService } from '../outlet-verification/outlet-verification.service';
 
 const REPORT_TIMEZONE =
@@ -120,7 +123,8 @@ export class CustomerService extends MongoRepository<Customer> {
       .lean();
     roleQuery.session(session);
     const role = await roleQuery;
-    if (!role?.roleId) throw new BadRequestException('Active SALESMAN role not found');
+    if (!role?.roleId)
+      throw new BadRequestException('Active SALESMAN role not found');
 
     const name = TextNormalizer.normalize(van.name, NormalizeType.TITLE);
     const existingQuery = this.positionModel
@@ -149,14 +153,22 @@ export class CustomerService extends MongoRepository<Customer> {
     if (existing?.isDeleted) {
       await this.positionModel.updateOne(
         { positionId: existing.positionId },
-        { $set: positionData, $unset: { employeeId: 1, reportTo: 1, marketId: 1 } },
+        {
+          $set: positionData,
+          $unset: { employeeId: 1, reportTo: 1, marketId: 1 },
+        },
         { session },
       );
       return;
     }
 
     await this.positionModel.create(
-      [{ ...positionData, positionId: await generatePositionId(this.positionModel, session) }],
+      [
+        {
+          ...positionData,
+          positionId: await generatePositionId(this.positionModel, session),
+        },
+      ],
       { session },
     );
   }
@@ -184,9 +196,9 @@ export class CustomerService extends MongoRepository<Customer> {
     if (outletTypeId) filter.customerTypeId = outletTypeId;
     if (marketId) filter.marketId = marketId;
     if (provinceId) filter.provinceId = provinceId;
-    if (ownerName) filter.ownerName = new RegExp(ownerName, 'i') as any;
-    if (phoneNumber) filter.phoneNumber = new RegExp(phoneNumber, 'i') as any;
-    if (outletName) filter.name = new RegExp(outletName, 'i') as any;
+    if (ownerName) filter.ownerName = new RegExp(ownerName, 'i');
+    if (phoneNumber) filter.phoneNumber = new RegExp(phoneNumber, 'i');
+    if (outletName) filter.name = new RegExp(outletName, 'i');
 
     if (address) {
       const regex = new RegExp(address, 'i');
@@ -194,7 +206,7 @@ export class CustomerService extends MongoRepository<Customer> {
         ...(Array.isArray(filter.$or) ? filter.$or : []),
         { 'address.line1': regex },
         { 'address.line2': regex },
-      ] as any;
+      ];
     }
 
     if (searchText) {
@@ -208,11 +220,11 @@ export class CustomerService extends MongoRepository<Customer> {
         { customerCategoryId: regex },
         { marketId: regex },
         { provinceId: regex },
-      ] as any;
+      ];
     }
 
     if (customerIds) {
-      filter.customerId = { $in: customerIds } as any;
+      filter.customerId = { $in: customerIds };
     }
 
     return filter;
@@ -504,25 +516,23 @@ export class CustomerService extends MongoRepository<Customer> {
     try {
       const creatorId = String(RequestContextStore.getStore()?.userId ?? '');
       const customerStatus = allowActiveBulkStatus
-        ? payload.status ?? CustomerStatus.VERIFICATION_PENDING
+        ? (payload.status ?? CustomerStatus.VERIFICATION_PENDING)
         : CustomerStatus.VERIFICATION_PENDING;
-      const uploadedCustomerId =
-        payload.customerId
-          ? payload.customerId
-              .trim()
-              .replace(/^FO_(?:TOKEN|TKON)_/i, '') || undefined
-          : undefined;
+      const uploadedCustomerId = payload.customerId
+        ? payload.customerId.trim().replace(/^FO_(?:TOKEN|TKON)_/i, '') ||
+          undefined
+        : undefined;
       const result = await this.withTransaction(async (session) => {
         // Outlets without a phone number (bulk upload) skip the duplicate check
         const existingByPhone = payload.phoneNumber
           ? await this.findOne(
-              { phoneNumber: payload.phoneNumber } as FilterQuery<Customer>,
+              { phoneNumber: payload.phoneNumber },
               { session, includeDeleted: true },
             )
           : null;
         const existingById = uploadedCustomerId
           ? await this.findOne(
-              { customerId: uploadedCustomerId } as FilterQuery<Customer>,
+              { customerId: uploadedCustomerId },
               { session, includeDeleted: true },
             )
           : null;
@@ -563,8 +573,7 @@ export class CustomerService extends MongoRepository<Customer> {
             {
               ...payload,
               customerId:
-                uploadedCustomerId ||
-                IdGenerator.generateRandomNumber(12),
+                uploadedCustomerId || IdGenerator.generateRandomNumber(12),
               status: customerStatus,
               createdByEmployeeId: creatorId || undefined,
             },
@@ -650,7 +659,7 @@ export class CustomerService extends MongoRepository<Customer> {
           customerId: created?.data?.customerId,
         });
       } catch (error) {
-        const response: any = (error as any)?.getResponse?.();
+        const response: any = error?.getResponse?.();
         const errorMessage = Array.isArray(response?.message)
           ? response.message.join(', ')
           : response?.message ||
@@ -1770,7 +1779,9 @@ export class CustomerService extends MongoRepository<Customer> {
 
     try {
       return await this.withTransaction(async (session) => {
-        this.logger.log('🚀 ================= IMPORT STARTED =================');
+        this.logger.log(
+          '🚀 ================= IMPORT STARTED =================',
+        );
 
         /* ======================================================
          * EXCEL READ
@@ -1844,7 +1855,9 @@ export class CustomerService extends MongoRepository<Customer> {
          * COUNTRY
          * ====================================================== */
 
-        this.logger.log('🌍 ================= IMPORTING COUNTRIES =================');
+        this.logger.log(
+          '🌍 ================= IMPORTING COUNTRIES =================',
+        );
 
         for (const row of rows) {
           try {
@@ -1889,7 +1902,9 @@ export class CustomerService extends MongoRepository<Customer> {
          * PROVINCE
          * ====================================================== */
 
-        this.logger.log('🏛 ================= IMPORTING PROVINCES =================');
+        this.logger.log(
+          '🏛 ================= IMPORTING PROVINCES =================',
+        );
 
         for (const row of rows) {
           try {
@@ -1943,7 +1958,9 @@ export class CustomerService extends MongoRepository<Customer> {
          * MARKET
          * ====================================================== */
 
-        this.logger.log('🏪 ================= IMPORTING MARKETS =================');
+        this.logger.log(
+          '🏪 ================= IMPORTING MARKETS =================',
+        );
 
         for (const row of rows) {
           try {
@@ -2004,7 +2021,9 @@ export class CustomerService extends MongoRepository<Customer> {
          * CUSTOMER
          * ====================================================== */
 
-        this.logger.log('👥 ================= IMPORTING CUSTOMERS =================');
+        this.logger.log(
+          '👥 ================= IMPORTING CUSTOMERS =================',
+        );
 
         for (const row of rows) {
           try {
@@ -2062,7 +2081,9 @@ export class CustomerService extends MongoRepository<Customer> {
               const duplicateList = duplicateCustomers.slice(1);
 
               for (const duplicate of duplicateList) {
-                this.logger.debug(`🗑 REMOVING DUPLICATE CUSTOMER: ${duplicate.customerId}`);
+                this.logger.debug(
+                  `🗑 REMOVING DUPLICATE CUSTOMER: ${duplicate.customerId}`,
+                );
 
                 /* ======================================================
                  * UPDATE ROUTE MAPPINGS
@@ -2174,7 +2195,9 @@ export class CustomerService extends MongoRepository<Customer> {
          * ROUTE
          * ====================================================== */
 
-        this.logger.log('🛣 ================= IMPORTING ROUTES =================');
+        this.logger.log(
+          '🛣 ================= IMPORTING ROUTES =================',
+        );
 
         for (const row of rows) {
           try {
@@ -2243,7 +2266,9 @@ export class CustomerService extends MongoRepository<Customer> {
          * VAN
          * ====================================================== */
 
-        this.logger.log('🚚 ================= IMPORTING VANS =================');
+        this.logger.log(
+          '🚚 ================= IMPORTING VANS =================',
+        );
 
         for (const row of rows) {
           try {
@@ -2271,15 +2296,10 @@ export class CustomerService extends MongoRepository<Customer> {
 
                 vanNumber,
 
-
                 associatedRoutes: [],
               });
 
-              await this.createImportedVanPosition(
-                van,
-                routeId,
-                session,
-              );
+              await this.createImportedVanPosition(van, routeId, session);
 
               stats.vans++;
 
@@ -2317,9 +2337,13 @@ export class CustomerService extends MongoRepository<Customer> {
                   },
                 );
 
-                this.logger.debug(`🔗 ROUTE ${routeId} ATTACHED TO VAN ${vanNumber}`);
+                this.logger.debug(
+                  `🔗 ROUTE ${routeId} ATTACHED TO VAN ${vanNumber}`,
+                );
               } else {
-                this.logger.debug(`♻️ ROUTE ALREADY ATTACHED TO VAN ${vanNumber}`);
+                this.logger.debug(
+                  `♻️ ROUTE ALREADY ATTACHED TO VAN ${vanNumber}`,
+                );
               }
             }
 
@@ -2338,7 +2362,9 @@ export class CustomerService extends MongoRepository<Customer> {
          * ROUTE CUSTOMER MAPPING
          * ====================================================== */
 
-        this.logger.log('🔗 ================= IMPORTING MAPPINGS =================');
+        this.logger.log(
+          '🔗 ================= IMPORTING MAPPINGS =================',
+        );
 
         let sequence = 1;
 
@@ -2383,7 +2409,9 @@ export class CustomerService extends MongoRepository<Customer> {
                 { session },
               );
 
-              this.logger.debug(`🔄 ROUTE OUTLET COUNT UPDATED: ${totalMappings}`);
+              this.logger.debug(
+                `🔄 ROUTE OUTLET COUNT UPDATED: ${totalMappings}`,
+              );
 
               continue;
             }
@@ -2420,7 +2448,9 @@ export class CustomerService extends MongoRepository<Customer> {
               { session },
             );
 
-            this.logger.debug(`🔄 ROUTE OUTLET COUNT UPDATED: ${totalMappings}`);
+            this.logger.debug(
+              `🔄 ROUTE OUTLET COUNT UPDATED: ${totalMappings}`,
+            );
           } catch (error: any) {
             this.logger.warn(`❌ MAPPING ERROR: ${error.message}`);
 
@@ -2431,7 +2461,9 @@ export class CustomerService extends MongoRepository<Customer> {
           }
         }
 
-        this.logger.log('🎉 ================= IMPORT COMPLETED =================');
+        this.logger.log(
+          '🎉 ================= IMPORT COMPLETED =================',
+        );
 
         this.logger.log(`🌍 Countries Created: ${stats.countries}`);
 
@@ -2460,7 +2492,10 @@ export class CustomerService extends MongoRepository<Customer> {
         };
       });
     } catch (error) {
-      this.logger.error('💥 IMPORT FAILED', error instanceof Error ? error.stack : String(error));
+      this.logger.error(
+        '💥 IMPORT FAILED',
+        error instanceof Error ? error.stack : String(error),
+      );
 
       throw error;
     }

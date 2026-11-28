@@ -87,9 +87,7 @@ export class SchemeService extends MongoRepository<Scheme> {
       }
       return { freeProductName: scheme.freeProductName || product.name };
     }
-    if (
-      schemeType !== SchemeType.GROUP_FREE_QTY
-    ) {
+    if (schemeType !== SchemeType.GROUP_FREE_QTY) {
       return {};
     }
 
@@ -121,7 +119,9 @@ export class SchemeService extends MongoRepository<Scheme> {
       throw new BadRequestException(SCHEME.PRODUCT_SCOPE_REQUIRED);
     }
     const hasGeographyScope = Boolean(
-      scheme.provinceIds?.length || scheme.routeIds?.length || scheme.vanIds?.length,
+      scheme.provinceIds?.length ||
+      scheme.routeIds?.length ||
+      scheme.vanIds?.length,
     );
     if (!hasGeographyScope) {
       throw new BadRequestException(SCHEME.GEOGRAPHY_SCOPE_REQUIRED);
@@ -244,7 +244,8 @@ export class SchemeService extends MongoRepository<Scheme> {
     status?: SchemeStatus | string,
   ): SchemeStatus {
     if (new Date(endDate) < this.startOfToday()) return SchemeStatus.EXPIRED;
-    if (!status || status === SchemeStatus.EXPIRED) return SchemeStatus.ACTIVE;
+    if (!status || status === (SchemeStatus.EXPIRED as string))
+      return SchemeStatus.ACTIVE;
     return status as SchemeStatus;
   }
 

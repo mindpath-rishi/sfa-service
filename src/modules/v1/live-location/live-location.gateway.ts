@@ -34,7 +34,10 @@ export class LiveLocationGateway implements OnGatewayConnection, OnModuleInit {
   ) {}
 
   onModuleInit() {
-    registerSocketCounter('liveLocation', () => this.server?.sockets.sockets.size ?? 0);
+    registerSocketCounter(
+      'liveLocation',
+      () => this.server?.sockets.sockets.size ?? 0,
+    );
     this.liveLocationService.setRealtimeListener((update) =>
       this.server?.to(MANAGER_ROOM).emit('live-location:update', update),
     );
@@ -66,7 +69,7 @@ export class LiveLocationGateway implements OnGatewayConnection, OnModuleInit {
   }
 
   @SubscribeMessage('live-location:track')
-  async track(
+  track(
     @ConnectedSocket() client: Socket,
     @MessageBody() payload: TrackLiveLocationDto,
   ) {

@@ -1,4 +1,3 @@
-
 export const SHOP_VISIT = {
   CREATED: 'ShopVisit created successfully',
   FETCHED: 'ShopVisit fetched successfully',

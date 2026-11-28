@@ -21,7 +21,9 @@ export class SystemLogsFilterDto {
   @IsIn(LOG_LEVEL_FILTERS)
   level?: LogLevelFilter;
 
-  @ApiPropertyOptional({ description: 'Start of range (ISO). Defaults to 24 hours ago.' })
+  @ApiPropertyOptional({
+    description: 'Start of range (ISO). Defaults to 24 hours ago.',
+  })
   @IsOptional()
   @IsISO8601()
   from?: string;
@@ -49,13 +51,17 @@ export class SystemLogsFilterDto {
   @MaxLength(64)
   vanId?: string;
 
-  @ApiPropertyOptional({ description: 'API module, e.g. sale, sync, work-session' })
+  @ApiPropertyOptional({
+    description: 'API module, e.g. sale, sync, work-session',
+  })
   @IsOptional()
   @IsString()
   @MaxLength(64)
   flow?: string;
 
-  @ApiPropertyOptional({ description: 'Logger context, e.g. MongoDB, SaleService' })
+  @ApiPropertyOptional({
+    description: 'Logger context, e.g. MongoDB, SaleService',
+  })
   @IsOptional()
   @IsString()
   @MaxLength(64)

@@ -35,5 +35,5 @@ export const SWAGGER_ENDPOINT = '/api-docs';
 
 /* ================= SECURITY / RATE LIMITING ================= */
 
-export const THROTTLE_TTL = 60;      // seconds
-export const THROTTLE_LIMIT = 100;   // requests per TTL
+export const THROTTLE_TTL = 60; // seconds
+export const THROTTLE_LIMIT = 100; // requests per TTL

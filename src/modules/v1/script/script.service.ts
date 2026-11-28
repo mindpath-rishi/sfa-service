@@ -362,7 +362,7 @@ export class ScriptService {
     let reportsFound = 0;
     let reportsSkipped = 0;
 
-    for (const row of employeeWorkingDates as any[]) {
+    for (const row of employeeWorkingDates) {
       const employeeId = String(row._id.employeeId);
       const reportDate = new Date(row._id.reportDate);
       const reportDateKey = this.formatDate(reportDate);

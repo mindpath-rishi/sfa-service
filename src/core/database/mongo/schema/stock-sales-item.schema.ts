@@ -16,12 +16,10 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument } from 'mongoose';
 
-export type StockSalesItemDocument =
-  HydratedDocument<StockSalesItem>;
+export type StockSalesItemDocument = HydratedDocument<StockSalesItem>;
 
 @Schema({ timestamps: true, collection: 'stock_sales_items' })
 export class StockSalesItem {
-
   /* ======================================================
    * REFERENCES
    * ====================================================== */
@@ -110,7 +108,4 @@ export class StockSalesItem {
 export const StockSalesItemSchema =
   SchemaFactory.createForClass(StockSalesItem);
 
-StockSalesItemSchema.index(
-  { stockSalesId: 1, productId: 1 },
-  { unique: true },
-);
+StockSalesItemSchema.index({ stockSalesId: 1, productId: 1 }, { unique: true });

@@ -3,7 +3,6 @@ import { CustomerStatus } from 'src/shared/enums/customer.enums';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IsArray, IsEnum, IsOptional, IsString } from 'class-validator';
 import { PaginationDto } from 'src/shared/dto/pagination.dto';
-import { Type } from 'class-transformer';
 
 export class CustomerQueryDto extends PaginationDto {
   /**

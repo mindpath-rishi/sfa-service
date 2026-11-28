@@ -50,7 +50,6 @@ export class Market {
     default: MarketStatus.ACTIVE,
   })
   status!: MarketStatus;
-
 }
 
 export const MarketSchema = SchemaFactory.createForClass(Market);

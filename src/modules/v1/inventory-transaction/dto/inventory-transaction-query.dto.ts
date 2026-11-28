@@ -1,66 +1,99 @@
-import { InventoryTransactionStatus, TransactionType } from 'src/shared/enums/inventory-transaction.enums';
+import {
+  InventoryTransactionStatus,
+  TransactionType,
+} from 'src/shared/enums/inventory-transaction.enums';
 
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsDate, IsEnum, IsNumber, IsOptional, IsString, MaxLength, Min } from 'class-validator';
+import {
+  IsDate,
+  IsEnum,
+  IsNumber,
+  IsOptional,
+  IsString,
+  MaxLength,
+  Min,
+} from 'class-validator';
 import { PaginationDto } from 'src/shared/dto/pagination.dto';
 
 /**
  * InventoryTransactionQueryDto
  * =================
  * Data Transfer Object for querying InventoryTransaction records
- * 
+ *
  * All fields are optional - supports partial matching and range queries
  * Extends PaginationDto for pagination support
  */
 export class InventoryTransactionQueryDto extends PaginationDto {
-  @ApiPropertyOptional({ description: "Search by name, code, or identifier (supports partial matching)", example: "search term" })
+  @ApiPropertyOptional({
+    description:
+      'Search by name, code, or identifier (supports partial matching)',
+    example: 'search term',
+  })
   @IsOptional()
   @IsString()
   @MaxLength(100)
   searchText?: string;
 
-  @ApiPropertyOptional({ type: String, description: 'Business identifier for transaction' })
+  @ApiPropertyOptional({
+    type: String,
+    description: 'Business identifier for transaction',
+  })
   @IsOptional()
   @IsString()
   transactionId?: string;
 
-  @ApiPropertyOptional({ type: String , description: 'Filter by product ID' })
+  @ApiPropertyOptional({ type: String, description: 'Filter by product ID' })
   @IsOptional()
   @IsString()
   productId?: string;
 
-  @ApiPropertyOptional({ type: String , description: 'Filter by van ID' })
+  @ApiPropertyOptional({ type: String, description: 'Filter by van ID' })
   @IsOptional()
   @IsString()
   vanId?: string;
 
-  @ApiPropertyOptional({ type: String , description: 'Filter by employee ID' })
+  @ApiPropertyOptional({ type: String, description: 'Filter by employee ID' })
   @IsOptional()
   @IsString()
   employeeId?: string;
 
-  @ApiPropertyOptional({ type: String , description: 'Filter by warehouse ID' })
+  @ApiPropertyOptional({ type: String, description: 'Filter by warehouse ID' })
   @IsOptional()
   @IsString()
   warehouseId?: string;
 
-  @ApiPropertyOptional({ enum: TransactionType, description: 'Filter by transactionType' })
+  @ApiPropertyOptional({
+    enum: TransactionType,
+    description: 'Filter by transactionType',
+  })
   @IsOptional()
   @IsEnum(TransactionType)
   transactionType?: TransactionType;
 
-  @ApiPropertyOptional({ type: Number , description: "Supports operators: gt, gte, lt, lte", example: 10 })
+  @ApiPropertyOptional({
+    type: Number,
+    description: 'Supports operators: gt, gte, lt, lte',
+    example: 10,
+  })
   @IsOptional()
   @IsNumber()
   @Min(0.0001)
   quantity?: number;
 
-  @ApiPropertyOptional({ type: Number , description: "Supports operators: gt, gte, lt, lte", example: 10 })
+  @ApiPropertyOptional({
+    type: Number,
+    description: 'Supports operators: gt, gte, lt, lte',
+    example: 10,
+  })
   @IsOptional()
   @IsNumber()
   cases?: number;
 
-  @ApiPropertyOptional({ type: Number , description: "Supports operators: gt, gte, lt, lte", example: 10 })
+  @ApiPropertyOptional({
+    type: Number,
+    description: 'Supports operators: gt, gte, lt, lte',
+    example: 10,
+  })
   @IsOptional()
   @IsNumber()
   pieces?: number;
@@ -75,14 +108,22 @@ export class InventoryTransactionQueryDto extends PaginationDto {
   @IsString()
   remark?: string;
 
-  @ApiPropertyOptional({ type: Date , description: "Filter by date range (supports operators: gt, gte, lt, lte)", example: "2024-01-01T00:00:00.000Z" })
+  @ApiPropertyOptional({
+    type: Date,
+    description: 'Filter by date range (supports operators: gt, gte, lt, lte)',
+    example: '2024-01-01T00:00:00.000Z',
+  })
   @IsOptional()
   @IsDate()
   transactionDate?: Date;
 
-  @ApiPropertyOptional({ enum: InventoryTransactionStatus, description: 'Filter by status', example: InventoryTransactionStatus.POSTED, default: InventoryTransactionStatus.POSTED })
+  @ApiPropertyOptional({
+    enum: InventoryTransactionStatus,
+    description: 'Filter by status',
+    example: InventoryTransactionStatus.POSTED,
+    default: InventoryTransactionStatus.POSTED,
+  })
   @IsOptional()
   @IsEnum(InventoryTransactionStatus)
   status?: InventoryTransactionStatus;
-
 }

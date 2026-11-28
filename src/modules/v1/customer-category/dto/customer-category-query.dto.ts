@@ -8,7 +8,7 @@ import { PaginationDto } from 'src/shared/dto/pagination.dto';
  * CustomerCategory Query DTO
  * ===================
  * Data Transfer Object for querying CustomerCategory records
- * 
+ *
  * Extends PaginationDto for pagination support
  */
 export class CustomerCategoryQueryDto extends PaginationDto {
@@ -18,7 +18,7 @@ export class CustomerCategoryQueryDto extends PaginationDto {
    * Search by name, code, or identifier
    */
 
-  @ApiPropertyOptional({ description: "Search by name, code, or identifier" })
+  @ApiPropertyOptional({ description: 'Search by name, code, or identifier' })
   @IsOptional()
   @IsString()
   searchText?: string;
@@ -38,7 +38,10 @@ export class CustomerCategoryQueryDto extends PaginationDto {
    * Customer category availability status
    */
 
-  @ApiPropertyOptional({ example: CustomerCategoryStatus.ACTIVE, enum: CustomerCategoryStatus })
+  @ApiPropertyOptional({
+    example: CustomerCategoryStatus.ACTIVE,
+    enum: CustomerCategoryStatus,
+  })
   @IsOptional()
   @IsEnum(CustomerCategoryStatus)
   status?: CustomerCategoryStatus;

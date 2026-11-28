@@ -1,4 +1,3 @@
-
 export const VAN_DAILY_STOCK = {
   CREATED: 'VanDailyStock created successfully',
   FETCHED: 'VanDailyStock fetched successfully',

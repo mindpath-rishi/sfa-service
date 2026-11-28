@@ -364,7 +364,7 @@ export class ShopVisitService extends MongoRepository<ShopVisit> {
             checkInTime: interaction?.arrivalTime ?? new Date(),
             checkInLocation:
               interaction?.arrivalLocation ?? payload.checkInLocation,
-            visitType: interaction!.visitType,
+            visitType: interaction.visitType,
             interactionId: interaction?.interactionId,
             customerLocation: interaction?.customerLocation,
             distanceMeters: interaction?.distanceMeters,

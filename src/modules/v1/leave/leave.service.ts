@@ -45,26 +45,6 @@ export class LeaveService extends MongoRepository<Leave> {
         const todayStart = new Date(new Date().setHours(0, 0, 0, 0));
         const todayEnd = new Date(new Date().setHours(23, 59, 59, 999));
 
-        const todayWorkFilter = {
-          userId: payload.userId,
-          isDeleted: { $ne: true },
-          $or: [
-            {
-              startTime: {
-                $gte: todayStart,
-                $lte: todayEnd,
-              },
-              name: { $in: ['Retailing', 'Offline'] },
-            },
-            {
-              dayStartTime: {
-                $gte: todayStart,
-                $lte: todayEnd,
-              },
-            },
-          ],
-        };
-
         const hasTodayWork = await this.activityModel
           .findOne(
             {

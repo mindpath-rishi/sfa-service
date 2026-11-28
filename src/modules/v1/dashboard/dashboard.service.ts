@@ -18,8 +18,6 @@ import { SaleStatus } from 'src/shared/enums/sale.enums';
 import { Van } from 'src/core/database/mongo/schema/van.schema';
 import { RouteCustomerMapping } from 'src/core/database/mongo/schema/route-customer-mapping.schema';
 
-type DashboardTone = 'success' | 'warning' | 'danger' | 'neutral';
-
 type SalesSeriesPoint = {
   label: string;
   value: number;

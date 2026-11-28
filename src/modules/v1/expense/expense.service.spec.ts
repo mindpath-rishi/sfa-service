@@ -13,7 +13,6 @@ import { ExpenseService } from './expense.service';
 import { EXPENSE } from './expense.constants';
 import { MongoService } from 'src/core/database/mongo/mongo.service';
 import {
-  CreateExpenseDto,
   ReplaceWithdrawalChargesDto,
   UpdateExpenseStatusDto,
   UpsertExpenseRatesDto,
@@ -82,9 +81,15 @@ describe('ExpenseService', () => {
 
   let employees: Record<string, unknown>[];
   let rates: { expenseTag: ExpenseTag; perDayValue: number }[];
-  let slabs: { minAmount: number; maxAmount: number; charge: number }[];
+  let slabs: { minAmount: number; maxAmount: number; chargePercent: number }[];
   let sessions: { userId: string; dayStartTime: Date }[];
-  let beats: { beatId: string; name: string }[];
+  let routeSessions: {
+    userId: string;
+    routeId: string;
+    routeName?: string;
+    sessionDate: Date;
+    startTime: Date;
+  }[];
   let expenses: ExpenseRow[];
 
   let repoSave: jest.SpyInstance;
@@ -116,16 +121,12 @@ describe('ExpenseService', () => {
       { expenseTag: ExpenseTag.UPC, perDayValue: 250 },
     ];
     slabs = [
-      { minAmount: 1, maxAmount: 500, charge: 10 },
-      { minAmount: 501, maxAmount: 1000, charge: 15 },
-      { minAmount: 1001, maxAmount: 5000, charge: 25 },
+      { minAmount: 1, maxAmount: 500, chargePercent: 2 },
+      { minAmount: 501, maxAmount: 1000, chargePercent: 2.5 },
+      { minAmount: 1001, maxAmount: 5000, chargePercent: 3 },
     ];
     sessions = [];
-    beats = [
-      { beatId: 'B1', name: 'Kabwata' },
-      { beatId: 'B2', name: 'Matero' },
-      { beatId: 'B3', name: 'Chilenje' },
-    ];
+    routeSessions = [];
     expenses = [];
 
     const employeeModel = {
@@ -175,9 +176,16 @@ describe('ExpenseService', () => {
         ),
       ),
     };
-    const beatModel = {
-      find: jest.fn((f: { beatId: { $in: string[] } }) =>
-        chain(beats.filter((b) => f.beatId.$in.includes(b.beatId))),
+    const routeSessionModel = {
+      find: jest.fn((f: { userId: string; sessionDate: Range }) =>
+        chain(
+          routeSessions
+            .filter(
+              (r) =>
+                r.userId === f.userId && inRange(r.sessionDate, f.sessionDate),
+            )
+            .sort((a, b) => +a.startTime - +b.startTime),
+        ),
       ),
     };
 
@@ -187,7 +195,7 @@ describe('ExpenseService', () => {
       WithdrawalCharge: chargeModel,
       Employee: employeeModel,
       WorkSession: workSessionModel,
-      Beat: beatModel,
+      RouteSession: routeSessionModel,
     };
     const mongo = { getModel: jest.fn((name: string) => models[name]) };
 
@@ -405,17 +413,19 @@ describe('ExpenseService', () => {
       expect(data.totalAmount).toBe(0);
     });
 
-    it('Total = payable × per day value + withdrawal charge', async () => {
+    it('Total = payable × per day value + withdrawal charge (%)', async () => {
       const { data } = await run(() => service.preview());
-      // 6 × 100 = 600 → slab 501–1000 → 15
+      // 6 × 100 = 600 → slab 501–1000 → 2.5% → 15
+      expect(data.withdrawalChargePercent).toBe(2.5);
       expect(data.perDayValue).toBe(100);
       expect(data.withdrawalCharges).toBe(15);
       expect(data.totalAmount).toBe(615);
     });
 
     it('picks the withdrawal slab on inclusive boundaries', async () => {
-      rates[0].perDayValue = 500 / 6; // 6 × 83.33.. = 500 → first slab
+      rates[0].perDayValue = 500 / 6; // 6 × 83.33.. = 500 → first slab (2%)
       const { data } = await run(() => service.preview());
+      expect(data.withdrawalChargePercent).toBe(2);
       expect(data.withdrawalCharges).toBe(10);
       expect(data.totalAmount).toBe(510);
     });
@@ -423,6 +433,7 @@ describe('ExpenseService', () => {
     it('charges nothing when no slab matches', async () => {
       rates[0].perDayValue = 10_000;
       const { data } = await run(() => service.preview());
+      expect(data.withdrawalChargePercent).toBe(0);
       expect(data.withdrawalCharges).toBe(0);
       expect(data.totalAmount).toBe(60_000);
     });
@@ -430,8 +441,15 @@ describe('ExpenseService', () => {
     it('rounds amounts to 2 decimals', async () => {
       rates[0].perDayValue = 33.333;
       const { data } = await run(() => service.preview());
-      // 6 × 33.333 = 199.998 → 200.00, slab 1–500 → +10
-      expect(data.totalAmount).toBe(210);
+      // 6 × 33.333 = 199.998 → 200.00, slab 1–500 → 2% → +4
+      expect(data.totalAmount).toBe(204);
+    });
+
+    it('rounds the percentage charge to 2 decimals', async () => {
+      rates[0].perDayValue = 55.555; // 6 × 55.555 = 333.33 → 2% = 6.6666
+      const { data } = await run(() => service.preview());
+      expect(data.withdrawalCharges).toBe(6.67);
+      expect(data.totalAmount).toBe(340);
     });
   });
 
@@ -453,7 +471,7 @@ describe('ExpenseService', () => {
       expect(data.expenseTag).toBe(ExpenseTag.UPC);
       expect(data.expenseOption).toBe('FOOD_AND_NIGHT_STAY');
       expect(data.perDayValue).toBe(250);
-      expect(data.totalAmount).toBe(1500 + 25);
+      expect(data.totalAmount).toBe(1500 + 45); // 3% of 1500
       expect(data.manNumber).toBe('MN-200');
       expect(data.employeeName).toBe('Joseph Phiri');
     });
@@ -485,26 +503,53 @@ describe('ExpenseService', () => {
   });
 
   /* ======================================================
-   * REMARKS (BEAT NAMES)
+   * REMARKS (ROUTES WORKED)
    * ====================================================== */
 
   describe('remarks', () => {
-    beforeEach(() => at(d(2026, 11, 23, 8)));
+    const route = (
+      routeId: string,
+      routeName: string | undefined,
+      day: Date,
+      h: number,
+      userId = USER,
+    ) =>
+      routeSessions.push({
+        userId,
+        routeId,
+        routeName,
+        sessionDate: day,
+        startTime: new Date(+day + h * 3600_000),
+      });
 
-    it('concatenates selected beat names in selection order', async () => {
-      const { data } = await run(() => service.preview(['B3', 'B1']));
-      expect(data.remarks).toBe('Chilenje, Kabwata');
-      expect(data.beatIds).toEqual(['B3', 'B1']);
-    });
+    it('lists routes worked from fromDate to now, in order worked, without duplicates', async () => {
+      at(d(2026, 11, 25, 10)); // Wed
+      present(MON);
+      route('R1', 'Kitwe Local', MON, 8);
+      route('R2', 'Ndola', MON, 13); // mid-day route change
+      route('R1', 'Kitwe Local', d(2026, 11, 24), 8);
+      route('R3', undefined, d(2026, 11, 25), 8); // falls back to id
+      route('R9', 'Other user', MON, 8, 'EMP-2');
+      route('R8', 'Last week', PREV_SAT, 8);
 
-    it('drops duplicates and unknown beats', async () => {
-      const { data } = await run(() => service.preview(['B2', 'B2', 'BX', '']));
-      expect(data.beatIds).toEqual(['B2']);
-      expect(data.remarks).toBe('Matero');
-    });
-
-    it('is empty when no beats are selected', async () => {
       const { data } = await run(() => service.preview());
+      expect(data.routeIds).toEqual(['R1', 'R2', 'R3']);
+      expect(data.remarks).toBe('Kitwe Local, Ndola, R3');
+    });
+
+    it('starts from today when absent on Monday', async () => {
+      at(d(2026, 11, 25, 10)); // Wed, no Monday attendance
+      route('R1', 'Kitwe Local', d(2026, 11, 24), 8);
+      route('R2', 'Ndola', d(2026, 11, 25), 8);
+
+      const { data } = await run(() => service.preview());
+      expect(data.remarks).toBe('Ndola');
+    });
+
+    it('is empty when no route has been started', async () => {
+      at(MON);
+      const { data } = await run(() => service.preview());
+      expect(data.routeIds).toEqual([]);
       expect(data.remarks).toBe('');
     });
   });
@@ -517,7 +562,14 @@ describe('ExpenseService', () => {
     beforeEach(() => at(d(2026, 11, 23, 8)));
 
     it('saves a PENDING request with all ERP fields', async () => {
-      const res = await run(() => service.create({ beatIds: ['B1'] }));
+      routeSessions.push({
+        userId: USER,
+        routeId: 'R1',
+        routeName: 'Kitwe Local',
+        sessionDate: MON,
+        startTime: d(2026, 11, 23, 7),
+      });
+      const res = await run(() => service.create());
 
       expect(res.statusCode).toBe(201);
       expect(repoSave).toHaveBeenCalledTimes(1);
@@ -532,34 +584,35 @@ describe('ExpenseService', () => {
         perDayValue: 100,
         withdrawalCharges: 15,
         totalAmount: 615,
-        remarks: 'Kabwata',
+        remarks: 'Kitwe Local',
+        routeIds: ['R1'],
       });
       expect(expenses[0].expenseId).toMatch(/^EID\d{8}$/);
     });
 
     it('blocks a second request in the same week', async () => {
-      await run(() => service.create({}));
+      await run(() => service.create());
       at(d(2026, 11, 25, 9));
-      await expect(run(() => service.create({}))).rejects.toBeInstanceOf(
+      await expect(run(() => service.create())).rejects.toBeInstanceOf(
         ConflictException,
       );
     });
 
     it('allows a new request after the week’s request was rejected', async () => {
-      await run(() => service.create({}));
+      await run(() => service.create());
       expenses[0].status = ExpenseStatus.REJECTED;
-      await expect(run(() => service.create({}))).resolves.toMatchObject({
+      await expect(run(() => service.create())).resolves.toMatchObject({
         statusCode: 201,
       });
       expect(expenses).toHaveLength(2);
     });
 
     it('allows a request in the following week and adjusts from this one', async () => {
-      await run(() => service.create({}));
+      await run(() => service.create());
       present(MON, d(2026, 11, 24), d(2026, 11, 25)); // absent Thu, Fri, Sat
       at(d(2026, 11, 30, 8)); // next Monday
 
-      const res = await run(() => service.create({}));
+      const res = await run(() => service.create());
       expect(res.data).toMatchObject({
         toBeAdjustedDays: 3,
         payableDays: 3,
@@ -752,7 +805,7 @@ describe('ExpenseService', () => {
     });
 
     it('replaces withdrawal slabs', async () => {
-      const next = [{ minAmount: 0, maxAmount: 100, charge: 5 }];
+      const next = [{ minAmount: 0, maxAmount: 100, chargePercent: 5 }];
       await service.replaceWithdrawalCharges({ slabs: next });
       expect(chargeModel.deleteMany).toHaveBeenCalled();
       expect(chargeModel.insertMany).toHaveBeenCalledWith(next, {
@@ -763,7 +816,7 @@ describe('ExpenseService', () => {
     it('rejects a slab with min > max', async () => {
       await expect(
         service.replaceWithdrawalCharges({
-          slabs: [{ minAmount: 200, maxAmount: 100, charge: 5 }],
+          slabs: [{ minAmount: 200, maxAmount: 100, chargePercent: 5 }],
         }),
       ).rejects.toThrow(EXPENSE.INVALID_SLAB);
       expect(chargeModel.deleteMany).not.toHaveBeenCalled();
@@ -780,17 +833,6 @@ describe('Expense DTO validation', () => {
     (await validate(plainToInstance(cls, body) as object)).map(
       (e) => e.property,
     );
-
-  it('CreateExpenseDto accepts beat ids and rejects non-strings', async () => {
-    expect(await errors(CreateExpenseDto, { beatIds: ['B1'] })).toEqual([]);
-    expect(await errors(CreateExpenseDto, {})).toEqual([]);
-    expect(await errors(CreateExpenseDto, { beatIds: [1] })).toEqual([
-      'beatIds',
-    ]);
-    expect(await errors(CreateExpenseDto, { beatIds: 'B1' })).toEqual([
-      'beatIds',
-    ]);
-  });
 
   it('UpdateExpenseStatusDto requires a valid status', async () => {
     expect(
@@ -823,12 +865,12 @@ describe('Expense DTO validation', () => {
   it('ReplaceWithdrawalChargesDto rejects negative amounts', async () => {
     expect(
       await errors(ReplaceWithdrawalChargesDto, {
-        slabs: [{ minAmount: 0, maxAmount: 10, charge: 1 }],
+        slabs: [{ minAmount: 0, maxAmount: 10, chargePercent: 1 }],
       }),
     ).toEqual([]);
     expect(
       await errors(ReplaceWithdrawalChargesDto, {
-        slabs: [{ minAmount: -1, maxAmount: 10, charge: 1 }],
+        slabs: [{ minAmount: -1, maxAmount: 10, chargePercent: 1 }],
       }),
     ).toEqual(['slabs']);
   });

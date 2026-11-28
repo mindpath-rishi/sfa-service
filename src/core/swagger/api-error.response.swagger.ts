@@ -10,11 +10,7 @@ export const ApiNotFoundResponse = () =>
   ApiErrorResponse(404, 'Not Found', 'Resource not found');
 
 export const ApiUnprocessableEntityResponse = () =>
-  ApiErrorResponse(
-    422,
-    'Unprocessable Entity',
-    'Validation failed',
-  );
+  ApiErrorResponse(422, 'Unprocessable Entity', 'Validation failed');
 
 export const ApiInternalErrorResponse = () =>
   ApiErrorResponse(500, 'Internal Server Error', 'Internal Server Error');

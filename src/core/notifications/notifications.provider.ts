@@ -21,7 +21,7 @@ export const NotificationProvider: Provider = {
       throw new Error(`firebase-admin.json not found at: ${filePath}`);
     }
 
-    const serviceAccount = require(filePath);
+    const serviceAccount = JSON.parse(fs.readFileSync(filePath, 'utf8'));
 
     try {
       const app = initializeApp({
@@ -30,7 +30,9 @@ export const NotificationProvider: Provider = {
 
       // Project id only: key ids and client emails are credentials metadata
       // and must not end up in log storage.
-      logger.log(`Firebase initialized (project: ${serviceAccount.project_id})`);
+      logger.log(
+        `Firebase initialized (project: ${serviceAccount.project_id})`,
+      );
 
       return app;
     } catch (error) {

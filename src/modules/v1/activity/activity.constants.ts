@@ -1,4 +1,3 @@
-
 export const ACTIVITY = {
   CREATED: 'Activity created successfully',
   FETCHED: 'Activity fetched successfully',

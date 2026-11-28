@@ -1,4 +1,3 @@
-
 export const CUSTOMER = {
   CREATED: 'Customer created successfully',
   FETCHED: 'Customer fetched successfully',

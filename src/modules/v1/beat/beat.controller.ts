@@ -1,4 +1,3 @@
-
 /**
  * Beat Controller
  * ----------------
@@ -34,7 +33,6 @@ import { FeatureFlag } from 'src/core/decorators/feature-flag.decorator';
 import { ApiSuccessResponse } from 'src/core/swagger/api.response.swagger';
 import {
   ApiInternalErrorResponse,
-  ApiNotFoundResponse,
   ApiUnauthorizedResponse,
   ApiUnprocessableEntityResponse,
 } from 'src/core/swagger/api-error.response.swagger';
@@ -76,11 +74,7 @@ export class BeatController {
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Create beat' })
   @ApiBody({ type: CreateBeatDto })
-  @ApiSuccessResponse(
-    { beatId: 'BEAT-001' },
-    BEAT.CREATED,
-    HttpStatus.CREATED,
-  )
+  @ApiSuccessResponse({ beatId: 'BEAT-001' }, BEAT.CREATED, HttpStatus.CREATED)
   async create(@Body() dto: CreateBeatDto) {
     return this.service.create(dto);
   }
@@ -114,10 +108,7 @@ export class BeatController {
   @Permissions('BEAT_UPDATE')
   @BackOfficeOnly()
   @Patch(':beatId')
-  async update(
-    @Param('beatId') beatId: string,
-    @Body() dto: UpdateBeatDto,
-  ) {
+  async update(@Param('beatId') beatId: string, @Body() dto: UpdateBeatDto) {
     return this.service.update(beatId, dto);
   }
 

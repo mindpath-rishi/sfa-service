@@ -8,18 +8,25 @@ import { PaginationDto } from 'src/shared/dto/pagination.dto';
  * NonSaleQueryDto
  * =================
  * Data Transfer Object for querying NonSale records
- * 
+ *
  * All fields are optional - supports partial matching and range queries
  * Extends PaginationDto for pagination support
  */
 export class NonSaleQueryDto extends PaginationDto {
-  @ApiPropertyOptional({ description: "Search by name, code, or identifier (supports partial matching)", example: "search term" })
+  @ApiPropertyOptional({
+    description:
+      'Search by name, code, or identifier (supports partial matching)',
+    example: 'search term',
+  })
   @IsOptional()
   @IsString()
   @MaxLength(100)
   searchText?: string;
 
-  @ApiPropertyOptional({ type: String, description: 'Business identifier for nonSale' })
+  @ApiPropertyOptional({
+    type: String,
+    description: 'Business identifier for nonSale',
+  })
   @IsOptional()
   @IsString()
   nonSaleId?: string;
@@ -70,9 +77,12 @@ export class NonSaleQueryDto extends PaginationDto {
    * ------
    * Salesman / User
    */
-  @ApiPropertyOptional({ enum: NonSaleStatus, description: 'Filter by status', default: NonSaleStatus.COMPLETED })
+  @ApiPropertyOptional({
+    enum: NonSaleStatus,
+    description: 'Filter by status',
+    default: NonSaleStatus.COMPLETED,
+  })
   @IsOptional()
   @IsEnum(NonSaleStatus)
   status?: NonSaleStatus;
-
 }

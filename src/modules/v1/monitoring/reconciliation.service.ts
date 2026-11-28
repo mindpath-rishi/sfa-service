@@ -1,4 +1,10 @@
-import { HttpStatus, Injectable, Logger, NotFoundException, OnModuleInit } from '@nestjs/common';
+import {
+  HttpStatus,
+  Injectable,
+  Logger,
+  NotFoundException,
+  OnModuleInit,
+} from '@nestjs/common';
 import { InjectConnection } from '@nestjs/mongoose';
 import { Connection } from 'mongoose';
 import { IdGenerator } from 'src/shared/utils/id-generator.utils';
@@ -27,7 +33,9 @@ export class ReconciliationService implements OnModuleInit {
   async onModuleInit() {
     await this.reports
       .createIndex({ startedAt: -1 })
-      .catch((error) => this.logger.warn(`Reconciliation index: ${error?.message}`));
+      .catch((error) =>
+        this.logger.warn(`Reconciliation index: ${error?.message}`),
+      );
   }
 
   async run(trigger: 'schedule' | 'manual' = 'schedule', days = 1) {
@@ -39,13 +47,21 @@ export class ReconciliationService implements OnModuleInit {
       failures: feature.failures,
       warnings: feature.warnings,
       error: feature.error,
-      problems: feature.findings.reduce<Record<string, number>>((counts, finding) => {
-        counts[finding.problem] = (counts[finding.problem] ?? 0) + 1;
-        return counts;
-      }, {}),
+      problems: feature.findings.reduce<Record<string, number>>(
+        (counts, finding) => {
+          counts[finding.problem] = (counts[finding.problem] ?? 0) + 1;
+          return counts;
+        },
+        {},
+      ),
     }));
     const findings = scan.data.features
-      .flatMap((feature) => feature.findings.map((finding) => ({ feature: feature.feature, ...finding })))
+      .flatMap((feature) =>
+        feature.findings.map((finding) => ({
+          feature: feature.feature,
+          ...finding,
+        })),
+      )
       .slice(0, MAX_FINDINGS);
 
     const report = {
@@ -63,7 +79,9 @@ export class ReconciliationService implements OnModuleInit {
       findings,
     };
     await this.reports.insertOne(report);
-    this.logger.log(`Reconciliation ${report.reportId}: ${report.totals.failures} failures, ${report.totals.warnings} warnings (${report.tookMs} ms)`);
+    this.logger.log(
+      `Reconciliation ${report.reportId}: ${report.totals.failures} failures, ${report.totals.warnings} warnings (${report.tookMs} ms)`,
+    );
     return report;
   }
 
@@ -73,12 +91,20 @@ export class ReconciliationService implements OnModuleInit {
       .find({ startedAt: { $gte: since } }, { projection: { findings: 0 } })
       .sort({ startedAt: -1 })
       .toArray();
-    return { statusCode: HttpStatus.OK, message: 'Reconciliation reports fetched', data: items };
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'Reconciliation reports fetched',
+      data: items,
+    };
   }
 
   async get(reportId: string) {
     const report = await this.reports.findOne({ reportId });
     if (!report) throw new NotFoundException('Report not found');
-    return { statusCode: HttpStatus.OK, message: 'Reconciliation report fetched', data: report };
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'Reconciliation report fetched',
+      data: report,
+    };
   }
 }

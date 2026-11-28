@@ -88,8 +88,7 @@ export class VanErpClosing {
   createdDate?: Date; // DT_CREATE_DATE
 }
 
-export const VanErpClosingSchema =
-  SchemaFactory.createForClass(VanErpClosing);
+export const VanErpClosingSchema = SchemaFactory.createForClass(VanErpClosing);
 
 /**
  * One record per Van + Product + Day

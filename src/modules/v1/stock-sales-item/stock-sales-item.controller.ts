@@ -33,7 +33,6 @@ import { FeatureFlag } from 'src/core/decorators/feature-flag.decorator';
 import { ApiSuccessResponse } from 'src/core/swagger/api.response.swagger';
 import {
   ApiInternalErrorResponse,
-  ApiNotFoundResponse,
   ApiUnauthorizedResponse,
   ApiUnprocessableEntityResponse,
 } from 'src/core/swagger/api-error.response.swagger';
@@ -100,7 +99,10 @@ export class StockSalesItemController {
    */
   @Permissions('STOCK_SALES_ITEM_VIEW')
   @Get(':stockSalesId')
-  @ApiParam({ name: 'stockSalesId', description: 'StockSalesItem stockSalesId' })
+  @ApiParam({
+    name: 'stockSalesId',
+    description: 'StockSalesItem stockSalesId',
+  })
   async findOne(@Param('stockSalesId') stockSalesId: string) {
     return this.service.findByStockSalesId(stockSalesId);
   }
@@ -111,7 +113,10 @@ export class StockSalesItemController {
    */
   @Permissions('STOCK_SALES_ITEM_UPDATE')
   @Patch(':stockSalesId')
-  @ApiParam({ name: 'stockSalesId', description: 'StockSalesItem stockSalesId' })
+  @ApiParam({
+    name: 'stockSalesId',
+    description: 'StockSalesItem stockSalesId',
+  })
   async update(
     @Param('stockSalesId') stockSalesId: string,
     @Body() dto: UpdateStockSalesItemDto,
@@ -125,7 +130,10 @@ export class StockSalesItemController {
    */
   @Permissions('STOCK_SALES_ITEM_DELETE')
   @Delete(':stockSalesId')
-  @ApiParam({ name: 'stockSalesId', description: 'StockSalesItem stockSalesId' })
+  @ApiParam({
+    name: 'stockSalesId',
+    description: 'StockSalesItem stockSalesId',
+  })
   async delete(@Param('stockSalesId') stockSalesId: string) {
     return this.service.delete(stockSalesId);
   }

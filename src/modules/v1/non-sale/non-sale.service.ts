@@ -23,7 +23,6 @@ import { ShopVisitService } from '../shop-visit/shop-visit.service';
 import { ShopVisitStatus } from 'src/shared/enums/shop-visit.enums';
 import { RequestContextStore } from 'src/core/context/request-context';
 
-
 @Injectable()
 export class NonSaleService extends MongoRepository<NonSale> {
   constructor(

@@ -22,7 +22,6 @@ import {
 import { Role, RoleSchema } from 'src/core/database/mongo/schema/role.schema';
 import { VanModule } from '../van/van.module';
 
-
 @Module({
   imports: [
     PassportModule,
@@ -41,8 +40,7 @@ import { VanModule } from '../van/van.module';
       { name: UserDevice.name, schema: UserDeviceSchema },
       { name: Role.name, schema: RoleSchema },
     ]),
-    VanModule
-    
+    VanModule,
   ],
   controllers: [UserController],
   providers: [UserService, JwtStrategy, LoginPolicyService],

@@ -62,52 +62,206 @@ export type AuditedModule = AuditPluginOptions & {
 
 export const AUDITED_MODULES: AuditedModule[] = [
   /* ---------- Geography & masters ---------- */
-  { schema: CountrySchema, entity: 'countries', idField: 'countryId', label: 'Countries' },
-  { schema: ProvinceSchema, entity: 'provinces', idField: 'provinceId', label: 'Provinces' },
-  { schema: MarketSchema, entity: 'markets', idField: 'marketId', label: 'Markets' },
+  {
+    schema: CountrySchema,
+    entity: 'countries',
+    idField: 'countryId',
+    label: 'Countries',
+  },
+  {
+    schema: ProvinceSchema,
+    entity: 'provinces',
+    idField: 'provinceId',
+    label: 'Provinces',
+  },
+  {
+    schema: MarketSchema,
+    entity: 'markets',
+    idField: 'marketId',
+    label: 'Markets',
+  },
   { schema: BeatSchema, entity: 'beats', idField: 'beatId', label: 'Beats' },
-  { schema: ChannelSchema, entity: 'channels', idField: 'channelId', label: 'Channels' },
-  { schema: SegmentationSchema, entity: 'segmentations', idField: 'segmentationId', label: 'Segmentations' },
-  { schema: OutletTypeSchema, entity: 'outlet-types', idField: 'outletTypeId', label: 'Outlet Types' },
-  { schema: CustomerCategorySchema, entity: 'customer-categories', idField: 'customerCategoryId', label: 'Customer Categories' },
+  {
+    schema: ChannelSchema,
+    entity: 'channels',
+    idField: 'channelId',
+    label: 'Channels',
+  },
+  {
+    schema: SegmentationSchema,
+    entity: 'segmentations',
+    idField: 'segmentationId',
+    label: 'Segmentations',
+  },
+  {
+    schema: OutletTypeSchema,
+    entity: 'outlet-types',
+    idField: 'outletTypeId',
+    label: 'Outlet Types',
+  },
+  {
+    schema: CustomerCategorySchema,
+    entity: 'customer-categories',
+    idField: 'customerCategoryId',
+    label: 'Customer Categories',
+  },
 
   /* ---------- Products, pricing, schemes ---------- */
-  { schema: ProductCategorySchema, entity: 'product-categories', idField: 'categoryId', label: 'Product Categories' },
-  { schema: ProductSchema, entity: 'products', idField: 'productId', label: 'Products' },
-  { schema: PriceSchema, entity: 'prices', idField: 'priceId', label: 'Prices' },
-  { schema: SchemeSchema, entity: 'schemes', idField: 'schemeId', label: 'Schemes' },
+  {
+    schema: ProductCategorySchema,
+    entity: 'product-categories',
+    idField: 'categoryId',
+    label: 'Product Categories',
+  },
+  {
+    schema: ProductSchema,
+    entity: 'products',
+    idField: 'productId',
+    label: 'Products',
+  },
+  {
+    schema: PriceSchema,
+    entity: 'prices',
+    idField: 'priceId',
+    label: 'Prices',
+  },
+  {
+    schema: SchemeSchema,
+    entity: 'schemes',
+    idField: 'schemeId',
+    label: 'Schemes',
+  },
 
   /* ---------- Organisation & access ---------- */
   { schema: RoleSchema, entity: 'roles', idField: 'roleId', label: 'Roles' },
-  { schema: PositionSchema, entity: 'positions', idField: 'positionId', label: 'Positions' },
-  { schema: EmployeeSchema, entity: 'employees', idField: 'employeeId', label: 'Employees' },
-  { schema: UserSchema, entity: 'users', idField: 'profileId', label: 'User Logins' },
+  {
+    schema: PositionSchema,
+    entity: 'positions',
+    idField: 'positionId',
+    label: 'Positions',
+  },
+  {
+    schema: EmployeeSchema,
+    entity: 'employees',
+    idField: 'employeeId',
+    label: 'Employees',
+  },
+  {
+    schema: UserSchema,
+    entity: 'users',
+    idField: 'profileId',
+    label: 'User Logins',
+  },
   { schema: VanSchema, entity: 'vans', idField: 'vanId', label: 'Vans' },
 
   /* ---------- Outlets & routes ---------- */
-  { schema: CustomerSchema, entity: 'customers', idField: 'customerId', label: 'Outlets' },
-  { schema: OutletVerificationSchema, entity: 'outlet-verifications', idField: 'outletVerificationId', label: 'Outlet Verifications' },
-  { schema: RouteSchema, entity: 'routes', idField: 'routeId', label: 'Routes' },
-  { schema: RouteCustomerMappingSchema, entity: 'route-outlets', idField: 'mappingId', label: 'Route Outlets' },
+  {
+    schema: CustomerSchema,
+    entity: 'customers',
+    idField: 'customerId',
+    label: 'Outlets',
+  },
+  {
+    schema: OutletVerificationSchema,
+    entity: 'outlet-verifications',
+    idField: 'outletVerificationId',
+    label: 'Outlet Verifications',
+  },
+  {
+    schema: RouteSchema,
+    entity: 'routes',
+    idField: 'routeId',
+    label: 'Routes',
+  },
+  {
+    schema: RouteCustomerMappingSchema,
+    entity: 'route-outlets',
+    idField: 'mappingId',
+    label: 'Route Outlets',
+  },
 
   /* ---------- Transactions ---------- */
   { schema: SaleSchema, entity: 'sales', idField: 'saleId', label: 'Sales' },
-  { schema: PaymentSchema, entity: 'payments', idField: 'paymentId', label: 'Payments' },
-  { schema: NonSaleSchema, entity: 'non-sales', idField: 'nonSaleId', label: 'Non-Sales' },
-  { schema: VanInventoryTopupSchema, entity: 'topups', idField: 'vanInventoryTopupId', label: 'Top-ups' },
-  { schema: StockCountSchema, entity: 'stock-counts', idField: 'stockCountId', label: 'Stock Counts' },
-  { schema: StockUnloadRequestSchema, entity: 'stock-unloads', idField: 'unloadRequestId', label: 'Stock Unloads' },
+  {
+    schema: PaymentSchema,
+    entity: 'payments',
+    idField: 'paymentId',
+    label: 'Payments',
+  },
+  {
+    schema: NonSaleSchema,
+    entity: 'non-sales',
+    idField: 'nonSaleId',
+    label: 'Non-Sales',
+  },
+  {
+    schema: VanInventoryTopupSchema,
+    entity: 'topups',
+    idField: 'vanInventoryTopupId',
+    label: 'Top-ups',
+  },
+  {
+    schema: StockCountSchema,
+    entity: 'stock-counts',
+    idField: 'stockCountId',
+    label: 'Stock Counts',
+  },
+  {
+    schema: StockUnloadRequestSchema,
+    entity: 'stock-unloads',
+    idField: 'unloadRequestId',
+    label: 'Stock Unloads',
+  },
 
   /* ---------- Stock & line items ---------- */
-  { schema: VanInventorySchema, entity: 'van-stock', idField: 'inventoryId', label: 'Van Stock' },
-  { schema: SaleItemSchema, entity: 'sale-items', idField: 'saleId', label: 'Sale Items' },
-  { schema: VanInventoryTopupItemSchema, entity: 'topup-items', idField: 'vanInventoryTopupId', label: 'Top-up Items' },
-  { schema: StockCountItemSchema, entity: 'stock-count-items', idField: 'stockCountId', label: 'Stock Count Items' },
+  {
+    schema: VanInventorySchema,
+    entity: 'van-stock',
+    idField: 'inventoryId',
+    label: 'Van Stock',
+  },
+  {
+    schema: SaleItemSchema,
+    entity: 'sale-items',
+    idField: 'saleId',
+    label: 'Sale Items',
+  },
+  {
+    schema: VanInventoryTopupItemSchema,
+    entity: 'topup-items',
+    idField: 'vanInventoryTopupId',
+    label: 'Top-up Items',
+  },
+  {
+    schema: StockCountItemSchema,
+    entity: 'stock-count-items',
+    idField: 'stockCountId',
+    label: 'Stock Count Items',
+  },
 
   /* ---------- Requests & targets ---------- */
-  { schema: VanChangeRequestSchema, entity: 'van-change-requests', idField: 'vanChangeRequestId', label: 'Van Change Requests' },
-  { schema: RouteChangeRequestSchema, entity: 'route-change-requests', idField: 'routeChangeRequestId', label: 'Route Change Requests' },
-  { schema: LeaveSchema, entity: 'leaves', idField: 'leaveId', label: 'Leaves' },
+  {
+    schema: VanChangeRequestSchema,
+    entity: 'van-change-requests',
+    idField: 'vanChangeRequestId',
+    label: 'Van Change Requests',
+  },
+  {
+    schema: RouteChangeRequestSchema,
+    entity: 'route-change-requests',
+    idField: 'routeChangeRequestId',
+    label: 'Route Change Requests',
+  },
+  {
+    schema: LeaveSchema,
+    entity: 'leaves',
+    idField: 'leaveId',
+    label: 'Leaves',
+  },
   { schema: TargetSchema, entity: 'targets', label: 'Targets' },
-  { schema: FocusedPackTargetSchema, entity: 'focused-pack-targets', label: 'Focused Pack Targets' },
+  {
+    schema: FocusedPackTargetSchema,
+    entity: 'focused-pack-targets',
+    label: 'Focused Pack Targets',
+  },
 ];

@@ -1,4 +1,3 @@
-
 export const NON_SALE = {
   CREATED: 'NonSale created successfully',
   FETCHED: 'NonSale fetched successfully',

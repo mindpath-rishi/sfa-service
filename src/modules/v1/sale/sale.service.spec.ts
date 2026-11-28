@@ -1,15 +1,25 @@
 // Stub the sale service's collaborators: these tests inject plain mocks, and the
 // real modules load Mongoose schemas whose decorators ts-jest can't evaluate.
 jest.mock('../product/product.service', () => ({ ProductService: class {} }));
-jest.mock('../sale-item/sale-item.service', () => ({ SaleItemService: class {} }));
+jest.mock('../sale-item/sale-item.service', () => ({
+  SaleItemService: class {},
+}));
 jest.mock('../payment/payment.service', () => ({ PaymentService: class {} }));
-jest.mock('../van-inventory/van-inventory.service', () => ({ VanInventoryService: class {} }));
+jest.mock('../van-inventory/van-inventory.service', () => ({
+  VanInventoryService: class {},
+}));
 jest.mock('../inventory-transaction/inventory-transaction.service', () => ({
   InventoryTransactionService: class {},
 }));
-jest.mock('../customer/customer.service', () => ({ CustomerService: class {} }));
-jest.mock('../van-daily-stock/van-daily-stock.service', () => ({ VanDailyStockService: class {} }));
-jest.mock('../shop-visit/shop-visit.service', () => ({ ShopVisitService: class {} }));
+jest.mock('../customer/customer.service', () => ({
+  CustomerService: class {},
+}));
+jest.mock('../van-daily-stock/van-daily-stock.service', () => ({
+  VanDailyStockService: class {},
+}));
+jest.mock('../shop-visit/shop-visit.service', () => ({
+  ShopVisitService: class {},
+}));
 
 import { SaleService } from './sale.service';
 import { ShopVisitStatus } from 'src/shared/enums/shop-visit.enums';
@@ -45,11 +55,17 @@ describe('SaleService.completeVisitWithSale', () => {
   });
 
   it('closes an active visit in the sale transaction with the check-out location', async () => {
-    shopVisitService.findOne.mockResolvedValue({ visitId: 'V1', status: ShopVisitStatus.ACTIVE });
+    shopVisitService.findOne.mockResolvedValue({
+      visitId: 'V1',
+      status: ShopVisitStatus.ACTIVE,
+    });
 
     await expect(complete('V1', location)).resolves.toBe(true);
 
-    expect(shopVisitService.findOne).toHaveBeenCalledWith({ visitId: 'V1' }, { session });
+    expect(shopVisitService.findOne).toHaveBeenCalledWith(
+      { visitId: 'V1' },
+      { session },
+    );
     expect(shopVisitService.update).toHaveBeenCalledWith(
       'V1',
       expect.objectContaining({
@@ -62,7 +78,10 @@ describe('SaleService.completeVisitWithSale', () => {
   });
 
   it('closes the visit without a location when none was captured', async () => {
-    shopVisitService.findOne.mockResolvedValue({ visitId: 'V1', status: ShopVisitStatus.ACTIVE });
+    shopVisitService.findOne.mockResolvedValue({
+      visitId: 'V1',
+      status: ShopVisitStatus.ACTIVE,
+    });
 
     await complete('V1', undefined);
 
@@ -72,7 +91,10 @@ describe('SaleService.completeVisitWithSale', () => {
   });
 
   it('skips a visit that is already completed (never fails the sale)', async () => {
-    shopVisitService.findOne.mockResolvedValue({ visitId: 'V1', status: ShopVisitStatus.COMPLETED });
+    shopVisitService.findOne.mockResolvedValue({
+      visitId: 'V1',
+      status: ShopVisitStatus.COMPLETED,
+    });
 
     await expect(complete('V1', location)).resolves.toBe(false);
     expect(shopVisitService.update).not.toHaveBeenCalled();

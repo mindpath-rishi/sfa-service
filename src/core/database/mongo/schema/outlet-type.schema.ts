@@ -42,7 +42,7 @@ export class OutletType {
     enum: OutletTypeStatus,
     default: OutletTypeStatus.ACTIVE,
   })
-  status!: OutletTypeStatus
+  status!: OutletTypeStatus;
 }
 
 export const OutletTypeSchema = SchemaFactory.createForClass(OutletType);

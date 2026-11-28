@@ -8,6 +8,7 @@ import { GlobalExceptionFilter } from './core/filters/exception.filter';
 import { ResponseInterceptor } from './core/interceptors/response.interceptor';
 import * as bodyParser from 'body-parser';
 import { Logger, PinoLogger } from 'nestjs-pino';
+import cookieParser from 'cookie-parser';
 import { API_MODULE, API_PREFIX, V1 } from './shared/constants/api.constants';
 import {
   BODY_PARSER_LIMIT,
@@ -27,9 +28,6 @@ import { SeederRunner } from './core/seeds/seed.runner';
 import { CustomerService } from './modules/v1/customer/customer.service';
 import * as oracledb from 'oracledb';
 import { ORACLE_POOL } from './core/database/oracle/oracle.provider';
-
-// ⚠️ guaranteed cookie-parser fix
-const cookieParser = require('cookie-parser');
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
@@ -139,9 +137,12 @@ async function bootstrap() {
   await app.listen(process.env.PORT || 3000);
 
   logger.setContext('Bootstrap');
-  logger.info(`Server running on http://localhost:${process.env.PORT || 3000}`, {
-    env: process.env.NODE_ENV,
-  });
+  logger.info(
+    `Server running on http://localhost:${process.env.PORT || 3000}`,
+    {
+      env: process.env.NODE_ENV,
+    },
+  );
 
   if (process.env.SEED_PERMISSIONS === 'true') {
     // Seeding is idempotent housekeeping and runs on every start; a failure

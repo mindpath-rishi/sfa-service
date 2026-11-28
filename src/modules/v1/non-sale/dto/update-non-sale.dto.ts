@@ -3,16 +3,15 @@ import { NonSaleStatus } from 'src/shared/enums/non-sale.enums';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IsEnum, IsOptional, IsString, MaxLength } from 'class-validator';
 
-
 export class UpdateNonSaleDto {
-/**
- * UpdateNonSaleDto
- * =================
- * Data Transfer Object for updating NonSale records
- * 
- * All fields are optional for partial updates
- * Supports partial updates - omitted fields will retain their existing values
- */
+  /**
+   * UpdateNonSaleDto
+   * =================
+   * Data Transfer Object for updating NonSale records
+   *
+   * All fields are optional for partial updates
+   * Supports partial updates - omitted fields will retain their existing values
+   */
   @ApiPropertyOptional({ type: String, description: 'Array of Reference IDs' })
   @IsOptional()
   @IsString()
@@ -59,9 +58,12 @@ export class UpdateNonSaleDto {
    * ------
    * Salesman / User
    */
-  @ApiPropertyOptional({ enum: NonSaleStatus, default: NonSaleStatus.COMPLETED, description: 'Salesman / User' })
+  @ApiPropertyOptional({
+    enum: NonSaleStatus,
+    default: NonSaleStatus.COMPLETED,
+    description: 'Salesman / User',
+  })
   @IsOptional()
   @IsEnum(NonSaleStatus)
   status?: NonSaleStatus;
-
 }

@@ -1,8 +1,21 @@
-import { Body, Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { SuperAdminGuard } from 'src/core/guards/super-admin.guard';
 import { API_MODULE, V1 } from 'src/shared/constants/api.constants';
-import { InspectQueryDto, RepairDto, ScanQueryDto, SyncPreviewQueryDto } from './dto/feature-debug.dto';
+import {
+  InspectQueryDto,
+  RepairDto,
+  ScanQueryDto,
+  SyncPreviewQueryDto,
+} from './dto/feature-debug.dto';
 import { RepairsService } from './repairs.service';
 import { SyncPreviewService } from './sync-preview.service';
 import { FeatureDebugService } from './feature-debug.service';
@@ -35,7 +48,11 @@ export class FeatureDebugController {
   @Get('sync-preview')
   @ApiOperation({ summary: "What a salesman's phone downloads" })
   syncPreview(@Query() query: SyncPreviewQueryDto) {
-    return this.syncPreviewService.preview(query.employeeId, query.entity, query.search);
+    return this.syncPreviewService.preview(
+      query.employeeId,
+      query.entity,
+      query.search,
+    );
   }
 
   @Get('features')

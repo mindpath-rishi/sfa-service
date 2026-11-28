@@ -9,7 +9,6 @@ import { jwtExtractor } from '../../../core/auth/jwt-extractor';
 import { RequestContextStore } from 'src/core/context/request-context';
 import { LoginPolicyService } from './login-policy.service';
 
-
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
   constructor(

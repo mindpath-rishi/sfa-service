@@ -71,7 +71,7 @@ export class UserDevice {
   lastLoginAt!: Date;
 
   // Push notification token (mobile clients)
-  @Prop({ type: String})
+  @Prop({ type: String })
   fcmToken?: string;
 
   /* ======================================================

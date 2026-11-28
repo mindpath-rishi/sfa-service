@@ -1,7 +1,7 @@
 /**
  * Expense Controller
  * ------------------
- * Purpose : Advance expense automation (weekly Mon–Sat cycle)
+ * Purpose : Expense request automation (weekly Mon–Sat cycle)
  * Used by : MOBILE (request) / ADMIN PANEL (approval, config) / ERP (export)
  */
 
@@ -36,7 +36,6 @@ import {
 
 import { ExpenseService } from './expense.service';
 import {
-  CreateExpenseDto,
   ExpenseQueryDto,
   ReplaceWithdrawalChargesDto,
   UpdateExpenseStatusDto,
@@ -56,19 +55,15 @@ export class ExpenseController {
 
   @Get('preview')
   @ApiOperation({ summary: 'Preview current-week expense request (no save)' })
-  async preview(@Query('beatIds') beatIds?: string | string[]) {
-    const ids = Array.isArray(beatIds)
-      ? beatIds
-      : (beatIds ?? '').split(',').filter(Boolean);
-    return this.service.preview(ids);
+  async preview() {
+    return this.service.preview();
   }
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
-  @ApiOperation({ summary: 'Raise current-week advance expense request' })
-  @ApiBody({ type: CreateExpenseDto })
-  async create(@Body() dto: CreateExpenseDto) {
-    return this.service.create(dto);
+  @ApiOperation({ summary: 'Raise current-week expense request' })
+  async create() {
+    return this.service.create();
   }
 
   @Get('me')

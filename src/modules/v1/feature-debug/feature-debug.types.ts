@@ -16,7 +16,12 @@ export const REPAIR_ACTIONS = [
 export type RepairAction = (typeof REPAIR_ACTIONS)[number];
 
 /** A fix the MIS can offer next to a check (runs only after confirmation). */
-export type RepairRef = { action: RepairAction; id: string; label: string; confirm: string };
+export type RepairRef = {
+  action: RepairAction;
+  id: string;
+  label: string;
+  confirm: string;
+};
 
 /** A link from one report to another feature's inspector. */
 export type InspectTarget = { feature: FeatureKey; id: string };
@@ -32,7 +37,12 @@ export type DebugCheck = {
 };
 
 export type DebugSection =
-  | { key: string; title: string; kind: 'record'; record: Record<string, unknown> | null }
+  | {
+      key: string;
+      title: string;
+      kind: 'record';
+      record: Record<string, unknown> | null;
+    }
   | {
       key: string;
       title: string;

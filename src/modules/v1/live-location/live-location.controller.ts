@@ -37,7 +37,9 @@ export class LiveLocationController {
 
   @Get('settings')
   @Permissions('LIVE_LOCATION_VIEW')
-  @ApiOperation({ summary: 'Location tracking settings (global + per-user overrides)' })
+  @ApiOperation({
+    summary: 'Location tracking settings (global + per-user overrides)',
+  })
   getSettings() {
     return this.trackingSettings.getSettings();
   }
@@ -46,7 +48,7 @@ export class LiveLocationController {
   @Permissions('LIVE_LOCATION_UPDATE')
   @ApiOperation({ summary: 'Update location tracking settings' })
   updateSettings(@Body() dto: UpdateTrackingSettingsDto) {
-    return this.trackingSettings.updateSettings(dto as any);
+    return this.trackingSettings.updateSettings(dto);
   }
 
   @Get('settings/history')
@@ -58,7 +60,9 @@ export class LiveLocationController {
 
   @Post('settings/restore/:revision')
   @UseGuards(SuperAdminGuard)
-  @ApiOperation({ summary: 'Restore a tracking settings version (Super Admin)' })
+  @ApiOperation({
+    summary: 'Restore a tracking settings version (Super Admin)',
+  })
   restoreSettings(
     @Param('revision', ParseIntPipe) revision: number,
     @Body() dto: RestoreTrackingSettingsDto,
@@ -68,7 +72,9 @@ export class LiveLocationController {
 
   @Get('settings/me')
   @Permissions('LIVE_LOCATION_CREATE')
-  @ApiOperation({ summary: 'Effective tracking settings for the current user (app)' })
+  @ApiOperation({
+    summary: 'Effective tracking settings for the current user (app)',
+  })
   mySettings() {
     return this.trackingSettings.getMySettings();
   }
@@ -100,8 +106,13 @@ export class LiveLocationController {
   @BackOfficeOnly()
   @Get('day-route')
   @Permissions('LIVE_LOCATION_VIEW')
-  @ApiOperation({ summary: 'Day route of a user: road path, stops, visits, timeline, stats' })
-  dayRouteOf(@Query('employeeId') employeeId: string, @Query('date') date?: string) {
+  @ApiOperation({
+    summary: 'Day route of a user: road path, stops, visits, timeline, stats',
+  })
+  dayRouteOf(
+    @Query('employeeId') employeeId: string,
+    @Query('date') date?: string,
+  ) {
     return this.dayRoute.getDayRoute(employeeId, date);
   }
 }

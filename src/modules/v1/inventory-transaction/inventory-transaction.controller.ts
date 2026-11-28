@@ -33,7 +33,6 @@ import { FeatureFlag } from 'src/core/decorators/feature-flag.decorator';
 import { ApiSuccessResponse } from 'src/core/swagger/api.response.swagger';
 import {
   ApiInternalErrorResponse,
-  ApiNotFoundResponse,
   ApiUnauthorizedResponse,
   ApiUnprocessableEntityResponse,
 } from 'src/core/swagger/api-error.response.swagger';
@@ -101,7 +100,10 @@ export class InventoryTransactionController {
   @Permissions('INVENTORY_TRANSACTION_VIEW')
   @BackOfficeOnly()
   @Get(':transactionId')
-  @ApiParam({ name: 'transactionId', description: 'InventoryTransaction transactionId' })
+  @ApiParam({
+    name: 'transactionId',
+    description: 'InventoryTransaction transactionId',
+  })
   async findOne(@Param('transactionId') transactionId: string) {
     return this.service.findByTransactionId(transactionId);
   }
@@ -113,7 +115,10 @@ export class InventoryTransactionController {
   @Permissions('INVENTORY_TRANSACTION_UPDATE')
   @BackOfficeOnly()
   @Patch(':transactionId')
-  @ApiParam({ name: 'transactionId', description: 'InventoryTransaction transactionId' })
+  @ApiParam({
+    name: 'transactionId',
+    description: 'InventoryTransaction transactionId',
+  })
   async update(
     @Param('transactionId') transactionId: string,
     @Body() dto: UpdateInventoryTransactionDto,
@@ -128,7 +133,10 @@ export class InventoryTransactionController {
   @Permissions('INVENTORY_TRANSACTION_DELETE')
   @BackOfficeOnly()
   @Delete(':transactionId')
-  @ApiParam({ name: 'transactionId', description: 'InventoryTransaction transactionId' })
+  @ApiParam({
+    name: 'transactionId',
+    description: 'InventoryTransaction transactionId',
+  })
   async delete(@Param('transactionId') transactionId: string) {
     return this.service.delete(transactionId);
   }

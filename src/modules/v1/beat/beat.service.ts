@@ -1,4 +1,3 @@
-
 import {
   Injectable,
   NotFoundException,
@@ -30,12 +29,14 @@ export class BeatService extends MongoRepository<Beat> {
     try {
       return await this.withTransaction(async (session) => {
         if (payload.name) {
-          payload.name = TextNormalizer.normalize(payload.name, NormalizeType.TITLE);
+          payload.name = TextNormalizer.normalize(
+            payload.name,
+            NormalizeType.TITLE,
+          );
         }
 
         const filter: FilterQuery<Beat> = {};
 
-        
         if (payload.name) filter.name = payload.name;
 
         const existing = await this.findOne(filter, {
@@ -130,11 +131,10 @@ export class BeatService extends MongoRepository<Beat> {
           dto.name = TextNormalizer.normalize(dto.name, NormalizeType.TITLE);
         }
 
-        const doc = await this.updateOne(
-          { beatId },
-          dto,
-          { session, new: true },
-        );
+        const doc = await this.updateOne({ beatId }, dto, {
+          session,
+          new: true,
+        });
 
         if (!doc) throw new NotFoundException(BEAT.NOT_FOUND);
 

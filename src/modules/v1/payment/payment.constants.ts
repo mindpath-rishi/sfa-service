@@ -1,4 +1,3 @@
-
 export const PAYMENT = {
   CREATED: 'Payment created successfully',
   FETCHED: 'Payment fetched successfully',

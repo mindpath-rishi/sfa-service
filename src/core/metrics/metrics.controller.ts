@@ -1,4 +1,11 @@
-import { Controller, Get, Headers, Res, UnauthorizedException, VERSION_NEUTRAL } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Headers,
+  Res,
+  UnauthorizedException,
+  VERSION_NEUTRAL,
+} from '@nestjs/common';
 import type { Response } from 'express';
 import { timingSafeEqual } from 'crypto';
 import { Public } from '../decorators/public.decorator';
@@ -23,7 +30,10 @@ export class MetricsController {
   constructor(private readonly metrics: MetricsService) {}
 
   @Get()
-  async getMetrics(@Res() res: Response, @Headers('authorization') authorization?: string) {
+  async getMetrics(
+    @Res() res: Response,
+    @Headers('authorization') authorization?: string,
+  ) {
     const token = process.env.METRICS_TOKEN;
     if (token && !sameSecret(authorization ?? '', `Bearer ${token}`)) {
       throw new UnauthorizedException('Metrics token required');

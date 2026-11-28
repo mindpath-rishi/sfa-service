@@ -19,7 +19,11 @@ import { Collection } from 'mongodb';
 import { MongoService } from 'src/core/database/mongo/mongo.service';
 import { TrackingSettingsService } from './tracking-settings.service';
 
-export type TrackPoint = { latitude: number; longitude: number; capturedAt: Date };
+export type TrackPoint = {
+  latitude: number;
+  longitude: number;
+  capturedAt: Date;
+};
 type LatLng = [number, number];
 
 /** OSRM's default --max-matching-size is 100 */
@@ -56,7 +60,10 @@ export const distanceMeters = ([lat1, lng1]: LatLng, [lat2, lng2]: LatLng) => {
 export class RoadSnapService {
   private readonly logger = new Logger(RoadSnapService.name);
   private readonly cache: Collection<CacheDoc>;
-  private readonly inFlight = new Map<string, Promise<{ path: LatLng[]; snapped: boolean }>>();
+  private readonly inFlight = new Map<
+    string,
+    Promise<{ path: LatLng[]; snapped: boolean }>
+  >();
   private indexed = false;
 
   constructor(
@@ -87,15 +94,22 @@ export class RoadSnapService {
     return job;
   }
 
-  private async snapInternal(key: string, points: TrackPoint[], finished: boolean) {
-    const raw = (list: TrackPoint[]) => list.map((p) => [p.latitude, p.longitude] as LatLng);
+  private async snapInternal(
+    key: string,
+    points: TrackPoint[],
+    finished: boolean,
+  ) {
+    const raw = (list: TrackPoint[]) =>
+      list.map((p) => [p.latitude, p.longitude] as LatLng);
     if (!this.osrmUrl || !this.trackingSettings.current.roadSnapEnabled) {
       return { path: raw(points), snapped: false };
     }
 
     if (!this.indexed) {
       this.indexed = true;
-      void this.cache.createIndex({ key: 1 }, { unique: true }).catch(() => undefined);
+      void this.cache
+        .createIndex({ key: 1 }, { unique: true })
+        .catch(() => undefined);
     }
 
     const cached = await this.cache.findOne({ key });
@@ -108,23 +122,45 @@ export class RoadSnapService {
         return { path: cached.path, snapped: true };
       }
       // Active session snapped recently: serve cache + raw tail, no API call.
-      if (!finished && Date.now() - new Date(cached.updatedAt).getTime() < SNAP_REFRESH_MS) {
+      if (
+        !finished &&
+        Date.now() - new Date(cached.updatedAt).getTime() < SNAP_REFRESH_MS
+      ) {
         return { path: [...cached.path, ...raw(tail)], snapped: true };
       }
       const fresh = await this.snapPoints([cached.lastRawPoint, ...raw(tail)]);
-      if (!fresh) return { path: [...cached.path, ...raw(tail)], snapped: true };
+      if (!fresh)
+        return { path: [...cached.path, ...raw(tail)], snapped: true };
       const path = [...cached.path, ...fresh.path.slice(1)];
-      await this.save(key, path, tail[tail.length - 1], finished, (cached.apiCalls || 0) + fresh.calls);
+      await this.save(
+        key,
+        path,
+        tail[tail.length - 1],
+        finished,
+        (cached.apiCalls || 0) + fresh.calls,
+      );
       return { path, snapped: true };
     }
 
     const fresh = await this.snapPoints(raw(points));
     if (!fresh) return { path: raw(points), snapped: false };
-    await this.save(key, fresh.path, points[points.length - 1], finished, fresh.calls);
+    await this.save(
+      key,
+      fresh.path,
+      points[points.length - 1],
+      finished,
+      fresh.calls,
+    );
     return { path: fresh.path, snapped: true };
   }
 
-  private async save(key: string, path: LatLng[], last: TrackPoint, complete: boolean, apiCalls: number) {
+  private async save(
+    key: string,
+    path: LatLng[],
+    last: TrackPoint,
+    complete: boolean,
+    apiCalls: number,
+  ) {
     await this.cache.updateOne(
       { key },
       {
@@ -147,11 +183,14 @@ export class RoadSnapService {
    * nothing matched a road (e.g. points outside the loaded OSRM region), so the
    * raw path is neither cached nor reported as road matched.
    */
-  private async snapPoints(coords: LatLng[]): Promise<{ path: LatLng[]; calls: number } | null> {
+  private async snapPoints(
+    coords: LatLng[],
+  ): Promise<{ path: LatLng[]; calls: number } | null> {
     const thinned: LatLng[] = [];
     for (const point of coords) {
       const previous = thinned[thinned.length - 1];
-      if (!previous || distanceMeters(previous, point) >= THIN_METERS) thinned.push(point);
+      if (!previous || distanceMeters(previous, point) >= THIN_METERS)
+        thinned.push(point);
     }
     const last = coords[coords.length - 1];
     if (thinned[thinned.length - 1] !== last) thinned.push(last);
@@ -161,7 +200,8 @@ export class RoadSnapService {
     for (const point of thinned) {
       const current = segments[segments.length - 1];
       const previous = current[current.length - 1];
-      if (previous && distanceMeters(previous, point) > MAX_GAP_METERS) segments.push([point]);
+      if (previous && distanceMeters(previous, point) > MAX_GAP_METERS)
+        segments.push([point]);
       else current.push(point);
     }
 
@@ -174,7 +214,11 @@ export class RoadSnapService {
           path.push(...segment);
           continue;
         }
-        for (let start = 0; start < segment.length - 1; start += MAX_POINTS_PER_CALL - 1) {
+        for (
+          let start = 0;
+          start < segment.length - 1;
+          start += MAX_POINTS_PER_CALL - 1
+        ) {
           const chunk = segment.slice(start, start + MAX_POINTS_PER_CALL);
           const snapped = await this.callRoads(chunk);
           calls += 1;
@@ -196,8 +240,12 @@ export class RoadSnapService {
   }
 
   /** OSRM map matching of one chunk; unmatched stretches keep the raw points. */
-  private async callRoads(chunk: LatLng[]): Promise<{ path: LatLng[]; matched: boolean }> {
-    const coordinates = chunk.map(([lat, lng]) => `${lng.toFixed(6)},${lat.toFixed(6)}`).join(';');
+  private async callRoads(
+    chunk: LatLng[],
+  ): Promise<{ path: LatLng[]; matched: boolean }> {
+    const coordinates = chunk
+      .map(([lat, lng]) => `${lng.toFixed(6)},${lat.toFixed(6)}`)
+      .join(';');
     const radiuses = chunk.map(() => MATCH_RADIUS_METERS).join(';');
     const url = `${this.osrmUrl}/match/v1/driving/${coordinates}?overview=full&geometries=geojson&gaps=split&tidy=true&radiuses=${radiuses}`;
     const controller = new AbortController();
@@ -209,12 +257,17 @@ export class RoadSnapService {
         matchings?: { geometry?: { coordinates?: [number, number][] } }[];
       };
       // NoMatch / NoSegment: nothing matched here, keep the raw points
-      if (body.code && body.code !== 'Ok') return { path: chunk, matched: false };
+      if (body.code && body.code !== 'Ok')
+        return { path: chunk, matched: false };
       if (!response.ok) throw new Error(`OSRM ${response.status}`);
-      const matched = (body.matchings ?? []).flatMap(
-        (matching) => (matching.geometry?.coordinates ?? []).map(([lng, lat]) => [lat, lng] as LatLng),
+      const matched = (body.matchings ?? []).flatMap((matching) =>
+        (matching.geometry?.coordinates ?? []).map(
+          ([lng, lat]) => [lat, lng] as LatLng,
+        ),
       );
-      return matched.length > 1 ? { path: matched, matched: true } : { path: chunk, matched: false };
+      return matched.length > 1
+        ? { path: matched, matched: true }
+        : { path: chunk, matched: false };
     } finally {
       clearTimeout(timer);
     }

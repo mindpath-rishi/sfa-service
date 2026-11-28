@@ -94,7 +94,8 @@ export class CreateSaleDto {
 
   @ApiPropertyOptional({
     type: LocationPointDto,
-    description: 'Check-out location captured at checkout; used when completeVisit is true',
+    description:
+      'Check-out location captured at checkout; used when completeVisit is true',
   })
   @IsOptional()
   @ValidateNested()

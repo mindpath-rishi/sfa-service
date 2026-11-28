@@ -19,7 +19,12 @@
  *  - zstd compression and day-long buckets ("minutes" granularity).
  * Live viewers still receive every point over the socket — only storage is filtered.
  */
-import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  OnModuleDestroy,
+  OnModuleInit,
+} from '@nestjs/common';
 import { Collection, Db } from 'mongodb';
 import { MongoService } from 'src/core/database/mongo/mongo.service';
 import { accuracyLimitFor, isAccuracyDrift } from './location-drift';
@@ -28,7 +33,9 @@ export const POINTS_COLLECTION = 'live_location_points';
 const FLUSH_MS = 2000;
 const MAX_BUFFER = 5000;
 /** Raw points are kept this long (route history); 0 keeps them forever. */
-const RETENTION_DAYS = Number(process.env.LOCATION_POINTS_RETENTION_DAYS || 400);
+const RETENTION_DAYS = Number(
+  process.env.LOCATION_POINTS_RETENTION_DAYS || 400,
+);
 
 /** Admin controlled (TrackingSettingsService); these are the defaults. */
 export type FilterParams = {
@@ -39,7 +46,11 @@ export type FilterParams = {
   /** Fixes less accurate than this are not stored. */
   maxAccuracyMeters: number;
 };
-let params: FilterParams = { toleranceMeters: 5, keepAliveMs: 60_000, maxAccuracyMeters: 50 };
+let params: FilterParams = {
+  toleranceMeters: 5,
+  keepAliveMs: 60_000,
+  maxAccuracyMeters: 50,
+};
 export const setFilterParams = (next: FilterParams) => {
   params = { ...next };
 };
@@ -85,7 +96,12 @@ const round = (value: number, digits: number) => {
   return Math.round(value * factor) / factor;
 };
 
-const distanceMeters = (lat1: number, lng1: number, lat2: number, lng2: number) => {
+const distanceMeters = (
+  lat1: number,
+  lng1: number,
+  lat2: number,
+  lng2: number,
+) => {
   const rad = Math.PI / 180;
   const dLat = (lat2 - lat1) * rad;
   const dLng = (lng2 - lng1) * rad;
@@ -104,7 +120,9 @@ const offsetMeters = (p: StoredPoint, a: StoredPoint, b: StoredPoint) => {
   const bx = (b.lng - a.lng) * kx;
   const by = (b.lat - a.lat) * ky;
   const lengthSq = bx * bx + by * by;
-  const t = lengthSq ? Math.max(0, Math.min(1, (px * bx + py * by) / lengthSq)) : 0;
+  const t = lengthSq
+    ? Math.max(0, Math.min(1, (px * bx + py * by) / lengthSq))
+    : 0;
   return Math.hypot(px - t * bx, py - t * by);
 };
 
@@ -113,12 +131,17 @@ export function toStoredPoint(point: RawPoint): StoredPoint | null {
   const latitude = Number(point.latitude);
   const longitude = Number(point.longitude);
   const t = new Date(point.capturedAt);
-  if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || Number.isNaN(t.getTime())) {
+  if (
+    !Number.isFinite(latitude) ||
+    !Number.isFinite(longitude) ||
+    Number.isNaN(t.getTime())
+  ) {
     return null;
   }
   if (
     point.accuracy != null &&
-    Number(point.accuracy) > accuracyLimitFor(params.maxAccuracyMeters, point.source)
+    Number(point.accuracy) >
+      accuracyLimitFor(params.maxAccuracyMeters, point.source)
   ) {
     return null;
   }
@@ -132,11 +155,20 @@ export function toStoredPoint(point: RawPoint): StoredPoint | null {
     lat: round(latitude, 5),
     lng: round(longitude, 5),
   };
-  if (point.accuracy != null && Number.isFinite(Number(point.accuracy))) doc.acc = Math.round(Number(point.accuracy));
-  if (point.speed != null && Number.isFinite(Number(point.speed)) && Number(point.speed) >= 0) {
+  if (point.accuracy != null && Number.isFinite(Number(point.accuracy)))
+    doc.acc = Math.round(Number(point.accuracy));
+  if (
+    point.speed != null &&
+    Number.isFinite(Number(point.speed)) &&
+    Number(point.speed) >= 0
+  ) {
     doc.spd = round(Number(point.speed), 1);
   }
-  if (point.heading != null && Number.isFinite(Number(point.heading)) && Number(point.heading) >= 0) {
+  if (
+    point.heading != null &&
+    Number.isFinite(Number(point.heading)) &&
+    Number(point.heading) >= 0
+  ) {
     doc.hdg = Math.round(Number(point.heading)) % 360;
   }
   return doc;
@@ -146,33 +178,52 @@ export function toStoredPoint(point: RawPoint): StoredPoint | null {
  * Feeds one point (time ordered) into a stream. Returns the points to store
  * now (0 or 1; with a fresh stream the first point is stored immediately).
  */
-function feed(state: FilterState | undefined, point: StoredPoint): { state: FilterState; store: StoredPoint[] } {
+function feed(
+  state: FilterState | undefined,
+  point: StoredPoint,
+): { state: FilterState; store: StoredPoint[] } {
   const seenAt = Date.now();
-  if (!state) return { state: { anchor: point, pending: [], seenAt }, store: [point] };
+  if (!state)
+    return { state: { anchor: point, pending: [], seenAt }, store: [point] };
   const last = state.pending[state.pending.length - 1] ?? state.anchor;
   // GPS drift while standing still: hold the last position (and its accuracy)
   const meters = distanceMeters(last.lat, last.lng, point.lat, point.lng);
-  if (isAccuracyDrift(last.acc, { accuracy: point.acc, speed: point.spd }, meters)) {
+  if (
+    isAccuracyDrift(last.acc, { accuracy: point.acc, speed: point.spd }, meters)
+  ) {
     point.lat = last.lat;
     point.lng = last.lng;
     if (last.acc != null) point.acc = last.acc;
     else delete point.acc;
   }
   // Duplicate (same place within a second)
-  if (Math.abs(point.t.getTime() - last.t.getTime()) < 1000 && point.lat === last.lat && point.lng === last.lng) {
+  if (
+    Math.abs(point.t.getTime() - last.t.getTime()) < 1000 &&
+    point.lat === last.lat &&
+    point.lng === last.lng
+  ) {
     state.seenAt = seenAt;
     return { state, store: [] };
   }
   // Keep-alive: never leave more than a minute without a stored point
   if (point.t.getTime() - state.anchor.t.getTime() >= params.keepAliveMs) {
-    if (state.pending.length && last.t.getTime() - state.anchor.t.getTime() >= params.keepAliveMs / 2) {
+    if (
+      state.pending.length &&
+      last.t.getTime() - state.anchor.t.getTime() >= params.keepAliveMs / 2
+    ) {
       // keep the bend before the gap, then this point
-      return { state: { anchor: point, pending: [], seenAt }, store: [last, point] };
+      return {
+        state: { anchor: point, pending: [], seenAt },
+        store: [last, point],
+      };
     }
     return { state: { anchor: point, pending: [], seenAt }, store: [point] };
   }
   // Would a straight line anchor → point still pass within tolerance of every skipped point?
-  const bends = state.pending.some((skipped) => offsetMeters(skipped, state.anchor, point) > params.toleranceMeters);
+  const bends = state.pending.some(
+    (skipped) =>
+      offsetMeters(skipped, state.anchor, point) > params.toleranceMeters,
+  );
   if (bends) {
     // Store the last skipped point (where the path bent); this point starts a new window
     return { state: { anchor: last, pending: [point], seenAt }, store: [last] };
@@ -206,17 +257,33 @@ export function filterBatch(points: RawPoint[]): StoredPoint[] {
 
 /** Creates the time-series collection (zstd, day buckets) if missing. */
 export async function ensurePointsCollection(db: Db, logger?: Logger) {
-  const exists = await db.listCollections({ name: POINTS_COLLECTION }).hasNext();
+  const exists = await db
+    .listCollections({ name: POINTS_COLLECTION })
+    .hasNext();
   if (exists) {
     // Day-long buckets compress filtered (sparser) data better. Allowed seconds → minutes.
     await db
-      .command({ collMod: POINTS_COLLECTION, timeseries: { granularity: 'minutes' } })
+      .command({
+        collMod: POINTS_COLLECTION,
+        timeseries: { granularity: 'minutes' },
+      })
       .catch(() => undefined);
   } else {
-    const timeseries = { timeField: 't', metaField: 'm', granularity: 'minutes' as const };
-    const expiry = RETENTION_DAYS > 0 ? { expireAfterSeconds: RETENTION_DAYS * 86400 } : {};
+    const timeseries = {
+      timeField: 't',
+      metaField: 'm',
+      granularity: 'minutes' as const,
+    };
+    const expiry =
+      RETENTION_DAYS > 0 ? { expireAfterSeconds: RETENTION_DAYS * 86400 } : {};
     const attempts = [
-      { timeseries, ...expiry, storageEngine: { wiredTiger: { configString: 'block_compressor=zstd' } } },
+      {
+        timeseries,
+        ...expiry,
+        storageEngine: {
+          wiredTiger: { configString: 'block_compressor=zstd' },
+        },
+      },
       { timeseries, ...expiry },
       {},
     ];
@@ -230,12 +297,16 @@ export async function ensurePointsCollection(db: Db, logger?: Logger) {
         );
         break;
       } catch (error) {
-        logger?.warn(`Create ${POINTS_COLLECTION} failed: ${(error as Error).message}`);
+        logger?.warn(
+          `Create ${POINTS_COLLECTION} failed: ${(error as Error).message}`,
+        );
       }
     }
   }
   const collection = db.collection(POINTS_COLLECTION);
-  await collection.createIndex({ 'm.workSessionId': 1, t: 1 }).catch(() => undefined);
+  await collection
+    .createIndex({ 'm.workSessionId': 1, t: 1 })
+    .catch(() => undefined);
   await collection.createIndex({ 'm.userId': 1, t: 1 }).catch(() => undefined);
 }
 
@@ -255,8 +326,11 @@ export class LocationPointsStore implements OnModuleInit, OnModuleDestroy {
   }
 
   onModuleInit() {
-    this.ready = ensurePointsCollection(this.mongo.getDb(), this.logger).catch((error) =>
-      this.logger.error(`Location points collection setup failed: ${(error as Error).message}`),
+    this.ready = ensurePointsCollection(this.mongo.getDb(), this.logger).catch(
+      (error) =>
+        this.logger.error(
+          `Location points collection setup failed: ${(error as Error).message}`,
+        ),
     );
     this.timer = setInterval(() => void this.flush(), FLUSH_MS);
   }
@@ -272,9 +346,14 @@ export class LocationPointsStore implements OnModuleInit, OnModuleDestroy {
     if (!doc) return false;
     const liveKey = doc.m.workSessionId;
     const live = this.states.get(liveKey);
-    const head = live ? (live.pending[live.pending.length - 1] ?? live.anchor) : null;
+    const head = live
+      ? (live.pending[live.pending.length - 1] ?? live.anchor)
+      : null;
     // Points older than the stream head are back-fill (offline / delayed batch)
-    const key = head && doc.t.getTime() < head.t.getTime() - 1000 ? `${liveKey}:backfill` : liveKey;
+    const key =
+      head && doc.t.getTime() < head.t.getTime() - 1000
+        ? `${liveKey}:backfill`
+        : liveKey;
     const result = feed(this.states.get(key), doc);
     this.states.set(key, result.state);
     this.enqueue(result.store);
@@ -295,7 +374,11 @@ export class LocationPointsStore implements OnModuleInit, OnModuleDestroy {
       const tail = state.pending[state.pending.length - 1];
       if (tail && (force || now - state.seenAt >= TAIL_FLUSH_MS)) {
         this.enqueue([tail]);
-        this.states.set(key, { anchor: tail, pending: [], seenAt: state.seenAt });
+        this.states.set(key, {
+          anchor: tail,
+          pending: [],
+          seenAt: state.seenAt,
+        });
       }
       if (now - state.seenAt > STATE_TTL_MS) this.states.delete(key);
     }
@@ -310,7 +393,9 @@ export class LocationPointsStore implements OnModuleInit, OnModuleDestroy {
       await this.ready;
       await this.collection.insertMany(batch, { ordered: false });
     } catch (error) {
-      this.logger.warn(`Location points flush failed: ${(error as Error).message}`);
+      this.logger.warn(
+        `Location points flush failed: ${(error as Error).message}`,
+      );
     }
   }
 
@@ -328,7 +413,14 @@ export class LocationPointsStore implements OnModuleInit, OnModuleDestroy {
       .find(
         {
           'm.workSessionId': { $in: workSessionIds },
-          ...(from || to ? { t: { ...(from ? { $gte: from } : {}), ...(to ? { $lte: to } : {}) } } : {}),
+          ...(from || to
+            ? {
+                t: {
+                  ...(from ? { $gte: from } : {}),
+                  ...(to ? { $lte: to } : {}),
+                },
+              }
+            : {}),
         },
         { projection: { _id: 0 } },
       )

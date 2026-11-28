@@ -1,18 +1,23 @@
 import { PaymentMode, PaymentStatus } from 'src/shared/enums/payment.enums';
 
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsArray, IsDate, IsEnum, IsNumber, IsOptional, IsString } from 'class-validator';
-
+import {
+  IsDate,
+  IsEnum,
+  IsNumber,
+  IsOptional,
+  IsString,
+} from 'class-validator';
 
 export class UpdatePaymentDto {
-/**
- * UpdatePaymentDto
- * =================
- * Data Transfer Object for updating Payment records
- * 
- * All fields are optional for partial updates
- * Supports partial updates - omitted fields will retain their existing values
- */
+  /**
+   * UpdatePaymentDto
+   * =================
+   * Data Transfer Object for updating Payment records
+   *
+   * All fields are optional for partial updates
+   * Supports partial updates - omitted fields will retain their existing values
+   */
   @ApiPropertyOptional({ type: String })
   @IsOptional()
   @IsString()
@@ -38,7 +43,11 @@ export class UpdatePaymentDto {
   @IsEnum(PaymentMode)
   paymentMode?: PaymentMode;
 
-  @ApiPropertyOptional({ enum: PaymentStatus, example: PaymentStatus.SUCCESS, default: PaymentStatus.SUCCESS })
+  @ApiPropertyOptional({
+    enum: PaymentStatus,
+    example: PaymentStatus.SUCCESS,
+    default: PaymentStatus.SUCCESS,
+  })
   @IsOptional()
   @IsEnum(PaymentStatus)
   status?: PaymentStatus;
@@ -53,7 +62,7 @@ export class UpdatePaymentDto {
    * -----------
    * Total amount collected
    */
-  @ApiPropertyOptional({ type: String , default: [] })
+  @ApiPropertyOptional({ type: String, default: [] })
   @IsOptional()
   @IsString()
   referenceNo?: string;
@@ -62,5 +71,4 @@ export class UpdatePaymentDto {
   @IsOptional()
   @IsString()
   remark?: string;
-
 }

@@ -33,7 +33,6 @@ import { FeatureFlag } from 'src/core/decorators/feature-flag.decorator';
 import { ApiSuccessResponse } from 'src/core/swagger/api.response.swagger';
 import {
   ApiInternalErrorResponse,
-  ApiNotFoundResponse,
   ApiUnauthorizedResponse,
   ApiUnprocessableEntityResponse,
 } from 'src/core/swagger/api-error.response.swagger';
@@ -101,7 +100,10 @@ export class RouteSessionController {
   @Permissions('ROUTE_SESSION_VIEW')
   @BackOfficeOnly()
   @Get(':routeSessionId')
-  @ApiParam({ name: 'routeSessionId', description: 'RouteSession routeSessionId' })
+  @ApiParam({
+    name: 'routeSessionId',
+    description: 'RouteSession routeSessionId',
+  })
   async findOne(@Param('routeSessionId') routeSessionId: string) {
     return this.service.findByRouteSessionId(routeSessionId);
   }
@@ -113,7 +115,10 @@ export class RouteSessionController {
   @Permissions('ROUTE_SESSION_UPDATE')
   @BackOfficeOnly()
   @Patch(':routeSessionId')
-  @ApiParam({ name: 'routeSessionId', description: 'RouteSession routeSessionId' })
+  @ApiParam({
+    name: 'routeSessionId',
+    description: 'RouteSession routeSessionId',
+  })
   async update(
     @Param('routeSessionId') routeSessionId: string,
     @Body() dto: UpdateRouteSessionDto,
@@ -128,7 +133,10 @@ export class RouteSessionController {
   @Permissions('ROUTE_SESSION_DELETE')
   @BackOfficeOnly()
   @Delete(':routeSessionId')
-  @ApiParam({ name: 'routeSessionId', description: 'RouteSession routeSessionId' })
+  @ApiParam({
+    name: 'routeSessionId',
+    description: 'RouteSession routeSessionId',
+  })
   async delete(@Param('routeSessionId') routeSessionId: string) {
     return this.service.delete(routeSessionId);
   }

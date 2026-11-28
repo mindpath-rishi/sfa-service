@@ -113,16 +113,6 @@ export class AuditLogsService extends MongoRepository<AuditLog> {
     };
   }
 
-  /**
-   * Get Audit Log by ID
-   * -------------------
-   * Purpose : Fetch a single audit log entry
-   * Used by : AUDIT LOG DETAIL / FORENSIC REVIEW
-   *
-   * Params:
-   * - id : Audit log document ID
-   */
-  async findById(id: string) {
-    return this.findById(id);
-  }
+  // Get Audit Log by ID → inherited MongoRepository.findById
+  // (the previous override called itself and recursed forever)
 }

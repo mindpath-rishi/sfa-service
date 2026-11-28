@@ -35,7 +35,6 @@ import { FeatureFlag } from 'src/core/decorators/feature-flag.decorator';
 import { ApiSuccessResponse } from 'src/core/swagger/api.response.swagger';
 import {
   ApiInternalErrorResponse,
-  ApiNotFoundResponse,
   ApiUnauthorizedResponse,
   ApiUnprocessableEntityResponse,
 } from 'src/core/swagger/api-error.response.swagger';
@@ -49,7 +48,7 @@ import {
 import { Permissions } from 'src/core/decorators/permission.decorator';
 
 import { RouteService } from './route.service';
-import { CreateRouteDto, RouteCustomerDto } from './dto/create-route.dto';
+import { CreateRouteDto } from './dto/create-route.dto';
 import { BulkUploadRouteDto } from './dto/bulk-upload-route.dto';
 import { UpdateRouteDto } from './dto/update-route.dto';
 import { RouteCustomerQueryDto, RouteQueryDto } from './dto/route-query.dto';
