@@ -37,6 +37,10 @@ export type DeviceTrackingSettings = {
   backgroundDistanceM: number;
   maxAccuracyM: number;
   heartbeatSec: number;
+  /** Salesman must grant "Allow all the time" location before starting the day */
+  requireAlwaysLocation: boolean;
+  /** Android: battery "Unrestricted" (no battery optimisation) before starting the day */
+  requireBatteryUnrestricted: boolean;
 };
 
 /** Settings applied on the server. */
@@ -67,6 +71,8 @@ export const DEFAULT_TRACKING_SETTINGS: TrackingSettings = {
   backgroundDistanceM: 0,
   maxAccuracyM: 50,
   heartbeatSec: 30,
+  requireAlwaysLocation: false,
+  requireBatteryUnrestricted: false,
   storageToleranceM: 5,
   storageKeepAliveSec: 60,
   roadSnapEnabled: true,
@@ -84,6 +90,8 @@ export const DEVICE_SETTING_KEYS: (keyof DeviceTrackingSettings)[] = [
   'backgroundDistanceM',
   'maxAccuracyM',
   'heartbeatSec',
+  'requireAlwaysLocation',
+  'requireBatteryUnrestricted',
 ];
 
 const SETTINGS_KEY = 'location_tracking';

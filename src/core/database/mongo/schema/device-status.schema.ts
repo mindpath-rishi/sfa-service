@@ -22,6 +22,10 @@ export class DeviceStatus {
   @Prop({ type: Boolean, default: false })
   isCharging?: boolean;
 
+  // Last location point or stationary ping received (also while the app is closed)
+  @Prop({ type: Date })
+  lastLocationAt?: Date;
+
   /** Last time the app was in use (heartbeat received or user activity) */
   @Prop({ type: Date, index: true })
   lastActiveAt?: Date;

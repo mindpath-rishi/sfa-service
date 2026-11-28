@@ -33,6 +33,8 @@ export type DeviceStatusView = {
   offlineMinutesToday: number;
   /** Last heartbeat received (sent every 5 min while the app runs and is online) */
   lastHeartbeatAt: string | null;
+  /** Last location point / stationary ping received (also while the app is closed) */
+  lastLocationAt: string | null;
   trackingHealth: {
     backgroundLocation: boolean | null;
     batteryUnrestricted: boolean | null;
@@ -178,9 +180,14 @@ export class DeviceStatusService {
     const today = dayKey(new Date());
     for (const row of rows) {
       const lastActive = row.lastActiveAt ? new Date(row.lastActiveAt) : null;
+      // Online = any recent contact: app use, heartbeat or a location upload
+      const lastContact = Math.max(
+        lastActive?.getTime() ?? 0,
+        row.lastOnlineAt ? new Date(row.lastOnlineAt).getTime() : 0,
+        row.lastLocationAt ? new Date(row.lastLocationAt).getTime() : 0,
+      );
       const stale =
-        !lastActive ||
-        now - lastActive.getTime() > DEVICE_STALE_MINUTES * 60_000;
+        !lastContact || now - lastContact > DEVICE_STALE_MINUTES * 60_000;
       map.set(row.userId, {
         batteryLevel:
           row.batteryLevel === null || row.batteryLevel === undefined
@@ -196,6 +203,9 @@ export class DeviceStatusService {
           row.offlineDay === today ? Number(row.offlineMinutesToday) || 0 : 0,
         lastHeartbeatAt: row.lastOnlineAt
           ? new Date(row.lastOnlineAt).toISOString()
+          : null,
+        lastLocationAt: row.lastLocationAt
+          ? new Date(row.lastLocationAt).toISOString()
           : null,
         trackingHealth: row.trackingHealth
           ? {

@@ -88,6 +88,15 @@ export class LiveLocationGateway implements OnGatewayConnection, OnModuleInit {
       if (this.liveLocationService.shouldBroadcast(data)) {
         this.server.to(MANAGER_ROOM).emit('live-location:update', data);
       }
+      void this.liveLocationService.recordDeviceContact(
+        auth.sub,
+        payload,
+        data.location.capturedAt,
+      );
+      // Stationary ping: online status + live marker only, never a route point
+      if (payload.ping) {
+        return { success: true, statusCode: 200, message: 'Ping received' };
+      }
       void this.liveLocationService.storePoint(data).catch((error) => {
         this.logger.error(
           `Failed to persist sampled location (van ${data.vanId})`,

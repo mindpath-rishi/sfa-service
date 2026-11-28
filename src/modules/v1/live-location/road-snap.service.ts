@@ -35,6 +35,46 @@ const THIN_METERS = 25;
 /** Do not ask Google to connect points this far apart (GPS gap / tunnel / app closed). */
 const MAX_GAP_METERS = 1500;
 const SNAP_REFRESH_MS = 2 * 60 * 1000;
+/**
+ * Stay = the user remained within this radius for at least STAY_MIN_MS.
+ * Stays keep their real position (inside a shop / yard / building) instead of
+ * being moved onto the nearest road, which showed users up to ~100 m away.
+ */
+const STAY_RADIUS_METERS = 40;
+const STAY_MIN_MS = 2 * 60 * 1000;
+
+/**
+ * Collapses each stay to one point (its last, most refined fix) and returns
+ * which points are stays. Points without times never form a stay.
+ */
+export const collapseStays = (coords: LatLng[], times?: number[]) => {
+  const points: LatLng[] = [];
+  const stays = new Set<LatLng>();
+  let i = 0;
+  while (i < coords.length) {
+    let j = i + 1;
+    while (
+      j < coords.length &&
+      distanceMeters(coords[i], coords[j]) <= STAY_RADIUS_METERS
+    ) {
+      j += 1;
+    }
+    const span =
+      times && Number.isFinite(times[i]) && Number.isFinite(times[j - 1])
+        ? times[j - 1] - times[i]
+        : 0;
+    if (j - i >= 2 && span >= STAY_MIN_MS) {
+      const stay = coords[j - 1];
+      points.push(stay);
+      stays.add(stay);
+      i = j;
+    } else {
+      points.push(coords[i]);
+      i += 1;
+    }
+  }
+  return { points, stays };
+};
 
 type CacheDoc = {
   key: string;
@@ -128,7 +168,13 @@ export class RoadSnapService {
       ) {
         return { path: [...cached.path, ...raw(tail)], snapped: true };
       }
-      const fresh = await this.snapPoints([cached.lastRawPoint, ...raw(tail)]);
+      const fresh = await this.snapPoints(
+        [cached.lastRawPoint, ...raw(tail)],
+        [
+          new Date(cached.lastRawAt).getTime(),
+          ...tail.map((p) => p.capturedAt.getTime()),
+        ],
+      );
       if (!fresh)
         return { path: [...cached.path, ...raw(tail)], snapped: true };
       const path = [...cached.path, ...fresh.path.slice(1)];
@@ -142,7 +188,10 @@ export class RoadSnapService {
       return { path, snapped: true };
     }
 
-    const fresh = await this.snapPoints(raw(points));
+    const fresh = await this.snapPoints(
+      raw(points),
+      points.map((p) => p.capturedAt.getTime()),
+    );
     if (!fresh) return { path: raw(points), snapped: false };
     await this.save(
       key,
@@ -184,12 +233,18 @@ export class RoadSnapService {
    * raw path is neither cached nor reported as road matched.
    */
   private async snapPoints(
-    coords: LatLng[],
+    rawCoords: LatLng[],
+    times?: number[],
   ): Promise<{ path: LatLng[]; calls: number } | null> {
+    const { points: coords, stays } = collapseStays(rawCoords, times);
     const thinned: LatLng[] = [];
     for (const point of coords) {
       const previous = thinned[thinned.length - 1];
-      if (!previous || distanceMeters(previous, point) >= THIN_METERS)
+      if (
+        !previous ||
+        stays.has(point) ||
+        distanceMeters(previous, point) >= THIN_METERS
+      )
         thinned.push(point);
     }
     const last = coords[coords.length - 1];
@@ -203,6 +258,10 @@ export class RoadSnapService {
       if (previous && distanceMeters(previous, point) > MAX_GAP_METERS)
         segments.push([point]);
       else current.push(point);
+      // A stay ends one matched segment and starts the next, so OSRM never
+      // moves it onto the road
+      if (stays.has(point) && segments[segments.length - 1].length > 1)
+        segments.push([point]);
     }
 
     const path: LatLng[] = [];
@@ -223,7 +282,16 @@ export class RoadSnapService {
           const snapped = await this.callRoads(chunk);
           calls += 1;
           if (snapped.matched) matchedCalls += 1;
-          path.push(...(path.length ? snapped.path.slice(1) : snapped.path));
+          const first = chunk[0];
+          const lastOfChunk = chunk[chunk.length - 1];
+          // Stays keep their real position; the road line leads to / from them
+          if (snapped.matched && stays.has(first)) {
+            if (path[path.length - 1] !== first) path.push(first);
+            path.push(...snapped.path);
+          } else {
+            path.push(...(path.length ? snapped.path.slice(1) : snapped.path));
+          }
+          if (snapped.matched && stays.has(lastOfChunk)) path.push(lastOfChunk);
         }
       }
       if (calls > 0 && matchedCalls === 0) {

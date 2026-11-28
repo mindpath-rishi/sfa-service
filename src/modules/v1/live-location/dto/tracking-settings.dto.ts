@@ -75,6 +75,22 @@ export class DeviceTrackingSettingsDto {
   @Min(5)
   @Max(900)
   heartbeatSec?: number;
+
+  @ApiPropertyOptional({
+    description:
+      'Require "Allow all the time" location: the app blocks Start Day and keeps asking until granted',
+  })
+  @IsOptional()
+  @IsBoolean()
+  requireAlwaysLocation?: boolean;
+
+  @ApiPropertyOptional({
+    description:
+      'Android: require battery "Unrestricted" so the phone cannot stop the background service; blocks Start Day until set',
+  })
+  @IsOptional()
+  @IsBoolean()
+  requireBatteryUnrestricted?: boolean;
 }
 
 export class TrackingSettingsDto extends DeviceTrackingSettingsDto {

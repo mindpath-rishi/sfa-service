@@ -11,6 +11,15 @@ import {
   WorkSession,
   WorkSessionSchema,
 } from 'src/core/database/mongo/schema/work-session.schema';
+import {
+  DeviceStatus,
+  DeviceStatusSchema,
+} from 'src/core/database/mongo/schema/device-status.schema';
+
+/** Device contact from location uploads is written at most this often per user. */
+const BATTERY_WRITE_INTERVAL_MS = 60_000;
+/** Queued (offline) points are old; only fresh points count as contact / battery. */
+const BATTERY_MAX_POINT_AGE_MS = 2 * 60_000;
 import { CreateLiveLocationDto } from './dto/create-live-location.dto';
 import { LiveLocationQueryDto } from './dto/live-location-query.dto';
 import { TrackLiveLocationDto } from './dto/track-live-location.dto';
@@ -38,6 +47,12 @@ export type LiveLocationUpdate = {
 @Injectable()
 export class LiveLocationService {
   private readonly workSessionModel: Model<WorkSession>;
+  private readonly deviceStatusModel: Model<DeviceStatus>;
+  /** userId → last battery write (level, charging, time) */
+  private readonly batteryWrites = new Map<
+    string,
+    { level: number | undefined; isCharging: boolean | undefined; at: number }
+  >();
   /** workSessionId:userId → session check result (avoids a DB read per point) */
   private readonly sessionCheck = new Map<
     string,
@@ -57,6 +72,69 @@ export class LiveLocationService {
     private readonly trackingSettings: TrackingSettingsService,
   ) {
     this.workSessionModel = mongo.getModel(WorkSession.name, WorkSessionSchema);
+    this.deviceStatusModel = mongo.getModel(
+      DeviceStatus.name,
+      DeviceStatusSchema,
+    );
+  }
+
+  /**
+   * Device contact from a location point or stationary ping: last location
+   * time (online status while the app is closed) and battery (native Android
+   * service sends it; no JS heartbeat runs while the app is closed).
+   * Best effort; written at most once a minute per user unless battery changes.
+   */
+  async recordDeviceContact(
+    userId: string,
+    payload: Pick<TrackLiveLocationDto, 'batteryLevel' | 'isCharging'>,
+    capturedAt?: Date | string | null,
+  ) {
+    const now = Date.now();
+    const pointTime = capturedAt ? new Date(capturedAt).getTime() : now;
+    // Queued offline points are old: they say nothing about being online now
+    if (!Number.isFinite(pointTime) || now - pointTime > BATTERY_MAX_POINT_AGE_MS) {
+      return;
+    }
+
+    const level = Number(payload.batteryLevel);
+    const hasBattery = payload.batteryLevel != null && Number.isFinite(level);
+    const rounded = hasBattery
+      ? Math.round(Math.min(100, Math.max(0, level)))
+      : undefined;
+
+    const last = this.batteryWrites.get(userId);
+    if (
+      last &&
+      last.level === rounded &&
+      last.isCharging === payload.isCharging &&
+      now - last.at < BATTERY_WRITE_INTERVAL_MS
+    ) {
+      return;
+    }
+    if (this.batteryWrites.size > 5000) this.batteryWrites.clear();
+    this.batteryWrites.set(userId, {
+      level: rounded,
+      isCharging: payload.isCharging,
+      at: now,
+    });
+
+    try {
+      await this.deviceStatusModel.updateOne(
+        { userId },
+        {
+          $set: {
+            lastLocationAt: new Date(Math.min(pointTime, now)),
+            ...(rounded !== undefined ? { batteryLevel: rounded } : {}),
+            ...(rounded !== undefined && payload.isCharging !== undefined
+              ? { isCharging: payload.isCharging }
+              : {}),
+          },
+        },
+        { upsert: true },
+      );
+    } catch {
+      this.batteryWrites.delete(userId);
+    }
   }
 
   /**
@@ -178,6 +256,16 @@ export class LiveLocationService {
     if (!locations.length)
       throw new BadRequestException('Location is required');
 
+    const newestCapturedAt = locations
+      .map((l) => (l.capturedAt ? new Date(l.capturedAt).getTime() : NaN))
+      .filter(Number.isFinite)
+      .sort((a, b) => b - a)[0];
+    void this.recordDeviceContact(
+      userId,
+      payload,
+      newestCapturedAt ? new Date(newestCapturedAt) : null,
+    );
+
     const updates: LiveLocationUpdate[] = [];
     let persistedCount = 0;
     // Keep batch persistence sequential. Concurrent points for the same work
@@ -190,6 +278,8 @@ export class LiveLocationService {
         RequestContextStore.getStore()?.vanId,
       );
       updates.push(update);
+      // Stationary ping: online status + live marker only, never a route point
+      if (payload.ping) continue;
       if (await this.storePoint(update)) persistedCount += 1;
     }
     // Background / offline batches arrive over HTTP; broadcast them so the

@@ -3,8 +3,12 @@ import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   IsArray,
+  IsBoolean,
+  IsNumber,
   IsOptional,
   IsString,
+  Max,
+  Min,
   ValidateNested,
 } from 'class-validator';
 import { LocationPointDto } from 'src/shared/dto/location-point.dto';
@@ -33,4 +37,27 @@ export class TrackLiveLocationDto {
   @ValidateNested({ each: true })
   @Type(() => LocationPointDto)
   locations?: LocationPointDto[];
+
+  @ApiPropertyOptional({
+    description: 'Phone battery % (0-100) when the point was sent',
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  batteryLevel?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  isCharging?: boolean;
+
+  @ApiPropertyOptional({
+    description:
+      'Stationary keep-alive: marks the user online and refreshes the live marker; not stored as a route point',
+  })
+  @IsOptional()
+  @IsBoolean()
+  ping?: boolean;
 }
